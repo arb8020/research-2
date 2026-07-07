@@ -298,7 +298,42 @@ def main() -> None:
   parser = argparse.ArgumentParser(prog="mimir", description="Codebase structural health scanner")
   sub = parser.add_subparsers(dest="command")
 
-  scan_p = sub.add_parser("scan", help="Codebase health dashboard")
+  scan_p = sub.add_parser(
+    "scan",
+    help="Codebase health dashboard",
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    description="Scan a codebase and report structural health metrics.",
+    epilog="""\
+sections:
+  structure  per-function complexity metrics + file/class counts
+  heat       git churn x complexity — files most likely to produce bugs
+  surface    import fan-in/fan-out, directory sprawl
+  rot        empty functions, dead code
+  todo       TODO/FIXME/HACK/XXX comments, NotImplementedError
+
+function metrics (structure):
+  nest       max control-flow nesting depth         warn=4  alert=5
+  stmts      statement count                        warn=50 alert=70
+  args       parameter count                        warn=5  alert=7
+  cc         cyclomatic complexity (branch paths)    warn=10 alert=12
+  branches   branch point count (if/for/while/match) warn=10 alert=12
+  returns    return statement count (early exits)    warn=4  alert=6
+
+aggregate metrics:
+  erosion    fraction of complexity mass in high-CC functions.
+             mass(f) = CC(f) * sqrt(SLOC(f)), threshold CC > 10.
+             human codebases ~0.31, agent-generated ~0.68.
+  rel_heat   commits x max cyclomatic complexity per file.
+             relative score for ranking — higher = more dangerous.
+
+examples:
+  mimir scan                          full dashboard
+  mimir scan --heat                   just heat section
+  mimir scan --only cc -v             list functions over CC threshold
+  mimir scan --only nest --nest=3 -w  nesting violations at custom threshold
+  mimir scan --heat --rot             combine sections
+""",
+  )
   _add_common_args(scan_p)
   scan_p.add_argument("--list", "-v", action="store_true", help="List individual findings")
   scan_p.add_argument("--warn", "-w", action="store_true", help="Include warn-level findings")
