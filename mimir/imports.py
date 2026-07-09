@@ -66,33 +66,81 @@ def _resolve_relative(importing_file: str, dotted: str) -> str | None:
   parts = importing_file.replace("\\", "/").split("/")
   # Go up `level` directories from the file's directory
   pkg_parts = parts[:-1]  # drop filename
-  if level > len(pkg_parts):
+  # level=1 (from .X) stays in current package, level=2 (from ..X) goes up
+  # one from current package, etc. Guard: can't go above the scan root.
+  up = level - 1
+  if up > len(pkg_parts):
     return None
-  base = pkg_parts[:len(pkg_parts) - level + 1]
+  base = pkg_parts[:len(pkg_parts) - up]
   result = ".".join(base)
   if rest:
     result = f"{result}.{rest}" if result else rest
   return result
 
 
-def scan_imports(
+@dataclass
+class ImportGraph:
+  edges: dict[str, set[str]]  # relpath -> set of relpaths it imports
+  metrics: list[ImportMetrics]
+  cycles: list[list[str]]  # each cycle is a list of relpaths
+
+
+def _find_cycles(edges: dict[str, set[str]]) -> list[list[str]]:
+  """Find all strongly connected components with >1 node (Tarjan's algorithm)."""
+  index_counter = [0]
+  stack: list[str] = []
+  on_stack: set[str] = set()
+  index: dict[str, int] = {}
+  lowlink: dict[str, int] = {}
+  sccs: list[list[str]] = []
+
+  def strongconnect(v: str) -> None:
+    index[v] = index_counter[0]
+    lowlink[v] = index_counter[0]
+    index_counter[0] += 1
+    stack.append(v)
+    on_stack.add(v)
+
+    for w in edges.get(v, set()):
+      if w not in index:
+        strongconnect(w)
+        lowlink[v] = min(lowlink[v], lowlink[w])
+      elif w in on_stack:
+        lowlink[v] = min(lowlink[v], index[w])
+
+    if lowlink[v] == index[v]:
+      scc: list[str] = []
+      while True:
+        w = stack.pop()
+        on_stack.discard(w)
+        scc.append(w)
+        if w == v:
+          break
+      if len(scc) > 1:
+        sccs.append(sorted(scc))
+
+  for v in edges:
+    if v not in index:
+      strongconnect(v)
+
+  return sccs
+
+
+def build_import_graph(
   root: str, exclude: list[str] | None = None,
-) -> list[ImportMetrics]:
-  """Compute fan-in and fan-out for all Python files."""
-  # Collect all files and their module names
+) -> ImportGraph:
+  """Build the full import graph with fan-in, fan-out, and cycles."""
   files: list[str] = list(iter_py_files(root, exclude))
-  relpath_map: dict[str, str] = {}  # relpath -> module name
-  module_to_relpath: dict[str, str] = {}  # module name -> relpath
+  module_to_relpath: dict[str, str] = {}
 
   for filepath in files:
     relpath = os.path.relpath(filepath, root)
     mod = _relpath_to_module(relpath)
-    relpath_map[relpath] = mod
     module_to_relpath[mod] = relpath
 
   all_modules = set(module_to_relpath.keys())
 
-  # Build edges: relpath -> set of relpaths it imports (internal only)
+  # Build edges
   edges: dict[str, set[str]] = {}
   for filepath in files:
     relpath = os.path.relpath(filepath, root)
@@ -102,27 +150,34 @@ def scan_imports(
       resolved = _resolve_relative(relpath, imp) if imp.startswith(".") else imp
       if resolved is None:
         continue
-      # Match against internal modules (exact or prefix)
       for mod in all_modules:
         if resolved == mod or resolved.startswith(mod + ".") or mod.startswith(resolved + "."):
           targets.add(module_to_relpath[mod])
-    # Don't count self-imports
     targets.discard(relpath)
     edges[relpath] = targets
 
-  # Compute fan-in
+  # Fan-in
   fan_in: dict[str, int] = {os.path.relpath(f, root): 0 for f in files}
   for src, dsts in edges.items():
     for dst in dsts:
       fan_in[dst] = fan_in.get(dst, 0) + 1
 
-  results: list[ImportMetrics] = []
+  metrics: list[ImportMetrics] = []
   for filepath in files:
     relpath = os.path.relpath(filepath, root)
-    results.append(ImportMetrics(
+    metrics.append(ImportMetrics(
       file=relpath,
       fan_out=len(edges.get(relpath, set())),
       fan_in=fan_in.get(relpath, 0),
     ))
 
-  return results
+  cycles = _find_cycles(edges)
+
+  return ImportGraph(edges=edges, metrics=metrics, cycles=cycles)
+
+
+# Backwards compat
+def scan_imports(
+  root: str, exclude: list[str] | None = None,
+) -> list[ImportMetrics]:
+  return build_import_graph(root, exclude).metrics
