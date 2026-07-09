@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
+from dataclasses import dataclass
 
 from .scan import FunctionMetrics, scan_dir, scan_file_lengths, structural_erosion
 
@@ -33,6 +35,13 @@ _METRIC_FIELDS = {
 }
 
 SECTIONS = ("structure", "heat", "surface", "rot", "todo")
+
+
+@dataclass(frozen=True)
+class EdgeFilter:
+  source: str | None
+  destination: str | None
+  cross_top_level: bool
 
 
 def _metric_val(m: FunctionMetrics, metric: str) -> int:
@@ -89,8 +98,295 @@ def _format_fn_line(
 
 def _active_sections(args: argparse.Namespace) -> set[str]:
   """Which sections to show. If none specified, show all."""
+  if args.edge_from or args.edge_to or args.cross:
+    return {"surface"}
   explicit = {s for s in SECTIONS if getattr(args, s, False)}
   return explicit if explicit else set(SECTIONS)
+
+
+def _build_report(
+  target: str,
+  sections: set[str],
+  thresholds: dict[str, tuple[int, int]],
+  only: list[str],
+  exclude: list[str],
+  edge_filter: EdgeFilter,
+) -> dict:
+  """Build the full report as a dict. Used by both text and JSON output."""
+  report: dict = {}
+
+  if "structure" in sections:
+    fn_metrics, cls_metrics = scan_dir(target, exclude=exclude)
+    file_metrics = scan_file_lengths(target, exclude=exclude)
+
+    long_files = sorted(
+      [f for f in file_metrics if f.lines >= LONG_FILE_THRESHOLD],
+      key=lambda f: -f.lines,
+    )
+    wide_classes = sorted(
+      [c for c in cls_metrics if c.field_count > FIELD_THRESHOLD],
+      key=lambda c: -c.field_count,
+    )
+
+    alerts: dict[str, int] = {}
+    for k in only:
+      _, alert_t = thresholds[k]
+      n = sum(1 for m in fn_metrics if _metric_val(m, k) >= alert_t)
+      if n > 0:
+        alerts[k] = n
+
+    report["structure"] = {
+      "functions": {
+        "total": len(fn_metrics),
+        "alerts": alerts,
+        "items": [
+          {
+            "name": m.name,
+            "file": os.path.relpath(m.file, target),
+            "line": m.line,
+            "nest": m.max_nesting,
+            "stmts": m.stmt_count,
+            "args": m.arg_count,
+            "cc": m.cyclomatic,
+            "branches": m.branches,
+            "returns": m.returns,
+          }
+          for m in fn_metrics
+        ],
+      },
+      "erosion": round(structural_erosion(fn_metrics), 2),
+      "files": {
+        "total": len(file_metrics),
+        "long": [
+          {"file": os.path.relpath(f.file, target), "lines": f.lines}
+          for f in long_files
+        ],
+      },
+      "classes": {
+        "total": len(cls_metrics),
+        "wide": [
+          {"name": c.name, "file": os.path.relpath(c.file, target), "line": c.line, "fields": c.field_count}
+          for c in wide_classes
+        ],
+      },
+    }
+
+  if "heat" in sections:
+    from .heat import compute_heat
+    heat_results = compute_heat(target, exclude=exclude)
+    report["heat"] = [
+      {"file": h.file, "commits": h.commits, "max_cc": h.max_cc, "rel_heat": h.heat}
+      for h in heat_results
+    ]
+
+  if "surface" in sections:
+    from .imports import build_import_graph
+    graph = build_import_graph(target, exclude=exclude)
+
+    HIGH_FAN_OUT = 10
+    HIGH_FAN_IN = 15
+    DIR_THRESHOLD = 10
+
+    dir_counts: dict[str, int] = {}
+    for m in graph.metrics:
+      d = os.path.dirname(m.file) or "."
+      dir_counts[d] = dir_counts.get(d, 0) + 1
+
+    def matches(path: str, prefix: str | None) -> bool:
+      if prefix is None:
+        return True
+      normalized = prefix.replace("\\", "/").rstrip("/")
+      return path == normalized or path.startswith(normalized + "/")
+
+    def top_directory(path: str) -> str:
+      directory = path.partition("/")[0]
+      return directory if "/" in path else "."
+
+    visible_edges = [
+      {"from": source, "to": destination}
+      for source, destinations in sorted(graph.edges.items())
+      for destination in sorted(destinations)
+      if matches(source, edge_filter.source)
+      and matches(destination, edge_filter.destination)
+      and (
+        not edge_filter.cross_top_level
+        or top_directory(source) != top_directory(destination)
+      )
+    ]
+
+    report["surface"] = {
+      "edges": visible_edges,
+      "cycles": [sorted(c) for c in graph.cycles],
+      "high_fan_out": [
+        {"file": m.file, "fan_out": m.fan_out}
+        for m in sorted(
+          [m for m in graph.metrics if m.fan_out >= HIGH_FAN_OUT],
+          key=lambda m: -m.fan_out,
+        )
+      ],
+      "high_fan_in": [
+        {"file": m.file, "fan_in": m.fan_in}
+        for m in sorted(
+          [m for m in graph.metrics if m.fan_in >= HIGH_FAN_IN],
+          key=lambda m: -m.fan_in,
+        )
+      ],
+      "wide_dirs": [
+        {"dir": d, "files": n}
+        for d, n in sorted(
+          [(d, n) for d, n in dir_counts.items() if n > DIR_THRESHOLD],
+          key=lambda x: -x[1],
+        )
+      ],
+    }
+
+  if "rot" in sections:
+    from .rot import scan_rot_dir
+    rot_findings = scan_rot_dir(target, exclude=exclude)
+    rot_by_kind: dict[str, int] = {}
+    for f in rot_findings:
+      rot_by_kind[f.kind] = rot_by_kind.get(f.kind, 0) + 1
+    report["rot"] = {
+      "counts": rot_by_kind,
+      "items": [
+        {"kind": f.kind, "file": os.path.relpath(f.file, target), "line": f.line, "detail": f.detail}
+        for f in rot_findings
+      ],
+    }
+
+  if "todo" in sections:
+    from .todo import scan_todo_dir
+    todo_findings = scan_todo_dir(target, exclude=exclude)
+    todo_by_kind: dict[str, int] = {}
+    for f in todo_findings:
+      todo_by_kind[f.kind] = todo_by_kind.get(f.kind, 0) + 1
+    report["todo"] = {
+      "counts": todo_by_kind,
+      "items": [
+        {"kind": f.kind, "file": os.path.relpath(f.file, target), "line": f.line, "detail": f.detail}
+        for f in todo_findings
+      ],
+    }
+
+  return report
+
+
+def _print_text(
+  report: dict,
+  target: str,
+  thresholds: dict[str, tuple[int, int]],
+  only: list[str],
+  args: argparse.Namespace,
+) -> None:
+  """Render the report as human-readable text."""
+  out = sys.stderr
+  sev_order = {"clean": 0, "warn": 1, "alert": 2}
+  min_sev = "alert"
+  if args.warn:
+    min_sev = "warn"
+  if args.all:
+    min_sev = "clean"
+  min_idx = sev_order[min_sev]
+
+  if "structure" in report:
+    s = report["structure"]
+    fn_metrics_raw = s["functions"]["items"]
+
+    if args.list:
+      # Reconstruct FunctionMetrics for filtering/formatting
+      fn_metrics = [
+        FunctionMetrics(
+          file=os.path.join(target, item["file"]),
+          name=item["name"], line=item["line"],
+          max_nesting=item["nest"], stmt_count=item["stmts"],
+          arg_count=item["args"], cyclomatic=item["cc"],
+          branches=item["branches"], returns=item["returns"],
+        )
+        for item in fn_metrics_raw
+      ]
+      shown = [
+        m for m in fn_metrics
+        if sev_order[_line_severity(m, thresholds, only)] >= min_idx
+      ]
+      shown.sort(key=lambda m: (
+        -max(_bad_metrics(m, thresholds, only).values()) if _bad_metrics(m, thresholds, only) else 0,
+        m.file, m.line,
+      ))
+      for m in shown:
+        print(_format_fn_line(m, target, thresholds, only))
+      if not args.only:
+        for f in s["files"]["long"]:
+          print(f"{f['file']}  lines={f['lines']}")
+        for c in s["classes"]["wide"]:
+          print(f"{c['name']}  {c['file']}:{c['line']}  fields={c['fields']}")
+
+    if not (args.only and args.list):
+      print("structure", file=out)
+      print(f"  functions  {s['functions']['total']}", file=out)
+      for k, n in s["functions"]["alerts"].items():
+        print(f"    {k}  {n}", file=out)
+      print(f"  erosion  {s['erosion']:.2f}", file=out)
+      print(f"  files  {s['files']['total']}", file=out)
+      if s["files"]["long"]:
+        print(f"    long  {len(s['files']['long'])}", file=out)
+      print(f"  classes  {s['classes']['total']}", file=out)
+      if s["classes"]["wide"]:
+        print(f"    wide  {len(s['classes']['wide'])}", file=out)
+
+  if "heat" in report and report["heat"]:
+    heat = report["heat"]
+    if args.list:
+      for h in heat:
+        print(f"{h['file']}  commits={h['commits']}  max_cc={h['max_cc']}  rel_heat={h['rel_heat']:.0f}")
+    print("heat", file=out)
+    for h in heat[:5]:
+      print(
+        f"  {h['file']}  commits={h['commits']}  max_cc={h['max_cc']}  rel_heat={h['rel_heat']:.0f}",
+        file=out,
+      )
+    if len(heat) > 5:
+      print(f"  ... {len(heat) - 5} more", file=out)
+
+  if "surface" in report:
+    sf = report["surface"]
+    if args.list:
+      for edge in sf["edges"]:
+        print(f"edge  {edge['from']} -> {edge['to']}")
+      for m in sf["high_fan_out"]:
+        print(f"{m['file']}  fan_out={m['fan_out']}")
+      for m in sf["high_fan_in"]:
+        print(f"{m['file']}  fan_in={m['fan_in']}")
+      for d in sf["wide_dirs"]:
+        print(f"{d['dir']}/  files={d['files']}")
+      for cycle in sf["cycles"]:
+        print(f"cycle  {' -> '.join(cycle)}")
+    has_surface = sf["cycles"] or sf["high_fan_out"] or sf["high_fan_in"] or sf["wide_dirs"]
+    if has_surface:
+      print("surface", file=out)
+      if sf["cycles"]:
+        print(f"  cycles  {len(sf['cycles'])}", file=out)
+      if sf["high_fan_out"]:
+        print(f"  high_fan_out  {len(sf['high_fan_out'])}", file=out)
+      if sf["high_fan_in"]:
+        print(f"  high_fan_in  {len(sf['high_fan_in'])}", file=out)
+      if sf["wide_dirs"]:
+        print(f"  wide_dirs  {len(sf['wide_dirs'])}", file=out)
+
+  if "rot" in report and report["rot"]["items"]:
+    if args.list:
+      for f in report["rot"]["items"]:
+        print(f"rot:{f['kind']}  {f['file']}:{f['line']}  {f['detail']}")
+    print("rot", file=out)
+    for kind, n in sorted(report["rot"]["counts"].items()):
+      print(f"  {kind}  {n}", file=out)
+
+  if "todo" in report and report["todo"]["items"]:
+    if args.list:
+      for f in report["todo"]["items"]:
+        print(f"todo:{f['kind']}  {f['file']}:{f['line']}  {f['detail']}")
+    print("todo", file=out)
+    for kind, n in sorted(report["todo"]["counts"].items()):
+      print(f"  {kind}  {n}", file=out)
 
 
 def cmd_scan(args: argparse.Namespace) -> None:
@@ -98,8 +394,6 @@ def cmd_scan(args: argparse.Namespace) -> None:
   if not os.path.exists(target):
     print(f"error: {target} does not exist", file=sys.stderr)
     sys.exit(1)
-
-  out = sys.stderr
 
   # Build thresholds with any overrides
   thresholds = dict(DEFAULT_THRESHOLDS)
@@ -118,172 +412,17 @@ def cmd_scan(args: argparse.Namespace) -> None:
       print(f"available: {', '.join(ALL_METRICS)}", file=sys.stderr)
       sys.exit(1)
 
-  # --only implies --structure (only show the filtered function metrics)
-  if args.only:
-    sections = {"structure"}
+  sections = {"structure"} if args.only else _active_sections(args)
+
+  report = _build_report(
+    target, sections, thresholds, only, args.exclude,
+    EdgeFilter(args.edge_from, args.edge_to, args.cross),
+  )
+
+  if args.json:
+    print(json.dumps(report, indent=2))
   else:
-    sections = _active_sections(args)
-
-  # Filter severity
-  min_sev = "alert"
-  if args.warn:
-    min_sev = "warn"
-  if args.all:
-    min_sev = "clean"
-  sev_order = {"clean": 0, "warn": 1, "alert": 2}
-  min_idx = sev_order[min_sev]
-
-  # -- structure --
-  if "structure" in sections:
-    fn_metrics, cls_metrics = scan_dir(target, exclude=args.exclude)
-    file_metrics = scan_file_lengths(target, exclude=args.exclude)
-
-    shown_fns = [
-      m for m in fn_metrics
-      if sev_order[_line_severity(m, thresholds, only)] >= min_idx
-    ]
-    shown_fns.sort(key=lambda m: (
-      -max(_bad_metrics(m, thresholds, only).values()) if _bad_metrics(m, thresholds, only) else 0,
-      m.file, m.line,
-    ))
-
-    long_files = sorted(
-      [f for f in file_metrics if f.lines >= LONG_FILE_THRESHOLD],
-      key=lambda f: -f.lines,
-    )
-    wide_classes = sorted(
-      [c for c in cls_metrics if c.field_count > FIELD_THRESHOLD],
-      key=lambda c: -c.field_count,
-    )
-
-    if args.list:
-      for m in shown_fns:
-        print(_format_fn_line(m, target, thresholds, only))
-      if not args.only:
-        for f in long_files:
-          print(f"{os.path.relpath(f.file, target)}  lines={f.lines}")
-        for c in wide_classes:
-          print(f"{c.name}  {os.path.relpath(c.file, target)}:{c.line}  fields={c.field_count}")
-
-    def fn_alert_count(metric: str) -> int:
-      _, alert_t = thresholds[metric]
-      return sum(1 for m in fn_metrics if _metric_val(m, metric) >= alert_t)
-
-    if not (args.only and args.list):
-      erosion = structural_erosion(fn_metrics)
-
-      print("structure", file=out)
-      print(f"  functions  {len(fn_metrics)}", file=out)
-      for k in only:
-        n = fn_alert_count(k)
-        if n > 0:
-          print(f"    {k}  {n}", file=out)
-      print(f"  erosion  {erosion:.2f}", file=out)
-      print(f"  files  {len(file_metrics)}", file=out)
-      if long_files:
-        print(f"    long  {len(long_files)}", file=out)
-      print(f"  classes  {len(cls_metrics)}", file=out)
-      if wide_classes:
-        print(f"    wide  {len(wide_classes)}", file=out)
-
-  # -- heat --
-  if "heat" in sections:
-    from .heat import compute_heat
-    heat_results = compute_heat(target, exclude=args.exclude)
-
-    if args.list:
-      for h in heat_results:
-        print(f"{h.file}  commits={h.commits}  max_cc={h.max_cc}  rel_heat={h.heat:.0f}")
-
-    if heat_results:
-      print("heat", file=out)
-      for h in heat_results[:5]:
-        print(
-          f"  {h.file}  commits={h.commits}  max_cc={h.max_cc}  rel_heat={h.heat:.0f}",
-          file=out,
-        )
-      if len(heat_results) > 5:
-        print(f"  ... {len(heat_results) - 5} more", file=out)
-
-  # -- surface --
-  if "surface" in sections:
-    from .imports import scan_imports
-    import_metrics = scan_imports(target, exclude=args.exclude)
-
-    HIGH_FAN_OUT = 10
-    HIGH_FAN_IN = 15
-    high_fan_out = sorted(
-      [m for m in import_metrics if m.fan_out >= HIGH_FAN_OUT],
-      key=lambda m: -m.fan_out,
-    )
-    high_fan_in = sorted(
-      [m for m in import_metrics if m.fan_in >= HIGH_FAN_IN],
-      key=lambda m: -m.fan_in,
-    )
-
-    # Directory sprawl
-    DIR_THRESHOLD = 10
-    dir_counts: dict[str, int] = {}
-    for m in import_metrics:
-      d = os.path.dirname(m.file) or "."
-      dir_counts[d] = dir_counts.get(d, 0) + 1
-    wide_dirs = sorted(
-      [(d, n) for d, n in dir_counts.items() if n > DIR_THRESHOLD],
-      key=lambda x: -x[1],
-    )
-
-    if args.list:
-      for m in high_fan_out:
-        print(f"{m.file}  fan_out={m.fan_out}")
-      for m in high_fan_in:
-        print(f"{m.file}  fan_in={m.fan_in}")
-      for d, n in wide_dirs:
-        print(f"{d}/  files={n}")
-
-    if high_fan_out or high_fan_in or wide_dirs:
-      print("surface", file=out)
-      if high_fan_out:
-        print(f"  high_fan_out  {len(high_fan_out)}", file=out)
-      if high_fan_in:
-        print(f"  high_fan_in  {len(high_fan_in)}", file=out)
-      if wide_dirs:
-        print(f"  wide_dirs  {len(wide_dirs)}", file=out)
-
-  # -- rot --
-  if "rot" in sections:
-    from .rot import scan_rot_dir
-    rot_findings = scan_rot_dir(target, exclude=args.exclude)
-
-    rot_by_kind: dict[str, int] = {}
-    for f in rot_findings:
-      rot_by_kind[f.kind] = rot_by_kind.get(f.kind, 0) + 1
-
-    if args.list:
-      for f in rot_findings:
-        print(f"rot:{f.kind}  {os.path.relpath(f.file, target)}:{f.line}  {f.detail}")
-
-    if rot_findings:
-      print("rot", file=out)
-      for kind in sorted(rot_by_kind):
-        print(f"  {kind}  {rot_by_kind[kind]}", file=out)
-
-  # -- todo --
-  if "todo" in sections:
-    from .todo import scan_todo_dir
-    todo_findings = scan_todo_dir(target, exclude=args.exclude)
-
-    todo_by_kind: dict[str, int] = {}
-    for f in todo_findings:
-      todo_by_kind[f.kind] = todo_by_kind.get(f.kind, 0) + 1
-
-    if args.list:
-      for f in todo_findings:
-        print(f"todo:{f.kind}  {os.path.relpath(f.file, target)}:{f.line}  {f.detail}")
-
-    if todo_findings:
-      print("todo", file=out)
-      for kind in sorted(todo_by_kind):
-        print(f"  {kind}  {todo_by_kind[kind]}", file=out)
+    _print_text(report, target, thresholds, only, args)
 
 
 def _add_common_args(p: argparse.ArgumentParser) -> None:
@@ -335,6 +474,7 @@ examples:
 """,
   )
   _add_common_args(scan_p)
+  scan_p.add_argument("--json", action="store_true", help="Output as JSON")
   scan_p.add_argument("--list", "-v", action="store_true", help="List individual findings")
   scan_p.add_argument("--warn", "-w", action="store_true", help="Include warn-level findings")
   scan_p.add_argument("--all", "-a", action="store_true", help="Show all functions")
@@ -343,6 +483,18 @@ examples:
   scan_p.add_argument("--structure", action="store_true", help="Show only structure section")
   scan_p.add_argument("--heat", action="store_true", help="Show only heat section")
   scan_p.add_argument("--surface", action="store_true", help="Show only surface section")
+  scan_p.add_argument(
+    "--from", dest="edge_from", metavar="PATH",
+    help="Only show import edges originating at this file or directory",
+  )
+  scan_p.add_argument(
+    "--to", dest="edge_to", metavar="PATH",
+    help="Only show import edges targeting this file or directory",
+  )
+  scan_p.add_argument(
+    "--cross", action="store_true",
+    help="Only show import edges crossing top-level directories",
+  )
   scan_p.add_argument("--rot", action="store_true", help="Show only rot section")
   scan_p.add_argument("--todo", action="store_true", help="Show only todo section")
 
