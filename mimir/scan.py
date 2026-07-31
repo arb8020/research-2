@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import ast
 import os
+from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Generator
 
 SKIP_DIRS = {
   "__pycache__", ".venv", "venv", ".git", "build", "dist",

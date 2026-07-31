@@ -41,19 +41,14 @@ def _scan_not_implemented(filepath: str, tree: ast.Module) -> list[TodoFinding]:
 
   def walk(node: ast.AST, scope: list[str]) -> None:
     for child in ast.iter_child_nodes(node):
-      if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        walk(child, [*scope, child.name])
-      elif isinstance(child, ast.ClassDef):
+      if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
         walk(child, [*scope, child.name])
       elif isinstance(child, ast.Raise) and child.exc is not None:
         # raise NotImplementedError or raise NotImplementedError(...)
         exc = child.exc
-        name = None
+        if isinstance(exc, ast.Call):
+          exc = exc.func
         if isinstance(exc, ast.Name) and exc.id == "NotImplementedError":
-          name = "NotImplementedError"
-        elif isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name) and exc.func.id == "NotImplementedError":
-          name = "NotImplementedError"
-        if name:
           qualname = ".".join(scope) if scope else "<module>"
           findings.append(TodoFinding(
             file=filepath,
