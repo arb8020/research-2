@@ -158,6 +158,34 @@ def test_merged_branch_with_dirty_worktree_goes_to_triage(tmp_path: Path, capsys
   assert (item["branch"], item["verdict"]) == ("feat/tri", "merged")
 
 
+def test_merged_branch_reports_age_and_no_upstream(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+  repo = make_repo(tmp_path)
+  add_commit(repo, "feat/aged", "j.txt", "aged\n")
+  git(repo, "merge", "-q", "--no-ff", "feat/aged", "-m", "merge feat/aged")
+  report = quests(repo, capsys)
+  (b,) = report["branches"]
+  assert b["branch"] == "feat/aged"
+  assert b["age"].endswith("ago")  # e.g. "2 seconds ago"
+  assert b["last_commit"].startswith("20")  # iso-strict date
+  assert b["upstream"] == "none"  # local-only branch
+
+
+def test_pruned_remote_branch_reports_upstream_gone(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+  repo = make_repo(tmp_path)
+  remote = tmp_path / "remote.git"
+  git(repo, "init", "-q", "--bare", str(remote))
+  git(repo, "remote", "add", "origin", f"file://{remote}")
+  add_commit(repo, "feat/pushed", "k.txt", "pushed\n")
+  git(repo, "push", "-q", "-u", "origin", "feat/pushed")
+  git(repo, "merge", "-q", "--no-ff", "feat/pushed", "-m", "merge feat/pushed")
+  git(repo, "push", "-q", "origin", "--delete", "feat/pushed")
+  git(repo, "fetch", "-q", "--prune", "origin")
+  report = quests(repo, capsys)
+  (b,) = report["branches"]
+  assert b["branch"] == "feat/pushed"
+  assert b["upstream"] == "gone"
+
+
 def test_squash_merged_then_reverted_branch_is_flagged(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
   repo = make_repo(tmp_path)
   add_commit(repo, "feat/rev", "h.txt", "landed\n")

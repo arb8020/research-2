@@ -22,6 +22,9 @@ class BranchVerdict:
   branch: str
   verdict: str  # "merged" | "content-merged"
   reverted: bool = False  # content landed, but main no longer carries it
+  age: str = ""  # relative committer date, e.g. "3 weeks ago"
+  last_commit: str = ""  # iso-strict committer date
+  upstream: str = "none"  # "none" | "gone" | "synced" | "ahead N, behind M"
 
 
 @dataclass
@@ -31,6 +34,9 @@ class WorktreeVerdict:
   head: str
   verdict: str  # "merged" | "content-merged" | "ancestor"
   dirty: bool
+  age: str = ""  # empty for detached HEAD
+  last_commit: str = ""
+  upstream: str = ""
 
 
 @dataclass
@@ -151,6 +157,34 @@ def _list_branches(root: str, merged_into: str | None = None) -> list[str]:
   return [ln.strip() for ln in (out or "").splitlines() if ln.strip()]
 
 
+@dataclass
+class _BranchMeta:
+  age: str  # relative committer date
+  last_commit: str  # iso-strict committer date
+  upstream: str  # "none" | "gone" | "synced" | e.g. "ahead 1, behind 2"
+
+
+def _branch_meta(root: str) -> dict[str, _BranchMeta]:
+  """Per-branch commit age and upstream state, from one for-each-ref call."""
+  fmt = "%(refname:short)%09%(committerdate:iso-strict)%09%(committerdate:relative)%09%(upstream:short)%09%(upstream:track)"
+  out = _git(root, "for-each-ref", f"--format={fmt}", "refs/heads/")
+  meta: dict[str, _BranchMeta] = {}
+  for ln in (out or "").splitlines():
+    if not ln.strip():
+      continue
+    name, iso, rel, up_short, up_track = (ln.split("\t") + [""] * 5)[:5]
+    if not up_short:
+      upstream = "none"
+    elif up_track == "[gone]":
+      upstream = "gone"
+    elif not up_track:
+      upstream = "synced"
+    else:
+      upstream = up_track.strip("[]")
+    meta[name] = _BranchMeta(age=rel, last_commit=iso, upstream=upstream)
+  return meta
+
+
 def _list_worktrees(root: str) -> list[dict[str, str | None]]:
   """Parse `git worktree list --porcelain` into dicts, main worktree excluded."""
   out = _git(root, "worktree", "list", "--porcelain")
@@ -186,6 +220,8 @@ def collect_turn_in(root: str) -> TurnIn | None:
     return None
 
   merged_set = set(_list_branches(root, merged_into=base))
+  meta = _branch_meta(root)
+  no_meta = _BranchMeta(age="", last_commit="", upstream="none")
 
   wt_verdicts: list[WorktreeVerdict] = []
   triage: list[TriageItem] = []
@@ -208,13 +244,16 @@ def collect_turn_in(root: str) -> TurnIn | None:
     else:
       verdict = "ancestor" if head and _is_ancestor(root, head, base) else None
     if verdict:
+      m = meta.get(branch, no_meta) if branch else None
       wt_verdicts.append(WorktreeVerdict(
         path=path, branch=branch, head=head[:8], verdict=verdict, dirty=False,
+        age=m.age if m else "", last_commit=m.last_commit if m else "",
+        upstream=m.upstream if m else "",
       ))
 
   reverted_ids = _reverted_patch_ids(root, base)
   br_verdicts: list[BranchVerdict] = []
-  branches = _list_branches(root)
+  branches = list(meta)
   current = (_git(root, "rev-parse", "--abbrev-ref", "HEAD") or "").strip()
   for branch in branches:
     if branch in (base, current) or branch in claimed_branches:
@@ -222,7 +261,11 @@ def collect_turn_in(root: str) -> TurnIn | None:
     verdict = _branch_verdict(root, branch, base, merged_set)
     if verdict:
       reverted = verdict == "content-merged" and _was_reverted(root, branch, base, reverted_ids)
-      br_verdicts.append(BranchVerdict(branch=branch, verdict=verdict, reverted=reverted))
+      m = meta.get(branch, no_meta)
+      br_verdicts.append(BranchVerdict(
+        branch=branch, verdict=verdict, reverted=reverted,
+        age=m.age, last_commit=m.last_commit, upstream=m.upstream,
+      ))
 
   judged_wt = len(worktrees) - len(skipped_dirty) - len(triage)
   candidate_branches = [
