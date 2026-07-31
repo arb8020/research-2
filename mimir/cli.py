@@ -450,7 +450,8 @@ def _print_turn_in(t: TurnIn) -> None:
     print("  worktrees")
     for w in t.worktrees:
       label = w.branch or f"(detached {w.head})"
-      print(f"    ✓ {w.path}  {label}  {w.verdict}")
+      extra = f"  {w.age}  upstream: {w.upstream}" if w.branch else ""
+      print(f"    ✓ {w.path}  {label}  {w.verdict}{extra}")
       if w.branch:
         force = "-d" if w.verdict == "merged" else "-D"
         print(f"        git worktree remove {w.path} && git branch {force} {w.branch}")
@@ -460,7 +461,7 @@ def _print_turn_in(t: TurnIn) -> None:
     print("  branches")
     for b in t.branches:
       note = "  (reverted on main? re-merging would change it)" if b.reverted else ""
-      print(f"    ✓ {b.branch}  {b.verdict}{note}")
+      print(f"    ✓ {b.branch}  {b.verdict}  {b.age}  upstream: {b.upstream}{note}")
     plain = [b.branch for b in t.branches if b.verdict == "merged"]
     forced = [b.branch for b in t.branches if b.verdict != "merged" and not b.reverted]
     if plain:
