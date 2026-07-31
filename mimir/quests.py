@@ -82,18 +82,20 @@ def _content_merged(root: str, branch: str, base: str) -> bool:
   return diff is not None and not diff.strip()
 
 
-def _branch_verdict(root: str, branch: str, base: str) -> str | None:
+def _branch_verdict(root: str, branch: str, base: str, merged_set: set[str]) -> str | None:
   if branch == base:
     return None
-  if _is_ancestor(root, f"refs/heads/{branch}", base):
+  if branch in merged_set:
     return "merged"
   if _content_merged(root, branch, base):
     return "content-merged"
   return None
 
 
-def _list_branches(root: str) -> list[str]:
-  out = _git(root, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+def _list_branches(root: str, merged_into: str | None = None) -> list[str]:
+  """All local branches; with merged_into, only those whose tip is its ancestor."""
+  flags = [f"--merged={merged_into}"] if merged_into else []
+  out = _git(root, "for-each-ref", "--format=%(refname:short)", *flags, "refs/heads/")
   return [ln.strip() for ln in (out or "").splitlines() if ln.strip()]
 
 
@@ -131,6 +133,8 @@ def collect_turn_in(root: str) -> TurnIn | None:
   if base is None:
     return None
 
+  merged_set = set(_list_branches(root, merged_into=base))
+
   wt_verdicts: list[WorktreeVerdict] = []
   skipped_dirty: list[str] = []
   worktrees = _list_worktrees(root)
@@ -143,7 +147,7 @@ def collect_turn_in(root: str) -> TurnIn | None:
       skipped_dirty.append(path)
       continue
     if branch:
-      verdict = _branch_verdict(root, branch, base)
+      verdict = _branch_verdict(root, branch, base, merged_set)
     else:
       verdict = "ancestor" if head and _is_ancestor(root, head, base) else None
     if verdict:
@@ -157,7 +161,7 @@ def collect_turn_in(root: str) -> TurnIn | None:
   for branch in branches:
     if branch in (base, current) or branch in claimed_branches:
       continue  # worktree-claimed branches are reported with their worktree
-    verdict = _branch_verdict(root, branch, base)
+    verdict = _branch_verdict(root, branch, base, merged_set)
     if verdict:
       br_verdicts.append(BranchVerdict(branch=branch, verdict=verdict))
 
