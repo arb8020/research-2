@@ -19,26 +19,55 @@ class RotFinding:
   detail: str
 
 
+_INTENTIONAL_DECORATORS = {"abstractmethod", "overload", "override"}
+_INTERFACE_BASES = {"Protocol", "ABC"}
+
+
+def _decorator_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+  names: set[str] = set()
+  for dec in node.decorator_list:
+    target = dec.func if isinstance(dec, ast.Call) else dec
+    if isinstance(target, ast.Attribute):
+      names.add(target.attr)
+    elif isinstance(target, ast.Name):
+      names.add(target.id)
+  return names
+
+
+def _is_interface_class(node: ast.ClassDef) -> bool:
+  """Heuristic: Protocol/ABC subclasses declare interfaces, not dead code."""
+  for base in node.bases:
+    name = base.attr if isinstance(base, ast.Attribute) else getattr(base, "id", None)
+    if name in _INTERFACE_BASES:
+      return True
+  return any(kw.arg == "metaclass" for kw in node.keywords)
+
+
 def _scan_empty_functions(filepath: str, tree: ast.Module) -> list[RotFinding]:
-  """Find functions whose body is just `pass`, `...`, or a single docstring."""
+  """Find functions whose body is just `pass`, `...`, or a single docstring.
+
+  Skips declared-intentional emptiness: @abstractmethod/@overload/@override
+  functions and methods of Protocol/ABC classes.
+  """
   findings: list[RotFinding] = []
 
-  def walk(node: ast.AST, scope: list[str]) -> None:
+  def walk(node: ast.AST, scope: list[str], in_interface: bool) -> None:
     for child in ast.iter_child_nodes(node):
       if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
         qualname = ".".join([*scope, child.name])
-        if _is_empty_body(child.body):
+        intentional = in_interface or (_decorator_names(child) & _INTENTIONAL_DECORATORS)
+        if not intentional and _is_empty_body(child.body):
           findings.append(RotFinding(
             file=filepath,
             line=child.lineno,
             kind="empty_fn",
             detail=qualname,
           ))
-        walk(child, [*scope, child.name])
+        walk(child, [*scope, child.name], in_interface)
       elif isinstance(child, ast.ClassDef):
-        walk(child, [*scope, child.name])
+        walk(child, [*scope, child.name], _is_interface_class(child))
 
-  walk(tree, [])
+  walk(tree, [], False)
   return findings
 
 
