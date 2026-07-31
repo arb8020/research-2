@@ -1,0 +1,9 @@
+# Python bytecode and cache directories
+__pycache__/
+*.py[cod]
+
+# Local Claude Code state and worktrees
+.claude/
+
+# Locally generated dependency lockfile
+uv.lock
