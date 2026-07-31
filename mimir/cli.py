@@ -459,13 +459,19 @@ def _print_turn_in(t: TurnIn) -> None:
   if t.branches:
     print("  branches")
     for b in t.branches:
-      print(f"    ✓ {b.branch}  {b.verdict}")
+      note = "  (reverted on main? re-merging would change it)" if b.reverted else ""
+      print(f"    ✓ {b.branch}  {b.verdict}{note}")
     plain = [b.branch for b in t.branches if b.verdict == "merged"]
-    forced = [b.branch for b in t.branches if b.verdict != "merged"]
+    forced = [b.branch for b in t.branches if b.verdict != "merged" and not b.reverted]
     if plain:
       print(f"        git branch -d {' '.join(plain)}")
     if forced:
       print(f"        git branch -D {' '.join(forced)}  # content-merged: not ancestors, force needed")
+  if t.triage:
+    print("  triage  (branch is done, but its worktree has uncommitted changes)")
+    for item in t.triage:
+      print(f"    ? {item.path}  {item.branch}  {item.verdict}")
+      print(f"        git -C {item.path} status   # inspect, then remove or commit")
   for path in t.skipped_dirty:
     print(f"  · skipped (uncommitted changes): {path}")
   print(f"  · live: {t.live_worktrees} worktrees, {t.live_branches} branches vs {t.default_branch}")

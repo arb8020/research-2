@@ -12,6 +12,7 @@ Verdict chain, decreasing certainty:
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 
@@ -20,6 +21,7 @@ from dataclasses import dataclass
 class BranchVerdict:
   branch: str
   verdict: str  # "merged" | "content-merged"
+  reverted: bool = False  # content landed, but main no longer carries it
 
 
 @dataclass
@@ -32,11 +34,19 @@ class WorktreeVerdict:
 
 
 @dataclass
+class TriageItem:
+  path: str
+  branch: str
+  verdict: str  # branch is done, but the worktree has uncommitted changes
+
+
+@dataclass
 class TurnIn:
   default_branch: str
   worktrees: list[WorktreeVerdict]
   branches: list[BranchVerdict]
-  skipped_dirty: list[str]  # worktree paths with uncommitted changes
+  triage: list[TriageItem]  # done branches with dirty worktrees — human decides
+  skipped_dirty: list[str]  # dirty worktrees on live branches
   live_worktrees: int
   live_branches: int
 
@@ -80,6 +90,48 @@ def _content_merged(root: str, branch: str, base: str) -> bool:
   # nothing beyond its merge-base is also done.
   diff = _git(root, "diff", "--name-only", f"{base}...{branch}")
   return diff is not None and not diff.strip()
+
+
+_REVERTS_RE = re.compile(r"This reverts commit ([0-9a-f]{7,40})")
+
+
+def _patch_id(root: str, commit: str) -> str | None:
+  """Stable patch-id of a commit's diff; None for empty/unreadable diffs."""
+  try:
+    show = subprocess.run(
+      ["git", "-C", root, "show", "--format=", commit],
+      capture_output=True, text=True, timeout=30,
+    )
+    if show.returncode != 0 or not show.stdout.strip():
+      return None
+    pid = subprocess.run(
+      ["git", "-C", root, "patch-id", "--stable"],
+      input=show.stdout, capture_output=True, text=True, timeout=30,
+    )
+  except (OSError, subprocess.TimeoutExpired):
+    return None
+  if pid.returncode != 0 or not pid.stdout.strip():
+    return None
+  return pid.stdout.split()[0]
+
+
+def _reverted_patch_ids(root: str, base: str) -> set[str]:
+  """Patch-ids of every commit that `base`'s history explicitly reverted."""
+  log = _git(root, "log", "--format=%B", "--grep=This reverts commit", base) or ""
+  ids = set()
+  for sha in _REVERTS_RE.findall(log):
+    pid = _patch_id(root, sha)
+    if pid:
+      ids.add(pid)
+  return ids
+
+
+def _was_reverted(root: str, branch: str, base: str, reverted_ids: set[str]) -> bool:
+  """True if any of the branch's own commits match a revert on `base`."""
+  if not reverted_ids:
+    return False
+  shas = (_git(root, "rev-list", f"{base}..{branch}") or "").split()
+  return any(_patch_id(root, sha) in reverted_ids for sha in shas)
 
 
 def _branch_verdict(root: str, branch: str, base: str, merged_set: set[str]) -> str | None:
@@ -136,6 +188,7 @@ def collect_turn_in(root: str) -> TurnIn | None:
   merged_set = set(_list_branches(root, merged_into=base))
 
   wt_verdicts: list[WorktreeVerdict] = []
+  triage: list[TriageItem] = []
   skipped_dirty: list[str] = []
   worktrees = _list_worktrees(root)
   claimed_branches: set[str] = set()
@@ -144,7 +197,11 @@ def collect_turn_in(root: str) -> TurnIn | None:
     if branch:
       claimed_branches.add(branch)
     if _worktree_dirty(path):
-      skipped_dirty.append(path)
+      verdict = _branch_verdict(root, branch, base, merged_set) if branch else None
+      if branch and verdict:
+        triage.append(TriageItem(path=path, branch=branch, verdict=verdict))
+      else:
+        skipped_dirty.append(path)
       continue
     if branch:
       verdict = _branch_verdict(root, branch, base, merged_set)
@@ -155,6 +212,7 @@ def collect_turn_in(root: str) -> TurnIn | None:
         path=path, branch=branch, head=head[:8], verdict=verdict, dirty=False,
       ))
 
+  reverted_ids = _reverted_patch_ids(root, base)
   br_verdicts: list[BranchVerdict] = []
   branches = _list_branches(root)
   current = (_git(root, "rev-parse", "--abbrev-ref", "HEAD") or "").strip()
@@ -163,9 +221,10 @@ def collect_turn_in(root: str) -> TurnIn | None:
       continue  # worktree-claimed branches are reported with their worktree
     verdict = _branch_verdict(root, branch, base, merged_set)
     if verdict:
-      br_verdicts.append(BranchVerdict(branch=branch, verdict=verdict))
+      reverted = verdict == "content-merged" and _was_reverted(root, branch, base, reverted_ids)
+      br_verdicts.append(BranchVerdict(branch=branch, verdict=verdict, reverted=reverted))
 
-  judged_wt = len(worktrees) - len(skipped_dirty)
+  judged_wt = len(worktrees) - len(skipped_dirty) - len(triage)
   candidate_branches = [
     b for b in branches if b not in (base, current) and b not in claimed_branches
   ]
@@ -173,6 +232,7 @@ def collect_turn_in(root: str) -> TurnIn | None:
     default_branch=base,
     worktrees=wt_verdicts,
     branches=br_verdicts,
+    triage=triage,
     skipped_dirty=skipped_dirty,
     live_worktrees=judged_wt - len(wt_verdicts),
     live_branches=len(candidate_branches) - len(br_verdicts),

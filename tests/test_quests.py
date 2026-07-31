@@ -106,15 +106,15 @@ def test_merged_worktree_reported_with_remedy(tmp_path: Path, capsys: pytest.Cap
   assert report["branches"] == []
 
 
-def test_dirty_worktree_is_never_judged_done(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_dirty_worktree_on_live_branch_is_skipped(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
   repo = make_repo(tmp_path)
-  add_commit(repo, "feat/dirty", "f.txt", "dirty\n")
-  git(repo, "merge", "-q", "--no-ff", "feat/dirty", "-m", "merge feat/dirty")
+  add_commit(repo, "feat/dirty", "f.txt", "dirty\n")  # NOT merged
   wt = tmp_path / "dirty-checkout"
   git(repo, "worktree", "add", "-q", str(wt), "feat/dirty")
   (wt / "uncommitted.txt").write_text("precious\n")
   report = quests(repo, capsys)
   assert report["worktrees"] == []
+  assert report["triage"] == []
   assert report["skipped_dirty"] == [str(wt)]
 
 
@@ -141,3 +141,39 @@ def test_non_git_dir_errors(tmp_path: Path) -> None:
       main()
   finally:
     sys.argv = argv_backup
+
+
+def test_merged_branch_with_dirty_worktree_goes_to_triage(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+  repo = make_repo(tmp_path)
+  add_commit(repo, "feat/tri", "g.txt", "tri\n")
+  git(repo, "merge", "-q", "--no-ff", "feat/tri", "-m", "merge feat/tri")
+  wt = tmp_path / "tri-checkout"
+  git(repo, "worktree", "add", "-q", str(wt), "feat/tri")
+  (wt / "uncommitted.txt").write_text("wip\n")
+  report = quests(repo, capsys)
+  assert report["worktrees"] == []
+  assert report["skipped_dirty"] == []
+  assert len(report["triage"]) == 1
+  item = report["triage"][0]
+  assert (item["branch"], item["verdict"]) == ("feat/tri", "merged")
+
+
+def test_squash_merged_then_reverted_branch_is_flagged(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+  repo = make_repo(tmp_path)
+  add_commit(repo, "feat/rev", "h.txt", "landed\n")
+  git(repo, "merge", "--squash", "-q", "feat/rev")
+  git(repo, "commit", "-q", "-m", "squash-merge feat/rev")
+  git(repo, "revert", "--no-edit", "HEAD")
+  report = quests(repo, capsys)
+  verdicts = {b["branch"]: (b["verdict"], b["reverted"]) for b in report["branches"]}
+  assert verdicts == {"feat/rev": ("content-merged", True)}
+
+
+def test_absorbed_content_merged_branch_not_flagged_reverted(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+  repo = make_repo(tmp_path)
+  add_commit(repo, "feat/kept", "i.txt", "kept\n")
+  git(repo, "merge", "--squash", "-q", "feat/kept")
+  git(repo, "commit", "-q", "-m", "squash-merge feat/kept")
+  report = quests(repo, capsys)
+  verdicts = {b["branch"]: (b["verdict"], b["reverted"]) for b in report["branches"]}
+  assert verdicts == {"feat/kept": ("content-merged", False)}
