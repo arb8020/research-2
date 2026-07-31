@@ -10,7 +10,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 
-from .scan import scan_file, iter_py_files
+from .scan import iter_py_files, scan_file
 
 
 @dataclass
