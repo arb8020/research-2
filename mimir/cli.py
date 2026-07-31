@@ -6,8 +6,9 @@ import argparse
 import json
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
+from .quests import TurnIn, collect_turn_in
 from .scan import FunctionMetrics, scan_dir, scan_file_lengths, structural_erosion
 
 FIELD_THRESHOLD = 7
@@ -425,6 +426,51 @@ def cmd_scan(args: argparse.Namespace) -> None:
     _print_text(report, target, thresholds, only, args)
 
 
+def cmd_quests(args: argparse.Namespace) -> None:
+  target = os.path.abspath(args.target)
+  if not os.path.exists(target):
+    print(f"error: {target} does not exist", file=sys.stderr)
+    sys.exit(1)
+  turn_in = collect_turn_in(target)
+  if turn_in is None:
+    print(f"error: {target} is not a git repository", file=sys.stderr)
+    sys.exit(1)
+
+  if args.json:
+    print(json.dumps({"turn_in": asdict(turn_in)}, indent=2))
+  else:
+    _print_turn_in(turn_in)
+
+
+def _print_turn_in(t: TurnIn) -> None:
+  print("turn in")
+  if not t.worktrees and not t.branches:
+    print("  nothing to turn in ✓")
+  if t.worktrees:
+    print("  worktrees")
+    for w in t.worktrees:
+      label = w.branch or f"(detached {w.head})"
+      print(f"    ✓ {w.path}  {label}  {w.verdict}")
+      if w.branch:
+        force = "-d" if w.verdict == "merged" else "-D"
+        print(f"        git worktree remove {w.path} && git branch {force} {w.branch}")
+      else:
+        print(f"        git worktree remove {w.path}")
+  if t.branches:
+    print("  branches")
+    for b in t.branches:
+      print(f"    ✓ {b.branch}  {b.verdict}")
+    plain = [b.branch for b in t.branches if b.verdict == "merged"]
+    forced = [b.branch for b in t.branches if b.verdict != "merged"]
+    if plain:
+      print(f"        git branch -d {' '.join(plain)}")
+    if forced:
+      print(f"        git branch -D {' '.join(forced)}  # content-merged: not ancestors, force needed")
+  for path in t.skipped_dirty:
+    print(f"  · skipped (uncommitted changes): {path}")
+  print(f"  · live: {t.live_worktrees} worktrees, {t.live_branches} branches vs {t.default_branch}")
+
+
 def _add_common_args(p: argparse.ArgumentParser) -> None:
   p.add_argument("target", nargs="?", default=".", help="Directory or file to scan")
   p.add_argument(
@@ -510,9 +556,17 @@ examples:
   scan_p.add_argument("--branches", type=int, default=None, help="Override branch count threshold")
   scan_p.add_argument("--returns", type=int, default=None, help="Override return count threshold")
 
+  quests_p = sub.add_parser(
+    "quests", help="Where pending work stands: merged-but-lingering branches and worktrees",
+  )
+  quests_p.add_argument("target", nargs="?", default=".", help="Git repository root")
+  quests_p.add_argument("--json", action="store_true", help="Output JSON")
+
   args = parser.parse_args()
   if args.command == "scan":
     cmd_scan(args)
+  elif args.command == "quests":
+    cmd_quests(args)
   else:
     parser.print_help()
 
