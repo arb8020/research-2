@@ -1,92 +1,60 @@
 /**
- * Parse unified diff (git diff output) into per-file old/new string pairs
- * that @codemirror/merge can consume.
+ * Parse unified diff (git diff output) into per-file chunks.
  */
 
 export interface DiffFile {
   oldPath: string;
   newPath: string;
-  oldContent: string;
-  newContent: string;
+  /** Raw diff text for this file (including headers, hunks, +/- lines) */
+  rawDiff: string;
+  additions: number;
+  deletions: number;
 }
 
 export function parseUnifiedDiff(patch: string): DiffFile[] {
   const lines = patch.split("\n");
   const files: DiffFile[] = [];
-  let currentFile: {
-    oldPath: string;
-    newPath: string;
-    oldLines: string[];
-    newLines: string[];
-  } | null = null;
+
+  let currentStart = -1;
+  let currentOldPath = "";
+  let currentNewPath = "";
+  let additions = 0;
+  let deletions = 0;
+
+  function flush(endIndex: number) {
+    if (currentStart < 0) return;
+    // Trim trailing empty lines
+    let end = endIndex;
+    while (end > currentStart && lines[end - 1] === "") end--;
+    files.push({
+      oldPath: currentOldPath,
+      newPath: currentNewPath,
+      rawDiff: lines.slice(currentStart, end).join("\n"),
+      additions,
+      deletions,
+    });
+  }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // New file header
     if (line.startsWith("diff --git ")) {
-      if (currentFile) {
-        files.push({
-          oldPath: currentFile.oldPath,
-          newPath: currentFile.newPath,
-          oldContent: currentFile.oldLines.join("\n"),
-          newContent: currentFile.newLines.join("\n"),
-        });
-      }
+      flush(i);
+      currentStart = i;
+      additions = 0;
+      deletions = 0;
       const match = line.match(/^diff --git a\/(.+) b\/(.+)$/);
-      currentFile = {
-        oldPath: match?.[1] ?? "",
-        newPath: match?.[2] ?? "",
-        oldLines: [],
-        newLines: [],
-      };
+      currentOldPath = match?.[1] ?? "";
+      currentNewPath = match?.[2] ?? "";
       continue;
     }
 
-    // Skip file metadata lines
-    if (
-      line.startsWith("--- ") ||
-      line.startsWith("+++ ") ||
-      line.startsWith("index ") ||
-      line.startsWith("new file") ||
-      line.startsWith("deleted file") ||
-      line.startsWith("rename ") ||
-      line.startsWith("similarity ") ||
-      line.startsWith("Binary ")
-    ) {
-      continue;
+    if (currentStart >= 0) {
+      if (line.startsWith("+") && !line.startsWith("+++")) additions++;
+      if (line.startsWith("-") && !line.startsWith("---")) deletions++;
     }
-
-    // Hunk header — reset is handled by context/add/delete naturally
-    if (line.startsWith("@@ ")) {
-      // Parse line numbers to insert blank lines for gaps
-      // For now, just continue — the content lines handle it
-      continue;
-    }
-
-    if (!currentFile) continue;
-
-    // Content lines
-    if (line.startsWith("+")) {
-      currentFile.newLines.push(line.slice(1));
-    } else if (line.startsWith("-")) {
-      currentFile.oldLines.push(line.slice(1));
-    } else if (line.startsWith(" ")) {
-      currentFile.oldLines.push(line.slice(1));
-      currentFile.newLines.push(line.slice(1));
-    }
-    // "\ No newline at end of file" — skip
   }
 
-  // Flush last file
-  if (currentFile) {
-    files.push({
-      oldPath: currentFile.oldPath,
-      newPath: currentFile.newPath,
-      oldContent: currentFile.oldLines.join("\n"),
-      newContent: currentFile.newLines.join("\n"),
-    });
-  }
-
+  flush(lines.length);
   return files;
 }
