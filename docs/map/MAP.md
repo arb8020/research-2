@@ -36,6 +36,7 @@ deep-link stays fog, 008 parked; (5) local-markdown tracker confirmed;
 <!-- one line per closed ticket: gist + link -->
 
 - [research: hunk annotation interface (007)](tickets/007-research-hunk-annotations.md) — no upstream PR needed: target `--agent-context` sidecar JSON v1; watch mode live-reloads the sidecar; ranges preserved (session daemon is single-line only)
+- [UI surface: code viewer + diff review (009)](tickets/009-ui-surface.md) — Vite+Preact+CM6, --at popover/peek, unified diff viewer, OKLCH syntax palette. Annotation + LSP + CLI entrypoint next.
 
 ## Not yet specified
 
@@ -43,8 +44,8 @@ deep-link stays fog, 008 parked; (5) local-markdown tracker confirmed;
 - Fleet-view-as-inbox; deep-link "agent said X" → file:line@commit (needs obol
   session data shape)
 - Spawn-from-code / zone-brief dispatch glue
-- Web substrate (tiling/buffer layer) — waits until shell + $EDITOR + hunk can't do
-  something we need
+- Web substrate (tiling/buffer layer) — no longer fog: 009 is the prototype. Annotation,
+  LSP, and agent integration (stdin→stdout protocol) are the next frontier.
 - Watch mode / staleness probes for surface aliveness
 - Erosion validation against real human/agent corpora; README + publish
 - Reading .beads/ as a tracker backend (hedge)
@@ -62,6 +63,8 @@ deep-link stays fog, 008 parked; (5) local-markdown tracker confirmed;
 
 Frontier: [001](tickets/001-at-query.md) · [003](tickets/003-pinned-markers.md) ·
 [005](tickets/005-multi-target-scan.md) · [008](tickets/008-grill-erosion-demotion.md) · [spawn forces worktree+branch (obol#646)](https://github.com/silares-ai/obol/issues/646) · [Session commit trailer (obol#647)](https://github.com/silares-ai/obol/issues/647)
+
+Claimed: [009](tickets/009-ui-surface.md) (UI surface — in progress)
 
 Blocked: [002](tickets/002-active-quests.md) (by 001) ·
 [004](tickets/004-check-ci-gate.md) (by 003) ·
