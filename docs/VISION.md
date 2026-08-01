@@ -65,9 +65,14 @@ tree) and no linter wants (network state).
    and v2/v3 retries collapse), 14d recency window, ⚑ = worktree checked out,
    dominant-dir location, zone-scoped `mimir quests <path>`. Unit is the effort, not
    the branch. Scratch dirs excluded.
-2. **`--at file:line`**: hunk-interval index over live branches → "who's here?" +
-   teleport target (worktree path + mapped line). Palantír/Crystal reborn; no shipping
-   competitor. Z-axis expansion (fan out a hunk's versions across branches) is its UI.
+2. **`--at file:line[-line]`** — likely FIRST build: hunk-interval index over live
+   branches → "who's here?" + teleport target (worktree path + mapped line, via
+   $EDITOR). Palantír/Crystal reborn; no shipping competitor. Pure CLI, no surface
+   needed: view via `hunk` (ext/hunk — terminal diff viewer on OpenTUI +
+   @pierre/diffs, MIT, inline agent annotations + watch mode; later ticket: emit
+   hunk-renderable annotations = NPC symbols in the terminal). Editor integration =
+   a keybind calling --at at cursor. Subset of active-quests machinery; active
+   inherits its plumbing. Z-axis expansion is its eventual web UI.
 3. **Pinned + check**: `TODO(#N)` markers as foreign keys (code owns location).
    Tracker declared once (config or origin inference), refs normalized at boundary
    into a sum type. gh-only v1. `mimir check` in CI: hard-fail marker→closed/missing
@@ -109,6 +114,11 @@ stdout JSON. Steal: cookies-not-localStorage (random ports), SSE + `?since=N`,
   Mobile = read-mostly companion posture, not modal grammar.
 - No vim-native web IDE exists to fork; don't fork one. $EDITOR stays the teleport
   target for deep editing.
+- **Terminal viewer exists — punt web further**: `hunk` (ext/hunk, modem-dev, MIT)
+  renders diffs with @pierre/diffs in the terminal, with inline agent annotations.
+  v1 surfaces = shell (--at) + $EDITOR keybind + hunk. Web substrate (tiling/buffer
+  layer over dockview/react-mosaic — engines exist, keyboard grammar doesn't) stays
+  fog until these three can't do something. Strict vim grammar optional, not required.
 
 ## Prior art map (why the slot is open)
 
