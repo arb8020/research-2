@@ -8,6 +8,7 @@ import os
 import sys
 from dataclasses import asdict, dataclass
 
+from .at import AtReport, parse_target, query_at
 from .quests import TurnIn, collect_turn_in
 from .scan import FunctionMetrics, scan_dir, scan_file_lengths, structural_erosion
 
@@ -431,6 +432,9 @@ def cmd_quests(args: argparse.Namespace) -> None:
   if not os.path.exists(target):
     print(f"error: {target} does not exist", file=sys.stderr)
     sys.exit(1)
+  if args.at:
+    _cmd_at(target, args)
+    return
   turn_in = collect_turn_in(target)
   if turn_in is None:
     print(f"error: {target} is not a git repository", file=sys.stderr)
@@ -440,6 +444,32 @@ def cmd_quests(args: argparse.Namespace) -> None:
     print(json.dumps({"turn_in": asdict(turn_in)}, indent=2))
   else:
     _print_turn_in(turn_in)
+
+
+def _cmd_at(root: str, args: argparse.Namespace) -> None:
+  path, start, end = parse_target(args.at)
+  report = query_at(root, path, start, end)
+  if report is None:
+    print(f"error: {root} is not a git repository", file=sys.stderr)
+    sys.exit(1)
+  if args.json:
+    print(json.dumps({"at": asdict(report)}, indent=2))
+    return
+  loc = report.file if start is None else (
+    f"{report.file}:{start}" if start == end else f"{report.file}:{start}-{end}")
+  print(loc)
+  if not report.hits:
+    print(f"  nobody here ({report.branches_scanned} live branches scanned)")
+    return
+  for h in report.hits:
+    flag = "⚑" if h.worktree else "○"
+    rngs = ",".join(f"{a}" if a == b else f"{a}-{b}" for a, b in h.ranges)
+    age = f"{h.age_hours:.0f}h" if h.age_hours is not None else "?"
+    where = f"  {h.worktree}" if h.worktree else ""
+    line = f"  (line {h.line_in_branch} there)" if h.line_in_branch and start is not None else ""
+    print(f"  {flag} {h.branch}  touches {rngs}  {age}{where}{line}")
+    if h.worktree and h.line_in_branch and start is not None:
+      print(f"      $EDITOR {h.worktree}/{report.file} +{h.line_in_branch}")
 
 
 def _print_turn_in(t: TurnIn) -> None:
@@ -568,12 +598,23 @@ examples:
   )
   quests_p.add_argument("target", nargs="?", default=".", help="Git repository root")
   quests_p.add_argument("--json", action="store_true", help="Output JSON")
+  quests_p.add_argument(
+    "--at", metavar="FILE[:LINE[-LINE]]", default=None,
+    help="Sideways blame: which live branches/worktrees touch this file/range")
+
+  ui_p = sub.add_parser("ui", help="Minimal local web surface (design spike)")
+  ui_p.add_argument("target", nargs="?", default=".", help="Git repository root")
+  ui_p.add_argument("--port", type=int, default=None)
+  ui_p.add_argument("--no-open", action="store_true")
 
   args = parser.parse_args()
   if args.command == "scan":
     cmd_scan(args)
   elif args.command == "quests":
     cmd_quests(args)
+  elif args.command == "ui":
+    from .webui import serve_ui
+    serve_ui(os.path.abspath(args.target), args.port, not args.no_open)
   else:
     parser.print_help()
 

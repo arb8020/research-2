@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mimir</title>
+<style>
+/* ── design tokens ─────────────────────────────────────────────── */
+:root {
+  --bg:        #101014;
+  --bg-raise:  #17171d;
+  --bg-hover:  #1f1f27;
+  --ink:       #d6d6dd;
+  --ink-dim:   #7a7a88;
+  --ink-faint: #46464f;
+  --accent:    #e8b84b;   /* quest gold */
+  --accent-2:  #6cb2ff;   /* teleport blue */
+  --danger:    #e06c75;
+  --ok:        #7fc97f;
+  --font-ui:   "SF Mono", ui-monospace, "Cascadia Code", monospace;
+  --fs:        13px;
+  --lh:        1.55;
+  --pad:       10px;
+  --radius:    6px;
+  --tree-w:    280px;
+  --log-h:     160px;
+}
+/* ── layout ────────────────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: var(--fs)/var(--lh) var(--font-ui);
+  height: 100vh; display: grid;
+  grid-template: "tree code" 1fr "tree log" var(--log-h) / var(--tree-w) 1fr;
+  overflow: hidden;
+}
+#tree { grid-area: tree; overflow-y: auto; border-right: 1px solid var(--ink-faint); padding: var(--pad); }
+#code { grid-area: code; overflow: auto; padding: var(--pad) 0; }
+#log  { grid-area: log; overflow-y: auto; border-top: 1px solid var(--ink-faint); padding: var(--pad); background: var(--bg-raise); }
+/* ── tree ──────────────────────────────────────────────────────── */
+.dir { color: var(--ink-dim); margin-top: 6px; }
+.file { cursor: pointer; padding: 0 4px; border-radius: var(--radius); white-space: nowrap; }
+.file:hover { background: var(--bg-hover); }
+.file.sel { background: var(--bg-hover); color: var(--accent); }
+.badge { color: var(--accent); margin-left: 6px; font-size: 11px; }
+/* ── code ──────────────────────────────────────────────────────── */
+.ln { display: flex; }
+.ln:hover { background: var(--bg-hover); cursor: pointer; }
+.ln .n { width: 56px; text-align: right; padding-right: 12px; color: var(--ink-faint); user-select: none; flex-shrink: 0; }
+.ln.touched .n { color: var(--accent); }
+.ln pre { white-space: pre; tab-size: 2; }
+/* ── at fan-out (the z-axis lite) ──────────────────────────────── */
+.fan { background: var(--bg-raise); border-left: 3px solid var(--accent); margin: 2px 0 2px 56px; padding: 6px 10px; border-radius: 0 var(--radius) var(--radius) 0; }
+.fan .hit { display: block; }
+.fan .b { color: var(--accent); }
+.fan .wt { color: var(--accent-2); cursor: pointer; }
+.fan .dim { color: var(--ink-dim); }
+/* ── quest log ─────────────────────────────────────────────────── */
+#log h3 { color: var(--ink-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }
+.q { padding: 1px 0; }
+.q .ok { color: var(--ok); }
+.q .dim { color: var(--ink-dim); }
+kbd { background: var(--bg-hover); border-radius: 3px; padding: 0 5px; color: var(--ink-dim); font-size: 11px; }
+#hint { position: fixed; right: 12px; top: 8px; color: var(--ink-faint); font-size: 11px; }
+</style>
+</head>
+<body>
+<nav id="tree">loading…</nav>
+<main id="code"><div style="padding:24px;color:var(--ink-dim)">
+  pick a file — <kbd>j</kbd>/<kbd>k</kbd> tree, <kbd>enter</kbd> open, click a line for who's-here
+</div></main>
+<footer id="log">loading quests…</footer>
+<div id="hint">mimir · design spike</div>
+<script>
+const $ = s => document.querySelector(s);
+let tree = null, files = [], sel = -1, curFile = null;
+
+async function j(url) { return (await fetch(url)).json(); }
+
+function renderTree() {
+  const el = $("#tree"); el.innerHTML = "";
+  let lastDir = null;
+  files.forEach((f, i) => {
+    const dir = f.includes("/") ? f.slice(0, f.lastIndexOf("/")) : "";
+    if (dir !== lastDir) {
+      const d = document.createElement("div"); d.className = "dir"; d.textContent = dir || "·";
+      el.appendChild(d); lastDir = dir;
+    }
+    const n = document.createElement("div");
+    n.className = "file" + (i === sel ? " sel" : "");
+    n.textContent = f.slice(f.lastIndexOf("/") + 1);
+    const t = tree.touched[f];
+    if (t) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "⚑" + (t.length > 1 ? t.length : ""); b.title = t.join("\n"); n.appendChild(b); }
+    n.onclick = () => { sel = i; openFile(f); renderTree(); };
+    el.appendChild(n);
+  });
+}
+
+async function openFile(path) {
+  curFile = path;
+  const d = await j("/api/file?path=" + encodeURIComponent(path));
+  const at = await j("/api/at?path=" + encodeURIComponent(path));
+  const touchedRanges = [];
+  (at.at?.hits || []).forEach(h => h.ranges.forEach(([a, b]) => touchedRanges.push([a, b, h.branch])));
+  const el = $("#code"); el.innerHTML = "";
+  d.content.split("\n").forEach((line, i) => {
+    const ln = i + 1;
+    const row = document.createElement("div");
+    row.className = "ln" + (touchedRanges.some(([a, b]) => ln >= a && ln <= b) ? " touched" : "");
+    row.innerHTML = `<span class="n">${ln}</span>`;
+    const pre = document.createElement("pre"); pre.textContent = line || " ";
+    row.appendChild(pre);
+    row.onclick = () => fanOut(row, ln);
+    el.appendChild(row);
+  });
+  el.scrollTop = 0;
+}
+
+async function fanOut(row, ln) {
+  document.querySelectorAll(".fan").forEach(f => f.remove());
+  const d = await j(`/api/at?path=${encodeURIComponent(curFile)}&start=${ln}`);
+  const fan = document.createElement("div"); fan.className = "fan";
+  const hits = d.at?.hits || [];
+  fan.innerHTML = hits.length
+    ? hits.map(h => `<span class="hit">${h.worktree ? "⚑" : "○"} <span class="b">${h.branch}</span>` +
+        ` <span class="dim">touches ${h.ranges.map(([a,b]) => a===b?a:a+"–"+b).join(", ")} · ${Math.round(h.age_hours)}h</span>` +
+        (h.worktree ? ` <span class="wt" title="${h.worktree}">↗ open in worktree (line ${h.line_in_branch})</span>` : "") +
+        `</span>`).join("")
+    : `<span class="dim">nobody here — ${d.at?.branches_scanned ?? 0} live branches scanned</span>`;
+  row.after(fan);
+}
+
+async function renderLog() {
+  const d = await j("/api/quests");
+  const t = d.turn_in; const el = $("#log");
+  if (!t) { el.textContent = "no repo"; return; }
+  const items = [
+    ...(t.worktrees || []).map(w => `<div class="q"><span class="ok">✓</span> ${w.branch} <span class="dim">${w.verdict} · worktree ${w.path}</span></div>`),
+    ...(t.branches || []).map(b => `<div class="q"><span class="ok">✓</span> ${b.name} <span class="dim">${b.verdict} · ${b.age ?? ""}</span></div>`),
+  ];
+  el.innerHTML = "<h3>turn in</h3>" + (items.length ? items.join("") : `<div class="q dim">nothing to turn in ✓</div>`);
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "j" || e.key === "k") {
+    sel = Math.max(0, Math.min(files.length - 1, sel + (e.key === "j" ? 1 : -1)));
+    renderTree();
+    document.querySelector(".file.sel")?.scrollIntoView({ block: "nearest" });
+  } else if (e.key === "Enter" && sel >= 0) openFile(files[sel]);
+});
+
+(async () => {
+  tree = await j("/api/tree");
+  files = tree.files;
+  renderTree(); renderLog();
+})();
+</script>
+</body>
+</html>
