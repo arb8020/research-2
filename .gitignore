@@ -7,3 +7,6 @@ __pycache__/
 
 # Locally generated dependency lockfile
 uv.lock
+
+# External reference repos (not vendored)
+ext/
