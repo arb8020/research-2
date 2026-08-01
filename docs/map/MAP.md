@@ -26,7 +26,7 @@ and the commander/web surfaces lie beyond this map's edge.
 
 <!-- one line per closed ticket: gist + link -->
 
-(none yet — map freshly charted)
+- [research: hunk annotation interface (007)](tickets/007-research-hunk-annotations.md) — no upstream PR needed: target `--agent-context` sidecar JSON v1; watch mode live-reloads the sidecar; ranges preserved (session daemon is single-line only)
 
 ## Not yet specified
 
@@ -50,9 +50,8 @@ and the commander/web surfaces lie beyond this map's edge.
 ## Tickets
 
 Frontier: [001](tickets/001-at-query.md) · [003](tickets/003-pinned-markers.md) ·
-[005](tickets/005-multi-target-scan.md) · [007](tickets/007-research-hunk-annotations.md) ·
-[008](tickets/008-grill-erosion-demotion.md) · [spawn forces worktree+branch (obol#646)](https://github.com/silares-ai/obol/issues/646) · [Session commit trailer (obol#647)](https://github.com/silares-ai/obol/issues/647)
+[005](tickets/005-multi-target-scan.md) · [008](tickets/008-grill-erosion-demotion.md) · [spawn forces worktree+branch (obol#646)](https://github.com/silares-ai/obol/issues/646) · [Session commit trailer (obol#647)](https://github.com/silares-ai/obol/issues/647)
 
 Blocked: [002](tickets/002-active-quests.md) (by 001) ·
 [004](tickets/004-check-ci-gate.md) (by 003) ·
-[006](tickets/006-emit-hunk-annotations.md) (by 001, 007)
+[006](tickets/006-emit-hunk-annotations.md) (by 001)
