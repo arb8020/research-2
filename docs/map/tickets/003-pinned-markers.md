@@ -12,4 +12,4 @@ State via one batched gh call: Open | Closed | Unknown(reason) — Unknown never
 fails anything. Watermark skew warnings, stateless: git blame time of marker vs
 issue updatedAt (issue updated after marker placed; code rewritten after issue
 quiet). Rumors report: markers with no ref; open issues with no marker (report,
-never a gate). Read todocheck (prior art) before building.
+never a gate). Read todocheck (prior art) + ext/symphony SPEC.md tracker integration before building. RATIFIED 2026-08-01: gh-only v1; foreign refs (ABC-123) surfaced as unknown-tracker, never silently ignored; v0 (shipped) is pure git.

@@ -129,6 +129,10 @@ stdout JSON. Steal: cookies-not-localStorage (random ports), SSE + `?since=N`,
 - Swerved survivors: Stepsize (writes into Jira), CodeScene (manager analytics).
 - Tracker side: Linear owns branch/PR↔issue for Linear shops + Code Intelligence
   agents; treat issue-refs-in-branch-names as commodity signal we read, never own.
+- openai/symphony (ext/symphony, Apache, spec-first): the INVERSE join — tracker
+  issue -> spawned agent run -> PR with proof-of-work. Validates the work-management
+  layer; competes with obol dispatch, not mimir observation. Its SPEC.md tracker
+  integration is the reference for pinned/003's gh (and later Linear) arm.
 - Agent side: Beads (issues-in-git for agents — validates the premise, secedes from
   external trackers; cheap hedge: read `.beads/` as a backend someday), DeepWiki
   (code knowledge, no intent join), t3code/omnigent (units surface).
