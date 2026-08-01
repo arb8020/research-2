@@ -142,6 +142,100 @@ body {
   letter-spacing: 0.02em;
 }
 
+.file-ref {
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--accent-bg, var(--surface));
+  padding: 1px 8px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+
+/* ── editor container (main + peek split) ──────────────────────── */
+.editor-container {
+  display: flex;
+  flex: 1;
+  gap: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.editor-pane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  transition: flex 0.2s ease;
+}
+.editor-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.editor-pane-ref {
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.editor-pane-label {
+  color: var(--ink-3);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+.editor-pane-body {
+  flex: 1;
+  overflow: hidden;
+}
+.editor-pane-body .cm-editor { height: 100%; }
+
+.editor-peek {
+  flex: 1 1 50%;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  animation: peek-enter 0.15s ease-out;
+}
+@keyframes peek-enter {
+  from { opacity: 0; flex-basis: 0; }
+  to   { opacity: 1; flex-basis: 50%; }
+}
+.editor-peek-enter {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink-2);
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--ground);
+  transition: all 0.1s;
+}
+.editor-peek-enter:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.editor-peek-close {
+  font-size: 14px;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  border: none;
+  background: none;
+}
+.editor-peek-close:hover {
+  color: var(--ink);
+}
+
 /* ── empty state ────────────────────────────────────────────────── */
 .empty-state {
   display: flex;
@@ -159,6 +253,12 @@ body {
   font-size: 11px;
   border: 1px solid var(--border);
   margin: 0 2px;
+}
+
+/* ── popover animation ──────────────────────────────────────────── */
+@keyframes mimir-popover-enter {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ── CodeMirror overrides ───────────────────────────────────────── */
