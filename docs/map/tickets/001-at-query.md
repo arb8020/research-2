@@ -1,8 +1,8 @@
 ---
 title: "--at file:line[-line]: who is here?"
 type: task
-status: open
-assignee:
+status: claimed
+assignee: chiraag+claude
 blocked-by: []
 ---
 ## Question
