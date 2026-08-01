@@ -93,7 +93,12 @@ tree) and no linter wants (network state).
 
 Fog (sensed, not ticketable): Slack-for-agents channels with scoped speech (subagents
 thread-locked; thread agents form per-zone channels) — obol territory; fleet-view-as-
-inbox triage; watch mode / staleness probes for UI aliveness; erosion validation.
+inbox triage; watch mode / staleness probes for UI aliveness; erosion validation;
+commit-pinned line-range sidecar (b-prime) as an OPTIONAL precision layer over
+markers — pin=(issue,file,range,commit), validity computable, auto-remap via
+hunk-offset mapping (Gerrit-style) — deferred until coarse markers prove
+insufficient (repair volume: pins yell on any code motion; markers only on close).
+RATIFIED 2026-08-01: custody model (a) — comments are the link, mimir never writes.
 
 ## Surfaces (adopt-don't-build, evidence gathered 2026-07-31)
 

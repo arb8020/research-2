@@ -39,6 +39,8 @@ and the commander/web surfaces lie beyond this map's edge.
 - Watch mode / staleness probes for surface aliveness
 - Erosion validation against real human/agent corpora; README + publish
 - Reading .beads/ as a tracker backend (hedge)
+- Commit-pinned range sidecar (b-prime): optional precision layer over markers,
+  deferred until coarse markers prove insufficient (see VISION fog)
 
 ## Out of scope
 
