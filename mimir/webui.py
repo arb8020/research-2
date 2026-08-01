@@ -98,6 +98,18 @@ class _Handler(BaseHTTPRequestHandler):
             self._json({"path": rel, "content": f.read()})
         except OSError:
           self._json({"error": "unreadable"}, 500)
+    elif url.path == "/api/diff":
+      # Return unified diff. ?ref=branch (vs main), or ?range=A..B
+      ref = q.get("ref", [None])[0]
+      range_spec = q.get("range", [None])[0]
+      if range_spec:
+        diff = _git(self.root, "diff", range_spec)
+      elif ref:
+        base = (_git(self.root, "merge-base", "main", ref) or "main").strip()
+        diff = _git(self.root, "diff", f"{base}...{ref}")
+      else:
+        diff = _git(self.root, "diff", "HEAD")
+      self._json({"diff": diff or "", "ref": ref, "range": range_spec})
     elif url.path == "/api/at":
       rel = q.get("path", [""])[0]
       start = q.get("start", [None])[0]

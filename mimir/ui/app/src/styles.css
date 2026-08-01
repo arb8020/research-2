@@ -236,6 +236,55 @@ body {
   color: var(--ink);
 }
 
+/* ── diff viewer ────────────────────────────────────────────────── */
+.diff-viewer {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.diff-file {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.diff-file-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.diff-file-header:hover { background: var(--border); }
+.diff-file-arrow {
+  font-size: 10px;
+  width: 10px;
+  color: var(--ink-3);
+}
+.diff-file-path {
+  color: var(--ink);
+}
+.diff-file-rename {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.diff-file-content .cm-editor {
+  border-radius: 0;
+}
+.diff-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
 /* ── empty state ────────────────────────────────────────────────── */
 .empty-state {
   display: flex;

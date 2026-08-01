@@ -27,6 +27,12 @@ export interface AtResult {
   branches_scanned: number;
 }
 
+export interface DiffData {
+  diff: string;
+  ref: string | null;
+  range: string | null;
+}
+
 async function json<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url}: ${res.status}`);
@@ -41,6 +47,13 @@ export async function fetchFile(path: string, ref?: string): Promise<FileData> {
   const params = new URLSearchParams({ path });
   if (ref) params.set("ref", ref);
   return json(`/api/file?${params}`);
+}
+
+export async function fetchDiff(ref?: string, range?: string): Promise<DiffData> {
+  const params = new URLSearchParams();
+  if (ref) params.set("ref", ref);
+  if (range) params.set("range", range);
+  return json(`/api/diff?${params}`);
 }
 
 export async function fetchAt(

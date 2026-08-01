@@ -2,7 +2,7 @@
  * File tree sidebar — collapsible directories, badge rollup, click to open.
  */
 
-import { useState, useMemo } from "preact/hooks";
+import { useState, useMemo, useEffect } from "preact/hooks";
 import type { TreeData } from "./api";
 
 interface Props {
@@ -133,21 +133,71 @@ function DirEntry({
 }
 
 export function FileTree({ tree, selected, onSelect }: Props) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Start with all dirs collapsed — we'll expand to the selected file
+  const [collapsed, setCollapsed] = useState<Set<string> | null>(null);
 
   const root = useMemo(
     () => (tree ? flatten(buildTree(tree.files, tree.touched)) : null),
     [tree]
   );
 
+  // On first tree load, collapse everything
+  useEffect(() => {
+    if (root && collapsed === null) {
+      const allDirs = new Set<string>();
+      function collectDirs(node: DirNode) {
+        if (node.path) allDirs.add(node.path);
+        node.dirs.forEach(collectDirs);
+      }
+      collectDirs(root);
+      setCollapsed(allDirs);
+    }
+  }, [root, collapsed]);
+
+  // When a file is selected, expand its ancestor dirs
+  useEffect(() => {
+    if (!selected || !collapsed) return;
+    const parts = selected.split("/");
+    const ancestors: string[] = [];
+    // Build ancestor paths, but account for flattened dirs
+    for (let i = 1; i < parts.length; i++) {
+      ancestors.push(parts.slice(0, i).join("/"));
+    }
+    if (ancestors.length === 0) return;
+
+    setCollapsed((prev) => {
+      if (!prev) return prev;
+      const next = new Set(prev);
+      let changed = false;
+      for (const a of ancestors) {
+        // Find the flattened dir that contains this ancestor
+        for (const key of next) {
+          if (a === key || a.startsWith(key + "/") || key.startsWith(a + "/") || key === a) {
+            if (next.has(key) && (a === key || key.endsWith("/" + a.split("/").pop()))) {
+              next.delete(key);
+              changed = true;
+            }
+          }
+        }
+        if (next.has(a)) {
+          next.delete(a);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [selected]);
+
   const toggle = (path: string) => {
     setCollapsed((prev) => {
-      const next = new Set(prev);
+      const next = new Set(prev ?? new Set<string>());
       if (next.has(path)) next.delete(path);
       else next.add(path);
       return next;
     });
   };
+
+  const safeCollapsed = collapsed ?? new Set<string>();
 
   return (
     <nav class="tree">
@@ -160,7 +210,7 @@ export function FileTree({ tree, selected, onSelect }: Props) {
             key={d.path}
             node={d}
             depth={0}
-            collapsed={collapsed}
+            collapsed={safeCollapsed}
             toggle={toggle}
             selected={selected}
             onSelect={onSelect}

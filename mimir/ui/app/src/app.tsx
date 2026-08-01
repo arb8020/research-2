@@ -1,26 +1,43 @@
 /**
- * mimir app shell — tree + editor with peek flow.
+ * mimir app shell — file browser + code viewer + diff viewer.
  *
- * Flow:
- * - Click gutter pip → popover lists branches
- * - Click branch → peek panel slides in showing that branch's code
- * - Click "enter" → main swaps to that branch, peek shows old branch
+ * Modes:
+ * - Default: file tree + code editor with --at popover/peek
+ * - Diff: unified diff viewer (triggered by ?diff or ?diff=branch)
  */
 
 import { useState, useEffect, useCallback } from "preact/hooks";
 import { FileTree } from "./tree";
 import { Editor } from "./editor";
-import { fetchTree, type TreeData } from "./api";
+import { DiffViewer } from "./diff-viewer";
+import { fetchTree, fetchDiff, type TreeData } from "./api";
+
+type Mode = { kind: "browse" } | { kind: "diff"; patch: string; label: string };
 
 export function App() {
   const [tree, setTree] = useState<TreeData | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [currentRef, setCurrentRef] = useState<string | null>(null); // null = working tree
+  const [currentRef, setCurrentRef] = useState<string | null>(null);
   const [peekRef, setPeekRef] = useState<string | null>(null);
   const [peekLine, setPeekLine] = useState<number | null>(null);
+  const [mode, setMode] = useState<Mode>({ kind: "browse" });
 
   useEffect(() => {
     fetchTree().then(setTree);
+
+    // Check URL params for diff mode
+    const params = new URLSearchParams(window.location.search);
+    const diffRef = params.get("diff");
+    const diffRange = params.get("range");
+    if (diffRef !== null || diffRange !== null) {
+      fetchDiff(diffRef ?? undefined, diffRange ?? undefined).then((data) => {
+        setMode({
+          kind: "diff",
+          patch: data.diff,
+          label: data.range ?? data.ref ?? "working tree",
+        });
+      });
+    }
   }, []);
 
   const handlePeek = useCallback((branch: string, line: number) => {
@@ -34,9 +51,8 @@ export function App() {
   }, []);
 
   const handleEnter = useCallback((branch: string) => {
-    const oldRef = currentRef; // might be null (working tree)
+    const oldRef = currentRef;
     setCurrentRef(branch);
-    // Peek now shows what we were looking at before
     setPeekRef(oldRef);
   }, [currentRef]);
 
@@ -44,14 +60,27 @@ export function App() {
 
   return (
     <div class="app">
-      <FileTree tree={tree} selected={selected} onSelect={(path) => {
-        setSelected(path);
-        setCurrentRef(null);
-        setPeekRef(null);
-        setPeekLine(null);
-      }} />
+      <FileTree
+        tree={tree}
+        selected={selected}
+        onSelect={(path) => {
+          setSelected(path);
+          setCurrentRef(null);
+          setPeekRef(null);
+          setPeekLine(null);
+          setMode({ kind: "browse" });
+        }}
+      />
       <div class="main">
-        {selected ? (
+        {mode.kind === "diff" ? (
+          <>
+            <div class="file-header">
+              <span class="file-name">diff</span>
+              <span class="file-meta">{mode.label}</span>
+            </div>
+            <DiffViewer patch={mode.patch} />
+          </>
+        ) : selected ? (
           <>
             <div class="file-header">
               <span class="file-path">
