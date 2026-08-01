@@ -20,7 +20,23 @@ from urllib.parse import parse_qs, urlparse
 from .at import query_at
 from .quests import _git, collect_turn_in
 
-_UI_PATH = os.path.join(os.path.dirname(__file__), "ui", "index.html")
+_UI_DIR = os.path.join(os.path.dirname(__file__), "ui")
+_DIST_DIR = os.path.join(_UI_DIR, "dist")
+_LEGACY_PATH = os.path.join(_UI_DIR, "index.html")
+
+def _use_dist() -> bool:
+  return os.path.isdir(_DIST_DIR) and os.path.isfile(os.path.join(_DIST_DIR, "index.html"))
+
+_MIME_TYPES: dict[str, str] = {
+  ".html": "text/html",
+  ".js": "application/javascript",
+  ".css": "text/css",
+  ".json": "application/json",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+}
 
 
 def _tree(root: str) -> dict:
@@ -84,9 +100,32 @@ class _Handler(BaseHTTPRequestHandler):
     elif url.path == "/api/quests":
       t = collect_turn_in(self.root)
       self._json({"turn_in": asdict(t) if t else None})
-    elif url.path == "/":
+    elif _use_dist():
+      # Serve from Vite build
+      path = url.path.lstrip("/") or "index.html"
+      full = os.path.realpath(os.path.join(_DIST_DIR, path))
+      if not full.startswith(os.path.realpath(_DIST_DIR)) or not os.path.isfile(full):
+        # SPA fallback: serve index.html for non-file routes
+        full = os.path.join(_DIST_DIR, "index.html")
       try:
-        with open(_UI_PATH, encoding="utf-8") as f:
+        with open(full, "rb") as f:
+          body = f.read()
+      except OSError:
+        self._json({"error": "not found"}, 404)
+        return
+      ext = os.path.splitext(full)[1]
+      mime = _MIME_TYPES.get(ext, "application/octet-stream")
+      self.send_response(200)
+      self.send_header("Content-Type", mime)
+      self.send_header("Content-Length", str(len(body)))
+      if ext in (".js", ".css") and "/assets/" in full:
+        self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+      self.end_headers()
+      self.wfile.write(body)
+    elif url.path == "/":
+      # Legacy single-file UI
+      try:
+        with open(_LEGACY_PATH, encoding="utf-8") as f:
           body = f.read().encode()
       except OSError:
         self._json({"error": "ui missing"}, 500)

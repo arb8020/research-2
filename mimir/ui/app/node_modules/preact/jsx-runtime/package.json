@@ -1,0 +1,18 @@
+{
+  "name": "jsx-runtime",
+  "amdName": "jsxRuntime",
+  "private": true,
+  "description": "Preact JSX runtime",
+  "main": "dist/jsxRuntime.js",
+  "module": "dist/jsxRuntime.mjs",
+  "umd:main": "dist/jsxRuntime.umd.js",
+  "source": "src/index.js",
+  "types": "src/index.d.ts",
+  "license": "MIT",
+  "mangle": {
+    "regex": "^_"
+  },
+  "peerDependencies": {
+    "preact": "^10.0.0"
+  }
+}
