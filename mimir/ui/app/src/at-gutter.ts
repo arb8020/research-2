@@ -1,18 +1,19 @@
 /**
- * CodeMirror extension: --at gutter marks + fan-out widgets.
+ * CodeMirror extension: --at gutter marks + popover with branch list + peek.
  *
- * Shows a small accent pip in the gutter for lines touched by other branches.
- * Click or hover a pip → fan-out widget appears below the line showing
- * which branches touch it, age, worktree links.
+ * Flow:
+ * 1. Gold pip in gutter for lines touched by other branches
+ * 2. Click pip → popover anchored to line listing branches
+ * 3. Click a branch → peek panel slides out showing that branch's code
+ * 4. Click "enter" → main editor swaps to that branch, peek shows old branch
  */
 
 import {
   EditorView,
   GutterMarker,
   gutter,
-  Decoration,
-  WidgetType,
-  type DecorationSet,
+  showTooltip,
+  type Tooltip,
 } from "@codemirror/view";
 import { StateField, StateEffect, RangeSetBuilder } from "@codemirror/state";
 import type { AtHit } from "./api";
@@ -24,46 +25,62 @@ export interface AtLineData {
   hits: AtHit[];
 }
 
-/* ── state: which lines have --at data ─────────────────────────── */
+/* ── callbacks for peek/enter (wired by the app shell) ─────────── */
+
+export interface AtCallbacks {
+  onPeek: (branch: string, line: number) => void;
+  onEnter: (branch: string) => void;
+}
+
+let _callbacks: AtCallbacks | null = null;
+
+export function setAtCallbacks(cb: AtCallbacks) {
+  _callbacks = cb;
+}
+
+/* ── state ─────────────────────────────────────────────────────── */
 
 export const setAtData = StateEffect.define<AtLineData[]>();
-export const toggleFanOut = StateEffect.define<number>(); // 1-indexed line
+export const openPopover = StateEffect.define<number | null>(); // 1-indexed line, null to close
+export const setPeekBranch = StateEffect.define<string | null>();
 
 interface AtState {
-  lineData: Map<number, AtHit[]>; // line → hits
-  openFan: number | null; // which line's fan-out is open
+  lineData: Map<number, AtHit[]>;
+  popoverLine: number | null;
+  peekBranch: string | null;
 }
 
 const atState = StateField.define<AtState>({
-  create: () => ({ lineData: new Map(), openFan: null }),
+  create: () => ({ lineData: new Map(), popoverLine: null, peekBranch: null }),
   update(state, tr) {
-    let { lineData, openFan } = state;
+    let { lineData, popoverLine, peekBranch } = state;
     for (const e of tr.effects) {
       if (e.is(setAtData)) {
         lineData = new Map();
-        for (const d of e.value) {
-          lineData.set(d.line, d.hits);
-        }
-        openFan = null; // close fan when data changes
+        for (const d of e.value) lineData.set(d.line, d.hits);
+        popoverLine = null;
+        peekBranch = null;
       }
-      if (e.is(toggleFanOut)) {
-        openFan = openFan === e.value ? null : e.value;
+      if (e.is(openPopover)) {
+        popoverLine = popoverLine === e.value ? null : e.value;
+        peekBranch = null; // reset peek when switching lines
+      }
+      if (e.is(setPeekBranch)) {
+        peekBranch = e.value;
       }
     }
-    return { lineData, openFan };
+    return { lineData, popoverLine, peekBranch };
   },
 });
 
-/* ── gutter marker (the small accent pip) ──────────────────────── */
+/* ── gutter marker ─────────────────────────────────────────────── */
 
 class AtMarker extends GutterMarker {
-  constructor(readonly count: number) {
-    super();
-  }
+  constructor(readonly count: number) { super(); }
   toDOM() {
     const el = document.createElement("div");
     el.className = "cm-at-mark";
-    el.title = `${this.count} branch${this.count > 1 ? "es" : ""} touch this line`;
+    el.title = `${this.count} branch${this.count > 1 ? "es" : ""}`;
     return el;
   }
 }
@@ -73,7 +90,6 @@ const atGutter = gutter({
   markers(view) {
     const state = view.state.field(atState);
     const builder = new RangeSetBuilder<GutterMarker>();
-    // Must add markers in document order
     const lines = [...state.lineData.entries()]
       .filter(([ln]) => ln >= 1 && ln <= view.state.doc.lines)
       .sort((a, b) => a[0] - b[0]);
@@ -86,136 +102,109 @@ const atGutter = gutter({
   domEventHandlers: {
     click(view, line) {
       const lineNo = view.state.doc.lineAt(line.from).number;
-      view.dispatch({ effects: toggleFanOut.of(lineNo) });
+      view.dispatch({ effects: openPopover.of(lineNo) });
       return true;
     },
   },
 });
 
-/* ── fan-out widget ────────────────────────────────────────────── */
+/* ── popover tooltip ───────────────────────────────────────────── */
 
-class FanOutWidget extends WidgetType {
-  constructor(
-    readonly lineNo: number,
-    readonly hits: AtHit[],
-    readonly branchesScanned: number
-  ) {
-    super();
+function createPopoverDom(
+  view: EditorView,
+  lineNo: number,
+  hits: AtHit[],
+  peekBranch: string | null,
+): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "mimir-popover";
+
+  if (hits.length === 0) {
+    container.innerHTML = `<div class="mimir-popover-empty">nobody here</div>`;
+    return container;
   }
 
-  eq(other: FanOutWidget) {
-    return this.lineNo === other.lineNo;
+  const list = document.createElement("div");
+  list.className = "mimir-popover-list";
+
+  for (const hit of hits) {
+    const row = document.createElement("div");
+    row.className = "mimir-popover-row" + (peekBranch === hit.branch ? " active" : "");
+
+    const rangeStr = hit.ranges
+      .map(([a, b]) => (a === b ? String(a) : `${a}–${b}`))
+      .join(", ");
+    const ageStr =
+      hit.age_hours < 1 ? `${Math.round(hit.age_hours * 60)}m` :
+      hit.age_hours < 24 ? `${Math.round(hit.age_hours)}h` :
+      `${Math.round(hit.age_hours / 24)}d`;
+
+    row.innerHTML = `
+      <span class="mimir-popover-branch">${hit.branch}</span>
+      <span class="mimir-popover-meta">L${rangeStr} · ${ageStr}</span>
+    `;
+
+    row.addEventListener("click", (e) => {
+      e.stopPropagation();
+      view.dispatch({ effects: setPeekBranch.of(hit.branch) });
+      _callbacks?.onPeek(hit.branch, hit.ranges[0][0]);
+    });
+
+    list.appendChild(row);
   }
 
-  toDOM() {
-    if (this.hits.length === 0) {
-      const el = document.createElement("div");
-      el.className = "mimir-fan-empty";
-      el.textContent = `line ${this.lineNo} — nobody here · ${this.branchesScanned} branches scanned`;
-      return el;
-    }
+  container.appendChild(list);
 
-    const fan = document.createElement("div");
-    fan.className = "mimir-fan";
-
-    const header = document.createElement("div");
-    header.className = "mimir-fan-header";
-    header.textContent = `line ${this.lineNo} · ${this.hits.length} branch${this.hits.length > 1 ? "es" : ""}`;
-    fan.appendChild(header);
-
-    for (const hit of this.hits) {
-      const entry = document.createElement("div");
-      entry.className = "mimir-fan-entry";
-
-      const branch = document.createElement("span");
-      branch.className = "mimir-fan-branch";
-      branch.textContent = hit.branch;
-
-      const rangeStr = hit.ranges
-        .map(([a, b]) => (a === b ? String(a) : `${a}–${b}`))
-        .join(", ");
-      const ageStr =
-        hit.age_hours < 1
-          ? `${Math.round(hit.age_hours * 60)}m`
-          : hit.age_hours < 24
-            ? `${Math.round(hit.age_hours)}h`
-            : `${Math.round(hit.age_hours / 24)}d`;
-
-      const detail = document.createElement("span");
-      detail.className = "mimir-fan-detail";
-      detail.textContent = `lines ${rangeStr} · ${ageStr} ago`;
-
-      entry.appendChild(branch);
-      entry.appendChild(detail);
-
-      if (hit.worktree) {
-        const action = document.createElement("a");
-        action.className = "mimir-fan-action";
-        action.textContent = `open → line ${hit.line_in_branch ?? hit.ranges[0][0]}`;
-        action.href = "#";
-        action.onclick = (e) => e.preventDefault();
-        entry.appendChild(action);
-      } else {
-        const noWt = document.createElement("span");
-        noWt.className = "mimir-fan-detail";
-        noWt.textContent = "no worktree";
-        entry.appendChild(noWt);
-      }
-
-      fan.appendChild(entry);
-    }
-
-    return fan;
-  }
-
-  ignoreEvent() {
-    return false;
-  }
+  return container;
 }
 
-/* ── decoration field (fan-out widgets) ─────────────────────────── */
-
-const fanOutDecorations = StateField.define<DecorationSet>({
-  create: () => Decoration.none,
+const popoverTooltip = StateField.define<readonly Tooltip[]>({
+  create: () => [],
   update(_, tr) {
     const state = tr.state.field(atState);
-    if (state.openFan == null) return Decoration.none;
+    if (state.popoverLine == null) return [];
 
-    const ln = state.openFan;
-    const hits = state.lineData.get(ln) ?? [];
-    if (ln < 1 || ln > tr.state.doc.lines) return Decoration.none;
+    const ln = state.popoverLine;
+    if (ln < 1 || ln > tr.state.doc.lines) return [];
 
     const line = tr.state.doc.line(ln);
-    const widget = Decoration.widget({
-      widget: new FanOutWidget(
-        ln,
-        hits,
-        // Sum total branches from all line data as rough "scanned" count
-        state.lineData.size > 0
-          ? Math.max(
-              ...Array.from(state.lineData.values()).map((h) => h.length)
-            )
-          : 0
-      ),
-      side: 1, // after the line
-      block: true,
-    });
-    return Decoration.set([widget.range(line.to)]);
+    const hits = state.lineData.get(ln) ?? [];
+
+    return [{
+      pos: line.from,
+      above: false,
+      strictSide: true,
+      arrow: false,
+      create(view: EditorView) {
+        const dom = createPopoverDom(view, ln, hits, state.peekBranch);
+        return { dom, offset: { x: 0, y: 4 } };
+      },
+    }];
   },
-  provide: (field) => EditorView.decorations.from(field),
+  provide: (field) => showTooltip.computeN([field], (state) => state.field(field)),
 });
 
-/* ── CSS animation ─────────────────────────────────────────────── */
+/* ── click-away to dismiss ─────────────────────────────────────── */
 
-const fanOutAnimation = EditorView.theme({
-  "@keyframes mimir-fan-enter": {
-    from: { opacity: "0", transform: "translateY(-4px)" },
-    to: { opacity: "1", transform: "translateY(0)" },
+const clickAwayHandler = EditorView.domEventHandlers({
+  click(event, view) {
+    const state = view.state.field(atState);
+    if (state.popoverLine == null) return false;
+
+    // Don't dismiss if clicking inside the popover
+    const target = event.target as HTMLElement;
+    if (target.closest(".mimir-popover")) return false;
+
+    // Don't dismiss if clicking a gutter mark (that handler toggles)
+    if (target.closest(".cm-at-mark")) return false;
+
+    view.dispatch({ effects: openPopover.of(null) });
+    return false;
   },
 });
 
-/* ── export: the full extension ────────────────────────────────── */
+/* ── export ────────────────────────────────────────────────────── */
 
 export function atExtension() {
-  return [atState, atGutter, fanOutDecorations, fanOutAnimation];
+  return [atState, atGutter, popoverTooltip, clickAwayHandler];
 }

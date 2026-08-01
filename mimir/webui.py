@@ -80,15 +80,24 @@ class _Handler(BaseHTTPRequestHandler):
       self._json(_tree(self.root))
     elif url.path == "/api/file":
       rel = q.get("path", [""])[0]
-      full = os.path.realpath(os.path.join(self.root, rel))
-      if not full.startswith(os.path.realpath(self.root)) or not os.path.isfile(full):
-        self._json({"error": "not found"}, 404)
-        return
-      try:
-        with open(full, encoding="utf-8", errors="replace") as f:
-          self._json({"path": rel, "content": f.read()})
-      except OSError:
-        self._json({"error": "unreadable"}, 500)
+      ref = q.get("ref", [None])[0]
+      if ref:
+        # Read file from a specific git ref (branch/commit)
+        content = _git(self.root, "show", f"{ref}:{rel}")
+        if content is None:
+          self._json({"error": "not found"}, 404)
+        else:
+          self._json({"path": rel, "ref": ref, "content": content})
+      else:
+        full = os.path.realpath(os.path.join(self.root, rel))
+        if not full.startswith(os.path.realpath(self.root)) or not os.path.isfile(full):
+          self._json({"error": "not found"}, 404)
+          return
+        try:
+          with open(full, encoding="utf-8", errors="replace") as f:
+            self._json({"path": rel, "content": f.read()})
+        except OSError:
+          self._json({"error": "unreadable"}, 500)
     elif url.path == "/api/at":
       rel = q.get("path", [""])[0]
       start = q.get("start", [None])[0]

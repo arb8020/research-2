@@ -37,8 +37,10 @@ export async function fetchTree(): Promise<TreeData> {
   return json("/api/tree");
 }
 
-export async function fetchFile(path: string): Promise<FileData> {
-  return json(`/api/file?path=${encodeURIComponent(path)}`);
+export async function fetchFile(path: string, ref?: string): Promise<FileData> {
+  const params = new URLSearchParams({ path });
+  if (ref) params.set("ref", ref);
+  return json(`/api/file?${params}`);
 }
 
 export async function fetchAt(
