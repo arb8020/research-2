@@ -47,7 +47,7 @@ and the commander/web surfaces lie beyond this map's edge.
 - Logging/observability/usage reconciliation — code can only describe what code is
 - Issue-text mining for location — judgment can't be derived; markers cache it
 - Writing to trackers, sync engines, tracker replacement
-- Building chat/fleet UI from scratch — commodity lane (t3code, omnigent, AI Elements)
+- Fleet/chat surface for now (punted; adopt-vs-build deliberately open — VISION)
 
 ## Tickets
 
