@@ -22,6 +22,15 @@ and the commander/web surfaces lie beyond this map's edge.
 - Tickets: docs/map/tickets/NNN-slug.md. Status lives in front-matter
   (open/claimed/closed). Frontier = open + unblocked + unassigned.
 
+## Ratifications (2026-08-01 audit)
+
+All previously-inferred decisions walked one-by-one and ruled on: (1) pinned v1
+gh-only, v0 pure git; (2) custody model (a) — comments are the link, mimir never
+writes; b-prime pinned ranges deferred to fog; (3) fleet surface punted,
+adopt-vs-build deliberately open; (4) map composition confirmed — --at first,
+deep-link stays fog, 008 parked; (5) local-markdown tracker confirmed;
+(6) read-only-forever confirmed (via 2).
+
 ## Decisions so far
 
 <!-- one line per closed ticket: gist + link -->
