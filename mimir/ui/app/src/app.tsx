@@ -10,8 +10,9 @@ import { useState, useEffect, useCallback, useMemo } from "preact/hooks";
 import { FileTree } from "./tree";
 import { Editor } from "./editor";
 import { DiffViewer } from "./diff-viewer";
-import { fetchTree, fetchDiff, type TreeData } from "./api";
+import { fetchTree, fetchDiff, fetchAnnotateTarget, type TreeData, type AnnotateTarget } from "./api";
 import { parseUnifiedDiff, type DiffFile } from "./diff-parse";
+import { useAnnotations, AnnotationInput, AnnotationBar, type PendingAnnotation } from "./annotate";
 
 export function App() {
   const [tree, setTree] = useState<TreeData | null>(null);
@@ -24,23 +25,50 @@ export function App() {
   const [diffFiles, setDiffFiles] = useState<DiffFile[] | null>(null);
   const [diffLabel, setDiffLabel] = useState<string>("");
 
+  // Annotate mode state
+  const [annotateMode, setAnnotateMode] = useState(false);
+  const [annotateTarget, setAnnotateTarget] = useState<AnnotateTarget | null>(null);
+  const [showingInput, setShowingInput] = useState<{
+    file: string;
+    startLine: number;
+    endLine: number;
+    top: number;
+  } | null>(null);
+  const annState = useAnnotations();
+
   const isDiffMode = diffFiles !== null;
 
   useEffect(() => {
     fetchTree().then(setTree);
 
-    // Check URL params for diff mode
+    // Check URL params for diff/annotate mode
     const params = new URLSearchParams(window.location.search);
-    const diffRef = params.get("diff");
-    const diffRange = params.get("range");
-    if (diffRef !== null || diffRange !== null) {
-      fetchDiff(diffRef ?? undefined, diffRange ?? undefined).then((data) => {
-        const files = parseUnifiedDiff(data.diff);
-        setDiffFiles(files);
-        setDiffLabel(data.range ?? data.ref ?? "working tree");
-        // Auto-select first file
-        if (files.length > 0) setSelected(files[0].newPath);
+    const isAnnotate = params.get("annotate") === "1";
+
+    if (isAnnotate) {
+      setAnnotateMode(true);
+      fetchAnnotateTarget().then((target) => {
+        setAnnotateTarget(target);
+        if (target.mode === "diff" && target.diff_ref) {
+          fetchDiff(target.diff_ref).then((data) => {
+            const files = parseUnifiedDiff(data.diff);
+            setDiffFiles(files);
+            setDiffLabel(target.label);
+            if (files.length > 0) setSelected(files[0].newPath);
+          });
+        }
       });
+    } else {
+      const diffRef = params.get("diff");
+      const diffRange = params.get("range");
+      if (diffRef !== null || diffRange !== null) {
+        fetchDiff(diffRef ?? undefined, diffRange ?? undefined).then((data) => {
+          const files = parseUnifiedDiff(data.diff);
+          setDiffFiles(files);
+          setDiffLabel(data.range ?? data.ref ?? "working tree");
+          if (files.length > 0) setSelected(files[0].newPath);
+        });
+      }
     }
   }, []);
 
@@ -83,11 +111,23 @@ export function App() {
   const activeTree = isDiffMode ? diffTree : tree;
   const touchedCount = selected && activeTree?.touched[selected]?.length;
 
+  // Handle line selection for annotation — triggered by double-click on gutter
+  const handleLineSelect = useCallback((file: string, startLine: number, endLine: number, top: number) => {
+    if (!annotateMode) return;
+    setShowingInput({ file, startLine, endLine, top });
+  }, [annotateMode]);
+
+  const handleAnnotationAdd = useCallback((ann: Omit<PendingAnnotation, "id">) => {
+    annState.add(ann);
+    setShowingInput(null);
+  }, [annState.add]);
+
   return (
-    <div class="app">
+    <div class={`app ${annotateMode ? "app-annotate" : ""}`}>
       <FileTree
         tree={activeTree}
         selected={selected}
+        mode={isDiffMode ? "diff" : "browse"}
         onSelect={(path) => {
           setSelected(path);
           if (!isDiffMode) {
@@ -143,14 +183,41 @@ export function App() {
               peekLine={peekLine}
               onPeek={handlePeek}
               onEnter={handleEnter}
+              onLineSelect={annotateMode ? handleLineSelect : undefined}
             />
           </>
         ) : (
           <div class="empty-state">
-            {isDiffMode ? "select a changed file" : "pick a file — click gutter marks for who's-here"}
+            {isDiffMode
+              ? "select a changed file"
+              : annotateMode
+                ? "pick a file to annotate"
+                : "pick a file — click gutter marks for who's-here"}
           </div>
         )}
+
+        {/* Annotation input popover */}
+        {showingInput && (
+          <AnnotationInput
+            file={showingInput.file}
+            startLine={showingInput.startLine}
+            endLine={showingInput.endLine}
+            onSubmit={handleAnnotationAdd}
+            onCancel={() => setShowingInput(null)}
+          />
+        )}
       </div>
+
+      {/* Annotation bar */}
+      {annotateMode && (
+        <AnnotationBar
+          annotations={annState.annotations}
+          onRemove={annState.remove}
+          onSubmit={annState.submit}
+          submitting={annState.submitting}
+          submitted={annState.submitted}
+        />
+      )}
     </div>
   );
 }

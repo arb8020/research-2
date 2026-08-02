@@ -103,8 +103,8 @@ body {
 .tree-file:hover { background: var(--surface); color: var(--ink); }
 .tree-file.active { background: var(--surface); color: var(--ink); }
 .tree-badge {
-  font-size: 11px;
-  color: var(--accent);
+  font-size: 10px;
+  color: var(--ink-3);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
   margin-left: auto;
@@ -274,6 +274,168 @@ body {
 @keyframes mimir-popover-enter {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── annotation UI ─────────────────────────────────────────────── */
+.ann-input {
+  position: absolute;
+  right: 32px;
+  z-index: 10;
+  background: var(--ground);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 10px 12px;
+  width: 340px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  animation: mimir-popover-enter 0.12s ease-out;
+}
+.ann-input-header {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+.ann-input-range {
+  color: var(--accent);
+  font-weight: 600;
+}
+.ann-input-file {
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ann-input-textarea {
+  width: 100%;
+  font: 12.5px/1.5 var(--font);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  resize: vertical;
+  min-height: 48px;
+}
+.ann-input-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.ann-input-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+.ann-btn {
+  font: 12px/1 var(--font);
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: all 0.1s;
+}
+.ann-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ann-btn-secondary {
+  background: var(--ground);
+  color: var(--ink-2);
+}
+.ann-btn-secondary:hover:not(:disabled) {
+  color: var(--ink);
+}
+.ann-btn-primary {
+  background: var(--accent);
+  color: var(--ground);
+  border-color: var(--accent);
+}
+.ann-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+/* annotation bar (bottom) */
+.ann-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.ann-bar-done {
+  justify-content: center;
+  color: var(--accent);
+  font-size: 13px;
+  padding: 14px;
+}
+.ann-bar-list {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  overflow-x: auto;
+}
+.ann-bar-empty {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.ann-bar-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  background: var(--ground);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+  max-width: 300px;
+}
+.ann-bar-item-loc {
+  color: var(--accent);
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.ann-bar-item-text {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ann-bar-item-rm {
+  background: none;
+  border: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+  line-height: 1;
+}
+.ann-bar-item-rm:hover {
+  color: var(--ink);
+}
+.ann-btn-submit {
+  background: var(--accent);
+  color: var(--ground);
+  border-color: var(--accent);
+  font-size: 13px;
+  padding: 6px 20px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.ann-btn-submit:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+/* annotate mode layout — add space for bottom bar */
+.app-annotate {
+  grid-template-rows: 1fr auto;
+}
+.app-annotate .main {
+  overflow: hidden;
 }
 
 /* ── CodeMirror overrides ───────────────────────────────────────── */
