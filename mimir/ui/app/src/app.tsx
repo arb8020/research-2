@@ -159,7 +159,11 @@ export function App() {
                 +{selectedDiff.additions} −{selectedDiff.deletions}
               </span>
             </div>
-            <DiffViewer patch={selectedDiff.rawDiff} />
+            <DiffViewer
+              patch={selectedDiff.rawDiff}
+              file={selected}
+              onLineSelect={annotateMode ? handleLineSelect : undefined}
+            />
           </>
         ) : selected && !isDiffMode ? (
           <>
