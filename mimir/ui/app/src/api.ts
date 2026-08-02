@@ -67,3 +67,34 @@ export async function fetchAt(
   const data = await json<{ at: AtResult | null }>(`/api/at?${params}`);
   return data.at;
 }
+
+/* ── annotate mode ─────────────────────────────────────────────── */
+
+export interface AnnotateTarget {
+  mode: "browse" | "diff" | "message";
+  label: string;
+  paths: string[];
+  diff_ref: string | null;
+  message_text: string | null;
+}
+
+export interface AnnotationData {
+  file: string;
+  start_line: number;
+  end_line: number;
+  side?: string | null;
+  text: string;
+}
+
+export async function fetchAnnotateTarget(): Promise<AnnotateTarget> {
+  return json("/api/annotate/target");
+}
+
+export async function submitAnnotations(annotations: AnnotationData[]): Promise<void> {
+  const res = await fetch("/api/annotate/submit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ annotations }),
+  });
+  if (!res.ok) throw new Error(`submit failed: ${res.status}`);
+}
