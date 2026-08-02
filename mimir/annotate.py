@@ -238,9 +238,15 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
     range_spec = q.get("range", [None])[0]
     if range_spec:
       diff = _git(self.root, "diff", range_spec)
+    elif ref and ".." in ref:
+      diff = _git(self.root, "diff", ref)
     elif ref:
-      base = (_git(self.root, "merge-base", "main", ref) or "main").strip()
-      diff = _git(self.root, "diff", f"{base}...{ref}")
+      # Try merge-base for branch names; fall back to direct diff for commits
+      base = _git(self.root, "merge-base", "main", ref)
+      if base:
+        diff = _git(self.root, "diff", f"{base.strip()}...{ref}")
+      else:
+        diff = _git(self.root, "diff", f"{ref}~..{ref}")
     else:
       diff = _git(self.root, "diff", "HEAD")
     self._json({"diff": diff or "", "ref": ref, "range": range_spec})

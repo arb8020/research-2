@@ -50,7 +50,11 @@ export function App() {
       fetchAnnotateTarget().then((target) => {
         setAnnotateTarget(target);
         if (target.mode === "diff" && target.diff_ref) {
-          fetchDiff(target.diff_ref).then((data) => {
+          const isRange = target.diff_ref.includes("..");
+          fetchDiff(
+            isRange ? undefined : target.diff_ref,
+            isRange ? target.diff_ref : undefined,
+          ).then((data) => {
             const files = parseUnifiedDiff(data.diff);
             setDiffFiles(files);
             setDiffLabel(target.label);
