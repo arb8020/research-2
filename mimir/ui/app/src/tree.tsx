@@ -9,6 +9,7 @@ interface Props {
   tree: TreeData | null;
   selected: string | null;
   onSelect: (path: string) => void;
+  mode?: "browse" | "diff";
 }
 
 interface DirNode {
@@ -60,6 +61,14 @@ function flatten(node: DirNode): DirNode {
   return { ...node, dirs: node.dirs.map(flatten) };
 }
 
+function fileBadge(t: string[], mode: "browse" | "diff"): string {
+  if (mode === "diff") {
+    // In diff mode, touched values are "+N −M" strings
+    return t[0] ?? "";
+  }
+  return t.length === 1 ? "1 branch" : `${t.length} branches`;
+}
+
 function DirEntry({
   node,
   depth,
@@ -68,6 +77,7 @@ function DirEntry({
   selected,
   onSelect,
   touched,
+  mode,
 }: {
   node: DirNode;
   depth: number;
@@ -76,6 +86,7 @@ function DirEntry({
   selected: string | null;
   onSelect: (path: string) => void;
   touched: Record<string, string[]>;
+  mode: "browse" | "diff";
 }) {
   const isCollapsed = collapsed.has(node.path);
   const indent = depth * 12;
@@ -90,7 +101,9 @@ function DirEntry({
         <span class="tree-arrow">{isCollapsed ? "▸" : "▾"}</span>
         <span class="tree-dir-name">{node.name}</span>
         {isCollapsed && node.badgeCount > 0 && (
-          <span class="tree-badge">⚑ {node.badgeCount}</span>
+          <span class="tree-badge">
+            {mode === "diff" ? `${node.badgeCount} files` : node.badgeCount}
+          </span>
         )}
       </div>
       {!isCollapsed && (
@@ -105,6 +118,7 @@ function DirEntry({
               selected={selected}
               onSelect={onSelect}
               touched={touched}
+              mode={mode}
             />
           ))}
           {node.files.map((f) => {
@@ -120,7 +134,7 @@ function DirEntry({
                 <span>{name}</span>
                 {t && (
                   <span class="tree-badge" title={t.join("\n")}>
-                    ⚑{t.length > 1 ? ` ${t.length}` : ""}
+                    {fileBadge(t, mode)}
                   </span>
                 )}
               </div>
@@ -132,7 +146,7 @@ function DirEntry({
   );
 }
 
-export function FileTree({ tree, selected, onSelect }: Props) {
+export function FileTree({ tree, selected, onSelect, mode = "browse" }: Props) {
   // Start with all dirs collapsed — we'll expand to the selected file
   const [collapsed, setCollapsed] = useState<Set<string> | null>(null);
 
@@ -215,6 +229,7 @@ export function FileTree({ tree, selected, onSelect }: Props) {
             selected={selected}
             onSelect={onSelect}
             touched={tree!.touched}
+            mode={mode}
           />
         ))
       )}
@@ -230,7 +245,7 @@ export function FileTree({ tree, selected, onSelect }: Props) {
             <span>{name}</span>
             {t && (
               <span class="tree-badge" title={t.join("\n")}>
-                ⚑{t.length > 1 ? ` ${t.length}` : ""}
+                {fileBadge(t, mode)}
               </span>
             )}
           </div>

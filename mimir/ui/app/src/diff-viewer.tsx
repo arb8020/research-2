@@ -20,6 +20,8 @@ import { tokens, type Tokens } from "./theme";
 
 interface Props {
   patch: string;
+  file?: string;
+  onLineSelect?: (file: string, startLine: number, endLine: number, top: number) => void;
 }
 
 /* ── line classification ───────────────────────────────────────── */
@@ -217,7 +219,7 @@ const diffSignGutter = gutter({
 
 /* ── component ─────────────────────────────────────────────────── */
 
-export function DiffViewer({ patch }: Props) {
+export function DiffViewer({ patch, file, onLineSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
 
@@ -249,25 +251,24 @@ export function DiffViewer({ patch }: Props) {
 
     viewRef.current = view;
 
-    // Start with files folded (fold at level 1 — file headers)
-    // Slight delay to let CM6 compute folds
-    setTimeout(() => {
-      const doc = view.state.doc;
-      for (let i = 1; i <= doc.lines; i++) {
-        const line = doc.line(i);
-        if (line.text.startsWith("diff --git ")) {
-          // Fold this file section
-          const foldRange = foldService.of(() => null); // just trigger computation
-          // Use CM6's fold command on each file header
-        }
-      }
-    }, 100);
+    // Double-click triggers annotation
+    const handleDblClick = () => {
+      if (!onLineSelect || !file) return;
+      const sel = view.state.selection.main;
+      const startLine = view.state.doc.lineAt(sel.from).number;
+      const endLine = view.state.doc.lineAt(sel.to).number;
+      const rect = view.dom.getBoundingClientRect();
+      const lineTop = view.coordsAtPos(sel.from)?.top ?? rect.top;
+      onLineSelect(file, startLine, endLine, lineTop - rect.top);
+    };
+    view.dom.addEventListener("dblclick", handleDblClick);
 
     return () => {
+      view.dom.removeEventListener("dblclick", handleDblClick);
       view.destroy();
       viewRef.current = null;
     };
-  }, [patch]);
+  }, [patch, file, onLineSelect]);
 
   return (
     <div
