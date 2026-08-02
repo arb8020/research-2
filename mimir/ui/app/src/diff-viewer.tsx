@@ -187,15 +187,12 @@ function diffTheme(t: Tokens) {
     ".diff-sign-del": {
       color: isDark ? "#f0a0a0" : "#b33030",
     },
-    // Make selection highlight visible over diff backgrounds
-    ".cm-selectionBackground": {
-      backgroundColor: `${isDark ? "rgba(158, 124, 26, 0.35)" : "rgba(158, 124, 26, 0.25)"} !important`,
+    // Selection highlight — must override CM6 defaults
+    "& .cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+      background: isDark ? "#4a3d10 !important" : "#e8d88a !important",
     },
-    "&.cm-focused .cm-selectionBackground": {
-      backgroundColor: `${isDark ? "rgba(158, 124, 26, 0.45)" : "rgba(158, 124, 26, 0.3)"} !important`,
-    },
-    ".cm-selectionMatch": {
-      backgroundColor: `${isDark ? "rgba(158, 124, 26, 0.2)" : "rgba(158, 124, 26, 0.15)"} !important`,
+    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
+      background: isDark ? "#5a4a15 !important" : "#dcc86a !important",
     },
   }, { dark: isDark });
 }
