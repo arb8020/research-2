@@ -1,0 +1,360 @@
+"""mimir annotate — annotation gate for agent harnesses.
+
+Start a local web server showing files or diffs, block until the user
+submits annotations, print structured JSON to stdout, exit.
+
+Protocol:
+  mimir annotate [target...]         → browse mode (files)
+  mimir annotate --diff <branch>     → diff mode
+  mimir annotate --last              → last agent message
+
+Output (one JSON line on stdout):
+  {"annotations": [...], "mode": "browse|diff|message", "target": "..."}
+
+Exit 0 = annotations submitted. Exit 1 = closed without submitting.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import socket
+import sys
+import threading
+import time
+import webbrowser
+from dataclasses import asdict, dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+from .at import query_at
+from .quests import _git
+
+
+# ---------------------------------------------------------------------------
+# Data types
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Annotation:
+  file: str
+  start_line: int
+  end_line: int
+  side: str | None = None   # "old" | "new" (diff mode only)
+  text: str = ""
+
+
+@dataclass
+class AnnotateResult:
+  annotations: list[Annotation] = field(default_factory=list)
+  mode: str = "browse"       # "browse" | "diff" | "message"
+  target: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Annotate target resolution
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AnnotateTarget:
+  mode: str                  # "browse" | "diff" | "message"
+  label: str                 # human-readable description
+  paths: list[str]           # files to show (browse/message mode)
+  diff_ref: str | None       # branch/range (diff mode)
+  message_text: str | None   # raw text (message mode)
+
+
+def resolve_target(
+  *,
+  paths: list[str] | None = None,
+  diff: str | None = None,
+  last: bool = False,
+  root: str = ".",
+) -> AnnotateTarget:
+  """Normalize CLI args into an AnnotateTarget."""
+  if last:
+    text = _read_last_message()
+    return AnnotateTarget(
+      mode="message",
+      label="last",
+      paths=[],
+      diff_ref=None,
+      message_text=text,
+    )
+  if diff is not None:
+    return AnnotateTarget(
+      mode="diff",
+      label=diff,
+      paths=[],
+      diff_ref=diff,
+      message_text=None,
+    )
+  if paths:
+    return AnnotateTarget(
+      mode="browse",
+      label=" ".join(paths),
+      paths=paths,
+      diff_ref=None,
+      message_text=None,
+    )
+  # Default: browse cwd
+  return AnnotateTarget(
+    mode="browse",
+    label=".",
+    paths=["."],
+    diff_ref=None,
+    message_text=None,
+  )
+
+
+def _read_last_message() -> str:
+  """Read last assistant message from the current Claude Code session."""
+  try:
+    from obol_sessions.decoders.claude_code import ClaudeCodeSessionSupport
+    from obol_sessions.model import MessageEntry
+    from obol_sessions.dtypes import AssistantMessage
+
+    support = ClaudeCodeSessionSupport()
+    sources = list(support.discover(Path.home() / ".claude", since=None))
+    if not sources:
+      raise SystemExit("no Claude Code sessions found")
+    session = support.load(sources[0])
+    if session is None:
+      raise SystemExit("could not load session")
+    for entry in reversed(session.entries):
+      if isinstance(entry, MessageEntry) and isinstance(entry.message, AssistantMessage):
+        blocks = [b.text for b in entry.message.content if hasattr(b, "text")]
+        return "\n".join(blocks)
+    raise SystemExit("no assistant message found in session")
+  except ImportError:
+    raise SystemExit(
+      "obol-sessions not installed — required for --last\n"
+      "  pip install obol-sessions"
+    ) from None
+
+
+# ---------------------------------------------------------------------------
+# Gate server — blocks until user submits or closes
+# ---------------------------------------------------------------------------
+
+
+class _AnnotateHandler(BaseHTTPRequestHandler):
+  root: str = "."
+  target: AnnotateTarget = AnnotateTarget(mode="browse", label=".", paths=["."], diff_ref=None, message_text=None)
+  result: AnnotateResult | None = None
+  submitted: threading.Event = threading.Event()
+
+  def log_message(self, *a: object) -> None:
+    pass
+
+  def _json(self, obj: object, code: int = 200) -> None:
+    body = json.dumps(obj).encode()
+    self.send_response(code)
+    self.send_header("Content-Type", "application/json")
+    self.send_header("Content-Length", str(len(body)))
+    self.end_headers()
+    self.wfile.write(body)
+
+  def _read_body(self) -> bytes:
+    length = int(self.headers.get("Content-Length", 0))
+    return self.rfile.read(length)
+
+  def do_GET(self) -> None:  # noqa: N802
+    url = urlparse(self.path)
+    q = parse_qs(url.query)
+
+    if url.path == "/api/annotate/target":
+      self._json({
+        "mode": self.target.mode,
+        "label": self.target.label,
+        "paths": self.target.paths,
+        "diff_ref": self.target.diff_ref,
+        "message_text": self.target.message_text,
+      })
+    elif url.path == "/api/tree":
+      self._json(_tree(self.root))
+    elif url.path == "/api/file":
+      self._serve_file(q)
+    elif url.path == "/api/diff":
+      self._serve_diff(q)
+    elif url.path == "/api/at":
+      self._serve_at(q)
+    elif _use_dist():
+      self._serve_static(url.path)
+    else:
+      self._json({"error": "not found"}, 404)
+
+  def do_POST(self) -> None:  # noqa: N802
+    url = urlparse(self.path)
+    if url.path == "/api/annotate/submit":
+      body = json.loads(self._read_body())
+      annotations = [
+        Annotation(
+          file=a["file"],
+          start_line=a["start_line"],
+          end_line=a["end_line"],
+          side=a.get("side"),
+          text=a.get("text", ""),
+        )
+        for a in body.get("annotations", [])
+      ]
+      _AnnotateHandler.result = AnnotateResult(
+        annotations=annotations,
+        mode=self.target.mode,
+        target=self.target.label,
+      )
+      self._json({"status": "ok"})
+      _AnnotateHandler.submitted.set()
+    else:
+      self._json({"error": "not found"}, 404)
+
+  # --- file serving (shared with webui.py) ---
+
+  def _serve_file(self, q: dict[str, list[str]]) -> None:
+    rel = q.get("path", [""])[0]
+    ref = q.get("ref", [None])[0]
+    if ref:
+      content = _git(self.root, "show", f"{ref}:{rel}")
+      if content is None:
+        self._json({"error": "not found"}, 404)
+      else:
+        self._json({"path": rel, "ref": ref, "content": content})
+    else:
+      full = os.path.realpath(os.path.join(self.root, rel))
+      if not full.startswith(os.path.realpath(self.root)) or not os.path.isfile(full):
+        self._json({"error": "not found"}, 404)
+        return
+      try:
+        with open(full, encoding="utf-8", errors="replace") as f:
+          self._json({"path": rel, "content": f.read()})
+      except OSError:
+        self._json({"error": "unreadable"}, 500)
+
+  def _serve_diff(self, q: dict[str, list[str]]) -> None:
+    ref = q.get("ref", [None])[0]
+    range_spec = q.get("range", [None])[0]
+    if range_spec:
+      diff = _git(self.root, "diff", range_spec)
+    elif ref:
+      base = (_git(self.root, "merge-base", "main", ref) or "main").strip()
+      diff = _git(self.root, "diff", f"{base}...{ref}")
+    else:
+      diff = _git(self.root, "diff", "HEAD")
+    self._json({"diff": diff or "", "ref": ref, "range": range_spec})
+
+  def _serve_at(self, q: dict[str, list[str]]) -> None:
+    from .at import query_at
+    from dataclasses import asdict
+    rel = q.get("path", [""])[0]
+    start = q.get("start", [None])[0]
+    end = q.get("end", [start])[0]
+    rep = query_at(
+      self.root, rel,
+      int(start) if start else None,
+      int(end) if end else None,
+    )
+    self._json({"at": asdict(rep) if rep else None})
+
+  def _serve_static(self, path: str) -> None:
+    from .webui import _MIME_TYPES
+    rel = path.lstrip("/") or "index.html"
+    dist = os.path.join(os.path.dirname(__file__), "ui", "dist")
+    full = os.path.realpath(os.path.join(dist, rel))
+    if not full.startswith(os.path.realpath(dist)) or not os.path.isfile(full):
+      full = os.path.join(dist, "index.html")
+    try:
+      with open(full, "rb") as f:
+        body = f.read()
+    except OSError:
+      self._json({"error": "not found"}, 404)
+      return
+    ext = os.path.splitext(full)[1]
+    mime = _MIME_TYPES.get(ext, "application/octet-stream")
+    self.send_response(200)
+    self.send_header("Content-Type", mime)
+    self.send_header("Content-Length", str(len(body)))
+    self.end_headers()
+    self.wfile.write(body)
+
+
+def _use_dist() -> bool:
+  dist = os.path.join(os.path.dirname(__file__), "ui", "dist")
+  return os.path.isdir(dist) and os.path.isfile(os.path.join(dist, "index.html"))
+
+
+def _tree(root: str) -> dict:
+  """File list (git-tracked) + quest badges."""
+  files = (_git(root, "ls-files") or "").splitlines()
+  touched: dict[str, list[str]] = {}
+  base = (_git(root, "rev-parse", "--abbrev-ref", "HEAD") or "main").strip()
+  now = time.time()
+  merged = set(
+    (_git(root, "branch", "--format=%(refname:short)", "--merged", "main") or "").split()
+  )
+  branches = []
+  for line in (
+    _git(root, "for-each-ref", "refs/heads", "--format=%(refname:short)|%(committerdate:unix)")
+    or ""
+  ).splitlines():
+    name, ts = line.split("|")
+    if name != "main" and name not in merged and (now - int(ts)) < 14 * 86400:
+      branches.append(name)
+  for b in branches:
+    out = _git(root, "diff", "--name-only", f"main...{b}") or ""
+    for f in out.splitlines():
+      touched.setdefault(f, []).append(b)
+  return {"files": files, "touched": touched, "branch": base}
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def run_annotate(
+  root: str,
+  target: AnnotateTarget,
+  *,
+  port: int | None = None,
+  open_browser: bool = True,
+) -> AnnotateResult | None:
+  """Start the annotation gate. Blocks until user submits or ctrl-c."""
+  if port is None:
+    with socket.socket() as s:
+      s.bind(("127.0.0.1", 0))
+      port = s.getsockname()[1]
+
+  _AnnotateHandler.root = root
+  _AnnotateHandler.target = target
+  _AnnotateHandler.result = None
+  _AnnotateHandler.submitted = threading.Event()
+
+  server = ThreadingHTTPServer(("127.0.0.1", port), _AnnotateHandler)
+  server.timeout = 0.5  # poll interval for checking submitted flag
+
+  # Build URL with mode-specific params
+  params = f"?annotate=1&mode={target.mode}"
+  if target.diff_ref:
+    params += f"&diff={target.diff_ref}"
+  url = f"http://127.0.0.1:{port}{params}"
+
+  print(f"mimir annotate · {url}", file=sys.stderr)
+  print("annotate in browser, then submit. ctrl-c to cancel.", file=sys.stderr)
+
+  if open_browser and os.environ.get("BROWSER") not in ("true", "false", ":"):
+    webbrowser.open(url)
+
+  try:
+    # Serve until submission or interrupt
+    while not _AnnotateHandler.submitted.is_set():
+      server.handle_request()
+  except KeyboardInterrupt:
+    print("", file=sys.stderr)
+    return None
+  finally:
+    server.server_close()
+
+  return _AnnotateHandler.result

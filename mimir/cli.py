@@ -516,6 +516,26 @@ def _add_common_args(p: argparse.ArgumentParser) -> None:
   )
 
 
+def cmd_annotate(args: argparse.Namespace) -> None:
+  from .annotate import AnnotateResult, resolve_target, run_annotate
+
+  target = resolve_target(
+    paths=args.paths or None,
+    diff=args.diff,
+    last=args.last,
+    root=os.path.abspath(args.root),
+  )
+  result = run_annotate(
+    os.path.abspath(args.root),
+    target,
+    port=args.port,
+    open_browser=not args.no_open,
+  )
+  if result is None:
+    sys.exit(1)
+  print(json.dumps(asdict(result)))
+
+
 def main() -> None:
   parser = argparse.ArgumentParser(prog="mimir", description="Codebase structural health scanner")
   sub = parser.add_subparsers(dest="command")
@@ -607,6 +627,21 @@ examples:
   ui_p.add_argument("--port", type=int, default=None)
   ui_p.add_argument("--no-open", action="store_true")
 
+  ann_p = sub.add_parser(
+    "annotate",
+    help="Annotation gate: open files/diffs in browser, collect feedback as JSON",
+    description=(
+      "Open files or diffs in the browser for annotation. "
+      "Blocks until annotations are submitted, then prints structured JSON to stdout."
+    ),
+  )
+  ann_p.add_argument("paths", nargs="*", help="Files or directories to annotate")
+  ann_p.add_argument("--diff", metavar="BRANCH", default=None, help="Show diff vs branch")
+  ann_p.add_argument("--last", action="store_true", help="Annotate the last agent message")
+  ann_p.add_argument("--root", default=".", help="Git repository root")
+  ann_p.add_argument("--port", type=int, default=None)
+  ann_p.add_argument("--no-open", action="store_true")
+
   args = parser.parse_args()
   if args.command == "scan":
     cmd_scan(args)
@@ -615,6 +650,8 @@ examples:
   elif args.command == "ui":
     from .webui import serve_ui
     serve_ui(os.path.abspath(args.target), args.port, not args.no_open)
+  elif args.command == "annotate":
+    cmd_annotate(args)
   else:
     parser.print_help()
 
