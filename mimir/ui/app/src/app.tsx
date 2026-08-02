@@ -33,6 +33,7 @@ export function App() {
     startLine: number;
     endLine: number;
     top: number;
+    left: number;
   } | null>(null);
   const annState = useAnnotations();
 
@@ -116,9 +117,9 @@ export function App() {
   const touchedCount = selected && activeTree?.touched[selected]?.length;
 
   // Handle line selection for annotation — triggered by double-click on gutter
-  const handleLineSelect = useCallback((file: string, startLine: number, endLine: number, top: number) => {
+  const handleLineSelect = useCallback((file: string, startLine: number, endLine: number, top: number, left: number) => {
     if (!annotateMode) return;
-    setShowingInput({ file, startLine, endLine, top });
+    setShowingInput({ file, startLine, endLine, top, left });
   }, [annotateMode]);
 
   const handleAnnotationAdd = useCallback((ann: Omit<PendingAnnotation, "id">) => {
@@ -204,15 +205,22 @@ export function App() {
           </div>
         )}
 
-        {/* Annotation input popover */}
+        {/* Annotation input popover — positioned at click point */}
         {showingInput && (
-          <AnnotationInput
-            file={showingInput.file}
-            startLine={showingInput.startLine}
-            endLine={showingInput.endLine}
-            onSubmit={handleAnnotationAdd}
-            onCancel={() => setShowingInput(null)}
-          />
+          <div style={{
+            position: "fixed",
+            top: `${Math.min(showingInput.top + 4, window.innerHeight - 240)}px`,
+            left: `${showingInput.left}px`,
+            zIndex: 100,
+          }}>
+            <AnnotationInput
+              file={showingInput.file}
+              startLine={showingInput.startLine}
+              endLine={showingInput.endLine}
+              onSubmit={handleAnnotationAdd}
+              onCancel={() => setShowingInput(null)}
+            />
+          </div>
         )}
       </div>
 

@@ -21,7 +21,7 @@ import { tokens, type Tokens } from "./theme";
 interface Props {
   patch: string;
   file?: string;
-  onLineSelect?: (file: string, startLine: number, endLine: number, top: number) => void;
+  onLineSelect?: (file: string, startLine: number, endLine: number, top: number, left: number) => void;
 }
 
 /* ── line classification ───────────────────────────────────────── */
@@ -187,6 +187,16 @@ function diffTheme(t: Tokens) {
     ".diff-sign-del": {
       color: isDark ? "#f0a0a0" : "#b33030",
     },
+    // Make selection highlight visible over diff backgrounds
+    ".cm-selectionBackground": {
+      backgroundColor: `${isDark ? "rgba(158, 124, 26, 0.35)" : "rgba(158, 124, 26, 0.25)"} !important`,
+    },
+    "&.cm-focused .cm-selectionBackground": {
+      backgroundColor: `${isDark ? "rgba(158, 124, 26, 0.45)" : "rgba(158, 124, 26, 0.3)"} !important`,
+    },
+    ".cm-selectionMatch": {
+      backgroundColor: `${isDark ? "rgba(158, 124, 26, 0.2)" : "rgba(158, 124, 26, 0.15)"} !important`,
+    },
   }, { dark: isDark });
 }
 
@@ -222,7 +232,6 @@ const diffSignGutter = gutter({
 export function DiffViewer({ patch, file, onLineSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -244,6 +253,24 @@ export function DiffViewer({ patch, file, onLineSelect }: Props) {
           diffTheme(t),
           diffHighlighting(t),
           makeDiffDecorations(t),
+          // On mouseup after selection, fire annotation immediately
+          EditorView.domEventHandlers({
+            mouseup: (e, view) => {
+              if (!onLineSelect || !file) return false;
+              // Small delay so CM6 finishes updating selection
+              setTimeout(() => {
+                const sel = view.state.selection.main;
+                if (sel.from === sel.to) return;
+                const startLine = view.state.doc.lineAt(sel.from).number;
+                const endLine = view.state.doc.lineAt(sel.to).number;
+                const endCoords = view.coordsAtPos(sel.to);
+                onLineSelect(file, startLine, endLine,
+                  endCoords ? endCoords.bottom : e.clientY,
+                  endCoords ? endCoords.left : e.clientX);
+              }, 10);
+              return false;
+            },
+          }),
         ],
       }),
       parent: containerRef.current,
@@ -251,29 +278,13 @@ export function DiffViewer({ patch, file, onLineSelect }: Props) {
 
     viewRef.current = view;
 
-    // Double-click triggers annotation
-    const handleDblClick = () => {
-      if (!onLineSelect || !file) return;
-      const sel = view.state.selection.main;
-      const startLine = view.state.doc.lineAt(sel.from).number;
-      const endLine = view.state.doc.lineAt(sel.to).number;
-      const rect = view.dom.getBoundingClientRect();
-      const lineTop = view.coordsAtPos(sel.from)?.top ?? rect.top;
-      onLineSelect(file, startLine, endLine, lineTop - rect.top);
-    };
-    view.dom.addEventListener("dblclick", handleDblClick);
-
     return () => {
-      view.dom.removeEventListener("dblclick", handleDblClick);
       view.destroy();
       viewRef.current = null;
     };
   }, [patch, file, onLineSelect]);
 
   return (
-    <div
-      ref={containerRef}
-      class="diff-viewer-cm"
-    />
+    <div ref={containerRef} class="diff-viewer-cm" />
   );
 }

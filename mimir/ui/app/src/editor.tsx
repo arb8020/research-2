@@ -22,7 +22,7 @@ interface Props {
   peekLine: number | null;
   onPeek: (branch: string, line: number) => void;
   onEnter: (branch: string) => void;
-  onLineSelect?: (file: string, startLine: number, endLine: number, top: number) => void;
+  onLineSelect?: (file: string, startLine: number, endLine: number, top: number, left: number) => void;
 }
 
 const langCompartment = new Compartment();
@@ -51,7 +51,6 @@ export function Editor({ path, currentRef, peekRef, peekLine, onPeek, onEnter, o
   const peekContainerRef = useRef<HTMLDivElement>(null);
   const mainViewRef = useRef<EditorView | null>(null);
   const peekViewRef = useRef<EditorView | null>(null);
-
   // Wire up callbacks for the popover
   useEffect(() => {
     setAtCallbacks({ onPeek, onEnter });
@@ -61,31 +60,39 @@ export function Editor({ path, currentRef, peekRef, peekLine, onPeek, onEnter, o
   useEffect(() => {
     if (!mainRef.current) return;
     const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const exts = createExtensions(isDark, null);
+
+    // On mouseup after selection, fire annotation popover immediately
+    if (onLineSelect) {
+      exts.push(EditorView.domEventHandlers({
+        mouseup: (e, view) => {
+          if (!path) return false;
+          setTimeout(() => {
+            const sel = view.state.selection.main;
+            if (sel.from === sel.to) return;
+            const startLine = view.state.doc.lineAt(sel.from).number;
+            const endLine = view.state.doc.lineAt(sel.to).number;
+            const rect = view.dom.getBoundingClientRect();
+            const endCoords = view.coordsAtPos(sel.to);
+            onLineSelect(path, startLine, endLine,
+              endCoords ? endCoords.bottom : e.clientY,
+              endCoords ? endCoords.left : e.clientX);
+          }, 10);
+          return false;
+        },
+      }));
+    }
+
     const view = new EditorView({
       state: EditorState.create({
         doc: "",
-        extensions: createExtensions(isDark, null),
+        extensions: exts,
       }),
       parent: mainRef.current,
     });
     mainViewRef.current = view;
 
-    // Double-click on line numbers triggers annotation
-    const handleDblClick = (e: MouseEvent) => {
-      if (!onLineSelect || !path) return;
-      const view = mainViewRef.current;
-      if (!view) return;
-      const sel = view.state.selection.main;
-      const startLine = view.state.doc.lineAt(sel.from).number;
-      const endLine = view.state.doc.lineAt(sel.to).number;
-      const rect = view.dom.getBoundingClientRect();
-      const lineTop = view.coordsAtPos(sel.from)?.top ?? rect.top;
-      onLineSelect(path, startLine, endLine, lineTop - rect.top);
-    };
-    view.dom.addEventListener("dblclick", handleDblClick);
-
     return () => {
-      view.dom.removeEventListener("dblclick", handleDblClick);
       view.destroy();
     };
   }, []);

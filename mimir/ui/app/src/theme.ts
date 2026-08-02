@@ -108,7 +108,10 @@ export function mimirEditorTheme(t: Tokens) {
         backgroundColor: t.surface,
       },
       ".cm-selectionBackground": {
-        backgroundColor: `${t.accent}22 !important`,
+        backgroundColor: `${t.accent}33 !important`,
+      },
+      "&.cm-focused .cm-selectionBackground": {
+        backgroundColor: `${t.accent}44 !important`,
       },
       "&.cm-focused .cm-cursor": {
         borderLeftColor: t.accent,
