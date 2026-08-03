@@ -9,7 +9,7 @@ interface Props {
   tree: TreeData | null;
   selected: string | null;
   onSelect: (path: string) => void;
-  mode?: "browse" | "diff";
+  mode?: "browse" | "diff" | "message";
 }
 
 interface DirNode {
@@ -212,6 +212,34 @@ export function FileTree({ tree, selected, onSelect, mode = "browse" }: Props) {
   };
 
   const safeCollapsed = collapsed ?? new Set<string>();
+
+  if (mode === "message") {
+    // Message mode: flat list of recent messages
+    return (
+      <nav class="tree">
+        <div class="tree-header">messages</div>
+        {!tree ? (
+          <div class="tree-loading">loading...</div>
+        ) : (
+          tree.files.map((f) => {
+            const t = tree.touched[f];
+            const preview = t?.[0] ?? "";
+            const idx = parseInt(f.slice(4), 10);
+            return (
+              <div
+                key={f}
+                class={`tree-file tree-message${selected === f ? " active" : ""}`}
+                onClick={() => onSelect(f)}
+              >
+                <span class="tree-message-label">{idx === 0 ? "latest" : `${idx + 1} ago`}</span>
+                <span class="tree-message-preview">{preview}</span>
+              </div>
+            );
+          })
+        )}
+      </nav>
+    );
+  }
 
   return (
     <nav class="tree">

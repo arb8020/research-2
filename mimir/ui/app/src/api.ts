@@ -70,12 +70,22 @@ export async function fetchAt(
 
 /* ── annotate mode ─────────────────────────────────────────────── */
 
+export interface MessageSummary {
+  index: number;
+  preview: string;
+}
+
 export interface AnnotateTarget {
   mode: "browse" | "diff" | "message";
   label: string;
   paths: string[];
   diff_ref: string | null;
   message_text: string | null;
+  messages?: MessageSummary[];
+}
+
+export async function fetchMessage(index: number): Promise<{ index: number; text: string; preview: string }> {
+  return json(`/api/message?index=${index}`);
 }
 
 export interface AnnotationData {
@@ -84,6 +94,7 @@ export interface AnnotationData {
   end_line: number;
   side?: string | null;
   text: string;
+  original_text?: string;
 }
 
 export async function fetchAnnotateTarget(): Promise<AnnotateTarget> {
