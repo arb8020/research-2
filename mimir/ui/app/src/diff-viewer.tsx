@@ -159,12 +159,12 @@ function diffHighlighting(t: Tokens) {
 function diffLineColors(isDark: boolean) {
   return EditorView.baseTheme({
     "&dark .diff-line-add, &light .diff-line-add": {},
-    ".diff-line-add": { backgroundColor: isDark ? "#1a2e1f" : "#e6f4ea" },
-    ".diff-line-del": { backgroundColor: isDark ? "#2e1a1a" : "#fbe8e8" },
-    ".diff-line-ctx": { backgroundColor: isDark ? "#141618" : "#fafafa" },
-    ".diff-line-hunk": { backgroundColor: isDark ? "#171a1d" : "#f0f3f6", color: isDark ? "#9aa4af" : "#6b7785", fontStyle: "italic" },
-    ".diff-line-file": { backgroundColor: isDark ? "#171a1d" : "#f0f3f6", color: isDark ? "#d5e0ea" : "#24292e", fontWeight: "bold" },
-    ".diff-line-meta": { backgroundColor: isDark ? "#141618" : "#fafafa", color: isDark ? "#555" : "#a0a0a0" },
+    ".diff-line-add": { backgroundColor: isDark ? "#0d4420" : "#e6f4ea" },
+    ".diff-line-del": { backgroundColor: isDark ? "#4a1c1c" : "#fbe8e8" },
+    ".diff-line-ctx": { backgroundColor: isDark ? "#161618" : "#fafafa" },
+    ".diff-line-hunk": { backgroundColor: isDark ? "#1a1e28" : "#f0f3f6", color: isDark ? "#7a9ec0" : "#6b7785", fontStyle: "italic" },
+    ".diff-line-file": { backgroundColor: isDark ? "#1e2230" : "#f0f3f6", color: isDark ? "#c0d0e8" : "#24292e", fontWeight: "bold" },
+    ".diff-line-meta": { backgroundColor: isDark ? "#161618" : "#fafafa", color: isDark ? "#666" : "#a0a0a0" },
   });
 }
 
