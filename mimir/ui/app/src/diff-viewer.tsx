@@ -212,10 +212,10 @@ function diffTheme(t: Tokens) {
     },
     // Selection highlight — must override CM6 defaults
     "& .cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-      background: isDark ? "#4a3d10 !important" : "#e8d88a !important",
+      background: isDark ? "#6a5520 !important" : "#e8d88a !important",
     },
     "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
-      background: isDark ? "#5a4a15 !important" : "#dcc86a !important",
+      background: isDark ? "#7a6525 !important" : "#dcc86a !important",
     },
   }, { dark: isDark });
 }
