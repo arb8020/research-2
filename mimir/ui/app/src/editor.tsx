@@ -3,7 +3,7 @@
  * Supports a peek panel (second editor) for viewing branch versions.
  */
 
-import { useRef, useEffect, useCallback } from "preact/hooks";
+import { useRef, useEffect, useCallback, useState } from "preact/hooks";
 import { EditorView, lineNumbers, drawSelection, keymap } from "@codemirror/view";
 import { EditorState, Compartment } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -46,11 +46,24 @@ function createExtensions(isDark: boolean, path: string | null) {
   ];
 }
 
+function EditorSkeleton() {
+  // Varying widths to mimic code lines
+  const widths = [72, 45, 88, 60, 35, 80, 55, 42, 90, 68, 50, 75, 38, 85, 48];
+  return (
+    <div class="editor-skeleton">
+      {widths.map((w, i) => (
+        <div key={i} class="editor-skeleton-line" style={{ width: `${w}%`, animationDelay: `${i * 60}ms` }} />
+      ))}
+    </div>
+  );
+}
+
 export function Editor({ path, currentRef, peekRef, peekLine, onPeek, onEnter, onLineSelect }: Props) {
   const mainRef = useRef<HTMLDivElement>(null);
   const peekContainerRef = useRef<HTMLDivElement>(null);
   const mainViewRef = useRef<EditorView | null>(null);
   const peekViewRef = useRef<EditorView | null>(null);
+  const [loading, setLoading] = useState(false);
   // Wire up callbacks for the popover
   useEffect(() => {
     setAtCallbacks({ onPeek, onEnter });
@@ -101,6 +114,7 @@ export function Editor({ path, currentRef, peekRef, peekLine, onPeek, onEnter, o
   useEffect(() => {
     if (!path || !mainViewRef.current) return;
     const view = mainViewRef.current;
+    setLoading(true);
 
     (async () => {
       const [file, at] = await Promise.all([
@@ -131,6 +145,7 @@ export function Editor({ path, currentRef, peekRef, peekLine, onPeek, onEnter, o
         }
         view.dispatch({ effects: setAtData.of(lineData) });
       }
+      setLoading(false);
     })();
   }, [path, currentRef]);
 
@@ -201,7 +216,9 @@ export function Editor({ path, currentRef, peekRef, peekLine, onPeek, onEnter, o
           <span class="editor-pane-ref">{refLabel}</span>
           {peekRef && <span class="editor-pane-label">current</span>}
         </div>
-        <div class="editor-pane-body" ref={mainRef} />
+        <div class="editor-pane-body" ref={mainRef}>
+          {loading && <EditorSkeleton />}
+        </div>
       </div>
       {peekRef && (
         <div class="editor-pane editor-peek">

@@ -3,13 +3,19 @@ description: Annotate the last agent message in the browser
 allowed-tools: Bash(mimir *)
 ---
 
-## Annotations
+## Step 1: Launch annotation gate
 
-!`PYTHONPATH=/Users/chiraagbalu/silares_stuff/obol/worktrees/obol-sessions/packages/sessions/src mimir annotate --last`
+Run this command using the Bash tool (it blocks until the user submits in the browser — use a 600000ms timeout):
 
-## Your task
+```
+PYTHONPATH=/Users/chiraagbalu/silares_stuff/obol/worktrees/obol-sessions/packages/sessions/src mimir annotate --last
+```
 
-The output above is a JSON object with the user's annotations on your last message. Parse it and address the feedback:
+The command starts a local server, opens the browser, and blocks until the user submits annotations or cancels (ctrl-c).
+
+## Step 2: Handle the result
+
+The command outputs a JSON object. Parse it and address the feedback:
 
 - `annotations` — array of `{file, start_line, end_line, text}` comments on specific lines of your message
 - `mode` — "message"

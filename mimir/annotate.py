@@ -42,8 +42,9 @@ class Annotation:
   file: str
   start_line: int
   end_line: int
-  side: str | None = None   # "old" | "new" (diff mode only)
+  side: str | None = None       # "old" | "new" (diff mode only)
   text: str = ""
+  original_text: str | None = None  # selected text (message mode)
 
 
 @dataclass
@@ -64,7 +65,8 @@ class AnnotateTarget:
   label: str                 # human-readable description
   paths: list[str]           # files to show (browse/message mode)
   diff_ref: str | None       # branch/range (diff mode)
-  message_text: str | None   # raw text (message mode)
+  message_text: str | None   # raw text (message mode) — the selected message
+  messages: list | None = None  # all recent messages (message mode)
 
 
 def resolve_target(
@@ -76,13 +78,14 @@ def resolve_target(
 ) -> AnnotateTarget:
   """Normalize CLI args into an AnnotateTarget."""
   if last:
-    text = _read_last_message()
+    messages = _load_session_messages()
     return AnnotateTarget(
       mode="message",
       label="last",
       paths=[],
       diff_ref=None,
-      message_text=text,
+      message_text=messages[0].text,
+      messages=messages,
     )
   if diff is not None:
     return AnnotateTarget(
@@ -110,30 +113,88 @@ def resolve_target(
   )
 
 
-def _read_last_message() -> str:
-  """Read last assistant message from the current Claude Code session."""
+@dataclass(frozen=True)
+class SessionMessage:
+  index: int        # 0 = most recent
+  text: str
+  preview: str      # first ~60 chars for sidebar display
+
+
+def _load_session_messages(*, max_messages: int = 20) -> list[SessionMessage]:
+  """Load recent assistant messages from the current Claude Code session."""
   try:
     from obol_sessions.decoders.claude_code import ClaudeCodeSessionSupport
     from obol_sessions.model import MessageEntry
-    from obol_sessions.dtypes import AssistantMessage
+    from obol_sessions.dtypes import AssistantMessage, UserMessage
 
+    session_id = os.environ.get("CLAUDE_CODE_SESSION_ID")
     support = ClaudeCodeSessionSupport()
     sources = list(support.discover(Path.home() / ".claude", since=None))
     if not sources:
       raise SystemExit("no Claude Code sessions found")
-    session = support.load(sources[0])
+
+    # Match the current session by ID if available
+    source = None
+    if session_id:
+      for s in sources:
+        if s.session_id == session_id:
+          source = s
+          break
+      if source is None:
+        print(f"warning: session {session_id} not found, falling back to most recent", file=sys.stderr)
+        source = sources[0]
+    else:
+      source = sources[0]
+
+    session = support.load(source)
     if session is None:
       raise SystemExit("could not load session")
-    for entry in reversed(session.entries):
+
+    entries = session.entries
+
+    # Find the last user message boundary — everything after it is the
+    # current turn (which is still being produced).
+    last_user_idx = None
+    for i in range(len(entries) - 1, -1, -1):
+      if isinstance(entries[i], MessageEntry) and isinstance(entries[i].message, UserMessage):
+        last_user_idx = i
+        break
+
+    search_end = last_user_idx if last_user_idx is not None else len(entries)
+
+    # Collect substantive assistant messages backwards
+    messages: list[SessionMessage] = []
+    for i in range(search_end - 1, -1, -1):
+      entry = entries[i]
       if isinstance(entry, MessageEntry) and isinstance(entry.message, AssistantMessage):
-        blocks = [b.text for b in entry.message.content if hasattr(b, "text")]
-        return "\n".join(blocks)
-    raise SystemExit("no assistant message found in session")
+        blocks = [b.text for b in entry.message.content if hasattr(b, "text") and b.text.strip()]
+        text = "\n".join(blocks)
+        if text.strip():
+          preview = text[:60].replace("\n", " ").strip()
+          if len(text) > 60:
+            preview += "..."
+          messages.append(SessionMessage(
+            index=len(messages),
+            text=text,
+            preview=preview,
+          ))
+          if len(messages) >= max_messages:
+            break
+
+    if not messages:
+      raise SystemExit("no assistant message found in session")
+    return messages
   except ImportError:
     raise SystemExit(
       "obol-sessions not installed — required for --last\n"
       "  pip install obol-sessions"
     ) from None
+
+
+def _read_last_message() -> str:
+  """Read last assistant message from the current Claude Code session."""
+  messages = _load_session_messages(max_messages=1)
+  return messages[0].text
 
 
 # ---------------------------------------------------------------------------
@@ -167,13 +228,21 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
     q = parse_qs(url.query)
 
     if url.path == "/api/annotate/target":
-      self._json({
+      resp: dict = {
         "mode": self.target.mode,
         "label": self.target.label,
         "paths": self.target.paths,
         "diff_ref": self.target.diff_ref,
         "message_text": self.target.message_text,
-      })
+      }
+      if self.target.messages:
+        resp["messages"] = [
+          {"index": m.index, "preview": m.preview}
+          for m in self.target.messages
+        ]
+      self._json(resp)
+    elif url.path == "/api/message":
+      self._serve_message(q)
     elif url.path == "/api/tree":
       self._json(_tree(self.root))
     elif url.path == "/api/file":
@@ -198,6 +267,7 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
           end_line=a["end_line"],
           side=a.get("side"),
           text=a.get("text", ""),
+          original_text=a.get("original_text"),
         )
         for a in body.get("annotations", [])
       ]
@@ -263,6 +333,19 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
       int(end) if end else None,
     )
     self._json({"at": asdict(rep) if rep else None})
+
+  def _serve_message(self, q: dict[str, list[str]]) -> None:
+    idx_str = q.get("index", ["0"])[0]
+    try:
+      idx = int(idx_str)
+    except ValueError:
+      self._json({"error": "invalid index"}, 400)
+      return
+    if not self.target.messages or idx < 0 or idx >= len(self.target.messages):
+      self._json({"error": "not found"}, 404)
+      return
+    msg = self.target.messages[idx]
+    self._json({"index": msg.index, "text": msg.text, "preview": msg.preview})
 
   def _serve_static(self, path: str) -> None:
     from .webui import _MIME_TYPES
