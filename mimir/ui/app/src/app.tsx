@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "preact/hooks";
 import { FileTree } from "./tree";
 import { Editor } from "./editor";
-import { DiffViewer } from "./diff-viewer";
+import { DiffViewer, MultiDiffViewer } from "./diff-viewer";
 import { fetchTree, fetchDiff, fetchAnnotateTarget, fetchMessage, type TreeData, type AnnotateTarget } from "./api";
 import { parseUnifiedDiff, type DiffFile } from "./diff-parse";
 import { useAnnotations, AnnotationInput, AnnotationBar, AnnotationSidebar, type PendingAnnotation } from "./annotate";
@@ -91,6 +91,7 @@ export function App() {
   // Diff mode state
   const [diffFiles, setDiffFiles] = useState<DiffFile[] | null>(null);
   const [diffLabel, setDiffLabel] = useState<string>("");
+  const [fullDiff, setFullDiff] = useState<string>("");
 
   // Annotate mode state
   const [annotateMode, setAnnotateMode] = useState(false);
@@ -130,15 +131,18 @@ export function App() {
           return;
         }
         fetchTree().then(setTree);
-        if (target.mode === "diff" && target.diff_ref) {
-          const isRange = target.diff_ref.includes("..");
+        if (target.mode === "diff") {
+          // Fetch diff — works for both git ref diffs and stdin diffs
+          const ref = target.diff_ref;
+          const isRange = ref?.includes("..") ?? false;
           fetchDiff(
-            isRange ? undefined : target.diff_ref,
-            isRange ? target.diff_ref : undefined,
+            isRange ? undefined : (ref ?? undefined),
+            isRange ? ref! : undefined,
           ).then((data) => {
             const files = parseUnifiedDiff(data.diff);
             setDiffFiles(files);
             setDiffLabel(target.label);
+            setFullDiff(data.diff);
             if (files.length > 0) setSelected(files[0].newPath);
           });
         }
@@ -152,6 +156,7 @@ export function App() {
           const files = parseUnifiedDiff(data.diff);
           setDiffFiles(files);
           setDiffLabel(data.range ?? data.ref ?? "working tree");
+          setFullDiff(data.diff);
           if (files.length > 0) setSelected(files[0].newPath);
         });
       }
@@ -222,7 +227,7 @@ export function App() {
   }, [annState.add]);
 
   return (
-    <div class={`app ${annotateMode ? "app-annotate" : ""} ${isMessageMode && annotateMode ? "app-with-sidebar" : ""}`}>
+    <div class={`app ${annotateMode ? "app-annotate app-with-sidebar" : ""}`}>
       <FileTree
         tree={activeTree}
         selected={selected}
@@ -233,7 +238,11 @@ export function App() {
             const idx = parseInt(path.slice(4), 10);
             setSelectedMsgIdx(idx);
             fetchMessage(idx).then((msg) => setMessageText(msg.text));
-          } else if (!isDiffMode) {
+          } else if (isDiffMode) {
+            // Scroll to file section in multi-diff viewer
+            const el = document.getElementById(`diff-file-${path}`);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+          } else {
             setCurrentRef(null);
             setPeekRef(null);
             setPeekLine(null);
@@ -241,26 +250,17 @@ export function App() {
         }}
       />
       <div class="main">
-        {isDiffMode && selected && selectedDiff ? (
+        {isDiffMode && fullDiff ? (
           <>
             <div class="file-header">
-              <span class="file-path">
-                {selected.includes("/")
-                  ? selected.slice(0, selected.lastIndexOf("/") + 1)
-                  : ""}
-              </span>
-              <span class="file-name">
-                {selected.includes("/")
-                  ? selected.slice(selected.lastIndexOf("/") + 1)
-                  : selected}
-              </span>
+              <span class="file-name">{diffLabel}</span>
               <span class="file-meta">
-                +{selectedDiff.additions} −{selectedDiff.deletions}
+                {diffFiles?.length ?? 0} file{(diffFiles?.length ?? 0) !== 1 ? "s" : ""} changed
               </span>
             </div>
-            <DiffViewer
-              patch={selectedDiff.rawDiff}
-              file={selected}
+            <MultiDiffViewer
+              patch={fullDiff}
+              label={diffLabel}
               onLineSelect={annotateMode ? handleLineSelect : undefined}
             />
           </>
@@ -326,8 +326,8 @@ export function App() {
         )}
       </div>
 
-      {/* Annotation sidebar — message mode only */}
-      {annotateMode && isMessageMode && (
+      {/* Annotation sidebar */}
+      {annotateMode && (
         <AnnotationSidebar
           annotations={annState.annotations}
           onRemove={annState.remove}
