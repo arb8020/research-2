@@ -914,17 +914,32 @@ body {
 
 @media (prefers-color-scheme: dark) {
   .diff-file-editor .cm-editor .cm-line.diff-line-add,
-  .diff-viewer-cm .cm-editor .cm-line.diff-line-add { background-color: #0d4420 !important; }
+  .diff-viewer-cm .cm-editor .cm-line.diff-line-add { background-color: rgba(13, 68, 32, 0.7) !important; }
   .diff-file-editor .cm-editor .cm-line.diff-line-del,
-  .diff-viewer-cm .cm-editor .cm-line.diff-line-del { background-color: #4a1c1c !important; }
+  .diff-viewer-cm .cm-editor .cm-line.diff-line-del { background-color: rgba(74, 28, 28, 0.7) !important; }
   .diff-file-editor .cm-editor .cm-line.diff-line-ctx,
-  .diff-viewer-cm .cm-editor .cm-line.diff-line-ctx { background-color: #161618 !important; }
+  .diff-viewer-cm .cm-editor .cm-line.diff-line-ctx { background-color: rgba(22, 22, 24, 0.7) !important; }
   .diff-file-editor .cm-editor .cm-line.diff-line-hunk,
-  .diff-viewer-cm .cm-editor .cm-line.diff-line-hunk { background-color: #1a1e28 !important; color: #7a9ec0 !important; }
+  .diff-viewer-cm .cm-editor .cm-line.diff-line-hunk { background-color: rgba(26, 30, 40, 0.85) !important; color: #7a9ec0 !important; }
   .diff-file-editor .cm-editor .cm-line.diff-line-file,
-  .diff-viewer-cm .cm-editor .cm-line.diff-line-file { background-color: #1e2230 !important; color: #c0d0e8 !important; }
+  .diff-viewer-cm .cm-editor .cm-line.diff-line-file { background-color: rgba(30, 34, 48, 0.85) !important; color: #c0d0e8 !important; }
   .diff-file-editor .cm-editor .cm-line.diff-line-meta,
-  .diff-viewer-cm .cm-editor .cm-line.diff-line-meta { background-color: #161618 !important; color: #666666 !important; }
+  .diff-viewer-cm .cm-editor .cm-line.diff-line-meta { background-color: rgba(22, 22, 24, 0.7) !important; color: #666666 !important; }
+}
+
+/* ── CM6 selection highlighting — use native ::selection since drawSelection
+   layer (z-index: -2) is hidden behind opaque diff line backgrounds */
+.diff-file-editor .cm-editor .cm-content ::selection,
+.diff-viewer-cm .cm-editor .cm-content ::selection {
+  background: #4a3d10 !important;
+  color: inherit !important;
+}
+@media (prefers-color-scheme: light) {
+  .diff-file-editor .cm-editor .cm-content ::selection,
+  .diff-viewer-cm .cm-editor .cm-content ::selection {
+    background: #e8d88a !important;
+    color: inherit !important;
+  }
 }
 
 /* ── CM6 selection highlighting (must beat CM6's scoped &light/&dark rules) */
