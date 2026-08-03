@@ -8,8 +8,8 @@
  * - Fold by file (level 1) and hunk (level 2)
  */
 
-import { useRef, useEffect } from "preact/hooks";
-import { EditorView, lineNumbers, drawSelection, keymap, Decoration, type DecorationSet } from "@codemirror/view";
+import { useRef, useEffect, useMemo, useState } from "preact/hooks";
+import { EditorView, lineNumbers, drawSelection, keymap, Decoration, type DecorationSet, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { EditorState, StateField, RangeSetBuilder } from "@codemirror/state";
 import { defaultKeymap } from "@codemirror/commands";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
@@ -75,6 +75,41 @@ function makeDiffDecorations(t: Tokens) {
   }
 }
 
+/* ── DOM-based diff highlighting (fallback for CM6 decoration issues) ── */
+
+function diffDomHighlighter() {
+  function applyClasses(view: EditorView) {
+    const lines = view.dom.querySelectorAll(".cm-line");
+    lines.forEach((el) => {
+      const text = el.textContent || "";
+      // Remove old classes
+      el.classList.remove("diff-line-add", "diff-line-del", "diff-line-ctx", "diff-line-hunk", "diff-line-file", "diff-line-meta");
+      const kind = classifyLine(text);
+      switch (kind) {
+        case "add": el.classList.add("diff-line-add"); break;
+        case "delete": el.classList.add("diff-line-del"); break;
+        case "hunk_hdr": el.classList.add("diff-line-hunk"); break;
+        case "file_hdr": el.classList.add("diff-line-file"); break;
+        case "meta": el.classList.add("diff-line-meta"); break;
+        default: el.classList.add("diff-line-ctx"); break;
+      }
+    });
+  }
+
+  return ViewPlugin.fromClass(class {
+    constructor(view: EditorView) {
+      // Multiple passes to catch lazy-mounted editors
+      requestAnimationFrame(() => applyClasses(view));
+      setTimeout(() => applyClasses(view), 100);
+    }
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged) {
+        requestAnimationFrame(() => applyClasses(update.view));
+      }
+    }
+  });
+}
+
 /* ── fold by file/hunk ─────────────────────────────────────────── */
 
 const diffFoldService = foldService.of((state, lineStart, lineEnd) => {
@@ -121,6 +156,18 @@ function diffHighlighting(t: Tokens) {
 
 /* ── theme ─────────────────────────────────────────────────────── */
 
+function diffLineColors(isDark: boolean) {
+  return EditorView.baseTheme({
+    "&dark .diff-line-add, &light .diff-line-add": {},
+    ".diff-line-add": { backgroundColor: isDark ? "#1a2e1f" : "#e6f4ea" },
+    ".diff-line-del": { backgroundColor: isDark ? "#2e1a1a" : "#fbe8e8" },
+    ".diff-line-ctx": { backgroundColor: isDark ? "#141618" : "#fafafa" },
+    ".diff-line-hunk": { backgroundColor: isDark ? "#171a1d" : "#f0f3f6", color: isDark ? "#9aa4af" : "#6b7785", fontStyle: "italic" },
+    ".diff-line-file": { backgroundColor: isDark ? "#171a1d" : "#f0f3f6", color: isDark ? "#d5e0ea" : "#24292e", fontWeight: "bold" },
+    ".diff-line-meta": { backgroundColor: isDark ? "#141618" : "#fafafa", color: isDark ? "#555" : "#a0a0a0" },
+  });
+}
+
 function diffTheme(t: Tokens) {
   const isDark = t === tokens.dark;
   return EditorView.theme({
@@ -155,30 +202,6 @@ function diffTheme(t: Tokens) {
     ".cm-foldGutter .cm-gutterElement": {
       padding: "0 4px",
       cursor: "pointer",
-    },
-    // Diff line backgrounds
-    ".diff-line-add": {
-      backgroundColor: isDark ? "#1a2e1f" : "#e6f4ea",
-    },
-    ".diff-line-del": {
-      backgroundColor: isDark ? "#2e1a1a" : "#fbe8e8",
-    },
-    ".diff-line-ctx": {
-      backgroundColor: isDark ? "#141618" : "#fafafa",
-    },
-    ".diff-line-hunk": {
-      backgroundColor: isDark ? "#171a1d" : "#f0f3f6",
-      color: isDark ? "#9aa4af" : "#6b7785",
-      fontStyle: "italic",
-    },
-    ".diff-line-file": {
-      backgroundColor: isDark ? "#171a1d" : "#f0f3f6",
-      color: isDark ? "#d5e0ea" : "#24292e",
-      fontWeight: "bold",
-    },
-    ".diff-line-meta": {
-      backgroundColor: isDark ? "#141618" : "#fafafa",
-      color: t.ink3,
     },
     // Sign column — first character coloring
     ".diff-sign-add": {
@@ -244,12 +267,13 @@ export function DiffViewer({ patch, file, onLineSelect }: Props) {
           highlightSelectionMatches(),
           foldGutter(),
           diffFoldService,
-          diffSignGutter,
           keymap.of([...defaultKeymap, ...searchKeymap]),
           EditorState.readOnly.of(true),
           diffTheme(t),
+          diffLineColors(isDark),
           diffHighlighting(t),
           makeDiffDecorations(t),
+          diffDomHighlighter(),
           // On mouseup after selection, fire annotation immediately
           EditorView.domEventHandlers({
             mouseup: (e, view) => {
@@ -283,5 +307,157 @@ export function DiffViewer({ patch, file, onLineSelect }: Props) {
 
   return (
     <div ref={containerRef} class="diff-viewer-cm" />
+  );
+}
+
+/* ── multi-file diff viewer (scrollable with sticky headers) ──── */
+
+interface FileDiffChunk {
+  path: string;
+  additions: number;
+  deletions: number;
+  rawDiff: string;
+}
+
+function splitDiffByFile(patch: string): FileDiffChunk[] {
+  const lines = patch.split("\n");
+  const chunks: FileDiffChunk[] = [];
+  let start = -1;
+  let path = "";
+  let adds = 0;
+  let dels = 0;
+
+  function flush(end: number) {
+    if (start < 0) return;
+    let e = end;
+    while (e > start && lines[e - 1] === "") e--;
+    chunks.push({ path, additions: adds, deletions: dels, rawDiff: lines.slice(start, e).join("\n") });
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith("diff --git ")) {
+      flush(i);
+      start = i;
+      adds = 0;
+      dels = 0;
+      const m = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+      path = m?.[2] ?? "";
+      continue;
+    }
+    if (start >= 0) {
+      if (line.startsWith("+") && !line.startsWith("+++")) adds++;
+      if (line.startsWith("-") && !line.startsWith("---")) dels++;
+    }
+  }
+  flush(lines.length);
+  return chunks;
+}
+
+/** Single file section within the multi-diff viewer — lazy-mounted via IntersectionObserver */
+function DiffFileSection({ chunk, onLineSelect }: { chunk: FileDiffChunk; onLineSelect?: Props["onLineSelect"] }) {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const [visible, setVisible] = useState(false);
+
+  // Lazy mount: only create CM6 when scrolled into view
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { rootMargin: "200px" } // load slightly before visible
+    );
+    obs.observe(sentinelRef.current);
+    return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible || !editorRef.current) return;
+    const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const t = isDark ? tokens.dark : tokens.light;
+
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: chunk.rawDiff,
+        extensions: [
+          lineNumbers(),
+          drawSelection(),
+          highlightSelectionMatches(),
+          keymap.of([...defaultKeymap, ...searchKeymap]),
+          EditorState.readOnly.of(true),
+          diffTheme(t),
+          diffLineColors(isDark),
+          diffHighlighting(t),
+          makeDiffDecorations(t),
+          diffDomHighlighter(),
+          EditorView.domEventHandlers({
+            mouseup: (e, view) => {
+              if (!onLineSelect) return false;
+              setTimeout(() => {
+                const sel = view.state.selection.main;
+                if (sel.from === sel.to) return;
+                const startLine = view.state.doc.lineAt(sel.from).number;
+                const endLine = view.state.doc.lineAt(sel.to).number;
+                const endCoords = view.coordsAtPos(sel.to);
+                onLineSelect(chunk.path, startLine, endLine,
+                  endCoords ? endCoords.bottom : e.clientY,
+                  endCoords ? endCoords.left : e.clientX);
+              }, 10);
+              return false;
+            },
+          }),
+        ],
+      }),
+      parent: editorRef.current,
+    });
+    viewRef.current = view;
+
+
+    return () => { view.destroy(); viewRef.current = null; };
+  }, [chunk.rawDiff, visible]);
+
+  // Estimate height from line count for placeholder
+  const lineCount = chunk.rawDiff.split("\n").length;
+  const estimatedHeight = lineCount * 24; // ~24px per line
+
+  return (
+    <div ref={sentinelRef}>
+      {visible ? (
+        <div ref={editorRef} class="diff-file-editor" />
+      ) : (
+        <div class="diff-file-placeholder" style={{ height: `${Math.min(estimatedHeight, 800)}px` }} />
+      )}
+    </div>
+  );
+}
+
+interface MultiDiffProps {
+  patch: string;
+  label: string;
+  onLineSelect?: Props["onLineSelect"];
+  onFileVisible?: (path: string) => void;
+}
+
+export function MultiDiffViewer({ patch, label, onLineSelect, onFileVisible }: MultiDiffProps) {
+  const chunks = useMemo(() => splitDiffByFile(patch), [patch]);
+  console.log(`[MultiDiffViewer] ${chunks.length} files, patch ${patch.length} chars`);
+
+  return (
+    <div class="multi-diff-scroll">
+      {chunks.map((chunk) => (
+        <div key={chunk.path} class="multi-diff-file" id={`diff-file-${chunk.path}`}>
+          <div class="multi-diff-header">
+            <span class="multi-diff-path">{chunk.path}</span>
+            <span class="multi-diff-stat">
+              <span class="multi-diff-add">+{chunk.additions}</span>
+              {" "}
+              <span class="multi-diff-del">−{chunk.deletions}</span>
+            </span>
+          </div>
+          <DiffFileSection chunk={chunk} onLineSelect={onLineSelect} />
+        </div>
+      ))}
+    </div>
   );
 }

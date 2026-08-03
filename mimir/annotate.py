@@ -67,6 +67,7 @@ class AnnotateTarget:
   diff_ref: str | None       # branch/range (diff mode)
   message_text: str | None   # raw text (message mode) — the selected message
   messages: list | None = None  # all recent messages (message mode)
+  stdin_diff: str | None = None  # raw diff from stdin (diff mode)
 
 
 def resolve_target(
@@ -88,6 +89,24 @@ def resolve_target(
       messages=messages,
     )
   if diff is not None:
+    if diff == "-":
+      # Read diff from stdin
+      raw = sys.stdin.read()
+      if not raw.strip():
+        raise SystemExit("no diff on stdin")
+      # Extract summary line if meat-style (first line starting with #)
+      lines = raw.split("\n")
+      label = "stdin"
+      if lines and lines[0].startswith("# "):
+        label = lines[0][2:].strip()
+      return AnnotateTarget(
+        mode="diff",
+        label=label,
+        paths=[],
+        diff_ref=None,
+        message_text=None,
+        stdin_diff=raw,
+      )
     return AnnotateTarget(
       mode="diff",
       label=diff,
@@ -304,6 +323,10 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
         self._json({"error": "unreadable"}, 500)
 
   def _serve_diff(self, q: dict[str, list[str]]) -> None:
+    # Serve stdin diff if available
+    if self.target.stdin_diff:
+      self._json({"diff": self.target.stdin_diff, "ref": None, "range": None})
+      return
     ref = q.get("ref", [None])[0]
     range_spec = q.get("range", [None])[0]
     if range_spec:
@@ -428,6 +451,8 @@ def run_annotate(
   params = f"?annotate=1&mode={target.mode}"
   if target.diff_ref:
     params += f"&diff={target.diff_ref}"
+  elif target.stdin_diff:
+    params += "&diff=stdin"
   url = f"http://127.0.0.1:{port}{params}"
 
   print(f"mimir annotate · {url}", file=sys.stderr)

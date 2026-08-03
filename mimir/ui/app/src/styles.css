@@ -143,6 +143,7 @@ body {
   padding: 24px 32px;
   overflow: hidden;
   position: relative;
+  min-height: 0; /* allow grid to size it */
 }
 .file-header {
   display: flex;
@@ -175,6 +176,36 @@ body {
   padding: 1px 8px;
   border-radius: 3px;
   letter-spacing: 0.02em;
+}
+
+/* ── file navigation (diff mode) ───────────────────────────────── */
+.file-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.file-nav-btn {
+  font: 12px/1 var(--font);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.file-nav-btn:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--surface);
+}
+.file-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.file-nav-pos {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── editor container (main + peek split) ──────────────────────── */
@@ -816,6 +847,84 @@ body {
 }
 .app-annotate .main {
   overflow: hidden;
+}
+
+/* ── multi-file diff viewer ────────────────────────────────────── */
+.multi-diff-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0; /* allow flex to shrink */
+}
+.multi-diff-file {
+  border-bottom: 1px solid var(--border);
+}
+.multi-diff-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.multi-diff-path {
+  color: var(--ink);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.multi-diff-stat {
+  flex-shrink: 0;
+  font-size: 11px;
+  margin-left: 12px;
+}
+.multi-diff-add { color: #2a6f3b; }
+.multi-diff-del { color: #b33030; }
+@media (prefers-color-scheme: dark) {
+  .multi-diff-add { color: #88d39b; }
+  .multi-diff-del { color: #f0a0a0; }
+}
+.diff-file-placeholder {
+  background: var(--ground);
+  border-bottom: 1px solid var(--border);
+}
+.diff-file-editor .cm-editor {
+  border-radius: 0;
+  border: none;
+}
+
+/* ── diff line highlighting — triple-specificity to beat CM6's scoped selectors */
+.diff-file-editor .cm-editor .cm-line.diff-line-add,
+.diff-viewer-cm .cm-editor .cm-line.diff-line-add { background-color: #e6f4ea !important; }
+.diff-file-editor .cm-editor .cm-line.diff-line-del,
+.diff-viewer-cm .cm-editor .cm-line.diff-line-del { background-color: #fbe8e8 !important; }
+.diff-file-editor .cm-editor .cm-line.diff-line-ctx,
+.diff-viewer-cm .cm-editor .cm-line.diff-line-ctx { background-color: #fafafa !important; }
+.diff-file-editor .cm-editor .cm-line.diff-line-hunk,
+.diff-viewer-cm .cm-editor .cm-line.diff-line-hunk { background-color: #f0f3f6 !important; color: #6b7785 !important; font-style: italic; }
+.diff-file-editor .cm-editor .cm-line.diff-line-file,
+.diff-viewer-cm .cm-editor .cm-line.diff-line-file { background-color: #f0f3f6 !important; color: #24292e !important; font-weight: bold; }
+.diff-file-editor .cm-editor .cm-line.diff-line-meta,
+.diff-viewer-cm .cm-editor .cm-line.diff-line-meta { background-color: #fafafa !important; color: #a0a0a0 !important; }
+
+@media (prefers-color-scheme: dark) {
+  .diff-file-editor .cm-editor .cm-line.diff-line-add,
+  .diff-viewer-cm .cm-editor .cm-line.diff-line-add { background-color: #1a2e1f !important; }
+  .diff-file-editor .cm-editor .cm-line.diff-line-del,
+  .diff-viewer-cm .cm-editor .cm-line.diff-line-del { background-color: #2e1a1a !important; }
+  .diff-file-editor .cm-editor .cm-line.diff-line-ctx,
+  .diff-viewer-cm .cm-editor .cm-line.diff-line-ctx { background-color: #141618 !important; }
+  .diff-file-editor .cm-editor .cm-line.diff-line-hunk,
+  .diff-viewer-cm .cm-editor .cm-line.diff-line-hunk { background-color: #171a1d !important; color: #9aa4af !important; }
+  .diff-file-editor .cm-editor .cm-line.diff-line-file,
+  .diff-viewer-cm .cm-editor .cm-line.diff-line-file { background-color: #171a1d !important; color: #d5e0ea !important; }
+  .diff-file-editor .cm-editor .cm-line.diff-line-meta,
+  .diff-viewer-cm .cm-editor .cm-line.diff-line-meta { background-color: #141618 !important; color: #555555 !important; }
 }
 
 /* ── CodeMirror overrides ───────────────────────────────────────── */
