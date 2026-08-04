@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "preact/hooks";
 import { FileTree } from "./tree";
 import { Editor } from "./editor";
-import { DiffViewer, MultiDiffViewer } from "./diff-viewer";
+import { PierreMultiDiffViewer } from "./pierre-diff-viewer";
 import { fetchTree, fetchDiff, fetchAnnotateTarget, fetchMessage, type TreeData, type AnnotateTarget } from "./api";
 import { parseUnifiedDiff, type DiffFile } from "./diff-parse";
 import { useAnnotations, AnnotationInput, AnnotationBar, AnnotationSidebar, type PendingAnnotation } from "./annotate";
@@ -115,6 +115,7 @@ export function App() {
 
   const isDiffMode = diffFiles !== null;
   const isMessageMode = annotateTarget?.mode === "message" && messageText !== null;
+
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -258,7 +259,7 @@ export function App() {
                 {diffFiles?.length ?? 0} file{(diffFiles?.length ?? 0) !== 1 ? "s" : ""} changed
               </span>
             </div>
-            <MultiDiffViewer
+            <PierreMultiDiffViewer
               patch={fullDiff}
               label={diffLabel}
               onLineSelect={annotateMode ? handleLineSelect : undefined}
