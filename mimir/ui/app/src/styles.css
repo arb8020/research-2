@@ -615,19 +615,12 @@ body {
   color: var(--ink);
 }
 
-/* ── diff viewer ────────────────────────────────────────────────── */
-.diff-viewer-cm {
+/* ── pierre diff viewer ────────────────────────────────────────── */
+.pierre-diff-viewer {
   flex: 1;
   overflow: hidden;
   border-radius: 6px;
   border: 1px solid var(--border);
-}
-.diff-viewer-cm .cm-editor {
-  height: 100%;
-}
-.cm-diff-sign-gutter {
-  width: 16px;
-  text-align: center;
 }
 
 /* ── empty state ────────────────────────────────────────────────── */
@@ -893,80 +886,7 @@ body {
   background: var(--ground);
   border-bottom: 1px solid var(--border);
 }
-.diff-file-editor .cm-editor {
-  border-radius: 0;
-  border: none;
-}
-
-/* ── diff line highlighting — triple-specificity to beat CM6's scoped selectors */
-.diff-file-editor .cm-editor .cm-line.diff-line-add,
-.diff-viewer-cm .cm-editor .cm-line.diff-line-add { background-color: #e6f4ea !important; }
-.diff-file-editor .cm-editor .cm-line.diff-line-del,
-.diff-viewer-cm .cm-editor .cm-line.diff-line-del { background-color: #fbe8e8 !important; }
-.diff-file-editor .cm-editor .cm-line.diff-line-ctx,
-.diff-viewer-cm .cm-editor .cm-line.diff-line-ctx { background-color: #fafafa !important; }
-.diff-file-editor .cm-editor .cm-line.diff-line-hunk,
-.diff-viewer-cm .cm-editor .cm-line.diff-line-hunk { background-color: #f0f3f6 !important; color: #6b7785 !important; font-style: italic; }
-.diff-file-editor .cm-editor .cm-line.diff-line-file,
-.diff-viewer-cm .cm-editor .cm-line.diff-line-file { background-color: #f0f3f6 !important; color: #24292e !important; font-weight: bold; }
-.diff-file-editor .cm-editor .cm-line.diff-line-meta,
-.diff-viewer-cm .cm-editor .cm-line.diff-line-meta { background-color: #fafafa !important; color: #a0a0a0 !important; }
-
-@media (prefers-color-scheme: dark) {
-  .diff-file-editor .cm-editor .cm-line.diff-line-add,
-  .diff-viewer-cm .cm-editor .cm-line.diff-line-add { background-color: rgba(13, 68, 32, 0.7) !important; }
-  .diff-file-editor .cm-editor .cm-line.diff-line-del,
-  .diff-viewer-cm .cm-editor .cm-line.diff-line-del { background-color: rgba(74, 28, 28, 0.7) !important; }
-  .diff-file-editor .cm-editor .cm-line.diff-line-ctx,
-  .diff-viewer-cm .cm-editor .cm-line.diff-line-ctx { background-color: rgba(22, 22, 24, 0.7) !important; }
-  .diff-file-editor .cm-editor .cm-line.diff-line-hunk,
-  .diff-viewer-cm .cm-editor .cm-line.diff-line-hunk { background-color: rgba(26, 30, 40, 0.85) !important; color: #7a9ec0 !important; }
-  .diff-file-editor .cm-editor .cm-line.diff-line-file,
-  .diff-viewer-cm .cm-editor .cm-line.diff-line-file { background-color: rgba(30, 34, 48, 0.85) !important; color: #c0d0e8 !important; }
-  .diff-file-editor .cm-editor .cm-line.diff-line-meta,
-  .diff-viewer-cm .cm-editor .cm-line.diff-line-meta { background-color: rgba(22, 22, 24, 0.7) !important; color: #666666 !important; }
-}
-
-/* ── CM6 selection highlighting — use native ::selection since drawSelection
-   layer (z-index: -2) is hidden behind opaque diff line backgrounds */
-.diff-file-editor .cm-editor .cm-content ::selection,
-.diff-viewer-cm .cm-editor .cm-content ::selection {
-  background: #4a3d10 !important;
-  color: inherit !important;
-}
-@media (prefers-color-scheme: light) {
-  .diff-file-editor .cm-editor .cm-content ::selection,
-  .diff-viewer-cm .cm-editor .cm-content ::selection {
-    background: #e8d88a !important;
-    color: inherit !important;
-  }
-}
-
-/* ── CM6 selection highlighting (must beat CM6's scoped &light/&dark rules) */
-.diff-file-editor .cm-editor .cm-selectionBackground,
-.diff-file-editor .cm-editor.cm-focused .cm-selectionBackground,
-.diff-viewer-cm .cm-editor .cm-selectionBackground,
-.diff-viewer-cm .cm-editor.cm-focused .cm-selectionBackground {
-  background: #4a3d10 !important;
-}
-.diff-file-editor .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
-.diff-viewer-cm .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
-  background: #5a4a15 !important;
-}
-@media (prefers-color-scheme: light) {
-  .diff-file-editor .cm-editor .cm-selectionBackground,
-  .diff-file-editor .cm-editor.cm-focused .cm-selectionBackground,
-  .diff-viewer-cm .cm-editor .cm-selectionBackground,
-  .diff-viewer-cm .cm-editor.cm-focused .cm-selectionBackground {
-    background: #e8d88a !important;
-  }
-  .diff-file-editor .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
-  .diff-viewer-cm .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
-    background: #dcc86a !important;
-  }
-}
-
-/* ── CodeMirror overrides ───────────────────────────────────────── */
+/* ── CodeMirror overrides (editor.tsx — file viewer, not diff) ──── */
 .cm-editor {
   height: 100%;
 }
