@@ -8,8 +8,7 @@
 
 import { useRef, useEffect, useMemo, useState, useCallback } from "preact/hooks";
 import { PatchDiff } from "@pierre/diffs/react";
-import { parsePatchFiles } from "@pierre/diffs";
-import type { FileDiffMetadata, DiffLineAnnotation } from "@pierre/diffs";
+import type { SelectedLineRange } from "@pierre/diffs";
 
 interface Props {
   patch: string;
@@ -19,7 +18,6 @@ interface Props {
 
 /* ── theme ─────────────────────────────────────────────────────── */
 
-// Mimir's design tokens mapped to unsafeCSS for the Shadow DOM
 function mimirUnsafeCSS(isDark: boolean): string {
   const t = isDark
     ? {
@@ -61,18 +59,14 @@ function mimirUnsafeCSS(isDark: boolean): string {
       --diffs-border-color: ${t.border};
     }
 
-    /* line backgrounds */
     .diffs-addition-line { background-color: ${t.addBg} !important; }
     .diffs-deletion-line { background-color: ${t.delBg} !important; }
     .diffs-hunk-header { background-color: ${t.hunkBg} !important; color: ${t.hunkColor}; font-style: italic; }
 
-    /* selection */
     ::selection { background: ${t.selBg} !important; color: inherit !important; }
 
-    /* gutter */
     .diffs-gutter { color: ${t.ink3}; font-size: 12px; }
 
-    /* file header */
     .diffs-file-header {
       background: ${t.surface};
       border-bottom: 1px solid ${t.border};
@@ -80,50 +74,92 @@ function mimirUnsafeCSS(isDark: boolean): string {
       font-size: 12px;
       font-weight: 500;
     }
+
+    /* selected line highlight */
+    .diffs-selected-line {
+      background-color: ${t.selBg} !important;
+    }
   `;
+}
+
+/* ── shared options builder ──────────────────────────────────────── */
+
+function makeDiffOptions(
+  isDark: boolean,
+  opts?: {
+    disableFileHeader?: boolean;
+    onLineSelected?: (range: SelectedLineRange | null) => void;
+    onLineClick?: (props: any) => void;
+  },
+) {
+  return {
+    diffStyle: "unified" as const,
+    theme: isDark
+      ? ({ dark: "github-dark", light: "github-light" } as any)
+      : ({ dark: "github-dark", light: "github-light" } as any),
+    unsafeCSS: mimirUnsafeCSS(isDark),
+    disableFileHeader: opts?.disableFileHeader ?? false,
+    enableLineSelection: true,
+    onLineSelected: opts?.onLineSelected,
+    // Fire on content-area clicks too (not just gutter)
+    onLineClick: opts?.onLineClick,
+  };
 }
 
 /* ── single-file diff component ──────────────────────────────────── */
 
 export function PierreDiffViewer({ patch, file, onLineSelect }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const isDark = useMemo(
     () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-    []
+    [],
   );
 
-  // Handle text selection for annotations
-  const handleMouseUp = useCallback(
-    (e: MouseEvent) => {
-      if (!onLineSelect || !file) return;
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) return;
-
-      const text = sel.toString();
-      if (!text.trim()) return;
-
-      // Try to extract line info from the selection's position in the diff
-      const range = sel.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-
-      onLineSelect(file, 0, 0, rect.bottom, rect.left);
+  const handleLineSelected = useCallback(
+    (range: SelectedLineRange | null) => {
+      if (!onLineSelect || !file || !range) return;
+      // Get bounding rect of the selected line element for popover positioning
+      const el = document.querySelector(
+        `.pierre-diff-viewer [data-line="${range.end}"]`,
+      );
+      const rect = el?.getBoundingClientRect();
+      onLineSelect(
+        file,
+        range.start,
+        range.end,
+        rect?.bottom ?? 300,
+        rect?.left ?? 400,
+      );
     },
-    [onLineSelect, file]
+    [onLineSelect, file],
+  );
+
+  const handleLineClick = useCallback(
+    (props: any) => {
+      if (!onLineSelect || !file) return;
+      const rect = props.lineElement?.getBoundingClientRect();
+      onLineSelect(
+        file,
+        props.lineNumber,
+        props.lineNumber,
+        rect?.bottom ?? 300,
+        rect?.left ?? 400,
+      );
+    },
+    [onLineSelect, file],
+  );
+
+  const options = useMemo(
+    () =>
+      makeDiffOptions(isDark, {
+        onLineSelected: handleLineSelected,
+        onLineClick: handleLineClick,
+      }),
+    [isDark, handleLineSelected, handleLineClick],
   );
 
   return (
-    <div
-      ref={containerRef}
-      class="pierre-diff-viewer"
-      onMouseUp={handleMouseUp}
-    >
-      <PatchDiff
-        patch={patch}
-        options={{
-          theme: isDark ? "github-dark" : "github-light",
-          unsafeCSS: mimirUnsafeCSS(isDark),
-        }}
-      />
+    <div class="pierre-diff-viewer">
+      <PatchDiff patch={patch} options={options} />
     </div>
   );
 }
@@ -192,10 +228,8 @@ export function PierreMultiDiffViewer({
   const chunks = useMemo(() => splitDiffByFile(patch), [patch]);
   const isDark = useMemo(
     () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-    []
+    [],
   );
-  const unsafeCSS = useMemo(() => mimirUnsafeCSS(isDark), [isDark]);
-  const theme = isDark ? "github-dark" : "github-light";
 
   return (
     <div class="multi-diff-scroll">
@@ -214,8 +248,7 @@ export function PierreMultiDiffViewer({
           </div>
           <PierreDiffSection
             chunk={chunk}
-            theme={theme}
-            unsafeCSS={unsafeCSS}
+            isDark={isDark}
             onLineSelect={onLineSelect}
           />
         </div>
@@ -227,13 +260,11 @@ export function PierreMultiDiffViewer({
 /** Single file section — lazy-mounted via IntersectionObserver */
 function PierreDiffSection({
   chunk,
-  theme,
-  unsafeCSS,
+  isDark,
   onLineSelect,
 }: {
   chunk: FileDiffChunk;
-  theme: string;
-  unsafeCSS: string;
+  isDark: boolean;
   onLineSelect?: Props["onLineSelect"];
 }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -248,24 +279,59 @@ function PierreDiffSection({
           obs.disconnect();
         }
       },
-      { rootMargin: "200px" }
+      { rootMargin: "200px" },
     );
     obs.observe(sentinelRef.current);
     return () => obs.disconnect();
   }, []);
 
-  const handleMouseUp = useCallback(
-    (e: MouseEvent) => {
-      if (!onLineSelect) return;
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) return;
-      const text = sel.toString();
-      if (!text.trim()) return;
-      const range = sel.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      onLineSelect(chunk.path, 0, 0, rect.bottom, rect.left);
+  const handleLineSelected = useCallback(
+    (range: SelectedLineRange | null) => {
+      if (!onLineSelect || !range) return;
+      const container = sentinelRef.current;
+      const shadowHost = container?.querySelector("diffs-container");
+      const shadowRoot = shadowHost?.shadowRoot;
+      let rect: DOMRect | undefined;
+      if (shadowRoot) {
+        const lineEl = shadowRoot.querySelector(
+          `[data-line="${range.end}"]`,
+        );
+        rect = lineEl?.getBoundingClientRect();
+      }
+      onLineSelect(
+        chunk.path,
+        range.start,
+        range.end,
+        rect?.bottom ?? 300,
+        rect?.left ?? 400,
+      );
     },
-    [onLineSelect, chunk.path]
+    [onLineSelect, chunk.path],
+  );
+
+  const handleLineClick = useCallback(
+    (props: any) => {
+      if (!onLineSelect) return;
+      const rect = props.lineElement?.getBoundingClientRect();
+      onLineSelect(
+        chunk.path,
+        props.lineNumber,
+        props.lineNumber,
+        rect?.bottom ?? 300,
+        rect?.left ?? 400,
+      );
+    },
+    [onLineSelect, chunk.path],
+  );
+
+  const options = useMemo(
+    () =>
+      makeDiffOptions(isDark, {
+        disableFileHeader: true,
+        onLineSelected: handleLineSelected,
+        onLineClick: handleLineClick,
+      }),
+    [isDark, handleLineSelected, handleLineClick],
   );
 
   const lineCount = chunk.rawDiff.split("\n").length;
@@ -274,15 +340,8 @@ function PierreDiffSection({
   return (
     <div ref={sentinelRef}>
       {visible ? (
-        <div class="diff-file-editor" onMouseUp={handleMouseUp}>
-          <PatchDiff
-            patch={chunk.rawDiff}
-            options={{
-              theme: theme as any,
-              unsafeCSS,
-              disableFileHeader: true, // we render our own sticky header
-            }}
-          />
+        <div class="diff-file-editor">
+          <PatchDiff patch={chunk.rawDiff} options={options} />
         </div>
       ) : (
         <div
