@@ -654,7 +654,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 8px 10px;
-  width: 260px;
+  width: 300px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08);
   animation: mimir-popover-enter 0.15s ease-out;
 }
