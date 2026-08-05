@@ -37,14 +37,12 @@ function AnnotationPopover({ showingInput, onSubmit, onCancel }: {
   useEffect(() => {
     const anchor = showingInput.anchorEl;
     if (!anchor) {
-      // Position popover at the right edge of the main panel, aligned to the clicked line
-      // This prevents the popover from overlapping diff content
-      const mainPanel = document.querySelector(".main");
-      const mainRect = mainPanel?.getBoundingClientRect();
-      const rightEdge = mainRect ? mainRect.right - 316 : window.innerWidth - 340;
+      // Position popover inside the annotation sidebar area
+      const sidebar = document.querySelector(".ann-sidebar");
+      const sidebarRect = sidebar?.getBoundingClientRect();
       setPos({
         top: Math.min(showingInput.top + 4, window.innerHeight - 260),
-        left: Math.min(rightEdge, window.innerWidth - 340),
+        left: sidebarRect ? sidebarRect.left + 8 : window.innerWidth - 310,
       });
       return;
     }
