@@ -37,9 +37,14 @@ function AnnotationPopover({ showingInput, onSubmit, onCancel }: {
   useEffect(() => {
     const anchor = showingInput.anchorEl;
     if (!anchor) {
+      // Position popover at the right edge of the main panel, aligned to the clicked line
+      // This prevents the popover from overlapping diff content
+      const mainPanel = document.querySelector(".main");
+      const mainRect = mainPanel?.getBoundingClientRect();
+      const rightEdge = mainRect ? mainRect.right - 316 : window.innerWidth - 340;
       setPos({
         top: Math.min(showingInput.top + 4, window.innerHeight - 260),
-        left: Math.min(clickLeft, window.innerWidth - 340),
+        left: Math.min(rightEdge, window.innerWidth - 340),
       });
       return;
     }
@@ -60,7 +65,7 @@ function AnnotationPopover({ showingInput, onSubmit, onCancel }: {
       document.removeEventListener("scroll", update, true);
       window.removeEventListener("resize", update);
     };
-  }, [showingInput.anchorEl, clickLeft]);
+  }, [showingInput.anchorEl, showingInput.top, clickLeft]);
 
   return (
     <div style={{
@@ -68,7 +73,9 @@ function AnnotationPopover({ showingInput, onSubmit, onCancel }: {
       top: `${pos.top}px`,
       left: `${pos.left}px`,
       zIndex: 100,
+      pointerEvents: "none",
     }}>
+      <div style={{ pointerEvents: "auto" }}>
       <AnnotationInput
         file={showingInput.file}
         originalText={showingInput.originalText}
@@ -77,6 +84,7 @@ function AnnotationPopover({ showingInput, onSubmit, onCancel }: {
         onSubmit={onSubmit}
         onCancel={onCancel}
       />
+      </div>
     </div>
   );
 }
@@ -210,7 +218,7 @@ export function App() {
   const activeTree = isMessageMode ? messageTree : isDiffMode ? diffTree : tree;
   const touchedCount = selected && activeTree?.touched[selected]?.length;
 
-  // Handle line selection for annotation (file/diff mode — legacy)
+  // Handle line selection for annotation (file/diff mode)
   const handleLineSelect = useCallback((file: string, startLine: number, endLine: number, top: number, left: number, anchorEl?: Element | null) => {
     if (!annotateMode) return;
     setShowingInput({ file, startLine, endLine, originalText: "", top, left, anchorEl });
@@ -320,6 +328,7 @@ export function App() {
         {/* Annotation input popover */}
         {showingInput && (
           <AnnotationPopover
+            key={`${showingInput.file}:${showingInput.startLine}:${showingInput.endLine}:${showingInput.top}`}
             showingInput={showingInput}
             onSubmit={handleAnnotationAdd}
             onCancel={() => setShowingInput(null)}
