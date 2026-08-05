@@ -37,12 +37,9 @@ function AnnotationPopover({ showingInput, onSubmit, onCancel }: {
   useEffect(() => {
     const anchor = showingInput.anchorEl;
     if (!anchor) {
-      // Position popover inside the annotation sidebar area
-      const sidebar = document.querySelector(".ann-sidebar");
-      const sidebarRect = sidebar?.getBoundingClientRect();
       setPos({
-        top: Math.min(showingInput.top + 4, window.innerHeight - 260),
-        left: sidebarRect ? sidebarRect.left + 8 : window.innerWidth - 310,
+        top: Math.min(showingInput.top, window.innerHeight - 260),
+        left: Math.min(showingInput.left, window.innerWidth - 280),
       });
       return;
     }

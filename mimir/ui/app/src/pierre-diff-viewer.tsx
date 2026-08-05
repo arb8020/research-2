@@ -2,8 +2,10 @@
  * Diff viewer using @pierre/diffs — replaces the CM6-based diff-viewer.tsx.
  *
  * Uses PatchDiff for rendering unified diffs with proper syntax highlighting,
- * side-aware annotations, and built-in dark/light theme support. No more
- * fighting CM6 specificity wars.
+ * side-aware annotations, and built-in dark/light theme support.
+ *
+ * Annotation positioning follows the plannotator pattern: track mouse position
+ * continuously, position popover at the cursor on line click/selection.
  */
 
 import { useRef, useEffect, useMemo, useState, useCallback } from "preact/hooks";
@@ -75,7 +77,6 @@ function mimirUnsafeCSS(isDark: boolean): string {
       font-weight: 500;
     }
 
-    /* selected line highlight */
     .diffs-selected-line {
       background-color: ${t.selBg} !important;
     }
@@ -88,7 +89,7 @@ function makeDiffOptions(
   isDark: boolean,
   opts?: {
     disableFileHeader?: boolean;
-    onLineSelected?: (range: SelectedLineRange | null) => void;
+    onLineSelectionEnd?: (range: SelectedLineRange | null) => void;
     onLineClick?: (props: any) => void;
   },
 ) {
@@ -100,8 +101,7 @@ function makeDiffOptions(
     unsafeCSS: mimirUnsafeCSS(isDark),
     disableFileHeader: opts?.disableFileHeader ?? false,
     enableLineSelection: true,
-    onLineSelected: opts?.onLineSelected,
-    // Fire on content-area clicks too (not just gutter)
+    onLineSelectionEnd: opts?.onLineSelectionEnd,
     onLineClick: opts?.onLineClick,
   };
 }
@@ -113,22 +113,17 @@ export function PierreDiffViewer({ patch, file, onLineSelect }: Props) {
     () => window.matchMedia("(prefers-color-scheme: dark)").matches,
     [],
   );
+  const mouseRef = useRef({ x: 0, y: 0 });
 
-  const handleLineSelected = useCallback(
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    mouseRef.current = { x: e.clientX, y: e.clientY };
+  }, []);
+
+  const handleLineSelectionEnd = useCallback(
     (range: SelectedLineRange | null) => {
       if (!onLineSelect || !file || !range) return;
-      // Get bounding rect of the selected line element for popover positioning
-      const el = document.querySelector(
-        `.pierre-diff-viewer [data-line="${range.end}"]`,
-      );
-      const rect = el?.getBoundingClientRect();
-      onLineSelect(
-        file,
-        range.start,
-        range.end,
-        rect?.bottom ?? 300,
-        rect?.left ?? 400,
-      );
+      const { x, y } = mouseRef.current;
+      onLineSelect(file, range.start, range.end, y + 10, x);
     },
     [onLineSelect, file],
   );
@@ -136,14 +131,10 @@ export function PierreDiffViewer({ patch, file, onLineSelect }: Props) {
   const handleLineClick = useCallback(
     (props: any) => {
       if (!onLineSelect || !file) return;
-      const rect = props.lineElement?.getBoundingClientRect();
-      onLineSelect(
-        file,
-        props.lineNumber,
-        props.lineNumber,
-        rect?.bottom ?? 300,
-        rect?.left ?? 400,
-      );
+      const event = props.event as PointerEvent | undefined;
+      const x = event?.clientX ?? mouseRef.current.x;
+      const y = event?.clientY ?? mouseRef.current.y;
+      onLineSelect(file, props.lineNumber, props.lineNumber, y + 10, x);
     },
     [onLineSelect, file],
   );
@@ -151,14 +142,14 @@ export function PierreDiffViewer({ patch, file, onLineSelect }: Props) {
   const options = useMemo(
     () =>
       makeDiffOptions(isDark, {
-        onLineSelected: handleLineSelected,
+        onLineSelectionEnd: handleLineSelectionEnd,
         onLineClick: handleLineClick,
       }),
-    [isDark, handleLineSelected, handleLineClick],
+    [isDark, handleLineSelectionEnd, handleLineClick],
   );
 
   return (
-    <div class="pierre-diff-viewer">
+    <div class="pierre-diff-viewer" onMouseMove={handleMouseMove}>
       <PatchDiff patch={patch} options={options} />
     </div>
   );
@@ -230,9 +221,14 @@ export function PierreMultiDiffViewer({
     () => window.matchMedia("(prefers-color-scheme: dark)").matches,
     [],
   );
+  // Shared mouse tracker across all file sections
+  const mouseRef = useRef({ x: 0, y: 0 });
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    mouseRef.current = { x: e.clientX, y: e.clientY };
+  }, []);
 
   return (
-    <div class="multi-diff-scroll">
+    <div class="multi-diff-scroll" onMouseMove={handleMouseMove}>
       {chunks.map((chunk) => (
         <div
           key={chunk.path}
@@ -249,6 +245,7 @@ export function PierreMultiDiffViewer({
           <PierreDiffSection
             chunk={chunk}
             isDark={isDark}
+            mouseRef={mouseRef}
             onLineSelect={onLineSelect}
           />
         </div>
@@ -261,10 +258,12 @@ export function PierreMultiDiffViewer({
 function PierreDiffSection({
   chunk,
   isDark,
+  mouseRef,
   onLineSelect,
 }: {
   chunk: FileDiffChunk;
   isDark: boolean;
+  mouseRef: { current: { x: number; y: number } };
   onLineSelect?: Props["onLineSelect"];
 }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -285,53 +284,34 @@ function PierreDiffSection({
     return () => obs.disconnect();
   }, []);
 
-  const handleLineSelected = useCallback(
+  const handleLineSelectionEnd = useCallback(
     (range: SelectedLineRange | null) => {
       if (!onLineSelect || !range) return;
-      const container = sentinelRef.current;
-      const shadowHost = container?.querySelector("diffs-container");
-      const shadowRoot = shadowHost?.shadowRoot;
-      let rect: DOMRect | undefined;
-      if (shadowRoot) {
-        const lineEl = shadowRoot.querySelector(
-          `[data-line="${range.end}"]`,
-        );
-        rect = lineEl?.getBoundingClientRect();
-      }
-      onLineSelect(
-        chunk.path,
-        range.start,
-        range.end,
-        rect?.bottom ?? 300,
-        rect?.left ?? 400,
-      );
+      const { x, y } = mouseRef.current;
+      onLineSelect(chunk.path, range.start, range.end, y + 10, x);
     },
-    [onLineSelect, chunk.path],
+    [onLineSelect, chunk.path, mouseRef],
   );
 
   const handleLineClick = useCallback(
     (props: any) => {
       if (!onLineSelect) return;
-      const rect = props.lineElement?.getBoundingClientRect();
-      onLineSelect(
-        chunk.path,
-        props.lineNumber,
-        props.lineNumber,
-        rect?.bottom ?? 300,
-        rect?.left ?? 400,
-      );
+      const event = props.event as PointerEvent | undefined;
+      const x = event?.clientX ?? mouseRef.current.x;
+      const y = event?.clientY ?? mouseRef.current.y;
+      onLineSelect(chunk.path, props.lineNumber, props.lineNumber, y + 10, x);
     },
-    [onLineSelect, chunk.path],
+    [onLineSelect, chunk.path, mouseRef],
   );
 
   const options = useMemo(
     () =>
       makeDiffOptions(isDark, {
         disableFileHeader: true,
-        onLineSelected: handleLineSelected,
+        onLineSelectionEnd: handleLineSelectionEnd,
         onLineClick: handleLineClick,
       }),
-    [isDark, handleLineSelected, handleLineClick],
+    [isDark, handleLineSelectionEnd, handleLineClick],
   );
 
   const lineCount = chunk.rawDiff.split("\n").length;
