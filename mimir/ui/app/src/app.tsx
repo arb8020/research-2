@@ -134,7 +134,13 @@ export function App() {
           setSelected("msg:0");
           return;
         }
-        fetchTree().then(setTree);
+        fetchTree().then((t) => {
+          setTree(t);
+          // Auto-select first target path in browse mode
+          if (target.mode === "browse" && target.paths.length > 0) {
+            setSelected(target.paths[0]);
+          }
+        });
         if (target.mode === "diff") {
           // Fetch diff — works for both git ref diffs and stdin diffs
           const ref = target.diff_ref;
