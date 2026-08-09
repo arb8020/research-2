@@ -40,6 +40,39 @@ def fn_by_name(report: dict, name: str) -> dict:
   return matches[0]
 
 
+# ---------------------------------------------------------------------------
+# check helpers — matklad "check idiom"
+#
+# Decouple test data from internal API shape. When the report format changes,
+# update these helpers once instead of every test.
+# ---------------------------------------------------------------------------
+
+
+def check_fn(report: dict, name: str, **expected: int) -> None:
+  """Assert a function's metrics match expected values.
+
+  Usage: check_fn(report, "flat", nest=0, cc=1, args=2, returns=1)
+  """
+  fn = fn_by_name(report, name)
+  for metric, want in expected.items():
+    got = fn[metric]
+    assert got == want, f"{name}.{metric}: expected {want}, got {got}"
+
+
+def check_rot(report: dict, expected: set[str]) -> None:
+  """Assert exactly these function names are flagged as rot."""
+  flagged = {r["detail"] for r in report["rot"]["items"]}
+  assert flagged == expected, f"rot: expected {expected}, got {flagged}"
+
+
+def check_todos(report: dict, **expected_counts: int) -> None:
+  """Assert todo kind counts. Usage: check_todos(report, TODO=1, FIXME=1)"""
+  kinds = [f["kind"] for f in report["todo"]["items"]]
+  for kind, want in expected_counts.items():
+    got = kinds.count(kind)
+    assert got == want, f"todo {kind}: expected {want}, got {got}"
+
+
 def test_function_metrics(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
   report = scan(tmp_path, {"a.py": """
 def flat(x, y):
@@ -52,12 +85,8 @@ def branchy(x):
         return i
   return 0
 """}, capsys=capsys)
-  flat = fn_by_name(report, "flat")
-  assert (flat["nest"], flat["cc"], flat["args"], flat["returns"]) == (0, 1, 2, 1)
-  branchy = fn_by_name(report, "branchy")
-  assert branchy["nest"] == 3
-  assert branchy["branches"] == 3  # if, for, if
-  assert branchy["returns"] == 2
+  check_fn(report, "flat", nest=0, cc=1, args=2, returns=1)
+  check_fn(report, "branchy", nest=3, branches=3, returns=2)
   assert report["structure"]["functions"]["total"] == 2
 
 
@@ -97,8 +126,7 @@ def f(x: int) -> int: ...
 def f(x):
   return x
 """}, capsys=capsys)
-  flagged = {r["detail"] for r in report["rot"]["items"]}
-  assert flagged == {"dead", "dead_docstring"}
+  check_rot(report, {"dead", "dead_docstring"})
 
 
 def test_todo_markers_and_not_implemented(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -108,10 +136,7 @@ def test_todo_markers_and_not_implemented(tmp_path: Path, capsys: pytest.Capture
 def later():
   raise NotImplementedError
 """}, capsys=capsys)
-  kinds = [f["kind"] for f in report["todo"]["items"]]
-  assert kinds.count("TODO") == 1
-  assert kinds.count("FIXME") == 1
-  assert kinds.count("not_implemented") == 1
+  check_todos(report, TODO=1, FIXME=1, not_implemented=1)
 
 
 def test_import_graph_edges_and_cycle(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
