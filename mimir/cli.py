@@ -273,6 +273,126 @@ def _build_report(
   return report
 
 
+def _print_structure(
+  s: dict,
+  target: str,
+  thresholds: dict[str, tuple[int, int]],
+  only: list[str],
+  *,
+  list_mode: bool,
+  only_filter: str | None,
+  min_idx: int,
+) -> None:
+  """Print the structure section of the report."""
+  out = sys.stderr
+  sev_order = {"clean": 0, "warn": 1, "alert": 2}
+
+  if list_mode:
+    fn_metrics = [
+      FunctionMetrics(
+        file=os.path.join(target, item["file"]),
+        name=item["name"], line=item["line"],
+        max_nesting=item["nest"], stmt_count=item["stmts"],
+        arg_count=item["args"], cyclomatic=item["cc"],
+        branches=item["branches"], returns=item["returns"],
+      )
+      for item in s["functions"]["items"]
+    ]
+    shown = [
+      m for m in fn_metrics
+      if sev_order[_line_severity(m, thresholds, only)] >= min_idx
+    ]
+    shown.sort(key=lambda m: (
+      -max(_bad_metrics(m, thresholds, only).values()) if _bad_metrics(m, thresholds, only) else 0,
+      m.file, m.line,
+    ))
+    for m in shown:
+      print(_format_fn_line(m, target, thresholds, only))
+    if not only_filter:
+      for f in s["files"]["long"]:
+        print(f"{f['file']}  lines={f['lines']}")
+      for c in s["classes"]["wide"]:
+        print(f"{c['name']}  {c['file']}:{c['line']}  fields={c['fields']}")
+
+  if not (only_filter and list_mode):
+    print("structure", file=out)
+    print(f"  functions  {s['functions']['total']}", file=out)
+    for k, n in s["functions"]["alerts"].items():
+      print(f"    {k}  {n}", file=out)
+    print(f"  erosion  {s['erosion']:.2f}", file=out)
+    print(f"  files  {s['files']['total']}", file=out)
+    if s["files"]["long"]:
+      print(f"    long  {len(s['files']['long'])}", file=out)
+    print(f"  classes  {s['classes']['total']}", file=out)
+    if s["classes"]["wide"]:
+      print(f"    wide  {len(s['classes']['wide'])}", file=out)
+
+
+def _print_heat(heat: list[dict], *, list_mode: bool) -> None:
+  """Print the heat section of the report."""
+  out = sys.stderr
+  if list_mode:
+    for h in heat:
+      print(f"{h['file']}  commits={h['commits']}  max_cc={h['max_cc']}  rel_heat={h['rel_heat']:.0f}")
+  print("heat", file=out)
+  for h in heat[:5]:
+    print(
+      f"  {h['file']}  commits={h['commits']}  max_cc={h['max_cc']}  rel_heat={h['rel_heat']:.0f}",
+      file=out,
+    )
+  if len(heat) > 5:
+    print(f"  ... {len(heat) - 5} more", file=out)
+
+
+def _print_surface(sf: dict, *, list_mode: bool) -> None:
+  """Print the surface section of the report."""
+  out = sys.stderr
+  if list_mode:
+    for edge in sf["edges"]:
+      print(f"edge  {edge['from']} -> {edge['to']}")
+    for m in sf["high_fan_out"]:
+      print(f"{m['file']}  fan_out={m['fan_out']}")
+    for m in sf["high_fan_in"]:
+      print(f"{m['file']}  fan_in={m['fan_in']}")
+    for d in sf["wide_dirs"]:
+      print(f"{d['dir']}/  files={d['files']}")
+    for cycle in sf["cycles"]:
+      print(f"cycle  {' -> '.join(cycle)}")
+  has_surface = sf["cycles"] or sf["high_fan_out"] or sf["high_fan_in"] or sf["wide_dirs"]
+  if has_surface:
+    print("surface", file=out)
+    if sf["cycles"]:
+      print(f"  cycles  {len(sf['cycles'])}", file=out)
+    if sf["high_fan_out"]:
+      print(f"  high_fan_out  {len(sf['high_fan_out'])}", file=out)
+    if sf["high_fan_in"]:
+      print(f"  high_fan_in  {len(sf['high_fan_in'])}", file=out)
+    if sf["wide_dirs"]:
+      print(f"  wide_dirs  {len(sf['wide_dirs'])}", file=out)
+
+
+def _print_rot(rot: dict, *, list_mode: bool) -> None:
+  """Print the rot section of the report."""
+  out = sys.stderr
+  if list_mode:
+    for f in rot["items"]:
+      print(f"rot:{f['kind']}  {f['file']}:{f['line']}  {f['detail']}")
+  print("rot", file=out)
+  for kind, n in sorted(rot["counts"].items()):
+    print(f"  {kind}  {n}", file=out)
+
+
+def _print_todo(todo: dict, *, list_mode: bool) -> None:
+  """Print the todo section of the report."""
+  out = sys.stderr
+  if list_mode:
+    for f in todo["items"]:
+      print(f"todo:{f['kind']}  {f['file']}:{f['line']}  {f['detail']}")
+  print("todo", file=out)
+  for kind, n in sorted(todo["counts"].items()):
+    print(f"  {kind}  {n}", file=out)
+
+
 def _print_text(
   report: dict,
   target: str,
@@ -281,7 +401,6 @@ def _print_text(
   args: argparse.Namespace,
 ) -> None:
   """Render the report as human-readable text."""
-  out = sys.stderr
   sev_order = {"clean": 0, "warn": 1, "alert": 2}
   min_sev = "alert"
   if args.warn:
@@ -291,104 +410,18 @@ def _print_text(
   min_idx = sev_order[min_sev]
 
   if "structure" in report:
-    s = report["structure"]
-    fn_metrics_raw = s["functions"]["items"]
-
-    if args.list:
-      # Reconstruct FunctionMetrics for filtering/formatting
-      fn_metrics = [
-        FunctionMetrics(
-          file=os.path.join(target, item["file"]),
-          name=item["name"], line=item["line"],
-          max_nesting=item["nest"], stmt_count=item["stmts"],
-          arg_count=item["args"], cyclomatic=item["cc"],
-          branches=item["branches"], returns=item["returns"],
-        )
-        for item in fn_metrics_raw
-      ]
-      shown = [
-        m for m in fn_metrics
-        if sev_order[_line_severity(m, thresholds, only)] >= min_idx
-      ]
-      shown.sort(key=lambda m: (
-        -max(_bad_metrics(m, thresholds, only).values()) if _bad_metrics(m, thresholds, only) else 0,
-        m.file, m.line,
-      ))
-      for m in shown:
-        print(_format_fn_line(m, target, thresholds, only))
-      if not args.only:
-        for f in s["files"]["long"]:
-          print(f"{f['file']}  lines={f['lines']}")
-        for c in s["classes"]["wide"]:
-          print(f"{c['name']}  {c['file']}:{c['line']}  fields={c['fields']}")
-
-    if not (args.only and args.list):
-      print("structure", file=out)
-      print(f"  functions  {s['functions']['total']}", file=out)
-      for k, n in s["functions"]["alerts"].items():
-        print(f"    {k}  {n}", file=out)
-      print(f"  erosion  {s['erosion']:.2f}", file=out)
-      print(f"  files  {s['files']['total']}", file=out)
-      if s["files"]["long"]:
-        print(f"    long  {len(s['files']['long'])}", file=out)
-      print(f"  classes  {s['classes']['total']}", file=out)
-      if s["classes"]["wide"]:
-        print(f"    wide  {len(s['classes']['wide'])}", file=out)
-
+    _print_structure(
+      report["structure"], target, thresholds, only,
+      list_mode=args.list, only_filter=args.only, min_idx=min_idx,
+    )
   if "heat" in report and report["heat"]:
-    heat = report["heat"]
-    if args.list:
-      for h in heat:
-        print(f"{h['file']}  commits={h['commits']}  max_cc={h['max_cc']}  rel_heat={h['rel_heat']:.0f}")
-    print("heat", file=out)
-    for h in heat[:5]:
-      print(
-        f"  {h['file']}  commits={h['commits']}  max_cc={h['max_cc']}  rel_heat={h['rel_heat']:.0f}",
-        file=out,
-      )
-    if len(heat) > 5:
-      print(f"  ... {len(heat) - 5} more", file=out)
-
+    _print_heat(report["heat"], list_mode=args.list)
   if "surface" in report:
-    sf = report["surface"]
-    if args.list:
-      for edge in sf["edges"]:
-        print(f"edge  {edge['from']} -> {edge['to']}")
-      for m in sf["high_fan_out"]:
-        print(f"{m['file']}  fan_out={m['fan_out']}")
-      for m in sf["high_fan_in"]:
-        print(f"{m['file']}  fan_in={m['fan_in']}")
-      for d in sf["wide_dirs"]:
-        print(f"{d['dir']}/  files={d['files']}")
-      for cycle in sf["cycles"]:
-        print(f"cycle  {' -> '.join(cycle)}")
-    has_surface = sf["cycles"] or sf["high_fan_out"] or sf["high_fan_in"] or sf["wide_dirs"]
-    if has_surface:
-      print("surface", file=out)
-      if sf["cycles"]:
-        print(f"  cycles  {len(sf['cycles'])}", file=out)
-      if sf["high_fan_out"]:
-        print(f"  high_fan_out  {len(sf['high_fan_out'])}", file=out)
-      if sf["high_fan_in"]:
-        print(f"  high_fan_in  {len(sf['high_fan_in'])}", file=out)
-      if sf["wide_dirs"]:
-        print(f"  wide_dirs  {len(sf['wide_dirs'])}", file=out)
-
+    _print_surface(report["surface"], list_mode=args.list)
   if "rot" in report and report["rot"]["items"]:
-    if args.list:
-      for f in report["rot"]["items"]:
-        print(f"rot:{f['kind']}  {f['file']}:{f['line']}  {f['detail']}")
-    print("rot", file=out)
-    for kind, n in sorted(report["rot"]["counts"].items()):
-      print(f"  {kind}  {n}", file=out)
-
+    _print_rot(report["rot"], list_mode=args.list)
   if "todo" in report and report["todo"]["items"]:
-    if args.list:
-      for f in report["todo"]["items"]:
-        print(f"todo:{f['kind']}  {f['file']}:{f['line']}  {f['detail']}")
-    print("todo", file=out)
-    for kind, n in sorted(report["todo"]["counts"].items()):
-      print(f"  {kind}  {n}", file=out)
+    _print_todo(report["todo"], list_mode=args.list)
 
 
 def cmd_scan(args: argparse.Namespace) -> None:
