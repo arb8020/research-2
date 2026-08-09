@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "preact/hooks"
 import { FileTree } from "./tree";
 import { Editor } from "./editor";
 import { PierreMultiDiffViewer } from "./pierre-diff-viewer";
-import { fetchTree, fetchDiff, fetchAnnotateTarget, fetchMessage, type TreeData, type AnnotateTarget } from "./api";
+import { fetchTree, fetchDiff, fetchFile, fetchAnnotateTarget, fetchMessage, type TreeData, type AnnotateTarget } from "./api";
 import { parseUnifiedDiff, type DiffFile } from "./diff-parse";
 import { useAnnotations, AnnotationInput, AnnotationBar, AnnotationSidebar, type PendingAnnotation } from "./annotate";
 import { MessageViewer } from "./message-viewer";
@@ -111,6 +111,8 @@ export function App() {
   // Message mode state
   const [messageText, setMessageText] = useState<string | null>(null);
   const [selectedMsgIdx, setSelectedMsgIdx] = useState<number | null>(null);
+  // Markdown preview state
+  const [mdContent, setMdContent] = useState<string | null>(null);
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -118,7 +120,16 @@ export function App() {
 
   const isDiffMode = diffFiles !== null;
   const isMessageMode = annotateTarget?.mode === "message" && messageText !== null;
+  const isMarkdown = selected?.match(/\.(md|mdx|markdown)$/i) != null;
 
+  // Fetch markdown content when a .md file is selected
+  useEffect(() => {
+    if (!isMarkdown || !selected) {
+      setMdContent(null);
+      return;
+    }
+    fetchFile(selected, currentRef ?? undefined).then((f) => setMdContent(f.content));
+  }, [selected, currentRef, isMarkdown]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -306,15 +317,22 @@ export function App() {
                 </span>
               ) : null}
             </div>
-            <Editor
-              path={selected}
-              currentRef={currentRef}
-              peekRef={peekRef}
-              peekLine={peekLine}
-              onPeek={handlePeek}
-              onEnter={handleEnter}
-              onLineSelect={annotateMode ? handleLineSelect : undefined}
-            />
+            {isMarkdown && mdContent != null ? (
+              <MessageViewer
+                text={mdContent}
+                onTextSelect={annotateMode ? handleTextSelect : undefined}
+              />
+            ) : (
+              <Editor
+                path={selected}
+                currentRef={currentRef}
+                peekRef={peekRef}
+                peekLine={peekLine}
+                onPeek={handlePeek}
+                onEnter={handleEnter}
+                onLineSelect={annotateMode ? handleLineSelect : undefined}
+              />
+            )}
           </>
         ) : (
           <div class="empty-state">
