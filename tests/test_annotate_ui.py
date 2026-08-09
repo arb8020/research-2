@@ -94,7 +94,12 @@ try:
 except ImportError:
   HAS_PLAYWRIGHT = False
 
-pytestmark = pytest.mark.skipif(not HAS_PLAYWRIGHT, reason="playwright not installed")
+_SLOW = os.environ.get("RUN_SLOW_TESTS") not in (None, "", "0")
+
+pytestmark = [
+  pytest.mark.skipif(not HAS_PLAYWRIGHT, reason="playwright not installed"),
+  pytest.mark.skipif(not _SLOW, reason="slow test — set RUN_SLOW_TESTS=1"),
+]
 
 
 def _check_no_empty_state(page) -> None:
