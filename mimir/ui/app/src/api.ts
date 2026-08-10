@@ -101,6 +101,20 @@ export async function fetchAnnotateTarget(): Promise<AnnotateTarget> {
   return json("/api/annotate/target");
 }
 
+/* ── browse sidebar (codebase tree) ──────────────────────────────── */
+
+export interface BrowseEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+}
+
+export async function fetchBrowseChildren(path: string): Promise<BrowseEntry[]> {
+  const params = new URLSearchParams({ path });
+  const data = await json<{ entries: BrowseEntry[] }>(`/api/browse/children?${params}`);
+  return data.entries;
+}
+
 export async function submitAnnotations(annotations: AnnotationData[]): Promise<void> {
   const res = await fetch("/api/annotate/submit", {
     method: "POST",
