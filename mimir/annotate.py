@@ -28,6 +28,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import subprocess
+
 from .at import query_at
 from .quests import _git
 
@@ -279,6 +281,8 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
       self._serve_file(q)
     elif url.path == "/api/diff":
       self._serve_diff(q)
+    elif url.path == "/api/browse/children":
+      self._serve_browse_children(q)
     elif url.path == "/api/at":
       self._serve_at(q)
     elif _use_dist():
@@ -367,6 +371,67 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
       int(end) if end else None,
     )
     self._json({"at": asdict(rep) if rep else None})
+
+  def _serve_browse_children(self, q: dict[str, list[str]]) -> None:
+    """List directory children for the codebase tree, respecting .gitignore."""
+    rel = q.get("path", [""])[0]
+    full = os.path.realpath(os.path.join(self.root, rel))
+    root_real = os.path.realpath(self.root)
+    if not full.startswith(root_real) or not os.path.isdir(full):
+      self._json({"error": "not found"}, 404)
+      return
+    # Use git ls-files + ls-tree to respect .gitignore
+    # First, get git-tracked files in this directory (non-recursive, one level)
+    entries: list[dict] = []
+    try:
+      # git ls-tree lists the immediate children of a tree path
+      tree_path = rel if rel else "."
+      # Use git ls-tree HEAD to get tracked entries at this level
+      result = subprocess.run(
+        ["git", "ls-tree", "--name-only", "HEAD", tree_path + "/" if rel else ""],
+        cwd=self.root, capture_output=True, text=True, timeout=5,
+      )
+      if result.returncode == 0 and result.stdout.strip():
+        git_entries = set(result.stdout.strip().splitlines())
+      else:
+        git_entries = set()
+
+      # Also check for untracked-but-not-ignored files via git status
+      # Fall back to just listing the directory, filtering with git check-ignore
+      seen = set()
+      for name in sorted(os.listdir(full)):
+        if name.startswith("."):
+          continue
+        child_rel = os.path.join(rel, name) if rel else name
+        child_full = os.path.join(full, name)
+        is_dir = os.path.isdir(child_full)
+
+        # Check if git-ignored
+        check = subprocess.run(
+          ["git", "check-ignore", "-q", child_rel],
+          cwd=self.root, capture_output=True, timeout=5,
+        )
+        if check.returncode == 0:
+          continue  # ignored
+
+        entries.append({
+          "name": name,
+          "path": child_rel,
+          "is_dir": is_dir,
+        })
+    except (subprocess.TimeoutExpired, OSError):
+      # Fallback: just list directory
+      for name in sorted(os.listdir(full)):
+        if name.startswith("."):
+          continue
+        child_rel = os.path.join(rel, name) if rel else name
+        child_full = os.path.join(full, name)
+        entries.append({
+          "name": name,
+          "path": child_rel,
+          "is_dir": os.path.isdir(child_full),
+        })
+    self._json({"entries": entries})
 
   def _serve_message(self, q: dict[str, list[str]]) -> None:
     idx_str = q.get("index", ["0"])[0]

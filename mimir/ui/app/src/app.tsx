@@ -14,6 +14,7 @@ import { fetchTree, fetchDiff, fetchFile, fetchAnnotateTarget, fetchMessage, typ
 import { parseUnifiedDiff, type DiffFile } from "./diff-parse";
 import { useAnnotations, AnnotationInput, AnnotationBar, AnnotationSidebar, type PendingAnnotation } from "./annotate";
 import { MessageViewer } from "./message-viewer";
+import { BrowseSidebar } from "./browse-sidebar";
 
 /** Popover that tracks its anchor element on scroll/resize */
 function AnnotationPopover({ showingInput, onSubmit, onCancel }: {
@@ -115,11 +116,14 @@ export function App() {
   const [mdContent, setMdContent] = useState<string | null>(null);
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Browse sidebar state (left sidebar in annotate browse mode)
+  const [browseSidebarCollapsed, setBrowseSidebarCollapsed] = useState(false);
 
   const annState = useAnnotations();
 
   const isDiffMode = diffFiles !== null;
   const isMessageMode = annotateTarget?.mode === "message" && messageText !== null;
+  const isAnnotateBrowse = annotateMode && annotateTarget?.mode === "browse";
   const isMarkdown = selected?.match(/\.(md|mdx|markdown)$/i) != null;
 
   // Fetch markdown content when a .md file is selected
@@ -145,13 +149,16 @@ export function App() {
           setSelected("msg:0");
           return;
         }
-        fetchTree().then((t) => {
-          setTree(t);
-          // Auto-select first target path in browse mode
-          if (target.mode === "browse" && target.paths.length > 0) {
+        if (target.mode === "browse") {
+          // Browse mode uses BrowseSidebar with lazy loading — no need for full tree
+          if (target.paths.length > 0) {
             setSelected(target.paths[0]);
           }
-        });
+        } else {
+          fetchTree().then((t) => {
+            setTree(t);
+          });
+        }
         if (target.mode === "diff") {
           // Fetch diff — works for both git ref diffs and stdin diffs
           const ref = target.diff_ref;
@@ -249,27 +256,42 @@ export function App() {
 
   return (
     <div class={`app ${annotateMode ? "app-annotate app-with-sidebar" : ""}`}>
-      <FileTree
-        tree={activeTree}
-        selected={selected}
-        mode={isMessageMode ? "message" : isDiffMode ? "diff" : "browse"}
-        onSelect={(path) => {
-          setSelected(path);
-          if (isMessageMode && path.startsWith("msg:")) {
-            const idx = parseInt(path.slice(4), 10);
-            setSelectedMsgIdx(idx);
-            fetchMessage(idx).then((msg) => setMessageText(msg.text));
-          } else if (isDiffMode) {
-            // Scroll to file section in multi-diff viewer
-            const el = document.getElementById(`diff-file-${path}`);
-            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-          } else {
+      {isAnnotateBrowse ? (
+        <BrowseSidebar
+          reviewPaths={annotateTarget?.paths ?? []}
+          selected={selected}
+          onSelect={(path) => {
+            setSelected(path);
             setCurrentRef(null);
             setPeekRef(null);
             setPeekLine(null);
-          }
-        }}
-      />
+          }}
+          collapsed={browseSidebarCollapsed}
+          onToggle={() => setBrowseSidebarCollapsed((c) => !c)}
+        />
+      ) : (
+        <FileTree
+          tree={activeTree}
+          selected={selected}
+          mode={isMessageMode ? "message" : isDiffMode ? "diff" : "browse"}
+          onSelect={(path) => {
+            setSelected(path);
+            if (isMessageMode && path.startsWith("msg:")) {
+              const idx = parseInt(path.slice(4), 10);
+              setSelectedMsgIdx(idx);
+              fetchMessage(idx).then((msg) => setMessageText(msg.text));
+            } else if (isDiffMode) {
+              // Scroll to file section in multi-diff viewer
+              const el = document.getElementById(`diff-file-${path}`);
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+            } else {
+              setCurrentRef(null);
+              setPeekRef(null);
+              setPeekLine(null);
+            }
+          }}
+        />
+      )}
       <div class="main">
         {isDiffMode && fullDiff ? (
           <>
