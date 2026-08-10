@@ -1,8 +1,11 @@
 /**
  * File tree sidebar — collapsible directories, badge rollup, click to open.
+ *
+ * When `reviewPaths` is provided (annotate browse mode), a "TO REVIEW" section
+ * with checkboxes appears at the top, followed by the normal "CODEBASE" tree.
  */
 
-import { useState, useMemo, useEffect } from "preact/hooks";
+import { useState, useMemo, useEffect, useCallback } from "preact/hooks";
 import type { TreeData } from "./api";
 
 interface Props {
@@ -10,6 +13,22 @@ interface Props {
   selected: string | null;
   onSelect: (path: string) => void;
   mode?: "browse" | "diff" | "message";
+  /** Files the agent asked the user to review (annotate browse mode) */
+  reviewPaths?: string[];
+}
+
+/** Persistent "read" state in sessionStorage */
+function getReadState(): Set<string> {
+  try {
+    const raw = sessionStorage.getItem("mimir-review-read");
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveReadState(s: Set<string>) {
+  sessionStorage.setItem("mimir-review-read", JSON.stringify([...s]));
 }
 
 interface DirNode {
@@ -146,9 +165,10 @@ function DirEntry({
   );
 }
 
-export function FileTree({ tree, selected, onSelect, mode = "browse" }: Props) {
+export function FileTree({ tree, selected, onSelect, mode = "browse", reviewPaths }: Props) {
   // Start with all dirs collapsed — we'll expand to the selected file
   const [collapsed, setCollapsed] = useState<Set<string> | null>(null);
+  const [readSet, setReadSet] = useState<Set<string>>(getReadState);
 
   const root = useMemo(
     () => (tree ? flatten(buildTree(tree.files, tree.touched)) : null),
@@ -211,7 +231,20 @@ export function FileTree({ tree, selected, onSelect, mode = "browse" }: Props) {
     });
   };
 
+  const toggleRead = useCallback((path: string, e: Event) => {
+    e.stopPropagation();
+    setReadSet((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      saveReadState(next);
+      return next;
+    });
+  }, []);
+
   const safeCollapsed = collapsed ?? new Set<string>();
+  const hasReview = reviewPaths && reviewPaths.length > 0;
+  const reviewDone = hasReview ? reviewPaths.filter((p) => readSet.has(p)).length : 0;
 
   if (mode === "message") {
     // Message mode: flat list of recent messages
@@ -243,7 +276,41 @@ export function FileTree({ tree, selected, onSelect, mode = "browse" }: Props) {
 
   return (
     <nav class="tree">
-      <div class="tree-header">mimir</div>
+      {/* TO REVIEW section — only in annotate browse mode */}
+      {hasReview && (
+        <div class="review-section">
+          <div class="review-section-label">
+            to review
+            <span class="review-section-count">{reviewDone}/{reviewPaths.length}</span>
+          </div>
+          {reviewPaths.map((p) => {
+            const isRead = readSet.has(p);
+            return (
+              <div
+                key={p}
+                class={`review-item${selected === p ? " active" : ""}${isRead ? " review-done" : ""}`}
+                onClick={() => onSelect(p)}
+                title={p}
+              >
+                <label
+                  class="review-check"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isRead}
+                    onChange={(e) => toggleRead(p, e)}
+                  />
+                </label>
+                <span class="review-path">{p}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* CODEBASE section */}
+      <div class="tree-header">{hasReview ? "codebase" : "mimir"}</div>
       {!root ? (
         <div class="tree-loading">loading...</div>
       ) : (

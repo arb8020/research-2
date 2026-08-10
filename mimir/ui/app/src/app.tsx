@@ -14,7 +14,6 @@ import { fetchTree, fetchDiff, fetchFile, fetchAnnotateTarget, fetchMessage, typ
 import { parseUnifiedDiff, type DiffFile } from "./diff-parse";
 import { useAnnotations, AnnotationInput, AnnotationBar, AnnotationSidebar, type PendingAnnotation } from "./annotate";
 import { MessageViewer } from "./message-viewer";
-import { BrowseSidebar } from "./browse-sidebar";
 
 /** Popover that tracks its anchor element on scroll/resize */
 function AnnotationPopover({ showingInput, onSubmit, onCancel }: {
@@ -116,9 +115,6 @@ export function App() {
   const [mdContent, setMdContent] = useState<string | null>(null);
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // Browse sidebar state (left sidebar in annotate browse mode)
-  const [browseSidebarCollapsed, setBrowseSidebarCollapsed] = useState(false);
-
   const annState = useAnnotations();
 
   const isDiffMode = diffFiles !== null;
@@ -150,11 +146,12 @@ export function App() {
           return;
         }
         if (target.mode === "browse") {
-          // Browse mode uses BrowseSidebar with lazy loading — no need for full tree
           if (target.paths.length > 0) {
             setSelected(target.paths[0]);
           }
-        } else {
+        }
+        // Fetch tree for browse and diff modes (diff also needs it for sidebar)
+        if (target.mode !== "diff") {
           fetchTree().then((t) => {
             setTree(t);
           });
@@ -256,42 +253,28 @@ export function App() {
 
   return (
     <div class={`app ${annotateMode ? "app-annotate app-with-sidebar" : ""}`}>
-      {isAnnotateBrowse ? (
-        <BrowseSidebar
-          reviewPaths={annotateTarget?.paths ?? []}
-          selected={selected}
-          onSelect={(path) => {
-            setSelected(path);
+      <FileTree
+        tree={activeTree}
+        selected={selected}
+        mode={isMessageMode ? "message" : isDiffMode ? "diff" : "browse"}
+        reviewPaths={isAnnotateBrowse ? (annotateTarget?.paths ?? []) : undefined}
+        onSelect={(path) => {
+          setSelected(path);
+          if (isMessageMode && path.startsWith("msg:")) {
+            const idx = parseInt(path.slice(4), 10);
+            setSelectedMsgIdx(idx);
+            fetchMessage(idx).then((msg) => setMessageText(msg.text));
+          } else if (isDiffMode) {
+            // Scroll to file section in multi-diff viewer
+            const el = document.getElementById(`diff-file-${path}`);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+          } else {
             setCurrentRef(null);
             setPeekRef(null);
             setPeekLine(null);
-          }}
-          collapsed={browseSidebarCollapsed}
-          onToggle={() => setBrowseSidebarCollapsed((c) => !c)}
-        />
-      ) : (
-        <FileTree
-          tree={activeTree}
-          selected={selected}
-          mode={isMessageMode ? "message" : isDiffMode ? "diff" : "browse"}
-          onSelect={(path) => {
-            setSelected(path);
-            if (isMessageMode && path.startsWith("msg:")) {
-              const idx = parseInt(path.slice(4), 10);
-              setSelectedMsgIdx(idx);
-              fetchMessage(idx).then((msg) => setMessageText(msg.text));
-            } else if (isDiffMode) {
-              // Scroll to file section in multi-diff viewer
-              const el = document.getElementById(`diff-file-${path}`);
-              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-            } else {
-              setCurrentRef(null);
-              setPeekRef(null);
-              setPeekLine(null);
-            }
-          }}
-        />
-      )}
+          }
+        }}
+      />
       <div class="main">
         {isDiffMode && fullDiff ? (
           <>
