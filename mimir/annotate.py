@@ -115,10 +115,21 @@ def resolve_target(
       message_text=None,
     )
   if paths:
+    expanded: list[str] = []
+    for p in paths:
+      full = os.path.join(root, p)
+      if os.path.isdir(full):
+        # Expand directory to sorted list of files within it
+        for entry in sorted(os.listdir(full)):
+          entry_path = os.path.join(full, entry)
+          if os.path.isfile(entry_path):
+            expanded.append(os.path.join(p, entry))
+      else:
+        expanded.append(p)
     return AnnotateTarget(
       mode="browse",
       label=" ".join(paths),
-      paths=paths,
+      paths=expanded if expanded else paths,
       diff_ref=None,
       message_text=None,
     )
