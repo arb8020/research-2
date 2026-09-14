@@ -4,6 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>mimir</title>
+    <script>
+      // Stamp resolved theme before first paint to avoid a flash; the app's
+      // theme-mode module takes over once loaded.
+      (function () {
+        var m = localStorage.getItem("mimir-theme");
+        var dark = m === "dark" || (m !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

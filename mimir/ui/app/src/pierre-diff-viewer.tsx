@@ -11,6 +11,7 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from "preact/hooks";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { SelectedLineRange } from "@pierre/diffs";
+import { isDark as isDarkSignal } from "./theme-mode";
 
 interface Props {
   patch: string;
@@ -109,10 +110,7 @@ function makeDiffOptions(
 /* ── single-file diff component ──────────────────────────────────── */
 
 export function PierreDiffViewer({ patch, file, onLineSelect }: Props) {
-  const isDark = useMemo(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-    [],
-  );
+  const isDark = isDarkSignal.value;
   const mouseRef = useRef({ x: 0, y: 0 });
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -217,10 +215,7 @@ export function PierreMultiDiffViewer({
   onLineSelect,
 }: MultiDiffProps) {
   const chunks = useMemo(() => splitDiffByFile(patch), [patch]);
-  const isDark = useMemo(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-    [],
-  );
+  const isDark = isDarkSignal.value;
   // Shared mouse tracker across all file sections
   const mouseRef = useRef({ x: 0, y: 0 });
   const handleMouseMove = useCallback((e: MouseEvent) => {

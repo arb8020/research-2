@@ -14,6 +14,30 @@ import { fetchTree, fetchDiff, fetchFile, fetchAnnotateTarget, fetchMessage, typ
 import { parseUnifiedDiff, type DiffFile } from "./diff-parse";
 import { useAnnotations, AnnotationInput, AnnotationBar, AnnotationSidebar, type PendingAnnotation } from "./annotate";
 import { MessageViewer } from "./message-viewer";
+import { themeMode, type ThemeMode } from "./theme-mode";
+
+const THEME_SEGMENTS: { mode: ThemeMode; glyph: string; label: string }[] = [
+  { mode: "light", glyph: "☼", label: "light" },
+  { mode: "system", glyph: "◐", label: "system" },
+  { mode: "dark", glyph: "☾", label: "dark" },
+];
+
+function ThemeToggle() {
+  return (
+    <div class="theme-toggle">
+      {THEME_SEGMENTS.map(({ mode, glyph, label }) => (
+        <button
+          key={mode}
+          class={`theme-toggle-seg ${themeMode.value === mode ? "active" : ""}`}
+          title={label}
+          onClick={() => { themeMode.value = mode; }}
+        >
+          {glyph}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /** Popover that tracks its anchor element on scroll/resize */
 function AnnotationPopover({ showingInput, onSubmit, onCancel }: {
@@ -370,6 +394,8 @@ export function App() {
           onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
       )}
+
+      <ThemeToggle />
 
       {/* Annotation bar */}
       {annotateMode && (

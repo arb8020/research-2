@@ -6,6 +6,7 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "preact/hooks";
 import { marked } from "marked";
 import hljs from "highlight.js/lib/core";
+import { isDark } from "./theme-mode";
 
 // Register common languages
 import javascript from "highlight.js/lib/languages/javascript";
@@ -54,8 +55,22 @@ marked.setOptions({
   breaks: false,
 });
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 const renderer = new marked.Renderer();
 renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
+  // ```mermaid blocks become a placeholder that renderMermaid() fills with an
+  // SVG after mount. The source stays in the DOM (in a <pre>) until then, so a
+  // failed render degrades to the plain code block.
+  if (lang === "mermaid") {
+    return `<div class="md-mermaid" data-mermaid-src="${escapeHtml(text)}"><pre class="md-code-block"><code class="hljs language-mermaid">${escapeHtml(text)}</code></pre></div>`;
+  }
   let highlighted: string;
   if (lang && hljs.getLanguage(lang)) {
     highlighted = hljs.highlight(text, { language: lang }).value;
@@ -64,6 +79,56 @@ renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
   }
   return `<pre class="md-code-block"><code class="hljs${lang ? ` language-${lang}` : ""}">${highlighted}</code></pre>`;
 };
+
+/** Lazy-loaded mermaid — a large dep, only pulled in when a diagram appears. */
+let mermaidPromise: Promise<typeof import("mermaid").default> | null = null;
+function loadMermaid(dark: boolean) {
+  if (!mermaidPromise) {
+    mermaidPromise = import("mermaid").then((m) => {
+      m.default.initialize({
+        startOnLoad: false,
+        theme: dark ? "dark" : "default",
+        securityLevel: "strict",
+        fontFamily: "inherit",
+      });
+      return m.default;
+    });
+  }
+  return mermaidPromise;
+}
+
+let mermaidSeq = 0;
+let mermaidDark: boolean | null = null;
+
+async function renderMermaid(container: HTMLElement, dark: boolean) {
+  const blocks = container.querySelectorAll<HTMLElement>("[data-mermaid-src]");
+  if (!blocks.length) return;
+  const mermaid = await loadMermaid(dark);
+  if (mermaidDark !== dark) {
+    // Theme flipped since the last render — re-theme and redraw everything.
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "default",
+      securityLevel: "strict",
+      fontFamily: "inherit",
+    });
+    mermaidDark = dark;
+    for (const el of blocks) delete el.dataset.mermaidDone;
+  }
+  for (const el of blocks) {
+    const src = el.dataset.mermaidSrc;
+    if (!src || el.dataset.mermaidDone === "1") continue;
+    try {
+      const { svg } = await mermaid.render(`mmd-${mermaidSeq++}`, src);
+      el.innerHTML = svg;
+      el.dataset.mermaidDone = "1";
+    } catch {
+      // Leave the source code block in place — better a readable fence than
+      // a broken diagram.
+      el.dataset.mermaidDone = "1";
+    }
+  }
+}
 
 interface Props {
   text: string;
@@ -84,6 +149,14 @@ export function MessageViewer({ text, messageIndex, onTextSelect }: Props) {
   const html = useMemo(() => {
     return marked.parse(text, { renderer }) as string;
   }, [text]);
+
+  // Render any ```mermaid blocks into SVG after the markdown lands in the DOM.
+  const dark = isDark.value;
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    void renderMermaid(container, dark);
+  }, [html, dark]);
 
   // Handle text selection for annotation
   const handleMouseUp = useCallback(() => {

@@ -36,7 +36,7 @@ _METRIC_FIELDS = {
   "returns": "returns",
 }
 
-SECTIONS = ("structure", "heat", "surface", "rot", "todo")
+SECTIONS = ("structure", "heat", "surface", "rot", "todo", "coverage")
 
 
 @dataclass(frozen=True)
@@ -113,6 +113,7 @@ def _build_report(
   only: list[str],
   exclude: list[str],
   edge_filter: EdgeFilter,
+  coverage_path: str | None = None,
 ) -> dict:
   """Build the full report as a dict. Used by both text and JSON output."""
   report: dict = {}
@@ -270,6 +271,41 @@ def _build_report(
       ],
     }
 
+  if "coverage" in sections and coverage_path is not None:
+    from .coverage import load_coverage
+    fn_covs, file_covs = load_coverage(coverage_path, target)
+    report["coverage"] = {
+      "files": {
+        "total": len(file_covs),
+        "items": [
+          {
+            "file": fc.file,
+            "total_branches": fc.total_branches,
+            "covered": fc.covered_branches,
+            "missing": fc.missing_branches,
+            "pct": fc.branch_coverage_pct,
+          }
+          for fc in file_covs
+        ],
+      },
+      "functions": {
+        "total": len(fn_covs),
+        "items": [
+          {
+            "file": fc.file,
+            "name": fc.name,
+            "line": fc.start_line,
+            "total_branches": fc.total_branches,
+            "covered": fc.covered_branches,
+            "missing": fc.missing_branches,
+            "pct": fc.branch_coverage_pct,
+            "missing_arcs": [list(arc) for arc in fc.missing_arcs],
+          }
+          for fc in fn_covs
+        ],
+      },
+    }
+
   return report
 
 
@@ -393,6 +429,33 @@ def _print_todo(todo: dict, *, list_mode: bool) -> None:
     print(f"  {kind}  {n}", file=out)
 
 
+def _print_coverage(cov: dict, *, list_mode: bool) -> None:
+  out = sys.stderr
+  fns = cov["functions"]["items"]
+  low_fns = [f for f in fns if f["pct"] < 100.0]
+  if list_mode:
+    for f in low_fns:
+      arcs = " ".join(f"{a[0]}->{a[1]}" for a in f["missing_arcs"])
+      print(f"{f['file']}:{f['line']}  {f['name']}  {f['pct']:.0f}%  missing: {arcs}")
+  print("coverage", file=out)
+  print(f"  functions  {cov['functions']['total']}", file=out)
+  if low_fns:
+    print(f"    partial  {len(low_fns)}", file=out)
+    for f in low_fns[:5]:
+      print(
+        f"    {f['name']}  {f['file']}:{f['line']}  {f['pct']:.0f}%"
+        f"  ({f['covered']}/{f['total_branches']} branches)",
+        file=out,
+      )
+    if len(low_fns) > 5:
+      print(f"    ... {len(low_fns) - 5} more", file=out)
+  files = cov["files"]["items"]
+  low_files = [f for f in files if f["pct"] < 100.0]
+  print(f"  files  {cov['files']['total']}", file=out)
+  if low_files:
+    print(f"    partial  {len(low_files)}", file=out)
+
+
 def _print_text(
   report: dict,
   target: str,
@@ -422,6 +485,8 @@ def _print_text(
     _print_rot(report["rot"], list_mode=args.list)
   if "todo" in report and report["todo"]["items"]:
     _print_todo(report["todo"], list_mode=args.list)
+  if "coverage" in report:
+    _print_coverage(report["coverage"], list_mode=args.list)
 
 
 def cmd_scan(args: argparse.Namespace) -> None:
@@ -452,12 +517,25 @@ def cmd_scan(args: argparse.Namespace) -> None:
   report = _build_report(
     target, sections, thresholds, only, args.exclude,
     EdgeFilter(args.edge_from, args.edge_to, args.cross),
+    coverage_path=args.coverage,
   )
 
   if args.json:
     print(json.dumps(report, indent=2))
   else:
     _print_text(report, target, thresholds, only, args)
+
+
+def cmd_audit(args: argparse.Namespace) -> None:
+  from .audit import print_results, run_audit
+
+  target = os.path.abspath(args.target)
+  if not os.path.exists(target):
+    print(f"error: {target} does not exist", file=sys.stderr)
+    sys.exit(1)
+
+  results = run_audit(target, fix=args.fix)
+  sys.exit(print_results(results))
 
 
 def cmd_quests(args: argparse.Namespace) -> None:
@@ -549,6 +627,54 @@ def _add_common_args(p: argparse.ArgumentParser) -> None:
   )
 
 
+def cmd_papercut(args: argparse.Namespace) -> None:
+  from .papercut import append_entry, list_entries, resolve_path
+
+  path = resolve_path(args.file)
+
+  if args.path:
+    print(path)
+    return
+
+  if args.list:
+    print(list_entries(path))
+    return
+
+  msg = " ".join(args.message)
+  if not msg:
+    print("error: no message provided", file=sys.stderr)
+    sys.exit(1)
+
+  append_entry(args.model, msg, path)
+  print(f"logged to {path}")
+
+
+def cmd_breadcrumb(args: argparse.Namespace) -> None:
+  from .breadcrumb import append_entry, list_entries, resolve_path, view
+
+  path = resolve_path(args.file)
+
+  if args.path:
+    print(path)
+    return
+
+  if args.view:
+    view(path, args.port)
+    return
+
+  if args.list:
+    print(list_entries(path))
+    return
+
+  msg = " ".join(args.message)
+  if not msg:
+    print("error: no message provided", file=sys.stderr)
+    sys.exit(1)
+
+  append_entry(args.agent, msg, path)
+  print(f"logged to {path}")
+
+
 def cmd_annotate(args: argparse.Namespace) -> None:
   from .annotate import AnnotateResult, resolve_target, run_annotate
 
@@ -633,6 +759,9 @@ examples:
   )
   scan_p.add_argument("--rot", action="store_true", help="Show only rot section")
   scan_p.add_argument("--todo", action="store_true", help="Show only todo section")
+  scan_p.add_argument("--coverage", metavar="FILE", default=None,
+    help="Path to coverage.json (from `coverage json`); enables coverage section")
+
 
   # Metric filters
   scan_p.add_argument(
@@ -660,6 +789,40 @@ examples:
   ui_p.add_argument("--port", type=int, default=None)
   ui_p.add_argument("--no-open", action="store_true")
 
+  pc_p = sub.add_parser("papercut", help="Log small frictions to PAPERCUTS.md")
+  pc_p.add_argument("-m", "--model", default="unknown", help="Model name tag")
+  pc_p.add_argument(
+    "-f", "--file", default=None,
+    help="Path to papercuts file (default: PAPERCUTS.md in repo root or cwd)",
+  )
+  pc_p.add_argument("--list", action="store_true", help="Print PAPERCUTS.md contents")
+  pc_p.add_argument("--path", action="store_true", help="Print path to PAPERCUTS.md")
+  pc_p.add_argument("message", nargs="*", help="The papercut message")
+
+  bc_p = sub.add_parser("breadcrumb", help="Append-only event log to BREADCRUMBS.md")
+  bc_p.add_argument("-a", "--agent", default="unknown", help="Agent identity tag")
+  bc_p.add_argument(
+    "-f", "--file", default=None,
+    help="Path to breadcrumbs file (default: BREADCRUMBS.md in repo root or cwd)",
+  )
+  bc_p.add_argument("--list", action="store_true", help="Print BREADCRUMBS.md contents")
+  bc_p.add_argument("--view", action="store_true", help="Open auto-refreshing HTML viewer in browser")
+  bc_p.add_argument("--port", type=int, default=None, help="Port for --view server")
+  bc_p.add_argument("--path", action="store_true", help="Print path to BREADCRUMBS.md")
+  bc_p.add_argument("message", nargs="*", help="The breadcrumb message")
+
+  audit_p = sub.add_parser(
+    "audit",
+    help="Pass/fail code quality gate (ruff + pyright + style + structure)",
+    description=(
+      "Run a full audit on a project: ruff lint, ruff format, pyright (if configured), "
+      "AST style checks (function length, void returns), and structural thresholds "
+      "(nesting, cyclomatic complexity, args). Config from [tool.mimir] in pyproject.toml."
+    ),
+  )
+  audit_p.add_argument("target", nargs="?", default=".", help="Project root to audit")
+  audit_p.add_argument("--fix", action="store_true", help="Auto-fix (ruff format + ruff check --fix)")
+
   ann_p = sub.add_parser(
     "annotate",
     help="Annotation gate: open files/diffs in browser, collect feedback as JSON",
@@ -678,6 +841,8 @@ examples:
   args = parser.parse_args()
   if args.command == "scan":
     cmd_scan(args)
+  elif args.command == "audit":
+    cmd_audit(args)
   elif args.command == "quests":
     cmd_quests(args)
   elif args.command == "ui":
@@ -685,6 +850,10 @@ examples:
     serve_ui(os.path.abspath(args.target), args.port, not args.no_open)
   elif args.command == "annotate":
     cmd_annotate(args)
+  elif args.command == "papercut":
+    cmd_papercut(args)
+  elif args.command == "breadcrumb":
+    cmd_breadcrumb(args)
   else:
     parser.print_help()
 
