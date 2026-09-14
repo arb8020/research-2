@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import sys
 import threading
@@ -173,6 +174,120 @@ def _collect_before_last_user(
   return messages
 
 
+def _jsonl_by_mtime(directory: Path) -> list[Path]:
+  if not directory.is_dir():
+    return []
+  files = [p for p in directory.iterdir() if p.is_file() and p.suffix == ".jsonl"]
+  files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+  return files
+
+
+def _claude_project_slug(cwd: str) -> str:
+  """Claude Code slug: every character outside [a-zA-Z0-9-] becomes '-'."""
+  return re.sub(r"[^a-zA-Z0-9-]", "-", cwd)
+
+
+def _claude_projects_dir() -> Path:
+  root = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
+  return root / "projects"
+
+
+def _claude_logs_for_cwd(projects_dir: Path, cwd: str) -> list[Path]:
+  slug = _claude_project_slug(cwd)
+  logs = _jsonl_by_mtime(projects_dir / slug)
+  if logs:
+    return logs
+  if not projects_dir.is_dir():
+    return []
+  slug_l = slug.lower()
+  for child in projects_dir.iterdir():
+    if child.is_dir() and child.name.lower() == slug_l:
+      logs = _jsonl_by_mtime(child)
+      if logs:
+        return logs
+  return []
+
+
+def _claude_logs_ancestor(projects_dir: Path, cwd: str) -> list[Path]:
+  parent = str(Path(cwd).parent)
+  seen: set[str] = set()
+  while parent and parent not in seen:
+    seen.add(parent)
+    logs = _claude_logs_for_cwd(projects_dir, parent)
+    if logs:
+      return logs
+    nxt = str(Path(parent).parent)
+    if nxt == parent:
+      break
+    parent = nxt
+  return []
+
+
+def _find_claude_session_file(projects_dir: Path, session_id: str) -> Path | None:
+  if not projects_dir.is_dir():
+    return None
+  matches = list(projects_dir.glob(f"*/{session_id}.jsonl"))
+  return matches[0] if len(matches) == 1 else (max(matches, key=lambda p: p.stat().st_mtime) if matches else None)
+
+
+def resolve_claude_log(
+  *,
+  cwd: str,
+  session_id: str | None,
+  projects_dir: Path,
+) -> Path | None:
+  """Pick a Claude transcript. Never a session from an unrelated project.
+
+  Explicit session id wins. Otherwise newest jsonl for this cwd slug,
+  then the first ancestor cwd that has any logs. Missing id does not
+  fall back to a global newest-across-all-projects.
+  """
+  if session_id:
+    return _find_claude_session_file(projects_dir, session_id)
+  logs = _claude_logs_for_cwd(projects_dir, cwd)
+  if logs:
+    return logs[0]
+  logs = _claude_logs_ancestor(projects_dir, cwd)
+  return logs[0] if logs else None
+
+
+def _assistant_text(content: object) -> str:
+  if isinstance(content, str):
+    return content
+  if not isinstance(content, list):
+    return ""
+  parts: list[str] = []
+  for block in content:
+    if isinstance(block, dict) and block.get("type") == "text":
+      text = block.get("text")
+      if isinstance(text, str) and text.strip():
+        parts.append(text)
+  return "\n".join(parts)
+
+
+def _parse_session_jsonl(path: Path, *, assistant_from_message: bool) -> list[tuple[bool, str]]:
+  rows: list[tuple[bool, str]] = []
+  for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    if not line.strip():
+      continue
+    try:
+      row = json.loads(line)
+    except json.JSONDecodeError:
+      continue
+    kind = row.get("type")
+    if kind == "user":
+      rows.append((True, ""))
+    elif kind == "assistant":
+      if assistant_from_message:
+        message = row.get("message") if isinstance(row.get("message"), dict) else {}
+        text = _assistant_text(message.get("content") if message else None)
+      else:
+        content = row.get("content") or ""
+        text = content if isinstance(content, str) else ""
+      rows.append((False, text))
+  return rows
+
+
 def _grok_history_path() -> Path | None:
   grok_home = Path(os.environ.get("GROK_HOME", Path.home() / ".grok"))
   root = grok_home / "sessions"
@@ -194,82 +309,66 @@ def _load_grok_session_messages(*, max_messages: int) -> list[SessionMessage] | 
   history = _grok_history_path()
   if history is None:
     return None
-  rows: list[tuple[bool, str]] = []
-  for line in history.read_text().splitlines():
-    if not line.strip():
-      continue
-    try:
-      row = json.loads(line)
-    except json.JSONDecodeError:
-      continue
-    kind = row.get("type")
-    if kind == "user":
-      rows.append((True, ""))
-    elif kind == "assistant":
-      content = row.get("content") or ""
-      rows.append((False, content if isinstance(content, str) else ""))
-  messages = _collect_before_last_user(rows, max_messages=max_messages)
+  messages = _collect_before_last_user(
+    _parse_session_jsonl(history, assistant_from_message=False),
+    max_messages=max_messages,
+  )
+  if messages:
+    print(f"mimir annotate --last · grok {history}", file=sys.stderr)
   return messages or None
 
 
-def _load_claude_session_messages(*, max_messages: int) -> list[SessionMessage]:
-  from obol_sessions.decoders.claude_code import ClaudeCodeSessionSupport
-  from obol_sessions.dtypes import AssistantMessage, UserMessage
-  from obol_sessions.model import MessageEntry
-
+def _load_claude_session_messages(*, max_messages: int) -> list[SessionMessage] | None:
+  cwd = os.environ.get("PLANNOTATOR_CWD") or os.getcwd()
   session_id = os.environ.get("CLAUDE_CODE_SESSION_ID")
-  support = ClaudeCodeSessionSupport()
-  sources = list(support.discover(Path.home() / ".claude", since=None))
-  if not sources:
-    raise SystemExit("no Claude Code sessions found")
-
-  source = None
-  if session_id:
-    source = next((s for s in sources if s.session_id == session_id), None)
-    if source is None:
-      print(f"warning: session {session_id} not found, falling back to most recent", file=sys.stderr)
-      source = sources[0]
-  else:
-    source = sources[0]
-
-  session = support.load(source)
-  if session is None:
-    raise SystemExit("could not load session")
-
-  rows: list[tuple[bool, str]] = []
-  for entry in session.entries:
-    if not isinstance(entry, MessageEntry):
-      continue
-    if isinstance(entry.message, UserMessage):
-      rows.append((True, ""))
-    elif isinstance(entry.message, AssistantMessage):
-      blocks = [b.text for b in entry.message.content if hasattr(b, "text") and b.text.strip()]
-      rows.append((False, "\n".join(blocks)))
-  messages = _collect_before_last_user(rows, max_messages=max_messages)
-  if not messages:
-    raise SystemExit("no assistant message found in session")
-  return messages
+  path = resolve_claude_log(
+    cwd=cwd,
+    session_id=session_id,
+    projects_dir=_claude_projects_dir(),
+  )
+  if path is None:
+    return None
+  messages = _collect_before_last_user(
+    _parse_session_jsonl(path, assistant_from_message=True),
+    max_messages=max_messages,
+  )
+  if messages:
+    print(f"mimir annotate --last · claude {path}", file=sys.stderr)
+  return messages or None
 
 
 def _load_session_messages(*, max_messages: int = 20) -> list[SessionMessage]:
-  """Load recent completed-turn assistant messages from Grok or Claude Code."""
+  """Load recent completed-turn assistant messages from this cwd / this agent.
+
+  Never pick a Claude transcript from another project, and never fall
+  through from a Grok fingerprint to a random Claude session.
+  """
   prefer_grok = bool(os.environ.get("GROK_SESSION_ID") or os.environ.get("GROK_AGENT"))
+  prefer_claude = bool(os.environ.get("CLAUDE_CODE_SESSION_ID")) and not prefer_grok
+
   if prefer_grok:
     grok = _load_grok_session_messages(max_messages=max_messages)
     if grok is not None:
       return grok
     if os.environ.get("GROK_SESSION_ID"):
       raise SystemExit(f"no Grok session found for {os.environ['GROK_SESSION_ID']}")
-  try:
-    return _load_claude_session_messages(max_messages=max_messages)
-  except ImportError:
-    grok = None if prefer_grok else _load_grok_session_messages(max_messages=max_messages)
-    if grok is not None:
-      return grok
+    raise SystemExit("no Grok session found")
+
+  if prefer_claude:
+    claude = _load_claude_session_messages(max_messages=max_messages)
+    if claude is not None:
+      return claude
     raise SystemExit(
-      "cannot load --last: no Grok session, and obol-sessions is not installed "
-      "(needed only for Claude Code sessions)"
-    ) from None
+      f"no Claude session found for {os.environ['CLAUDE_CODE_SESSION_ID']}"
+    )
+
+  grok = _load_grok_session_messages(max_messages=max_messages)
+  if grok is not None:
+    return grok
+  claude = _load_claude_session_messages(max_messages=max_messages)
+  if claude is not None:
+    return claude
+  raise SystemExit("no session found for this directory")
 
 
 def _read_last_message() -> str:
@@ -377,12 +476,7 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
         self._json({"path": rel, "ref": ref, "content": content})
     else:
       full = os.path.realpath(os.path.join(self.root, rel))
-      root_real = os.path.realpath(self.root)
-      # Allow files under root, or files explicitly listed in target paths
-      allowed_paths = {os.path.realpath(p) for p in self.target.paths}
-      in_root = full.startswith(root_real + os.sep) or full == root_real
-      explicitly_allowed = full in allowed_paths
-      if (not in_root and not explicitly_allowed) or not os.path.isfile(full):
+      if not full.startswith(os.path.realpath(self.root)) or not os.path.isfile(full):
         self._json({"error": "not found"}, 404)
         return
       try:
