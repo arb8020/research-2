@@ -86,7 +86,7 @@ def branchy(x):
   return 0
 """}, capsys=capsys)
   check_fn(report, "flat", nest=0, cc=1, args=2, returns=1)
-  check_fn(report, "branchy", nest=3, branches=3, returns=2)
+  check_fn(report, "branchy", nest=3, branches=6, returns=2)
   assert report["structure"]["functions"]["total"] == 2
 
 

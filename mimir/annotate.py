@@ -26,7 +26,7 @@ import webbrowser
 from dataclasses import asdict, dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 import subprocess
 
@@ -152,74 +152,123 @@ class SessionMessage:
   preview: str      # first ~60 chars for sidebar display
 
 
-def _load_session_messages(*, max_messages: int = 20) -> list[SessionMessage]:
-  """Load recent assistant messages from the current Claude Code session."""
-  try:
-    from obol_sessions.decoders.claude_code import ClaudeCodeSessionSupport
-    from obol_sessions.model import MessageEntry
-    from obol_sessions.dtypes import AssistantMessage, UserMessage
+def _preview(text: str) -> str:
+  preview = text[:60].replace("\n", " ").strip()
+  return preview + "..." if len(text) > 60 else preview
 
-    session_id = os.environ.get("CLAUDE_CODE_SESSION_ID")
-    support = ClaudeCodeSessionSupport()
-    sources = list(support.discover(Path.home() / ".claude", since=None))
-    if not sources:
-      raise SystemExit("no Claude Code sessions found")
 
-    # Match the current session by ID if available
-    source = None
-    if session_id:
-      for s in sources:
-        if s.session_id == session_id:
-          source = s
-          break
-      if source is None:
-        print(f"warning: session {session_id} not found, falling back to most recent", file=sys.stderr)
-        source = sources[0]
-    else:
+def _collect_before_last_user(
+  texts: list[tuple[bool, str]], *, max_messages: int,
+) -> list[SessionMessage]:
+  """`texts` is (is_user, text) in session order. Skip the current turn."""
+  last_user_idx = next((i for i in range(len(texts) - 1, -1, -1) if texts[i][0]), None)
+  search_end = last_user_idx if last_user_idx is not None else len(texts)
+  messages: list[SessionMessage] = []
+  for is_user, text in reversed(texts[:search_end]):
+    if is_user or not text.strip():
+      continue
+    messages.append(SessionMessage(index=len(messages), text=text, preview=_preview(text)))
+    if len(messages) >= max_messages:
+      break
+  return messages
+
+
+def _grok_history_path() -> Path | None:
+  grok_home = Path(os.environ.get("GROK_HOME", Path.home() / ".grok"))
+  root = grok_home / "sessions"
+  if not root.is_dir():
+    return None
+  session_id = os.environ.get("GROK_SESSION_ID")
+  if session_id:
+    matches = list(root.glob(f"*/{session_id}/chat_history.jsonl"))
+    return matches[0] if matches else None
+  group = root / quote(str(Path.cwd()), safe="")
+  if group.is_dir():
+    newest = max(group.glob("*/chat_history.jsonl"), key=lambda p: p.stat().st_mtime, default=None)
+    if newest is not None:
+      return newest
+  return None
+
+
+def _load_grok_session_messages(*, max_messages: int) -> list[SessionMessage] | None:
+  history = _grok_history_path()
+  if history is None:
+    return None
+  rows: list[tuple[bool, str]] = []
+  for line in history.read_text().splitlines():
+    if not line.strip():
+      continue
+    try:
+      row = json.loads(line)
+    except json.JSONDecodeError:
+      continue
+    kind = row.get("type")
+    if kind == "user":
+      rows.append((True, ""))
+    elif kind == "assistant":
+      content = row.get("content") or ""
+      rows.append((False, content if isinstance(content, str) else ""))
+  messages = _collect_before_last_user(rows, max_messages=max_messages)
+  return messages or None
+
+
+def _load_claude_session_messages(*, max_messages: int) -> list[SessionMessage]:
+  from obol_sessions.decoders.claude_code import ClaudeCodeSessionSupport
+  from obol_sessions.dtypes import AssistantMessage, UserMessage
+  from obol_sessions.model import MessageEntry
+
+  session_id = os.environ.get("CLAUDE_CODE_SESSION_ID")
+  support = ClaudeCodeSessionSupport()
+  sources = list(support.discover(Path.home() / ".claude", since=None))
+  if not sources:
+    raise SystemExit("no Claude Code sessions found")
+
+  source = None
+  if session_id:
+    source = next((s for s in sources if s.session_id == session_id), None)
+    if source is None:
+      print(f"warning: session {session_id} not found, falling back to most recent", file=sys.stderr)
       source = sources[0]
+  else:
+    source = sources[0]
 
-    session = support.load(source)
-    if session is None:
-      raise SystemExit("could not load session")
+  session = support.load(source)
+  if session is None:
+    raise SystemExit("could not load session")
 
-    entries = session.entries
+  rows: list[tuple[bool, str]] = []
+  for entry in session.entries:
+    if not isinstance(entry, MessageEntry):
+      continue
+    if isinstance(entry.message, UserMessage):
+      rows.append((True, ""))
+    elif isinstance(entry.message, AssistantMessage):
+      blocks = [b.text for b in entry.message.content if hasattr(b, "text") and b.text.strip()]
+      rows.append((False, "\n".join(blocks)))
+  messages = _collect_before_last_user(rows, max_messages=max_messages)
+  if not messages:
+    raise SystemExit("no assistant message found in session")
+  return messages
 
-    # Find the last user message boundary — everything after it is the
-    # current turn (which is still being produced).
-    last_user_idx = None
-    for i in range(len(entries) - 1, -1, -1):
-      if isinstance(entries[i], MessageEntry) and isinstance(entries[i].message, UserMessage):
-        last_user_idx = i
-        break
 
-    search_end = last_user_idx if last_user_idx is not None else len(entries)
-
-    # Collect substantive assistant messages backwards
-    messages: list[SessionMessage] = []
-    for i in range(search_end - 1, -1, -1):
-      entry = entries[i]
-      if isinstance(entry, MessageEntry) and isinstance(entry.message, AssistantMessage):
-        blocks = [b.text for b in entry.message.content if hasattr(b, "text") and b.text.strip()]
-        text = "\n".join(blocks)
-        if text.strip():
-          preview = text[:60].replace("\n", " ").strip()
-          if len(text) > 60:
-            preview += "..."
-          messages.append(SessionMessage(
-            index=len(messages),
-            text=text,
-            preview=preview,
-          ))
-          if len(messages) >= max_messages:
-            break
-
-    if not messages:
-      raise SystemExit("no assistant message found in session")
-    return messages
+def _load_session_messages(*, max_messages: int = 20) -> list[SessionMessage]:
+  """Load recent completed-turn assistant messages from Grok or Claude Code."""
+  prefer_grok = bool(os.environ.get("GROK_SESSION_ID") or os.environ.get("GROK_AGENT"))
+  if prefer_grok:
+    grok = _load_grok_session_messages(max_messages=max_messages)
+    if grok is not None:
+      return grok
+    if os.environ.get("GROK_SESSION_ID"):
+      raise SystemExit(f"no Grok session found for {os.environ['GROK_SESSION_ID']}")
+  try:
+    return _load_claude_session_messages(max_messages=max_messages)
   except ImportError:
+    grok = None if prefer_grok else _load_grok_session_messages(max_messages=max_messages)
+    if grok is not None:
+      return grok
     raise SystemExit(
-      "obol-sessions not installed — required for --last\n"
-      "  pip install obol-sessions"
+      "cannot load --last: no Grok session, and obol-sessions is not installed "
+      "(needed only for Claude Code sessions)"
     ) from None
 
 
@@ -328,7 +377,12 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
         self._json({"path": rel, "ref": ref, "content": content})
     else:
       full = os.path.realpath(os.path.join(self.root, rel))
-      if not full.startswith(os.path.realpath(self.root)) or not os.path.isfile(full):
+      root_real = os.path.realpath(self.root)
+      # Allow files under root, or files explicitly listed in target paths
+      allowed_paths = {os.path.realpath(p) for p in self.target.paths}
+      in_root = full.startswith(root_real + os.sep) or full == root_real
+      explicitly_allowed = full in allowed_paths
+      if (not in_root and not explicitly_allowed) or not os.path.isfile(full):
         self._json({"error": "not found"}, 404)
         return
       try:

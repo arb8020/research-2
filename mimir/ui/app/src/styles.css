@@ -12,8 +12,7 @@
   --font:      "SF Mono", ui-monospace, "Cascadia Code", "Fira Code", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+:root[data-theme="dark"] {
     --ground:    #111113;
     --surface:   #1a1a1c;
     --border:    #2a2a2c;
@@ -23,7 +22,6 @@
     --ink-4:     #333333;
     --accent:    #c9a23e;
     --accent-bg: #1f1c14;
-  }
 }
 
 /* ── reset ──────────────────────────────────────────────────────── */
@@ -339,6 +337,24 @@ body {
   padding: 0;
   font-size: inherit;
 }
+/* Rendered ```mermaid diagram. Before render (or on failure) this wraps the
+   plain .md-code-block fallback, which brings its own styling. */
+.md-content .md-mermaid[data-mermaid-done="1"] {
+  margin: 1em 0;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow-x: auto;
+  text-align: center;
+}
+/* mermaid stamps an inline max-width sized to the diagram's intrinsic width,
+   which leaves it small in a wide pane. Let it fill the column instead. */
+.md-content .md-mermaid svg {
+  max-width: 100% !important;
+  width: 100%;
+  height: auto;
+}
 .md-content table {
   margin: 1em 0;
   border-collapse: collapse;
@@ -380,14 +396,12 @@ body {
 .hljs-addition { color: #98c379; background: rgba(152,195,121,0.1); }
 .hljs-deletion { color: #e06c75; background: rgba(224,108,117,0.1); }
 
-@media (prefers-color-scheme: light) {
-  .hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: #a626a4; }
-  .hljs-string, .hljs-attr { color: #50a14f; }
-  .hljs-number, .hljs-literal { color: #986801; }
-  .hljs-title, .hljs-function { color: #4078f2; }
-  .hljs-type, .hljs-class { color: #c18401; }
-  .hljs-variable, .hljs-template-variable { color: #e45649; }
-}
+:root[data-theme="light"] .hljs-keyword, :root[data-theme="light"] .hljs-selector-tag, :root[data-theme="light"] .hljs-built_in { color: #a626a4; }
+:root[data-theme="light"] .hljs-string, :root[data-theme="light"] .hljs-attr { color: #50a14f; }
+:root[data-theme="light"] .hljs-number, :root[data-theme="light"] .hljs-literal { color: #986801; }
+:root[data-theme="light"] .hljs-title, :root[data-theme="light"] .hljs-function { color: #4078f2; }
+:root[data-theme="light"] .hljs-type, :root[data-theme="light"] .hljs-class { color: #c18401; }
+:root[data-theme="light"] .hljs-variable, :root[data-theme="light"] .hljs-template-variable { color: #e45649; }
 
 /* ── selection toolbar ─────────────────────────────────────────── */
 .md-sel-toolbar {
@@ -878,10 +892,8 @@ body {
 }
 .multi-diff-add { color: #2a6f3b; }
 .multi-diff-del { color: #b33030; }
-@media (prefers-color-scheme: dark) {
-  .multi-diff-add { color: #88d39b; }
-  .multi-diff-del { color: #f0a0a0; }
-}
+:root[data-theme="dark"] .multi-diff-add { color: #88d39b; }
+:root[data-theme="dark"] .multi-diff-del { color: #f0a0a0; }
 .diff-file-placeholder {
   background: var(--ground);
   border-bottom: 1px solid var(--border);
@@ -957,3 +969,30 @@ body {
 .cm-scroller {
   font-family: var(--font) !important;
 }
+
+/* ── theme toggle (segmented) ───────────────────────────────────── */
+.theme-toggle {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  z-index: 60;
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--ground);
+  overflow: hidden;
+}
+.theme-toggle-seg {
+  border: none;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 8px;
+  cursor: pointer;
+  transition: background 0.08s, color 0.08s;
+}
+.theme-toggle-seg + .theme-toggle-seg { border-left: 1px solid var(--border); }
+.theme-toggle-seg:hover { color: var(--ink); background: var(--surface); }
+.theme-toggle-seg.active { color: var(--accent); background: var(--accent-bg); }

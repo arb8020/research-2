@@ -14,6 +14,7 @@ import { tokens, mimirEditorTheme, mimirHighlightStyle } from "./theme";
 import { atExtension, setAtData, setAtCallbacks, type AtLineData } from "./at-gutter";
 import { langForPath } from "./lang";
 import { fetchFile, fetchAt } from "./api";
+import { isDark } from "./theme-mode";
 
 interface Props {
   path: string | null;
@@ -64,6 +65,7 @@ export function Editor({ path, currentRef, peekRef, peekLine, onPeek, onEnter, o
   const mainViewRef = useRef<EditorView | null>(null);
   const peekViewRef = useRef<EditorView | null>(null);
   const [loading, setLoading] = useState(false);
+  const dark = isDark.value;
   // Wire up callbacks for the popover
   useEffect(() => {
     setAtCallbacks({ onPeek, onEnter });
@@ -72,8 +74,7 @@ export function Editor({ path, currentRef, peekRef, peekLine, onPeek, onEnter, o
   // Create main editor
   useEffect(() => {
     if (!mainRef.current) return;
-    const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const exts = createExtensions(isDark, null);
+    const exts = createExtensions(dark, null);
 
     // On mouseup after selection, fire annotation popover immediately
     if (onLineSelect) {
@@ -108,7 +109,7 @@ export function Editor({ path, currentRef, peekRef, peekLine, onPeek, onEnter, o
     return () => {
       view.destroy();
     };
-  }, []);
+  }, [dark]);
 
   // Load file when path or ref changes
   useEffect(() => {
@@ -147,7 +148,7 @@ export function Editor({ path, currentRef, peekRef, peekLine, onPeek, onEnter, o
       }
       setLoading(false);
     })();
-  }, [path, currentRef]);
+  }, [path, currentRef, dark]);
 
   // Create/update peek editor when peekRef changes
   useEffect(() => {
@@ -162,8 +163,7 @@ export function Editor({ path, currentRef, peekRef, peekLine, onPeek, onEnter, o
 
     (async () => {
       const file = await fetchFile(path, peekRef);
-      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      const t = isDark ? tokens.dark : tokens.light;
+      const t = dark ? tokens.dark : tokens.light;
 
       if (peekViewRef.current) {
         peekViewRef.current.destroy();
@@ -205,7 +205,7 @@ export function Editor({ path, currentRef, peekRef, peekLine, onPeek, onEnter, o
         peekViewRef.current = null;
       }
     };
-  }, [peekRef, path, peekLine]);
+  }, [peekRef, path, peekLine, dark]);
 
   const refLabel = currentRef ?? "working tree";
 

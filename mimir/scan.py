@@ -105,7 +105,18 @@ def _cyclomatic_complexity(node: ast.AST) -> int:
 
 
 def _count_branches(node: ast.AST) -> int:
-  """Count branch points in a function (if/elif/else/for/while/match arms).
+  """Count execution arcs in a function — every point where control flow diverges.
+
+  Mirrors coverage.py's arc model: counts both explicit and implicit branches.
+    if x:        → 2 (true + fall-through)
+    if x: / else → 2 (true + false)
+    for/while    → 2 (enter body + skip/exit)
+    try/except   → 1 + N (no-exception path + each except handler)
+    try/else     → +1 (else = no-exception, distinct from fall-through)
+    try/finally  → +1 (finally is a separate arc)
+    match/case   → N (one per case arm)
+    BoolOp       → N-1 (short-circuit points)
+    IfExp        → 2 (ternary true + false)
 
   Stops at nested function/class scopes.
   """
@@ -117,10 +128,25 @@ def _count_branches(node: ast.AST) -> int:
       if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
         if child is not node:
           continue
-      if isinstance(child, (ast.If, ast.For, ast.While, ast.AsyncFor)):
-        count += 1
+      if isinstance(child, ast.If):
+        count += 2  # true + false/fall-through
+      elif isinstance(child, (ast.For, ast.While, ast.AsyncFor)):
+        # skip fors inside comprehensions/genexprs — they always exhaust
+        if not isinstance(n, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+          count += 2  # enter body + skip/exit
       elif isinstance(child, ast.Match):
         count += len(child.cases)
+      elif isinstance(child, (ast.Try, ast.TryStar)):
+        count += 1  # no-exception path
+        count += len(child.handlers)  # each except handler
+        if child.orelse:
+          count += 1  # else block
+        if child.finalbody:
+          count += 1  # finally block
+      # BoolOp short-circuits and IfExp ternaries are expression-level branching.
+      # coverage.py tracks line-to-line arcs only, so these don't appear in its
+      # branch count. We skip them here to stay compatible; cyclomatic_complexity
+      # still counts them.
       walk(child)
 
   walk(node)

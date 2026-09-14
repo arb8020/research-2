@@ -4,6 +4,11 @@ __pycache__/
 
 # Local Claude Code state and worktrees
 .claude/
+worktrees/
+
+# Coverage artifacts
+.coverage
+coverage.json
 
 # Locally generated dependency lockfile
 uv.lock
