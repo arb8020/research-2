@@ -6,6 +6,13 @@ __pycache__/
 .claude/
 worktrees/
 
+# Python build output (uv build / hatchling)
+/dist/
+
+# Built Vite output (produced by the hatchling build hook, see hatch_build.py)
+mimir/ui/dist/
+mimir/ui/app/node_modules/
+
 # Coverage artifacts
 .coverage
 coverage.json

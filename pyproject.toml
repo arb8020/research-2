@@ -18,6 +18,19 @@ dev = [
 [project.scripts]
 mimir = "mimir.cli:main"
 
+# The annotate UI (mimir/ui/dist) is built from mimir/ui/app at package-build
+# time by hatch_build.py and is gitignored, so it must be listed as an artifact
+# to survive hatchling's VCS-aware file selection.
+[tool.hatch.build]
+artifacts = ["mimir/ui/dist/**"]
+exclude = ["mimir/ui/app/node_modules/**"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["mimir"]
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [tool.ruff]
 line-length = 100
 indent-width = 2
