@@ -1,47 +1,53 @@
-"""breadcrumb — append-only event log to BREADCRUMBS.md."""
+"""breadcrumb — append-only event log to BREADCRUMBS.md.
+
+Disabled by default: enable with `breadcrumb = true` under [tool.mimir] in the
+repo's pyproject.toml, or MIMIR_BREADCRUMB=1 for a single session.
+"""
 
 from __future__ import annotations
 
-import os
-import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 
+from . import journal
+from .journal import BREADCRUMB as SPEC
+from .journal import repo_root, user  # re-exported for callers
 
-def _git(*args: str) -> str | None:
-  try:
-    return subprocess.check_output(
-      ["git", *args], stderr=subprocess.DEVNULL, text=True
-    ).strip()
-  except (subprocess.CalledProcessError, FileNotFoundError):
-    return None
-
-
-def repo_root() -> Path | None:
-  root = _git("rev-parse", "--show-toplevel")
-  return Path(root) if root else None
+__all__ = [
+  "SPEC",
+  "append_entry",
+  "disabled_message",
+  "is_enabled",
+  "list_entries",
+  "repo_root",
+  "require_enabled",
+  "resolve_path",
+  "user",
+  "view",
+]
 
 
 def resolve_path(file_override: str | None = None) -> Path:
-  if file_override:
-    return Path(file_override)
-  root = repo_root() or Path.cwd()
-  return root / "BREADCRUMBS.md"
+  return journal.resolve_path(SPEC, file_override)
 
 
 def append_entry(agent: str, message: str, path: Path) -> None:
-  ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
-  needs_header = not path.exists() or path.stat().st_size == 0
-  with open(path, "a") as f:
-    if needs_header:
-      f.write("# Breadcrumbs\n\n")
-    f.write(f"{ts} [{agent}] {message}\n")
+  journal.append_entry(SPEC, agent, message, path)
 
 
 def list_entries(path: Path) -> str:
-  if path.exists():
-    return path.read_text()
-  return "(no breadcrumbs yet)"
+  return journal.list_entries(SPEC, path)
+
+
+def is_enabled(root: str | None = None) -> bool:
+  return journal.is_enabled(SPEC, root)
+
+
+def disabled_message(root: str | None = None) -> str:
+  return journal.disabled_message(SPEC, root)
+
+
+def require_enabled(root: str | None = None) -> None:
+  journal.require_enabled(SPEC, root)
 
 
 def view(path: Path, port: int | None = None) -> None:

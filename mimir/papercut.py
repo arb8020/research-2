@@ -1,47 +1,49 @@
-"""papercut — log small frictions to PAPERCUTS.md."""
+"""papercut — log small frictions to PAPERCUTS.md.
+
+Disabled by default: enable with `papercut = true` under [tool.mimir] in the
+repo's pyproject.toml, or MIMIR_PAPERCUT=1 for a single session.
+"""
 
 from __future__ import annotations
 
-import os
-import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 
+from . import journal
+from .journal import PAPERCUT as SPEC
+from .journal import repo_root, user  # re-exported for callers
 
-def _git(*args: str) -> str | None:
-  try:
-    return subprocess.check_output(
-      ["git", *args], stderr=subprocess.DEVNULL, text=True
-    ).strip()
-  except (subprocess.CalledProcessError, FileNotFoundError):
-    return None
-
-
-def repo_root() -> Path | None:
-  root = _git("rev-parse", "--show-toplevel")
-  return Path(root) if root else None
-
-
-def user() -> str:
-  return _git("config", "user.name") or os.environ.get("USER", "unknown")
+__all__ = [
+  "SPEC",
+  "append_entry",
+  "disabled_message",
+  "is_enabled",
+  "list_entries",
+  "repo_root",
+  "require_enabled",
+  "resolve_path",
+  "user",
+]
 
 
 def resolve_path(file_override: str | None = None) -> Path:
-  if file_override:
-    return Path(file_override)
-  root = repo_root() or Path.cwd()
-  return root / "PAPERCUTS.md"
+  return journal.resolve_path(SPEC, file_override)
 
 
 def append_entry(model: str, message: str, path: Path) -> None:
-  ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-  u = user()
-  entry = f"\n{ts} - {model} - {u}\n\n{message}\n"
-  with open(path, "a") as f:
-    f.write(entry)
+  journal.append_entry(SPEC, model, message, path)
 
 
 def list_entries(path: Path) -> str:
-  if path.exists():
-    return path.read_text()
-  return "(no papercuts yet)"
+  return journal.list_entries(SPEC, path)
+
+
+def is_enabled(root: str | None = None) -> bool:
+  return journal.is_enabled(SPEC, root)
+
+
+def disabled_message(root: str | None = None) -> str:
+  return journal.disabled_message(SPEC, root)
+
+
+def require_enabled(root: str | None = None) -> None:
+  journal.require_enabled(SPEC, root)

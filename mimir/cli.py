@@ -628,7 +628,9 @@ def _add_common_args(p: argparse.ArgumentParser) -> None:
 
 
 def cmd_papercut(args: argparse.Namespace) -> None:
-  from .papercut import append_entry, list_entries, resolve_path
+  from .papercut import append_entry, list_entries, require_enabled, resolve_path
+
+  require_enabled()
 
   path = resolve_path(args.file)
 
@@ -650,7 +652,9 @@ def cmd_papercut(args: argparse.Namespace) -> None:
 
 
 def cmd_breadcrumb(args: argparse.Namespace) -> None:
-  from .breadcrumb import append_entry, list_entries, resolve_path, view
+  from .breadcrumb import append_entry, list_entries, require_enabled, resolve_path, view
+
+  require_enabled()
 
   path = resolve_path(args.file)
 
@@ -789,7 +793,14 @@ examples:
   ui_p.add_argument("--port", type=int, default=None)
   ui_p.add_argument("--no-open", action="store_true")
 
-  pc_p = sub.add_parser("papercut", help="Log small frictions to PAPERCUTS.md")
+  pc_p = sub.add_parser(
+    "papercut",
+    help="Log small frictions to PAPERCUTS.md (off by default)",
+    description=(
+      "Append-only friction log. Disabled unless `papercut = true` is set under "
+      "[tool.mimir] in the repo's pyproject.toml, or MIMIR_PAPERCUT=1 is set."
+    ),
+  )
   pc_p.add_argument("-m", "--model", default="unknown", help="Model name tag")
   pc_p.add_argument(
     "-f", "--file", default=None,
@@ -799,7 +810,14 @@ examples:
   pc_p.add_argument("--path", action="store_true", help="Print path to PAPERCUTS.md")
   pc_p.add_argument("message", nargs="*", help="The papercut message")
 
-  bc_p = sub.add_parser("breadcrumb", help="Append-only event log to BREADCRUMBS.md")
+  bc_p = sub.add_parser(
+    "breadcrumb",
+    help="Append-only event log to BREADCRUMBS.md (off by default)",
+    description=(
+      "Append-only event log. Disabled unless `breadcrumb = true` is set under "
+      "[tool.mimir] in the repo's pyproject.toml, or MIMIR_BREADCRUMB=1 is set."
+    ),
+  )
   bc_p.add_argument("-a", "--agent", default="unknown", help="Agent identity tag")
   bc_p.add_argument(
     "-f", "--file", default=None,

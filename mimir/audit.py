@@ -16,6 +16,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from .config import load_tool_mimir
 from .scan import iter_py_files, scan_dir
 
 # --- defaults (match crucible's thresholds) ---
@@ -100,17 +101,7 @@ class Violation:
 
 def load_config(root: str) -> AuditConfig:
   """Read [tool.mimir] from the target project's pyproject.toml."""
-  toml_path = os.path.join(root, "pyproject.toml")
-  cfg: dict = {}
-
-  if os.path.isfile(toml_path):
-    try:
-      import tomllib
-    except ModuleNotFoundError:
-      import tomli as tomllib  # type: ignore[no-redef]
-    with open(toml_path, "rb") as f:
-      data = tomllib.load(f)
-    cfg = data.get("tool", {}).get("mimir", {})
+  cfg = load_tool_mimir(root)
 
   src_raw = cfg.get("src", None)
   if src_raw is None:
