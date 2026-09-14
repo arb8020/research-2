@@ -489,6 +489,39 @@ def _print_text(
     _print_coverage(report["coverage"], list_mode=args.list)
 
 
+def cmd_graph(args: argparse.Namespace) -> None:
+  target = os.path.abspath(args.target)
+  if not os.path.exists(target):
+    print(f"error: {target} does not exist", file=sys.stderr)
+    sys.exit(1)
+
+  from .imports import build_import_graph
+  graph = build_import_graph(target, exclude=args.exclude)
+
+  # Collect and filter edges
+  pairs: list[tuple[str, str]] = []
+  for src, dsts in graph.edges.items():
+    for dst in dsts:
+      if args.from_prefix and not src.startswith(args.from_prefix):
+        continue
+      if args.to_prefix and not dst.startswith(args.to_prefix):
+        continue
+      if args.cross:
+        src_pkg = src.split("/")[0]
+        dst_pkg = dst.split("/")[0]
+        if src_pkg == dst_pkg:
+          continue
+      pairs.append((src, dst))
+
+  pairs.sort()
+
+  if args.json:
+    print(json.dumps([{"from": s, "to": t} for s, t in pairs], indent=2))
+  else:
+    for src, dst in pairs:
+      print(f"{src} → {dst}")
+
+
 def cmd_scan(args: argparse.Namespace) -> None:
   target = os.path.abspath(args.target)
   if not os.path.exists(target):
@@ -855,6 +888,12 @@ examples:
   ann_p.add_argument("--root", default=".", help="Git repository root")
   ann_p.add_argument("--port", type=int, default=None)
   ann_p.add_argument("--no-open", action="store_true")
+  graph_p = sub.add_parser("graph", help="Print raw import graph edges")
+  _add_common_args(graph_p)
+  graph_p.add_argument("--from", dest="from_prefix", default=None, help="Only edges where source starts with PREFIX")
+  graph_p.add_argument("--to", dest="to_prefix", default=None, help="Only edges where target starts with PREFIX")
+  graph_p.add_argument("--cross", action="store_true", help="Only cross-package edges")
+  graph_p.add_argument("--json", action="store_true", help="Output as JSON")
 
   args = parser.parse_args()
   if args.command == "scan":
@@ -872,6 +911,8 @@ examples:
     cmd_papercut(args)
   elif args.command == "breadcrumb":
     cmd_breadcrumb(args)
+  elif args.command == "graph":
+    cmd_graph(args)
   else:
     parser.print_help()
 
