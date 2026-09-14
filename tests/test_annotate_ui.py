@@ -46,6 +46,20 @@ def mimir_server(request, tmp_path):
             "--root", root, "mimir/cli.py"]
     proc = subprocess.Popen(_mimir_cmd(argv), cwd=root, stderr=subprocess.PIPE)
 
+  elif mode == "html":
+    html = tmp_path / "show-me.html"
+    html.write_text("<!doctype html><h1>hello-preview</h1>", encoding="utf-8")
+    argv = ["mimir", "annotate", "--no-open", "--port", str(port),
+            "--root", str(tmp_path), "show-me.html"]
+    proc = subprocess.Popen(_mimir_cmd(argv), cwd=root, stderr=subprocess.PIPE)
+
+  elif mode == "markdown":
+    md = tmp_path / "note.md"
+    md.write_text("# hello-md\n\nA paragraph.\n", encoding="utf-8")
+    argv = ["mimir", "annotate", "--no-open", "--port", str(port),
+            "--root", str(tmp_path), "note.md"]
+    proc = subprocess.Popen(_mimir_cmd(argv), cwd=root, stderr=subprocess.PIPE)
+
   elif mode == "diff":
     # Create a small diff to feed via stdin
     diff_text = textwrap.dedent("""\
@@ -122,6 +136,64 @@ def test_browse_auto_selects_file(mimir_server):
     # Verify file header shows the target
     header = page.locator(".file-header").text_content()
     assert "cli.py" in header
+    browser.close()
+
+
+@pytest.mark.parametrize("mimir_server", ["html"], indirect=True)
+def test_html_renders_in_iframe(mimir_server):
+  """Browse mode on an .html file should render it, not open CodeMirror."""
+  port, _ = mimir_server
+  with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page(viewport={"width": 1400, "height": 900})
+    page.goto(f"http://127.0.0.1:{port}?annotate=1&mode=browse")
+    page.wait_for_selector("iframe.html-preview-frame", timeout=8000)
+    _check_no_empty_state(page)
+    frame = page.frame_locator("iframe.html-preview-frame")
+    frame.locator("h1").wait_for(timeout=8000)
+    assert frame.locator("h1").inner_text() == "hello-preview"
+    assert page.locator(".view-toggle").count() == 1
+    browser.close()
+
+
+@pytest.mark.parametrize("mimir_server", ["html"], indirect=True)
+def test_html_source_toggle(mimir_server):
+  """Render/source toggle swaps iframe and CodeMirror for HTML."""
+  port, _ = mimir_server
+  with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page(viewport={"width": 1400, "height": 900})
+    page.goto(f"http://127.0.0.1:{port}?annotate=1&mode=browse")
+    page.wait_for_selector("iframe.html-preview-frame", timeout=8000)
+    page.locator(".view-toggle button", has_text="source").click()
+    page.wait_for_selector(".cm-editor", timeout=8000)
+    assert page.locator("iframe.html-preview-frame").count() == 0
+    page.locator(".view-toggle button", has_text="render").click()
+    page.wait_for_selector("iframe.html-preview-frame", timeout=8000)
+    assert page.locator(".cm-editor").count() == 0
+    browser.close()
+
+
+@pytest.mark.parametrize("mimir_server", ["markdown"], indirect=True)
+def test_markdown_render_source_toggle(mimir_server):
+  """Markdown defaults to rendered view and shares the render/source toggle."""
+  port, _ = mimir_server
+  with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page(viewport={"width": 1400, "height": 900})
+    page.goto(f"http://127.0.0.1:{port}?annotate=1&mode=browse")
+    page.wait_for_selector(".md-content, .message-viewer-md", timeout=8000)
+    _check_no_empty_state(page)
+    assert page.locator(".view-toggle").count() == 1
+    heading = page.locator(".md-content h1")
+    heading.wait_for(timeout=8000)
+    assert heading.inner_text() == "hello-md"
+    page.locator(".view-toggle button", has_text="source").click()
+    page.wait_for_selector(".cm-editor", timeout=8000)
+    assert page.locator(".md-content").count() == 0
+    page.locator(".view-toggle button", has_text="render").click()
+    page.wait_for_selector(".md-content, .message-viewer-md", timeout=8000)
+    assert page.locator(".cm-editor").count() == 0
     browser.close()
 
 

@@ -27,7 +27,7 @@ import webbrowser
 from dataclasses import asdict, dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import subprocess
 
@@ -47,7 +47,9 @@ class Annotation:
   end_line: int
   side: str | None = None       # "old" | "new" (diff mode only)
   text: str = ""
-  original_text: str | None = None  # selected text (message mode)
+  original_text: str | None = None  # selected text (message / rendered html)
+  prefix: str | None = None     # ~32 chars before quote (html re-highlight)
+  suffix: str | None = None     # ~32 chars after quote
 
 
 @dataclass
@@ -433,6 +435,8 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
       self._serve_browse_children(q)
     elif url.path == "/api/at":
       self._serve_at(q)
+    elif url.path.startswith(_PREVIEW_PREFIX):
+      self._serve_preview(unquote(url.path[len(_PREVIEW_PREFIX):]))
     elif _use_dist():
       self._serve_static(url.path)
     else:
@@ -450,6 +454,8 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
           side=a.get("side"),
           text=a.get("text", ""),
           original_text=a.get("original_text"),
+          prefix=a.get("prefix"),
+          suffix=a.get("suffix"),
         )
         for a in body.get("annotations", [])
       ]
@@ -465,6 +471,22 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
 
   # --- file serving (shared with webui.py) ---
 
+  def _resolve_readable(self, rel: str) -> str | None:
+    """Absolute path if `rel` is a readable file under root or an explicit target."""
+    if not rel:
+      return None
+    root_real = os.path.realpath(self.root)
+
+    def _abs(p: str) -> str:
+      return os.path.realpath(p if os.path.isabs(p) else os.path.join(self.root, p))
+
+    full = _abs(rel)
+    allowed = {_abs(p) for p in self.target.paths}
+    in_root = full.startswith(root_real + os.sep) or full == root_real
+    if (not in_root and full not in allowed) or not os.path.isfile(full):
+      return None
+    return full
+
   def _serve_file(self, q: dict[str, list[str]]) -> None:
     rel = q.get("path", [""])[0]
     ref = q.get("ref", [None])[0]
@@ -474,16 +496,36 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
         self._json({"error": "not found"}, 404)
       else:
         self._json({"path": rel, "ref": ref, "content": content})
-    else:
-      full = os.path.realpath(os.path.join(self.root, rel))
-      if not full.startswith(os.path.realpath(self.root)) or not os.path.isfile(full):
-        self._json({"error": "not found"}, 404)
-        return
-      try:
-        with open(full, encoding="utf-8", errors="replace") as f:
-          self._json({"path": rel, "content": f.read()})
-      except OSError:
-        self._json({"error": "unreadable"}, 500)
+      return
+    full = self._resolve_readable(rel)
+    if full is None:
+      self._json({"error": "not found"}, 404)
+      return
+    try:
+      with open(full, encoding="utf-8", errors="replace") as f:
+        self._json({"path": rel, "content": f.read()})
+    except OSError:
+      self._json({"error": "unreadable"}, 500)
+
+  def _serve_preview(self, rel: str) -> None:
+    """Serve a working-tree file as itself so an iframe can render HTML."""
+    full = self._resolve_readable(rel)
+    if full is None:
+      self._json({"error": "not found"}, 404)
+      return
+    try:
+      with open(full, "rb") as f:
+        body = f.read()
+    except OSError:
+      self._json({"error": "unreadable"}, 500)
+      return
+    ext = os.path.splitext(full)[1].lower()
+    mime = _PREVIEW_MIME.get(ext, "application/octet-stream")
+    self.send_response(200)
+    self.send_header("Content-Type", mime)
+    self.send_header("Content-Length", str(len(body)))
+    self.end_headers()
+    self.wfile.write(body)
 
   def _serve_diff(self, q: dict[str, list[str]]) -> None:
     # Serve stdin diff if available
@@ -614,6 +656,30 @@ class _AnnotateHandler(BaseHTTPRequestHandler):
     self.send_header("Content-Length", str(len(body)))
     self.end_headers()
     self.wfile.write(body)
+
+
+_PREVIEW_PREFIX = "/preview/"
+
+_PREVIEW_MIME: dict[str, str] = {
+  ".html": "text/html; charset=utf-8",
+  ".htm": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".txt": "text/plain; charset=utf-8",
+  ".md": "text/markdown; charset=utf-8",
+}
 
 
 def _use_dist() -> bool:

@@ -14,6 +14,7 @@ import { fetchTree, fetchDiff, fetchFile, fetchAnnotateTarget, fetchMessage, typ
 import { parseUnifiedDiff, type DiffFile } from "./diff-parse";
 import { useAnnotations, AnnotationInput, AnnotationBar, AnnotationSidebar, type PendingAnnotation } from "./annotate";
 import { MessageViewer } from "./message-viewer";
+import { HtmlViewer } from "./html-viewer";
 import { themeMode, type ThemeMode } from "./theme-mode";
 
 const THEME_SEGMENTS: { mode: ThemeMode; glyph: string; label: string }[] = [
@@ -49,6 +50,8 @@ function AnnotationPopover({ showingInput, onSubmit, onCancel }: {
     top: number;
     left: number;
     anchorEl?: Element | null;
+    prefix?: string;
+    suffix?: string;
   };
   onSubmit: (ann: Omit<PendingAnnotation, "id">) => void;
   onCancel: () => void;
@@ -100,6 +103,8 @@ function AnnotationPopover({ showingInput, onSubmit, onCancel }: {
         originalText={showingInput.originalText}
         startLine={showingInput.startLine}
         endLine={showingInput.endLine}
+        prefix={showingInput.prefix}
+        suffix={showingInput.suffix}
         onSubmit={onSubmit}
         onCancel={onCancel}
       />
@@ -131,6 +136,8 @@ export function App() {
     top: number;
     left: number;
     anchorEl?: Element | null;
+    prefix?: string;
+    suffix?: string;
   } | null>(null);
   // Message mode state
   const [messageText, setMessageText] = useState<string | null>(null);
@@ -139,12 +146,22 @@ export function App() {
   const [mdContent, setMdContent] = useState<string | null>(null);
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [previewView, setPreviewView] = useState<"render" | "source">("render");
+  const [focusAnnId, setFocusAnnId] = useState<string | null>(null);
   const annState = useAnnotations();
 
   const isDiffMode = diffFiles !== null;
   const isMessageMode = annotateTarget?.mode === "message" && messageText !== null;
   const isAnnotateBrowse = annotateMode && annotateTarget?.mode === "browse";
   const isMarkdown = selected?.match(/\.(md|mdx|markdown)$/i) != null;
+  const isHtml = selected?.match(/\.html?$/i) != null;
+  // /preview/ exists only on the annotate server. mimir ui would 404 the iframe.
+  const canRenderHtml = Boolean(isHtml && annotateMode);
+  const isPreviewable = isMarkdown || canRenderHtml;
+
+  useEffect(() => {
+    setPreviewView("render");
+  }, [selected]);
 
   // Fetch markdown content when a .md file is selected
   useEffect(() => {
@@ -264,10 +281,25 @@ export function App() {
     setShowingInput({ file, startLine, endLine, originalText: "", top, left, anchorEl });
   }, [annotateMode]);
 
-  // Handle text selection for annotation (message mode)
-  const handleTextSelect = useCallback((file: string, originalText: string, top: number, left: number) => {
+  // Handle text selection for annotation (message / rendered html)
+  const handleTextSelect = useCallback((
+    file: string,
+    originalText: string,
+    top: number,
+    left: number,
+    extra?: { startLine?: number; endLine?: number; prefix?: string; suffix?: string },
+  ) => {
     if (!annotateMode) return;
-    setShowingInput({ file, originalText, top, left });
+    setShowingInput({
+      file,
+      originalText,
+      top,
+      left,
+      startLine: extra?.startLine,
+      endLine: extra?.endLine,
+      prefix: extra?.prefix,
+      suffix: extra?.suffix,
+    });
   }, [annotateMode]);
 
   const handleAnnotationAdd = useCallback((ann: Omit<PendingAnnotation, "id">) => {
@@ -340,15 +372,39 @@ export function App() {
                   ? selected.slice(selected.lastIndexOf("/") + 1)
                   : selected}
               </span>
-              {touchedCount ? (
-                <span class="file-meta">
-                  {touchedCount} branch{touchedCount > 1 ? "es" : ""}
-                </span>
+              {(touchedCount || isPreviewable) ? (
+                <div class="file-header-end">
+                  {touchedCount ? (
+                    <span class="file-meta">
+                      {touchedCount} branch{touchedCount > 1 ? "es" : ""}
+                    </span>
+                  ) : null}
+                  {isPreviewable && (
+                    <div class="view-toggle">
+                      <button
+                        class={previewView === "render" ? "active" : ""}
+                        onClick={() => setPreviewView("render")}
+                      >render</button>
+                      <button
+                        class={previewView === "source" ? "active" : ""}
+                        onClick={() => setPreviewView("source")}
+                      >source</button>
+                    </div>
+                  )}
+                </div>
               ) : null}
             </div>
-            {isMarkdown && mdContent != null ? (
+            {canRenderHtml && previewView === "render" ? (
+              <HtmlViewer
+                path={selected}
+                annotations={annState.annotations.filter((a) => a.file === selected)}
+                focusId={focusAnnId}
+                onTextSelect={handleTextSelect}
+              />
+            ) : isMarkdown && previewView === "render" && mdContent != null ? (
               <MessageViewer
                 text={mdContent}
+                file={selected}
                 onTextSelect={annotateMode ? handleTextSelect : undefined}
               />
             ) : (
@@ -390,6 +446,7 @@ export function App() {
           annotations={annState.annotations}
           onRemove={annState.remove}
           onUpdate={annState.update}
+          onScrollTo={(ann) => setFocusAnnId(ann.id)}
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         />

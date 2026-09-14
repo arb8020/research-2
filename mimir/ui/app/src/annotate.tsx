@@ -21,6 +21,8 @@ export interface PendingAnnotation {
   startLine?: number;
   endLine?: number;
   side?: string | null;
+  prefix?: string;       // text-quote context (rendered html)
+  suffix?: string;
 }
 
 let _nextId = 0;
@@ -59,6 +61,8 @@ export function useAnnotations() {
         side: a.side,
         text: a.text,
         original_text: a.originalText || undefined,
+        prefix: a.prefix,
+        suffix: a.suffix,
       }));
       await submitAnnotations(data);
       setSubmitted(true);
@@ -101,11 +105,13 @@ interface InputProps {
   startLine?: number;
   endLine?: number;
   side?: string | null;
+  prefix?: string;
+  suffix?: string;
   onSubmit: (ann: Omit<PendingAnnotation, "id">) => void;
   onCancel: () => void;
 }
 
-export function AnnotationInput({ file, originalText, startLine, endLine, side, onSubmit, onCancel }: InputProps) {
+export function AnnotationInput({ file, originalText, startLine, endLine, side, prefix, suffix, onSubmit, onCancel }: InputProps) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -116,7 +122,7 @@ export function AnnotationInput({ file, originalText, startLine, endLine, side, 
 
   const handleSubmit = () => {
     if (!text.trim()) return;
-    onSubmit({ file, originalText, text: text.trim(), startLine, endLine, side });
+    onSubmit({ file, originalText, text: text.trim(), startLine, endLine, side, prefix, suffix });
     setText("");
   };
 
