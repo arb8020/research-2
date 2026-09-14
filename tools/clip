@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+usage() {
+  echo "Usage: clip <url> [output.md]"
+  echo ""
+  echo "Clip a web page to clean markdown."
+  echo "Writes to stdout or to a file if given."
+  echo ""
+  echo "Examples:"
+  echo "  clip https://example.com/article"
+  echo "  clip https://example.com/article docs/raw/article.md"
+  exit 1
+}
+
+[ $# -lt 1 ] && usage
+
+URL="$1"
+OUT="${2:-}"
+
+if [ -n "$OUT" ]; then
+  npx -y defuddle parse --markdown --frontmatter "$URL" > "$OUT"
+  echo "clipped → $OUT" >&2
+else
+  npx -y defuddle parse --markdown --frontmatter "$URL"
+fi
