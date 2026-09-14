@@ -77,6 +77,12 @@ _DEFAULT_VOID_EXEMPT_METHODS: set[str] = {
 
 
 @dataclass
+class Boundary:
+  src: str
+  forbid: list[str]
+
+
+@dataclass
 class AuditConfig:
   src: list[str]
   exclude: list[str]
@@ -89,6 +95,7 @@ class AuditConfig:
   check_void_returns: bool
   check_isinstance: bool
   void_exempt_methods: set[str]
+  boundaries: list[Boundary]
 
 
 @dataclass
@@ -125,6 +132,9 @@ def load_config(root: str) -> AuditConfig:
         list(_DEFAULT_VOID_EXEMPT_METHODS),
       )
     ),
+    boundaries=[
+      Boundary(src=b["src"], forbid=list(b["forbid"])) for b in cfg.get("boundaries", [])
+    ],
   )
 
 
@@ -484,6 +494,49 @@ def check_dir_entries(root: str, cfg: AuditConfig) -> list[Violation]:
   return violations
 
 
+def _imported_modules(tree: ast.AST) -> list[str]:
+  """Module names referenced by Import and ImportFrom nodes, including `from X import Y`
+  forms as both `X` and `X.Y` (so a forbidden prefix matches either)."""
+  names: list[str] = []
+  for node in ast.walk(tree):
+    if isinstance(node, ast.Import):
+      names.extend(a.name for a in node.names)
+    elif isinstance(node, ast.ImportFrom) and node.module:
+      names.append(node.module)
+      names.extend(f"{node.module}.{a.name}" for a in node.names)
+  return names
+
+
+def check_boundaries(root: str, cfg: AuditConfig) -> list[Violation]:
+  """Enforce [tool.mimir] boundaries: files matching `src` must not import anything
+  under a `forbid` prefix."""
+  violations: list[Violation] = []
+
+  for boundary in cfg.boundaries:
+    for filepath in sorted(Path(root).glob(boundary.src)):
+      if not filepath.is_file():
+        continue
+      relpath = os.path.relpath(filepath, root)
+      try:
+        tree = ast.parse(filepath.read_text())
+      except (OSError, UnicodeDecodeError, SyntaxError):
+        continue
+
+      for module in _imported_modules(tree):
+        hit = next((f for f in boundary.forbid if module == f or module.startswith(f + ".")), None)
+        if hit is not None:
+          violations.append(
+            Violation(
+              relpath,
+              0,
+              "import-boundary",
+              f"{relpath} imports {module}; forbidden by boundary {boundary.src}",
+            )
+          )
+
+  return violations
+
+
 # --- main audit orchestrator ---
 
 
@@ -546,6 +599,17 @@ def run_audit(root: str, *, fix: bool = False) -> list[CheckResult]:
       len(dir_violations) == 0,
       f"{len(dir_violations)} violations" if dir_violations else "clean",
       dir_violations,
+    )
+  )
+
+  # 7. import boundaries
+  boundary_violations = check_boundaries(root, cfg)
+  results.append(
+    CheckResult(
+      "boundaries",
+      len(boundary_violations) == 0,
+      f"{len(boundary_violations)} violations" if boundary_violations else "clean",
+      boundary_violations,
     )
   )
 
