@@ -132,6 +132,7 @@ async function renderMermaid(container: HTMLElement, dark: boolean) {
 
 interface Props {
   text: string;
+  file?: string;
   messageIndex?: number;
   onTextSelect?: (
     file: string,
@@ -141,7 +142,7 @@ interface Props {
   ) => void;
 }
 
-export function MessageViewer({ text, messageIndex, onTextSelect }: Props) {
+export function MessageViewer({ text, file, messageIndex, onTextSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [toolbar, setToolbar] = useState<{ top: number; left: number; text: string } | null>(null);
 
@@ -212,8 +213,9 @@ export function MessageViewer({ text, messageIndex, onTextSelect }: Props) {
 
   const handleComment = useCallback(() => {
     if (!toolbar || !onTextSelect) return;
-    const file = messageIndex != null ? `__message__:${messageIndex}` : "__message__";
-    onTextSelect(file, toolbar.text, toolbar.top + 40, toolbar.left);
+    const target = file
+      ?? (messageIndex != null ? `__message__:${messageIndex}` : "__message__");
+    onTextSelect(target, toolbar.text, toolbar.top + 40, toolbar.left);
     setToolbar(null);
     window.getSelection()?.removeAllRanges();
   }, [toolbar, onTextSelect]);

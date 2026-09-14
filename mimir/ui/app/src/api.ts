@@ -95,6 +95,12 @@ export interface AnnotationData {
   side?: string | null;
   text: string;
   original_text?: string;
+  prefix?: string;
+  suffix?: string;
+}
+
+export function previewUrl(path: string): string {
+  return "/preview/" + path.split("/").map(encodeURIComponent).join("/");
 }
 
 export async function fetchAnnotateTarget(): Promise<AnnotateTarget> {

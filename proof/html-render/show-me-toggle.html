@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>show-me toggle</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      margin: 0;
+      padding: 48px 56px;
+      font: 16px/1.6 "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+      color: #1c1914;
+      background: #f6f1e6;
+    }
+    h1 {
+      font-size: 1.8em;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.4em;
+    }
+    p { margin: 0 0 1em; max-width: 40em; }
+    .callout {
+      max-width: 40em;
+      padding: 14px 18px;
+      border-left: 3px solid #c9a23e;
+      background: #faf5e6;
+      color: #3a3324;
+    }
+    .callout strong { color: #1c1914; }
+  </style>
+</head>
+<body>
+  <h1>show-me toggle</h1>
+  <p>
+    This page should open rendered in an iframe, not as HTML source.
+    Use the header control to flip between render and source.
+  </p>
+  <div class="callout">
+    <strong>Try it.</strong> Select this sentence — the comment toolbar
+    should appear. Then click source to see the CodeMirror of this file.
+  </div>
+</body>
+</html>
