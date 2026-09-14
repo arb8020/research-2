@@ -31,6 +31,12 @@ packages = ["mimir"]
 [tool.hatch.build.hooks.custom]
 path = "hatch_build.py"
 
+[tool.mimir]
+# Journals are off by default everywhere; mimir's own repo opts in.
+# See docs/journals.md
+breadcrumb = true
+papercut = true
+
 [tool.ruff]
 line-length = 100
 indent-width = 2
