@@ -1,0 +1,106 @@
+/* Hairlines, not boxes: the scroller is bounded by rules, not a card. */
+.raw-table {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.raw-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.raw-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.chips { display: flex; gap: 6px; }
+.chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--faint);
+  border-radius: 999px;
+  padding: 2px 9px;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+.chip:hover { background: var(--hover); }
+.chip[aria-pressed="true"] {
+  color: var(--ink);
+  border-color: var(--muted);
+  background: var(--surface-subtle);
+}
+
+.raw-follow {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.raw-follow input { margin: 0; cursor: pointer; }
+
+.raw-scroll {
+  flex: 1;
+  min-height: 160px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--surface);
+  position: relative;
+}
+.raw-spacer { position: relative; }
+.raw-window { position: absolute; left: 0; right: 0; }
+
+.raw-row {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  padding: 0 14px;
+}
+
+/* table mode: columns, one hairline per row. Height matches ROW_HEIGHT.table. */
+[data-mode="table"] .raw-row {
+  display: grid;
+  grid-template-columns: 58px 84px 150px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  height: 22px;
+  border-bottom: 1px solid color-mix(in srgb, var(--grid) 70%, transparent);
+}
+
+/* terminal mode: one dense line, no columns, no rules. ROW_HEIGHT.terminal. */
+[data-mode="terminal"] .raw-row {
+  height: 18px;
+  line-height: 18px;
+  color: var(--muted);
+  text-overflow: ellipsis;
+}
+[data-mode="terminal"] .raw-row[data-kind="metric"] { color: var(--ink); }
+[data-mode="terminal"] .raw-row[data-kind="span"] { color: var(--violet); }
+
+.raw-kind { text-transform: uppercase; letter-spacing: 0.04em; }
+.raw-kind[data-kind="metric"] { color: var(--blue); }
+.raw-kind[data-kind="span"] { color: var(--violet); }
+.raw-kind[data-kind="log"] { color: var(--faint); }
+.raw-ts { color: var(--faint); }
+.raw-name { color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+.raw-attrs { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+
+.raw-empty {
+  padding: 14px;
+  font-size: 12px;
+  color: var(--faint);
+}

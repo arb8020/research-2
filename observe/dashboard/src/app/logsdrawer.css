@@ -1,0 +1,100 @@
+/* The drawer is a fixed right-edge sheet. No scrim: the figure behind it stays
+   readable, which is the point of a HUD. */
+.logs-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  width: min(720px, 92vw);
+  display: flex;
+  pointer-events: none;
+}
+.logs-drawer[data-open="true"] { pointer-events: auto; }
+
+.logs-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  box-shadow: -8px 0 24px -12px rgb(0 0 0 / 18%);
+  transform: translateX(100%);
+  opacity: 0;
+  /* Exit: ~20% faster than the entrance. */
+  transition:
+    transform var(--drawer-out) var(--ease-out),
+    opacity var(--drawer-out) var(--ease-out);
+  will-change: transform;
+}
+.logs-drawer[data-open="true"] .logs-panel {
+  transform: translateX(0);
+  opacity: 1;
+  transition:
+    transform var(--drawer-in) var(--ease-out),
+    opacity var(--drawer-in) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logs-panel,
+  .logs-drawer[data-open="true"] .logs-panel {
+    transform: none;
+    transition: opacity 200ms ease;
+  }
+}
+
+.logs-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.logs-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+/* Segmented control — chrome, so radius is allowed here. */
+.mode-toggle {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.mode-button {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  padding: 3px 11px;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.mode-button:hover { background: var(--hover); }
+.mode-button[aria-pressed="true"] {
+  background: var(--action-hover);
+  color: var(--ink);
+}
+
+.logs-close {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--faint);
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.logs-close:hover { background: var(--hover); color: var(--ink); }

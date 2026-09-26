@@ -1,0 +1,169 @@
+/* The rollout playback surface. Hairlines, not boxes (DESIGN.md "Skin").
+ *
+ * Same rule as panels.css: every color is a bare `var(--token)` with no literal
+ * fallback. theme.css is the one writer of the palette; a fallback here would
+ * be a second copy of it, and the copy would drift.
+ */
+
+.rollout {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rollout-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 3px;
+}
+
+.rollout-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+/* Unsupported-mime count and loop count. Muted, but never absent when nonzero:
+   this is the "nothing was silently dropped" surface. */
+.rollout-notice {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.rollout-step-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.rollout-step-picker:empty {
+  display: none;
+}
+
+.rollout-step-button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  cursor: pointer;
+  min-width: 32px;
+}
+
+.rollout-step-button:hover {
+  background: var(--action-hover);
+  color: var(--ink);
+}
+
+.rollout-step-active {
+  background: var(--action-hover);
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.rollout-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  background: var(--surface-subtle);
+}
+
+.rollout-svg {
+  width: 100%;
+  max-height: 300px;
+}
+
+.rollout-track {
+  stroke: var(--line);
+  stroke-width: 2;
+}
+
+/* The ±2.4 termination bounds, so "ran out of track" reads as a reason. */
+.rollout-limit {
+  stroke: var(--faint);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+
+.rollout-cart {
+  fill: var(--ink);
+}
+
+.rollout-pole {
+  stroke: var(--amber);
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+
+.rollout-hinge {
+  fill: var(--canvas);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+/* Loud, not blank: an unparseable payload or an env with no renderer. */
+.rollout-fault {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--red);
+  text-align: center;
+}
+
+.rollout-fault-detail {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.rollout-readout {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: pre;
+}
+
+.rollout-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rollout-button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.rollout-button:hover:not(:disabled) {
+  background: var(--action-hover);
+}
+
+.rollout-button:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.rollout-speed {
+  font-family: var(--font-mono);
+  min-width: 40px;
+}
+
+.rollout-scrub {
+  flex: 1;
+  accent-color: var(--blue);
+}

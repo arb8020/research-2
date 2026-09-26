@@ -1,0 +1,138 @@
+/*
+ * Paper skin — ported from loom's `paper` skin
+ * (loom/cli/sessions/viewer/src/styles.css, the `[data-skin="paper"]` block and
+ * its dark variant).  Warm canvas, white surfaces, hairlines instead of boxes.
+ *
+ * Two NAMED themes, `paper` and `paper-dark`, each a `[data-theme="<name>"]`
+ * block. The app always stamps the resolved name on <html>, so a theme is one
+ * attribute, not a mode plus a media query plus an override.
+ *
+ * `:root` carries `paper` as the base — so the page is styled before React
+ * mounts — and `prefers-color-scheme: dark` swaps to the dark palette for a
+ * visitor whose OS is dark and who has not chosen (`[data-theme]` absent).
+ *
+ * This file is the ONE writer of the palette. No component names a hex value
+ * and no component repeats a token as a `var(--x, #literal)` fallback: a
+ * fallback is a second copy that drifts silently (it did — `--muted` was
+ * `#777b75` here and `#6b6f6b` in vega-theme.ts). core/vega-theme.ts reads
+ * these variables off the live document instead of holding its own copy.
+ */
+:root {
+  --canvas: #f5f5f1;
+  --surface: #fff;
+  --surface-subtle: #fafaf8;
+  --hover: #f2f2ee;
+  --action-hover: #ecebe6;
+  --ink: #252825;
+  --muted: #777b75;
+  --faint: #93978f;
+  --line: #dedfd9;
+  --grid: #e9e7e1;
+
+  --green: #28855b;
+  --blue: #477bd8;
+  --violet: #7659c7;
+  --amber: #c4862b;
+  --red: #c54f4a;
+
+  --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Motion. animations.md: ease-out for things entering/leaving the viewport,
+     exits ~20% faster than entrances, nothing over 300ms. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --drawer-in: 300ms;
+  --drawer-out: 240ms;
+
+  color-scheme: light dark;
+}
+
+/* The named light theme. Identical to the base, by name. */
+:root[data-theme="paper"] {
+  --canvas: #f5f5f1;
+  --surface: #fff;
+  --surface-subtle: #fafaf8;
+  --hover: #f2f2ee;
+  --action-hover: #ecebe6;
+  --ink: #252825;
+  --muted: #777b75;
+  --faint: #93978f;
+  --line: #dedfd9;
+  --grid: #e9e7e1;
+
+  --green: #28855b;
+  --blue: #477bd8;
+  --violet: #7659c7;
+  --amber: #c4862b;
+  --red: #c54f4a;
+  color-scheme: light;
+}
+
+/* Unchosen + OS dark. `[data-theme]` absent, so the app has not stamped one
+   (or has not mounted yet). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --canvas: #1a1c19;
+    --surface: #242624;
+    --surface-subtle: #1f211e;
+    --hover: #2b2e2a;
+    --action-hover: #32352f;
+    --ink: #e8eae5;
+    --muted: #9a9e96;
+    --faint: #868b83;
+    --line: #393c37;
+    --grid: #33362f;
+    --green: #6dba8a;
+    --blue: #7ba3e6;
+    --violet: #a48de0;
+    --amber: #daa24e;
+    --red: #e07670;
+  }
+}
+
+:root[data-theme="paper-dark"] {
+  --canvas: #1a1c19;
+  --surface: #242624;
+  --surface-subtle: #1f211e;
+  --hover: #2b2e2a;
+  --action-hover: #32352f;
+  --ink: #e8eae5;
+  --muted: #9a9e96;
+  --faint: #868b83;
+  --line: #393c37;
+  --grid: #33362f;
+  --green: #6dba8a;
+  --blue: #7ba3e6;
+  --violet: #a48de0;
+  --amber: #daa24e;
+  --red: #e07670;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  background: var(--canvas);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+/* Every number in this app is tabular. */
+.mono,
+input,
+select,
+button,
+table,
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+svg { display: block; }
+[hidden] { display: none !important; }
