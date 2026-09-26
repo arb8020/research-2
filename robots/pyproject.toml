@@ -1,0 +1,19 @@
+[project]
+name = "robots"
+version = "0.1.0"
+description = "World models and policies for games and robots."
+requires-python = ">=3.11"
+dependencies = [
+    "torch",
+    "gymnasium",
+    "einops>=0.8.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["robots"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
