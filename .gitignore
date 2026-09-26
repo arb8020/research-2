@@ -41,3 +41,11 @@ node_modules/
 
 # Claude
 .claude/
+
+# dashboard build artifacts
+observe/dashboard/node_modules/
+observe/dashboard/dist/
+observe/dashboard/*.tsbuildinfo
+
+# run logs are scratch data; the cross-language fixture lives in src/core/__fixtures__/golden.jsonl
+runs/
