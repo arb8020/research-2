@@ -2,8 +2,9 @@
 
 ## Reproduction
 
+From an loom checkout (scorer-unification worktree):
+
 ```bash
-cd ~/work/loom/worktrees/scorer-unification
 mimir annotate docs/concepts/grading.md
 ```
 

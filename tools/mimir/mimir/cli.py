@@ -560,15 +560,26 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
 
 def cmd_audit(args: argparse.Namespace) -> None:
-  from .audit import print_results, run_audit
+  from .audit import EXIT_MISCONFIGURED, ConfigError, print_results, results_json, run_audit
 
   target = os.path.abspath(args.target)
   if not os.path.exists(target):
     print(f"error: {target} does not exist", file=sys.stderr)
-    sys.exit(1)
+    sys.exit(EXIT_MISCONFIGURED)
 
-  results = run_audit(target, fix=args.fix)
-  sys.exit(print_results(results))
+  only = None if args.only is None else [n.strip() for n in args.only.split(",") if n.strip()]
+  if only == []:
+    print("error: --only needs at least one check name", file=sys.stderr)
+    sys.exit(EXIT_MISCONFIGURED)
+  try:
+    results = run_audit(target, fix=args.fix, only=only, config_path=args.config)
+  except ConfigError as e:
+    print(f"error: {e}", file=sys.stderr)
+    sys.exit(EXIT_MISCONFIGURED)
+  code = print_results(results)
+  if args.json:
+    print(results_json(results))
+  sys.exit(code)
 
 
 def cmd_quests(args: argparse.Namespace) -> None:
@@ -864,15 +875,27 @@ examples:
 
   audit_p = sub.add_parser(
     "audit",
-    help="Pass/fail code quality gate (ruff + pyright + style + structure)",
+    help="Pass/fail code quality gate for Python and TypeScript (exit 1 on violations)",
     description=(
-      "Run a full audit on a project: ruff lint, ruff format, pyright (if configured), "
-      "AST style checks (function length, void returns), and structural thresholds "
-      "(nesting, cyclomatic complexity, args). Config from [tool.mimir] in pyproject.toml."
+      "Run a full audit on a project: native tools (ruff, ruff format, pyright and tsc when "
+      "configured), Python AST style and structure thresholds, and ast-grep driven checks "
+      "for Python and TypeScript: directory width, import boundaries and layers, no "
+      "comments / no docstrings, EXTERNAL(...) citations vs lockfiles. Config from "
+      "[tool.mimir] in pyproject.toml. Exit 0 clean, 1 violations, 2 misconfigured."
     ),
   )
   audit_p.add_argument("target", nargs="?", default=".", help="Project root to audit")
   audit_p.add_argument("--fix", action="store_true", help="Auto-fix (ruff format + ruff check --fix)")
+  audit_p.add_argument(
+    "--only", default=None, metavar="A,B",
+    help="Run only these checks: ruff, ruff-format, pyright, tsc, style, structure, "
+    "directories, boundaries, layers, comments, docstrings, citations",
+  )
+  audit_p.add_argument("--json", action="store_true", help="Also print the report as JSON on stdout")
+  audit_p.add_argument(
+    "--config", default=None, metavar="TOML",
+    help="Read [tool.mimir] from this TOML file instead of TARGET/pyproject.toml",
+  )
 
   ann_p = sub.add_parser(
     "annotate",

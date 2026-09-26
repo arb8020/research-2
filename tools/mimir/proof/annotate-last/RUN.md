@@ -1,9 +1,9 @@
 # Proof: `--last` stays on this cwd / this agent
 
-From this worktree:
+From research-2:
 
 ```
-cd ~/work/mimir/worktrees/annotate-last-session
+cd ~/research-2/tools/mimir
 PYTHONPATH=. uv run pytest tests/test_annotate_last.py -v
 ```
 
@@ -18,7 +18,7 @@ All six tests should pass. The ones that name the bug:
 See which session *this* process would open:
 
 ```
-cd ~/work/mimir/worktrees/annotate-last-session
+cd ~/research-2/tools/mimir
 PYTHONPATH=. uv run python -c "
 from mimir.annotate import _load_session_messages
 ms = _load_session_messages(max_messages=1)

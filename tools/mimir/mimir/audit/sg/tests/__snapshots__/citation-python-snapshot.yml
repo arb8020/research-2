@@ -1,0 +1,14 @@
+id: citation-python
+snapshots:
+  '# EXTERNAL(httpx==0.28.1 httpx/_client.py:10-20): fact':
+    labels:
+    - source: '# EXTERNAL(httpx==0.28.1 httpx/_client.py:10-20): fact'
+      style: primary
+      start: 0
+      end: 54
+  'x = 1  # EXTERNAL(https://example.com @2026-09-25): fact':
+    labels:
+    - source: '# EXTERNAL(https://example.com @2026-09-25): fact'
+      style: primary
+      start: 7
+      end: 56

@@ -1,0 +1,28 @@
+id: no-comments-python
+valid:
+  - "x = 1  # noqa: E501"
+  - "x = f()  # type: ignore[attr-defined]"
+  - "x = [1,  2]  # fmt: skip"
+  - "# EXTERNAL(httpx==0.28.1 httpx/_client.py:10-20): fact"
+invalid:
+  - "# a comment"
+  - "x = 1  # trailing"
+  - "x = 1  # noqa"
+  - "x = f()  # type: ignore"
+  - "#!/usr/bin/env python"
+---
+id: no-comments-typescript
+valid:
+  - "// @ts-expect-error: the rule this bends"
+  - "// EXTERNAL(react==19.1.0 index.js:1-2): fact"
+invalid:
+  - "// a comment"
+  - "/* EXTERNAL(react==19.1.0 index.js:1-2): block comments are not citations */"
+  - "/** jsdoc */ function f() {}"
+---
+id: no-comments-tsx
+valid:
+  - "// @ts-expect-error: the rule this bends"
+invalid:
+  - "const e = <div>{/* jsx comment */}</div>;"
+  - "// a comment"

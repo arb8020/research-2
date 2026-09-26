@@ -1,0 +1,32 @@
+id: no-comments-python
+language: python
+severity: error
+message: "no comments: only tool directives and EXTERNAL(...) citations"
+rule:
+  kind: comment
+  not:
+    any:
+      - regex: '^#\s*EXTERNAL\('
+      - matches: allowed-directive-python
+---
+id: no-comments-typescript
+language: typescript
+severity: error
+message: "no comments: only tool directives and EXTERNAL(...) citations"
+rule:
+  kind: comment
+  not:
+    any:
+      - regex: '^//\s*EXTERNAL\('
+      - matches: allowed-directive-typescript
+---
+id: no-comments-tsx
+language: tsx
+severity: error
+message: "no comments: only tool directives and EXTERNAL(...) citations"
+rule:
+  kind: comment
+  not:
+    any:
+      - regex: '^//\s*EXTERNAL\('
+      - matches: allowed-directive-tsx

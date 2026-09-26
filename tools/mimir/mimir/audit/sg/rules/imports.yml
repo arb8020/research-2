@@ -1,0 +1,88 @@
+id: imports-python
+language: python
+severity: hint
+message: import
+rule:
+  any:
+    - kind: dotted_name
+      inside:
+        kind: import_statement
+        field: name
+    - kind: dotted_name
+      inside:
+        kind: aliased_import
+        field: name
+        inside:
+          kind: import_statement
+    - kind: dotted_name
+      inside:
+        kind: import_from_statement
+        field: name
+        has:
+          field: module_name
+          pattern: $MOD
+    - kind: dotted_name
+      inside:
+        kind: aliased_import
+        field: name
+        inside:
+          kind: import_from_statement
+          has:
+            field: module_name
+            pattern: $MOD
+    - kind: wildcard_import
+      inside:
+        kind: import_from_statement
+        has:
+          field: module_name
+          pattern: $MOD
+---
+id: imports-typescript
+language: typescript
+severity: hint
+message: import
+rule:
+  kind: string_fragment
+  inside:
+    kind: string
+    any:
+      - inside:
+          kind: import_statement
+          field: source
+      - inside:
+          kind: export_statement
+          field: source
+      - inside:
+          kind: import_require_clause
+      - inside:
+          kind: arguments
+          inside:
+            kind: call_expression
+            has:
+              field: function
+              regex: '^(import|require)$'
+---
+id: imports-tsx
+language: tsx
+severity: hint
+message: import
+rule:
+  kind: string_fragment
+  inside:
+    kind: string
+    any:
+      - inside:
+          kind: import_statement
+          field: source
+      - inside:
+          kind: export_statement
+          field: source
+      - inside:
+          kind: import_require_clause
+      - inside:
+          kind: arguments
+          inside:
+            kind: call_expression
+            has:
+              field: function
+              regex: '^(import|require)$'

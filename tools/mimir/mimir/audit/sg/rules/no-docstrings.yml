@@ -1,0 +1,25 @@
+id: no-docstrings-python
+language: python
+severity: error
+message: "no docstrings: names, asserts and tests carry the why"
+rule:
+  any:
+    - kind: string
+    - kind: concatenated_string
+  not:
+    regex: '^[rR]?[bBfF]'
+  inside:
+    kind: expression_statement
+    nthChild:
+      position: 1
+      ofRule:
+        not:
+          kind: comment
+    inside:
+      any:
+        - kind: module
+        - kind: block
+          inside:
+            any:
+              - kind: function_definition
+              - kind: class_definition

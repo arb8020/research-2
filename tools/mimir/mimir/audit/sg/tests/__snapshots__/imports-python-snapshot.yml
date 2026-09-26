@@ -1,0 +1,80 @@
+id: imports-python
+snapshots:
+  ? |-
+    def f():
+        import lazy
+  : labels:
+    - source: lazy
+      style: primary
+      start: 20
+      end: 24
+    - source: import lazy
+      style: secondary
+      start: 13
+      end: 24
+  from . import x:
+    labels:
+    - source: x
+      style: primary
+      start: 14
+      end: 15
+    - source: .
+      style: secondary
+      start: 5
+      end: 6
+    - source: from . import x
+      style: secondary
+      start: 0
+      end: 15
+  from ..pkg.mod import (y, z as w):
+    labels:
+    - source: y
+      style: primary
+      start: 23
+      end: 24
+    - source: ..pkg.mod
+      style: secondary
+      start: 5
+      end: 14
+    - source: from ..pkg.mod import (y, z as w)
+      style: secondary
+      start: 0
+      end: 33
+  from q import *:
+    labels:
+    - source: '*'
+      style: primary
+      start: 14
+      end: 15
+    - source: q
+      style: secondary
+      start: 5
+      end: 6
+    - source: from q import *
+      style: secondary
+      start: 0
+      end: 15
+  import a.b as c:
+    labels:
+    - source: a.b
+      style: primary
+      start: 7
+      end: 10
+    - source: import a.b as c
+      style: secondary
+      start: 0
+      end: 15
+    - source: a.b as c
+      style: secondary
+      start: 7
+      end: 15
+  import os:
+    labels:
+    - source: os
+      style: primary
+      start: 7
+      end: 9
+    - source: import os
+      style: secondary
+      start: 0
+      end: 9

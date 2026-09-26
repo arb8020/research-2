@@ -1,0 +1,130 @@
+id: imports-typescript
+snapshots:
+  const m = await import('./dyn');:
+    labels:
+    - source: ./dyn
+      style: primary
+      start: 24
+      end: 29
+    - source: import
+      style: secondary
+      start: 16
+      end: 22
+    - source: import('./dyn')
+      style: secondary
+      start: 16
+      end: 31
+    - source: ('./dyn')
+      style: secondary
+      start: 22
+      end: 31
+    - source: '''./dyn'''
+      style: secondary
+      start: 23
+      end: 30
+  const r = require('./req');:
+    labels:
+    - source: ./req
+      style: primary
+      start: 19
+      end: 24
+    - source: require
+      style: secondary
+      start: 10
+      end: 17
+    - source: require('./req')
+      style: secondary
+      start: 10
+      end: 26
+    - source: ('./req')
+      style: secondary
+      start: 17
+      end: 26
+    - source: '''./req'''
+      style: secondary
+      start: 18
+      end: 25
+  export * from './reexp';:
+    labels:
+    - source: ./reexp
+      style: primary
+      start: 15
+      end: 22
+    - source: export * from './reexp';
+      style: secondary
+      start: 0
+      end: 24
+    - source: '''./reexp'''
+      style: secondary
+      start: 14
+      end: 23
+  export { q } from 'pkg/sub';:
+    labels:
+    - source: pkg/sub
+      style: primary
+      start: 19
+      end: 26
+    - source: export { q } from 'pkg/sub';
+      style: secondary
+      start: 0
+      end: 28
+    - source: '''pkg/sub'''
+      style: secondary
+      start: 18
+      end: 27
+  import './side';:
+    labels:
+    - source: ./side
+      style: primary
+      start: 8
+      end: 14
+    - source: import './side';
+      style: secondary
+      start: 0
+      end: 16
+    - source: '''./side'''
+      style: secondary
+      start: 7
+      end: 15
+  import legacy = require('./legacy');:
+    labels:
+    - source: ./legacy
+      style: primary
+      start: 25
+      end: 33
+    - source: legacy = require('./legacy')
+      style: secondary
+      start: 7
+      end: 35
+    - source: '''./legacy'''
+      style: secondary
+      start: 24
+      end: 34
+  import type { T } from '../b/c';:
+    labels:
+    - source: ../b/c
+      style: primary
+      start: 24
+      end: 30
+    - source: import type { T } from '../b/c';
+      style: secondary
+      start: 0
+      end: 32
+    - source: '''../b/c'''
+      style: secondary
+      start: 23
+      end: 31
+  import x from './a';:
+    labels:
+    - source: ./a
+      style: primary
+      start: 15
+      end: 18
+    - source: import x from './a';
+      style: secondary
+      start: 0
+      end: 20
+    - source: '''./a'''
+      style: secondary
+      start: 14
+      end: 19
