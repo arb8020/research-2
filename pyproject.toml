@@ -1,0 +1,23 @@
+# Makes `observe` importable as an installed package (`pip install -e .`), so
+# tests import it the same way a consumer does — no sys.path manipulation in
+# conftest.py.
+#
+# Ruff config deliberately lives in ruff.toml, NOT here: that file is a
+# canonical copy synced from ~/dotfiles/lint and `lint/sync.sh` reports drift
+# against it. Moving it into this file would break that sync.
+[project]
+name = "research"
+version = "0.1.0"
+description = "Wide-event observability (observe/) and the research code that emits it."
+requires-python = ">=3.11"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["observe", "observe.scripts"]
+
+[tool.pytest.ini_options]
+testpaths = ["observe/tests"]

@@ -1,0 +1,23 @@
+# Canonical ruff config. Encodes docs/synthesis/CODING_STANDARDS.md mechanically.
+# Consumers: copy this file into the repo root as `ruff.toml` (or `extend` it from
+# pyproject.toml) and adjust formatting knobs as needed. `lint/sync.sh` reports drift.
+
+line-length = 100
+target-version = "py312"
+preview = true
+
+[lint]
+select = [
+  "E", "F", "I", "B", "ANN", "UP", "A",
+  "PLR0913",  # too many args        -> max-args
+  "PLR0915",  # too many statements  -> max-statements (the 70-line rule)
+  "PLR1702",  # too many nested blocks -> max-nested-blocks
+  "SIM", "PERF", "PIE",
+]
+ignore = ["E501", "ANN401"]
+
+[lint.pylint]
+max-args = 7            # chunk limit: ~6 things in working memory
+max-statements = 70     # 70-line functions (Tiger Style)
+max-branches = 12
+max-nested-blocks = 4   # nesting depth: four levels
