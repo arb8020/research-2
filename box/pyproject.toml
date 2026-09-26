@@ -1,0 +1,36 @@
+[project]
+name = "box"
+version = "0.1.0"
+description = "Get a GPU, get a box. `box run` puts a command from this repo's kelpie tree on a Modal GPU."
+requires-python = ">=3.11"
+dependencies = ["modal>=1.5", "requests", "research"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+box = "box.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# This directory IS the `box` package (box/__init__.py sits next to this file). hatchling, not
+# setuptools: setuptools would execute a top-level setup.py here as a build script (box's kelpie
+# setup lived at box/setup.py until it moved to box/kelpie/setup.py).
+# The editable install puts the repo root on sys.path, which makes `box` (and `observe`)
+# importable exactly as `PYTHONPATH=.` does for kelpie/scripts/modal_run.py.
+[tool.hatch.build]
+dev-mode-dirs = [".."]
+
+# Only the editable install is supported: box runs from its checkout (and the same checkout is
+# mounted into each sandbox), never as a published wheel.
+[tool.hatch.build.targets.wheel]
+bypass-selection = true
+
+[tool.uv.sources]
+# `observe` (spans) ships in the repo-root project, named `research`.
+research = { path = "..", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
