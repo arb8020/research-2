@@ -1,0 +1,122 @@
+/* The panels landing surface. Hairlines, not boxes (DESIGN.md "Skin").
+ *
+ * Every color here is a bare `var(--token)` with NO literal fallback. theme.css
+ * is the one writer of the palette; a `var(--muted, #777b75)` here was a second
+ * copy of it, and the copy drifted. If a token is undefined the rule visibly
+ * loses its color, which is a bug to fix in theme.css rather than to paper over
+ * per component.
+ */
+
+.panels-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A panel-level empty state: "this view has no panels yet", inside the view.
+   Not landing chrome — see DESIGN.md's enforcement test. */
+.panel-empty {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.panels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px 20px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 3px;
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+/* The truncation sentence. Readable prose at reading size, in the header —
+   a 10px mono badge is a thing you scroll past. */
+.panel-notice {
+  margin: 0 auto 0 0;
+  font-size: 11px;
+  color: var(--amber);
+}
+
+.panel-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.panel-badge[data-tone="live"] { color: var(--green); }
+.panel-badge[data-tone="warn"] { color: var(--amber); }
+.panel-badge[data-tone="error"] { color: var(--red); }
+
+.panel-body { min-height: 176px; min-width: 0; }
+
+/* CSS owns the chart's paper: the Vega config is `background: transparent`
+   (core/vega-theme.ts), so the box color is this one declaration. */
+/* `width: "container"` asks Vega to measure this element, so it must have a
+   resolvable width: as a grid child with `min-width: 0` it otherwise collapses
+   to 0 and the chart renders at zero width with no error. */
+.panel-plot {
+  width: 100%;
+  min-width: 0;
+  background: var(--surface);
+}
+.panel-plot svg { display: block; max-width: 100%; }
+
+.panel-failure {
+  margin: 0;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--red);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-left: 2px solid var(--red);
+  background: color-mix(in srgb, var(--red) 6%, transparent);
+}
+
+/* vega-embed's tooltip is a single element it appends to <body>, styled by its
+   own stylesheet. Restyling it in the same tokens is the only way a hover
+   readout looks like part of this page instead of a default Vega chip — and it
+   lives here, next to the spec that turns hover on (views/panels/view.ts). */
+#vg-tooltip-element.vg-tooltip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px -6px rgb(0 0 0 / 25%);
+  padding: 6px 8px;
+}
+#vg-tooltip-element.vg-tooltip td.key {
+  color: var(--muted);
+  font-weight: 400;
+  padding-right: 8px;
+}
+#vg-tooltip-element.vg-tooltip td.value {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
