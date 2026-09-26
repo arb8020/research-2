@@ -1,0 +1,15 @@
+id: no-docstrings-python
+valid:
+  - "x = 1\n'not first'"
+  - "def f():\n    x = 1\n    'not first'"
+  - "def f():\n    b'bytes are not docstrings'"
+  - "def f():\n    f'f-strings are not docstrings'"
+  - "DESCRIPTION = '''an assigned string'''"
+invalid:
+  - "'''module docstring'''"
+  - "# a comment first\n'''still the module docstring'''"
+  - "def f():\n    '''function docstring'''"
+  - "async def f():\n    r'''raw docstring'''"
+  - "class K:\n    '''class docstring'''"
+  - "class K:\n    def m(self):\n        'method docstring'"
+  - "@dec\ndef f():\n    'decorated docstring'"

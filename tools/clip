@@ -1,26 +1,128 @@
-#!/bin/sh
-set -eu
+#!/usr/bin/env bun
 
-usage() {
-  echo "Usage: clip <url> [output.md]"
-  echo ""
-  echo "Clip a web page to clean markdown."
-  echo "Writes to stdout or to a file if given."
-  echo ""
-  echo "Examples:"
-  echo "  clip https://example.com/article"
-  echo "  clip https://example.com/article docs/raw/article.md"
-  exit 1
+import { $ } from "bun";
+
+// --- extractors ---
+
+type Extractor = {
+  name: string;
+  extract: (url: string) => Promise<string | null>;
+};
+
+async function defuddle(url: string): Promise<string | null> {
+  try {
+    const result =
+      await $`npx -y defuddle parse --markdown --frontmatter ${url}`
+        .quiet()
+        .text();
+    if (!result.trim() || result.startsWith("Error:")) return null;
+    return result;
+  } catch {
+    return null;
+  }
 }
 
-[ $# -lt 1 ] && usage
+async function browser(url: string): Promise<string | null> {
+  try {
+    // Open in headless browser, wait for JS
+    await $`agent-browser open ${url}`.quiet();
+    await Bun.sleep(2000);
 
-URL="$1"
-OUT="${2:-}"
+    // Get rendered HTML
+    const html =
+      await $`agent-browser eval '(() => document.documentElement.outerHTML)()'`
+        .quiet()
+        .text();
+    if (!html.trim()) return null;
 
-if [ -n "$OUT" ]; then
-  npx -y defuddle parse --markdown --frontmatter "$URL" > "$OUT"
-  echo "clipped → $OUT" >&2
-else
-  npx -y defuddle parse --markdown --frontmatter "$URL"
-fi
+    // Write to temp file, run defuddle on rendered HTML
+    const tmp = `/tmp/clip-${Date.now()}.html`;
+    await Bun.write(tmp, html);
+    try {
+      const result =
+        await $`npx -y defuddle parse --markdown --frontmatter ${tmp}`
+          .quiet()
+          .text();
+      if (!result.trim() || result.startsWith("Error:")) return null;
+      return result;
+    } finally {
+      await $`rm -f ${tmp}`.quiet();
+    }
+  } catch {
+    return null;
+  }
+}
+
+const extractors: Extractor[] = [
+  { name: "defuddle", extract: defuddle },
+  { name: "browser",  extract: browser },
+];
+
+// --- cleanup ---
+
+function cleanFrontmatter(fm: string): string {
+  return fm
+    .replaceAll('\\"', '"')
+    .replaceAll('\\\\"', '"')
+    // Collapse doubled/tripled quotes: `""en""` → `"en"`
+    .replace(/"{2,}([^"]*?)"{2,}/g, '"$1"')
+    // Ensure values are single-quoted: `key: ""value""` → `key: "value"`
+    .replace(/^(\w+:\s*)"+([^"]+)"+$/gm, '$1"$2"');
+}
+
+function cleanMarkdown(raw: string): string {
+  return raw
+    // Fix frontmatter
+    .replace(
+      /^---\n([\s\S]*?)\n---/,
+      (_, fm: string) => `---\n${cleanFrontmatter(fm)}\n---`,
+    )
+    // Strip all escaped quotes (browser DOM artifact)
+    .replaceAll('\\"', '"')
+    .replaceAll('\\\\"', '"')
+    // Fix broken image alt text: ![\"text"] → ![text]
+    .replace(/!\["?([^"\]]*?)"?\]/g, "![$1]")
+    // Remove orphaned alt text lines (bare text after image that duplicates alt)
+    .replace(/^\\?"[A-Z][^"\n]{5,}"?\s*$/gm, "")
+    // Collapse 3+ blank lines to 2
+    .replace(/\n{3,}/g, "\n\n");
+}
+
+// --- main ---
+
+function usage(): never {
+  console.error("Usage: clip <url> [output.md]");
+  console.error("");
+  console.error("Clip a web page to clean markdown.");
+  console.error("Tries defuddle first; falls back to headless browser for JS-rendered pages.");
+  process.exit(1);
+}
+
+const [url, out] = process.argv.slice(2);
+if (!url) usage();
+
+let result: string | null = null;
+
+for (const { name, extract } of extractors) {
+  result = await extract(url);
+  if (result) {
+    if (name !== extractors[0].name) {
+      console.error(`${extractors[0].name}: no content, fell back to ${name}`);
+    }
+    break;
+  }
+}
+
+if (!result) {
+  console.error(`clip: could not extract content from ${url}`);
+  process.exit(1);
+}
+
+result = cleanMarkdown(result);
+
+if (out) {
+  await Bun.write(out, result);
+  console.error(`clipped → ${out}`);
+} else {
+  process.stdout.write(result);
+}

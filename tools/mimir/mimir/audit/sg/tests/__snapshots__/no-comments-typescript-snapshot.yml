@@ -1,0 +1,20 @@
+id: no-comments-typescript
+snapshots:
+  '/* EXTERNAL(react==19.1.0 index.js:1-2): block comments are not citations */':
+    labels:
+    - source: '/* EXTERNAL(react==19.1.0 index.js:1-2): block comments are not citations */'
+      style: primary
+      start: 0
+      end: 76
+  /** jsdoc */ function f() {}:
+    labels:
+    - source: /** jsdoc */
+      style: primary
+      start: 0
+      end: 12
+  // a comment:
+    labels:
+    - source: // a comment
+      style: primary
+      start: 0
+      end: 12

@@ -1,0 +1,8 @@
+id: citation-tsx
+snapshots:
+  '// EXTERNAL(facebook/react@0123abc packages/x.js:L1-L2): fact':
+    labels:
+    - source: '// EXTERNAL(facebook/react@0123abc packages/x.js:L1-L2): fact'
+      style: primary
+      start: 0
+      end: 61

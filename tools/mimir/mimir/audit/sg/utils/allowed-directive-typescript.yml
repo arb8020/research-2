@@ -1,0 +1,1 @@
+{"id": "allowed-directive-typescript", "language": "typescript", "rule": {"regex": "^//\\s*(type: ignore\\[|noqa:|fmt: skip|@ts-expect-error)"}}

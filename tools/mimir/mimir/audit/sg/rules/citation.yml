@@ -1,0 +1,23 @@
+id: citation-python
+language: python
+severity: hint
+message: EXTERNAL(...) citation
+rule:
+  kind: comment
+  regex: '^#\s*EXTERNAL\('
+---
+id: citation-typescript
+language: typescript
+severity: hint
+message: EXTERNAL(...) citation
+rule:
+  kind: comment
+  regex: '^//\s*EXTERNAL\('
+---
+id: citation-tsx
+language: tsx
+severity: hint
+message: EXTERNAL(...) citation
+rule:
+  kind: comment
+  regex: '^//\s*EXTERNAL\('

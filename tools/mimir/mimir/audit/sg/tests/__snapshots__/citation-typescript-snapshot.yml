@@ -1,0 +1,8 @@
+id: citation-typescript
+snapshots:
+  '// EXTERNAL(react==19.1.0 index.js:1-2): fact':
+    labels:
+    - source: '// EXTERNAL(react==19.1.0 index.js:1-2): fact'
+      style: primary
+      start: 0
+      end: 45
