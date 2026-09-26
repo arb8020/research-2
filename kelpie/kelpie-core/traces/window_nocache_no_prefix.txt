@@ -1,0 +1,13 @@
+# A non-cacheable window group (DSV4's 128-token ring, here window8nc) never publishes and never
+# hits, and the overall hit is the min over groups: a request sharing A's whole prompt gets 0 even
+# though the stride group alone would match 16 tokens. (Recomputing the last W tokens from an
+# empty window cache would not reproduce the hidden states, so a nonzero hit is unsound.)
+config max_batch_tokens=32 max_batch_reqs=4 block_size=4 groups=window8nc,stride4 num_blocks=32 reserve_ratio=0 order=running_first eos=99 prefix_cache=1
+submit A prompt=20 max_new=1
+step
+step
+expect finished A reason=finished_length
+submit B prompt=24 max_new=1
+step
+  expect batch B:24
+  expect prefix queries=1 hits=0 tokens=0

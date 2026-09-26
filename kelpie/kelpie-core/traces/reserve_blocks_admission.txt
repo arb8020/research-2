@@ -1,0 +1,15 @@
+# num_blocks=5 = 4 usable (block 0 is null). reserve_ratio=1 reserves blocksFor(max_new)=3 blocks per admission on top of the prompt's 1.
+# A takes 1 of 4 and reserves 3; B's need (1 + 3) exceeds the 3 free, so it waits although
+# blocks are free. Compare reserve_zero_admits.txt.
+config max_batch_tokens=16 max_batch_reqs=4 block_size=4 num_blocks=5 reserve_ratio=1 order=running_first eos=99
+submit A prompt=4 max_new=12
+submit B prompt=4 max_new=12
+step
+  expect batch A:4
+  expect free 3
+  expect running A
+  expect waiting B
+step
+  expect batch A:1
+  expect free 2
+  expect waiting B

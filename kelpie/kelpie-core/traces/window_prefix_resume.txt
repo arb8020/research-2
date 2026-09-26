@@ -1,0 +1,23 @@
+# gpt_oss-shaped 2-group config: F (all) + W128-shaped window group (window=8, block=4, scaled down
+# from W=128 for a small trace). A's prompt (24 tokens) is longer than W and is chunked (budget 8
+# tokens/step) so each chunk's window-live blocks get published before the next chunk pushes them
+# out of the window -- a single unchunked prefill of the whole prompt would never publish anything
+# past the window (firstLiveRow at the chunk's own end already excludes rows behind it, so a
+# one-shot prefill of a prompt longer than W can never publish those rows at all).
+# B resubmits the same prompt: F's own hit is prefix-closed to the whole computed prefix (23 tokens,
+# floored to block 4 = 20: F's grain), and the window group independently finds the same 20-token
+# run still live (blocks freshly slid from A's own run are not yet reallocated), so both groups
+# agree and B resumes at 20.
+config max_batch_tokens=8 max_batch_reqs=4 block_size=4 groups=full,window8 num_blocks=64 reserve_ratio=0 order=running_first eos=99 prefix_cache=1
+submit A prompt=24 max_new=1
+step
+  expect batch A:8
+step
+  expect batch A:8
+step
+  expect batch A:8
+expect finished A reason=finished_length
+submit B prompt=24 max_new=1
+step
+  expect prefix queries=1 hits=1 tokens=20
+  expect batch B:4

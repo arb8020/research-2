@@ -1,0 +1,28 @@
+# A prefix hit on a per_seq checkpoint. Two requests share a 32-token prefix; the state group
+# checkpoints every S = 16 and keeps 1 checkpoint. B resumes from A's published checkpoint: the
+# checkpoint enters B's ring with a reference of its own, B's first step READS it and writes a
+# fresh unit. The shared checkpoint is never written.
+#
+# The bug this replaces: the hit put the checkpoint in the table but the model was only ever
+# given the (fresh, unwritten) live unit, so a prefix hit read garbage.
+config max_seq_len=128 max_batch_tokens=128 max_batch_reqs=4 block_size=16 groups=full,state16 num_blocks=16 prefix_cache=1 reserve_ratio=0 order=running_first eos=99
+submit A prompt=33 base=7000 max_new=1
+plan
+  expect batch A:33
+  expect idx A g=1 start=0 read=Z write=[5] ckpt=6@row31
+commit
+  expect finished A reason=finished_length
+# A finished: every unit is back on the free list, its published F blocks and checkpoint 6
+# still hittable. B shares A's first 33 tokens; the cross-group hit is 32.
+expect free 14
+submit B prompt=48 base=7000 max_new=2
+plan
+  expect batch B:16
+  expect idx B g=1 start=32 read=6 write=[8] ckpt=9@row15
+commit
+  expect prefix queries=1 hits=1 tokens=32
+# The ring keeps 1: checkpoint 9 (at 48) pushes the hit checkpoint 6 out, which drops B's
+# reference to it.
+  expect units B g=1 live=8 ring=[9@48]
+  expect table B g=0 [2,3,7]
+  expect free 9

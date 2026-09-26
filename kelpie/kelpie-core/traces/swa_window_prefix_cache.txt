@@ -1,0 +1,28 @@
+# Same as swa_window.txt with the prefix cache on. A cacheable window group now DOES publish its
+# live rows (matchWindow/insertWindow, item 1: cache-groups-ladder.md Q3's "resumable iff the
+# ceil((W-1)/block) blocks ending at t are all present"). A's block 0 (tokens 0-3) is published while
+# live and outlives A's own run (nothing reuses it before B submits), so B's resubmit of the same
+# prompt hits it; A's block 1 (tokens 4-7) slides out at n_computed=15 (the last step) and its slot
+# is reused by then, so it misses -- a real LRU eviction, not a group-identity refusal. Net hit: 4
+# tokens (one block; the last token of a match is never claimed, so the boundary floors to block 0
+# only), leaving B a 4-token chunk instead of the full 8.
+config max_batch_tokens=16 max_batch_reqs=4 block_size=4 groups=window8 num_blocks=16 reserve_ratio=0 order=running_first eos=99 prefix_cache=1
+submit A prompt=8 max_new=8
+step
+  expect batch A:8
+  expect free 13
+step
+step
+step
+step
+  expect free 13
+  expect table A g=0 [0,2,3]
+step
+step
+step
+step
+expect finished A reason=finished_length
+expect free 15
+submit B prompt=8 max_new=1
+step
+  expect batch B:4

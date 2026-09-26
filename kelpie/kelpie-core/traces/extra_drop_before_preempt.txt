@@ -1,0 +1,20 @@
+# Extra rows are optional, so a runner short of memory for them drops them (plain decode)
+# BEFORE preempting anyone. Without this, A's 1 + 3 rows needing a 3rd block would preempt B
+# (and a lone request would preempt itself, re-prefill and do it again forever).
+config max_seq_len=64 max_batch_tokens=64 max_batch_reqs=4 block_size=4 groups=full num_blocks=5 max_extra=3 reserve_ratio=0 order=running_first eos=99
+submit A prompt=5 max_new=4
+submit B prompt=5 base=2000 max_new=4
+step
+  expect batch A:5 B:5
+  expect free 0
+# Positions 5..8 would need a 3rd row each; position 5 alone fits in the 2 rows held.
+step
+  expect batch A:1 B:1
+  expect event n_preempted=0 n_extra_rows=0
+  expect running A B
+step
+  expect batch A:1 B:1
+  expect event n_preempted=0
+step
+  expect finished A reason=finished_length
+  expect finished B reason=finished_length

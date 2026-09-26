@@ -1,0 +1,11 @@
+# prefix_shared.txt with the knob off: B recomputes all 20 tokens and nothing is counted.
+config max_batch_tokens=32 max_batch_reqs=4 block_size=4 num_blocks=16 prefix_cache=0
+submit A prompt=20 max_new=2
+step
+  expect batch A:20
+  expect free 10
+submit B prompt=20 max_new=2
+step
+  expect batch A:1 B:20
+  expect free 10                # 15 - 6 (A) - 5 (B) during the step; A finished and released its 6
+  expect prefix queries=0 hits=0 tokens=0

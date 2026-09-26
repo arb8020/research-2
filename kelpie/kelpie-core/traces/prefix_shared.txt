@@ -1,0 +1,26 @@
+# Two requests sharing a 20-token prefix at block_size 4. A computes all 20 and publishes 5 full blocks after
+# its commit. B's prompt is the same 20 tokens, but the last token of a prompt is never matched: its logits are
+# what the request needs, so at least one token is always computed. Matching stops before block 5 (tokens
+# 16..19), so B hits 16 tokens (4 blocks) and its n_work is 4, not 0. C shares the same 20 tokens of a 24-token
+# prompt: now block 5 is not the last block, all 5 blocks hit (20 tokens) and C computes 4.
+# num_blocks=16 -> 15 usable.
+config max_batch_tokens=32 max_batch_reqs=4 block_size=4 num_blocks=16 prefix_cache=1
+submit A prompt=20 max_new=2
+step
+  expect batch A:20
+  expect free 10
+  expect prefix queries=1 hits=0 tokens=0
+submit B prompt=20 max_new=3
+step
+  expect batch A:1 B:4          # A decodes into a 6th block (free 9); B holds A's 4 blocks + 1 fresh (free 8)
+  expect prefix queries=1 hits=1 tokens=16
+  # A finished in this step: its blocks 0..3 are shared with B (still referenced); its blocks 4 and 5 go to
+  # the free list with hashes kept (free 10 again).
+  expect free 10
+expect finished A reason=finished_length
+expect polled A [1,1]
+submit C prompt=24 max_new=2
+step
+  expect batch B:1 C:4          # B: 6th block (free 9). C: 5 hits, block 4 resurrected from the free list (free 8), 1 fresh (free 7)
+  expect free 7
+  expect prefix queries=1 hits=1 tokens=20

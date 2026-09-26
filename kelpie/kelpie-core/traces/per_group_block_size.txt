@@ -1,0 +1,25 @@
+# Per-group block_size (docs/cache-groups-ladder.md Q3 "the way out is per-group block_size").
+# Three groups at three grains: F block 16 (grain 16 tokens), W128 window 128 block 16 (grain 16),
+# and a stride-4 group at block 32 (grain 4 * 32 = 128 tokens). Before this the core required one
+# block_size across groups; now blocksFor / rowsFor / the prefix grain each read stride_g * bs_g.
+#
+# A prompt of 128 tokens: F 8 rows, W128 8 rows (its plateau is ceil(127/16)+1 = 9, not reached),
+# stride4 ceil(32 units / 32) = 1 row. 17 pages, and 20 are usable.
+config max_seq_len=256 max_batch_tokens=256 max_batch_reqs=4 block_size=16 groups=full,window128,stride4:32 num_blocks=21 reserve_ratio=0 order=running_first eos=99
+submit A prompt=128 max_new=8
+step
+  expect batch A:128
+  expect table A g=0 [1,2,3,4,5,6,7,8]
+  expect table A g=1 [9,10,11,12,13,14,15,16]
+  expect table A g=2 [17]
+  expect free 3
+# Decode to token 129: each group grows at its own grain. F opens row 8 (grain 16), W128 opens
+# row 8 (grain 16; its first slide is at n_computed 130, so nothing has slid yet), and the
+# stride-4 group opens row 1 for unit 32 (grain 128: token 128 is the first token of its
+# second block). Three grains, three different row counts, one table each.
+step
+  expect batch A:1
+  expect table A g=0 [1,2,3,4,5,6,7,8,18]
+  expect table A g=1 [9,10,11,12,13,14,15,16,19]
+  expect table A g=2 [17,20]
+  expect free 0

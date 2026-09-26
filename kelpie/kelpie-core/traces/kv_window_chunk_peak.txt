@@ -1,0 +1,20 @@
+# One window8 group, block 4, 3 usable blocks. Decode plateaus at 3 rows, but a chunk slides
+# nothing out until it is done: a 16-token prompt in one chunk holds 4 rows at once. Submit
+# budgets the chunks the current max_batch_tokens would cut, so it rejects A here...
+config max_batch_tokens=16 max_batch_reqs=4 block_size=4 groups=window8 num_blocks=4 reserve_ratio=0 order=running_first eos=99
+submit A prompt=16 max_new=1 fails=ExceedsKvPool
+# ...and accepts it under a 4-token budget, where chunk [12,16) finds row 0 already slid out.
+# The knob applies at the next plan, and submit reads the live config, so step once first.
+set max_batch_tokens=4
+step
+submit A prompt=16 max_new=1
+step
+step
+step
+  expect batch A:4
+  expect table A g=0 [1,2,3]
+  expect free 0
+step
+  expect batch A:4
+  expect free 3
+expect finished A reason=finished_length

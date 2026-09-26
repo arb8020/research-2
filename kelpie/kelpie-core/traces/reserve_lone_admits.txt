@@ -1,0 +1,10 @@
+# reserve_ratio=1, 4 usable blocks. A's worst case is 9 + 7 - 1 = 15 tokens, 4 blocks: it fits
+# alone. Its prompt (3 blocks) plus the reserve for max_new (2 blocks) does not, so with the
+# reserve applied it would wait forever for room nobody holds. With nothing running the reserve
+# protects no one and is waived (compare reserve_blocks_admission.txt, where A is running).
+config max_batch_tokens=16 max_batch_reqs=4 block_size=4 num_blocks=5 reserve_ratio=1 order=running_first eos=99
+submit A prompt=9 max_new=7
+step
+  expect batch A:9
+  expect free 1
+  expect stall none

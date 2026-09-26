@@ -1,0 +1,17 @@
+# Cancel a request whose prefill chunks are in both plans (N in flight, N+1 built ahead).
+# commit(N) unwinds both plans' rows once, strikes A out of N+1 and releases the slot, as it
+# does for a reserved decode (cancel_between_plan_ahead_commit).
+config max_batch_tokens=4 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99 overlap=1
+submit A prompt=13 max_new=3
+plan
+  expect batch A:4
+plan
+  expect ahead_batch A:4
+  expect ahead_rows A [1004@4,1005@5,1006@6,1007@7]
+cancel A
+commit                              # commits N: cancelled; frees both chunks' blocks, strikes N+1
+  expect free 7                     # every block A held (block 0 is the null block)
+  expect batch                      # N+1, now live, no longer names A
+commit
+  expect running
+  expect waiting

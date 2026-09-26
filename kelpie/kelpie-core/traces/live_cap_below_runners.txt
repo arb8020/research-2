@@ -1,0 +1,39 @@
+# Found by kelpie-py/tests/test_differential.py (seed 2) as divergence-2.crash: `set max_batch_reqs` below the
+# runner count used to trip `assert(n_sched < max_batch_reqs)`. Now (docs/design-rules.md "Live config") the cap
+# bounds admission AND the planned batch: runners beyond it are skipped, keep their blocks, and go first next
+# step (round-robin). The same holds for max_batch_tokens below the runner count (a decode needs 1 token).
+config max_batch_tokens=16 max_batch_reqs=2 block_size=4 num_blocks=16 reserve_ratio=0 order=running_first eos=99
+submit A prompt=4 max_new=8
+submit B prompt=4 max_new=8
+step
+  expect batch A:4 B:4
+  expect running A B
+set max_batch_reqs=1
+step                            # B is skipped, not preempted: still running, blocks kept
+  expect batch A:1
+  expect running A B
+  expect event n_running=2 n_decode_reqs=1 n_preempted=0
+  expect free 12
+step                            # B goes first now; A is the one skipped
+  expect batch B:1
+  expect running A B
+step
+  expect batch A:1
+# The cap is back but a one-token budget still fits one decode; the rotation carries on.
+set max_batch_reqs=2 max_batch_tokens=1
+step
+  expect batch B:1
+  expect event n_running=2 n_tokens=1
+step
+  expect batch A:1
+set max_batch_tokens=16
+step                            # room for everyone again: B still goes first this once
+  expect batch B:1 A:1
+step                            # nobody was skipped, so the visit order is admission order again
+  expect batch A:1 B:1
+# A third request is admitted only while the runner count is under the cap; B and the newcomer share the cap.
+submit C prompt=4 max_new=8
+set max_batch_reqs=2
+step
+  expect batch A:1 B:1
+  expect waiting C

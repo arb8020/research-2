@@ -1,0 +1,28 @@
+# Preemption + recompute with a per_seq group. A (the youngest runner) is preempted when C's
+# decode takes the last free unit. Its units go back with their prefix hashes (F blocks and
+# the checkpoint at 16); on readmission A hits 16 in both groups (grain lcm(4, 8) = 8), reads
+# the checkpoint and recomputes rows 16..20, which includes its one generated token.
+config max_seq_len=64 max_batch_tokens=64 max_batch_reqs=4 block_size=4 groups=full,state8:2 num_blocks=12 prefix_cache=1 reserve_ratio=0 order=running_first eos=99
+submit C prompt=4 max_new=2
+submit A prompt=20 base=3000 max_new=8
+plan
+  expect batch C:4 A:20
+  expect idx C g=1 start=0 read=Z write=[3] ckpt=-
+  expect idx A g=1 start=0 read=Z write=[9] ckpt=10@row15
+commit
+  expect free 1
+step
+  expect batch C:1
+  expect event n_preempted=1
+  expect waiting A
+  expect finished C reason=finished_length
+  expect free 10
+plan
+  expect batch A:5
+  expect idx A g=1 start=16 read=10 write=[3] ckpt=-
+commit
+  expect prefix queries=1 hits=1 tokens=16
+  expect table A g=0 [4,5,6,7,9,8]
+  expect units A g=1 live=3 ring=[10@16]
+  expect n_computed A 21
+  expect free 2

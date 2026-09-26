@@ -1,0 +1,23 @@
+# The n_polled question the poll fix raises: a request that FINISHES at commit(N) while its
+# reservation is still outstanding. commit_entry overwrites the placeholder in place with the real
+# token (so seq.n already counts it), finish() frees the blocks, and strike_from_ahead removes the
+# request from N+1 -- so by the time anyone polls, pending_token is no longer the sentinel and
+# poll's "stop one short" correction must NOT apply. If it did, the EOS token itself would be
+# withheld and, because the finishing poll releases the slot, lost outright.
+#
+# Polls on both sides of the finishing commit pin this: empty inside the reservation window, then
+# the real EOS token delivered exactly once by the poll that reports finished.
+config max_batch_tokens=8 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99 overlap=1
+submit A prompt=4 max_new=5
+step tokens=A:7
+  expect polled A [7]
+plan tokens=A:99                  # N: the decode that will sample EOS
+  expect batch A:1
+plan tokens=A:9                   # N+1: reserved on the assumption A keeps decoding
+  expect reserved A true
+  expect polled A []              # inside the window: the placeholder is not a token
+commit                            # commits N: EOS -> finish(A), reservation struck from N+1
+  expect finished A reason=finished_eos
+  expect polled A [99]            # the EOS token, delivered once, not swallowed by the correction
+commit                            # commits N+1 (now empty)
+  expect running

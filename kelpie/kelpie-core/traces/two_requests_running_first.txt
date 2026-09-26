@@ -1,0 +1,18 @@
+# Decodes are planned before admission; C only gets the leftover budget, aligned down to a block.
+# Entries list decodes first regardless of schedule order.
+config max_batch_tokens=8 max_batch_reqs=4 block_size=4 num_blocks=16 reserve_ratio=0 order=running_first eos=99
+submit A prompt=4 max_new=4
+submit B prompt=6 max_new=2
+step
+  expect batch A:4 B:4
+  expect free 13
+submit C prompt=6 max_new=2
+step
+  expect batch A:1 B:2 C:4
+  expect free 10
+  expect running A B C
+step
+  expect batch A:1 B:1 C:2
+  expect free 11               # B hits max_new=2 and frees its 2 blocks; C takes 1
+  expect running A C
+expect finished B reason=finished_length

@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""scripts/test -- zig tests + ruff (advisory) + import-only smoke. No pytest, no torch/jax.
+
+The Python test suite is parked until the seams are re-cut.
+
+Runs: (1) kelpie-core zig build lib && zig build test; (2) ruff check per package, advisory
+(prints, never fails the run); (3) `python -c "import <pkg>"` per package -- no engine, no
+model, no checkpoint. A lock file under $TMPDIR refuses a second concurrent run on this
+machine (two suites at once has crashed this laptop before).
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+LOCK_PATH = Path(tempfile.gettempdir()) / "kelpie-scripts-test.lock"
+PY_PACKAGES = {
+    "kelpie-engine": "kelpie_engine",
+    "kelpie-models": "kelpie_models",
+    "kelpie-http": "kelpie_http",
+}
+
+
+def run(cmd: list[str], cwd: Path) -> int:
+    print(f"$ {' '.join(cmd)}  (in {cwd.relative_to(ROOT)})")
+    return subprocess.run(cmd, cwd=cwd).returncode
+
+
+def zig_tests() -> int:
+    core = ROOT / "kelpie-core"
+    zig = str(ROOT / "scripts" / "zig")
+    rc = run([zig, "build", "lib"], core)
+    return rc if rc != 0 else run([zig, "build", "test"], core)
+
+
+def ruff_advisory() -> None:
+    for pkg in PY_PACKAGES:
+        rc = run(["uv", "run", "--frozen", "ruff", "check", "."], ROOT / pkg)
+        if rc != 0:
+            print(f"[advisory] ruff check failed in {pkg} (rc={rc}) -- not gating the run")
+
+
+# Modules the smoke does not import, each with the reason it cannot.
+SMOKE_SKIP = {
+    # Not yet on the six-arg seam; each raises NotImplementedError at import BY DESIGN.
+    "kelpie_models.models.unported",
+    # Per-request state rings for the recurrent models. Reachable only from unported/, and its
+    # imports (kernels.Kernels, kernels.backend.Backend, sdk.kv.alloc_kv_groups) went with the old
+    # path on 2026-09-10. Owned by the Zig slab-pool spike, which decides where it lands.
+    "kelpie_models.state",
+    # Vendored NKI / Pallas kernel sources: import jax, which is not a dependency of this tree.
+    "kelpie_models.kernels.vendored.neuron._dense",
+    "kelpie_models.kernels.vendored.neuron._nki",
+    "kelpie_models.kernels.vendored.tpu._pallas",
+    # Loads vLLM 0.29.0's Marlin MoE .so files at import from $KELPIE_VLLM_MARLIN_DIR, which only
+    # the image (oci/Dockerfile) provides. The marlin adapter imports it lazily, inside the impl.
+    "kelpie_models.kernels.adapters._vllm_marlin_ops",
+    # Vendored vLLM Triton attention: @triton.jit at module scope, and triton is CUDA-only (not
+    # in the laptop lock). The vllm_triton adapter imports it lazily, inside the impl.
+    "kelpie_models.kernels.vendored.cuda.vllm_attention",
+}
+
+
+def modules_of(pkg: str, module: str) -> list[str]:
+    """Every module in the package, dotted, minus SMOKE_SKIP and anything under it."""
+    root = ROOT / pkg / module
+    out = []
+    for path in sorted(root.rglob("*.py")):
+        rel = path.relative_to(root.parent).with_suffix("")
+        name = ".".join(rel.parts).removesuffix(".__init__")
+        if not any(name == s or name.startswith(s + ".") for s in SMOKE_SKIP):
+            out.append(name)
+    return out
+
+
+def import_smoke() -> int:
+    """Import EVERY module of every package, one process each -- an unimportable module is a
+    broken module, whether or not anything imports it today."""
+    worst = 0
+    for pkg, module in PY_PACKAGES.items():
+        names = modules_of(pkg, module)
+        print(f"$ import {len(names)} modules  (in {pkg})")
+        for name in names:
+            rc = subprocess.run(
+                ["uv", "run", "--frozen", "python", "-c", f"import {name}"],
+                cwd=ROOT / pkg,
+                capture_output=True,
+                text=True,
+            ).returncode
+            if rc != 0:
+                print(f"  FAIL import {name}")
+                worst = worst or rc
+    return worst
+
+
+def conventions() -> int:
+    """The op-layout check (`kernels/conventions.py`): every op file imported, every op with a
+    fake, sample args and a backward, every adapter naming a declared backend. It fails, so the
+    layout is a rule and not a habit."""
+    print("$ kernels conventions  (in kelpie-models)")
+    result = subprocess.run(
+        ["uv", "run", "--frozen", "python", "-m", "kelpie_models.kernels.conventions"],
+        cwd=ROOT / "kelpie-models",
+        capture_output=True,
+        text=True,
+    )
+    print(result.stdout.rstrip() or result.stderr.rstrip())
+    return result.returncode
+
+
+def acquire_lock() -> bool:
+    try:
+        fd = os.open(str(LOCK_PATH), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    os.write(fd, str(os.getpid()).encode())
+    os.close(fd)
+    return True
+
+
+def main() -> int:
+    if not acquire_lock():
+        print(f"scripts/test: locked by {LOCK_PATH} -- refusing a second run (remove if stale)")
+        return 1
+    try:
+        rc = zig_tests()
+        if rc != 0:
+            return rc
+        ruff_advisory()
+        rc = conventions()
+        if rc != 0:
+            return rc
+        return import_smoke()
+    finally:
+        LOCK_PATH.unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

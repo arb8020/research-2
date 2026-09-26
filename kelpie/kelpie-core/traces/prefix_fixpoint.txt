@@ -1,0 +1,37 @@
+# Cross-group hit fixpoint (docs/cache-groups-ladder.md Q3; vLLM HybridKVCacheCoordinator).
+# A full group (prefix-closed) beside a cacheable window-8 group (NOT closed). A runs long
+# enough that its early window rows slide out and get reused, so the window group can only
+# resume at a boundary whose preceding W tokens are all still present, while the full group
+# is happy much further along.
+#
+# One pass of `min` over independent scans is not a fixed point: each group is asked at the
+# FULL prompt length and the answers are minned once. The fixpoint re-asks every group capped
+# at the running minimum until nobody shrinks, which is what makes the reported hit a boundary
+# every group can actually resume from -- not merely the smallest of three unrelated answers.
+config max_batch_tokens=64 max_batch_reqs=4 block_size=4 groups=full,window8 num_blocks=24 reserve_ratio=0 order=running_first eos=99 prefix_cache=1
+submit A prompt=16 base=4000 max_new=8
+step
+  expect batch A:16
+step
+step
+step
+step
+step
+step
+step
+expect finished A reason=finished_length
+# B shares A's whole 16-token prompt. The full group would hit 12 (three blocks; the last token
+# is never claimed). The window group can only resume where its last 8 tokens are present, and
+# A's early window rows were freed as it decoded -- so the window group supports NO boundary at
+# all, and the fixpoint (the largest t EVERY group can resume from) is 0: B recomputes its prompt.
+#
+# Before 2026-09-10 this trace expected a 12-token hit. That hit was an ALIASING BUG, not a hit:
+# the prefix hash had no group in it and the hash table is shared, so the window group's lookup
+# found the FULL group's page -- ids 1,2, which belong to g=0 -- and would have resumed on
+# another group's KV. Group-local page ids (ruling 2026-09-10) made the aliasing visible, and
+# `prefix.groupSeed` now roots each group's hash chain in its own index so the two key spaces
+# cannot collide.
+submit B prompt=16 base=4000 max_new=2
+step
+  expect batch B:16
+  expect prefix queries=1 hits=0 tokens=0

@@ -1,0 +1,14 @@
+# A drafting entry (1 + 3 rows) in the same step as a prefill chunk that crosses a checkpoint
+# boundary mid-chunk. Each entry's state indices are its own: A writes in place + 3 fresh units
+# and no checkpoint; B reads ZERO, writes fresh, and checkpoints after row 7 of its 10-row chunk.
+config max_seq_len=64 max_batch_tokens=14 max_batch_reqs=4 block_size=2 groups=full,state8 num_blocks=48 max_extra=3 reserve_ratio=0 order=running_first eos=99
+submit A prompt=4 max_new=16
+step
+submit B prompt=20 base=2000 max_new=4
+plan
+  expect batch A:1+3 B:10
+  expect idx A g=1 start=4 read=4 write=[4,7,8,9] ckpt=-
+  expect idx B g=1 start=0 read=Z write=[15,0,0,0] ckpt=16@row7
+commit
+  expect units B g=1 live=15 ring=[16@8]
+  expect n_computed B 10

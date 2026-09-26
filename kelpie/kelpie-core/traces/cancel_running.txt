@@ -1,0 +1,13 @@
+# Cancelling a runner frees its blocks and releases its slot immediately; unpolled tokens are dropped.
+config max_batch_tokens=8 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99
+submit A prompt=4 max_new=4
+submit B prompt=4 max_new=4
+step tokens=A:7
+  expect batch A:4 B:4
+  expect free 5
+cancel A
+  expect running B
+  expect free 6
+step
+  expect batch B:1
+  expect free 5

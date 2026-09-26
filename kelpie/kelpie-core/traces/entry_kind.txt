@@ -1,0 +1,32 @@
+# The entry kind (scheduler.Kind) is decided by position, never by n_work: decode iff the chunk is
+# exactly the newest token of a request whose prompt is fully computed. So a
+# one-token prompt's first chunk is a PREFILL although n_work == 1; its next step is a decode. A
+# chunked prefill whose last chunk is one token is still a prefill, and it sorts after the decodes
+# in the batch (decodes first by kind, not by n_work). `kept=` names the tokens committed per
+# entry: only 1 is legal while max_extra = 0.
+config max_batch_tokens=5 max_batch_reqs=4 block_size=4 num_blocks=16 reserve_ratio=0 order=running_first eos=99
+submit A prompt=1 max_new=5
+step tokens=A:7 kept=A:1
+  expect batch A:1
+  expect event n_prefill_reqs=1 n_decode_reqs=0 n_tokens=1 n_extra_rows=0 n_extra_kept=0
+  expect polled A [7]
+step tokens=A:8
+  expect batch A:1
+  expect event n_prefill_reqs=0 n_decode_reqs=1 n_tokens=1
+  expect polled A [8]
+# B: prompt 9 with 4 tokens of budget left after A's decode: chunks of 4, 4 (block aligned), then 1.
+submit B prompt=9 max_new=2
+step
+  expect batch A:1 B:4
+  expect event n_prefill_reqs=1 n_decode_reqs=1 n_tokens=5
+step
+  expect batch A:1 B:4
+  expect event n_prefill_reqs=1 n_decode_reqs=1
+step tokens=B:5
+  expect batch A:1 B:1            # B's one-token tail is a prefill; A's decode still sorts first
+  expect event n_prefill_reqs=1 n_decode_reqs=1 n_tokens=2
+  expect polled B [5]
+expect finished A reason=finished_length
+step
+  expect batch B:1                # now a decode
+  expect event n_prefill_reqs=0 n_decode_reqs=1

@@ -1,0 +1,50 @@
+# `expect prefix` reads the last committed StepEvent (per step, not cumulative).
+# preemption.txt with the prefix cache on and distinct prompts (base=2000 for B), so B can only hit its own history.
+# When B is preempted its two blocks (2: prompt, 4: generated 1,1,1,1) are released with hashes kept. A takes
+# block 4 for its next token, which forgets that hash. On readmission B matches block 2 (4 tokens) and re-prefills
+# the other 5 (instead of all 9).
+config max_batch_tokens=16 max_batch_reqs=4 block_size=4 num_blocks=5 reserve_ratio=0 order=running_first eos=99 prefix_cache=1
+submit A prompt=4 max_new=8
+submit B prompt=4 base=2000 max_new=8
+step
+  expect batch A:4 B:4
+  expect blocks A 1
+  expect blocks B 2
+  expect free 2
+step
+  expect batch A:1 B:1
+  expect blocks A 1 3
+  expect blocks B 2 4
+  expect free 0
+step
+step
+step
+  expect batch A:1 B:1
+  expect free 0
+  expect running A B
+step
+  expect batch A:1
+  expect blocks A 1 3 4         # B preempted: released 4 then 2; A pops 4
+  expect free 1
+  expect running A
+  expect waiting B
+step
+  expect batch A:1              # B matches block 2 but cannot get its other 2 blocks: not admitted, block 2 handed back
+  expect free 1
+  expect waiting B
+  expect prefix queries=0 hits=0 tokens=0   # the failed re-admission is not counted
+step
+  expect batch A:1
+  expect free 4
+  expect running
+  expect waiting B
+expect finished A reason=finished_length
+expect polled A [1,1,1,1,1,1,1,1]
+step tokens=B:2
+  expect batch B:5
+  expect blocks B 2 4 3         # 2 resurrected; 4 and 3 popped from the free list (2 4 3 1 after A released 4 3 1)
+  expect free 1
+  expect running B
+  expect waiting
+  expect prefix queries=1 hits=1 tokens=4
+expect polled B [1,1,1,1,1,2]
