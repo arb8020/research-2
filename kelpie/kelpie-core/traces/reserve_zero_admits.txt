@@ -1,0 +1,9 @@
+# num_blocks=5 = 4 usable (block 0 is null). Without a reserve both are admitted; the pool will run out and preempt later.
+config max_batch_tokens=16 max_batch_reqs=4 block_size=4 num_blocks=5 reserve_ratio=0 order=running_first eos=99
+submit A prompt=4 max_new=12
+submit B prompt=4 max_new=12
+step
+  expect batch A:4 B:4
+  expect free 2
+  expect running A B
+  expect waiting

@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Resolves and execs Zig 0.14.1 (the TigerBeetle pin kelpie-core requires; see
+# docs/decisions.md and kelpie-core/build.zig.zon "minimum_zig_version").
+#
+# `zig` on PATH may be a newer/older version managed by the system or another
+# project (this repo does NOT change build.zig to support other versions), so
+# this wrapper is the door: point tooling (docs, CI, kelpie-engine/kelpie-http
+# build steps) at `scripts/zig` instead of bare `zig`.
+#
+# Resolution order:
+#   1. $KELPIE_ZIG               - explicit override, used as-is
+#   2. zvm (if installed)        - `zvm which 0.14.1` / zvm's version dir
+#   3. zigup (if installed)      - zigup's version dir
+#   4. ~/.local/zig/0.14.1/zig   - the documented manual install location
+#   5. error, pointing at docs/decisions.md
+set -euo pipefail
+
+REQUIRED_VERSION="0.14.1"
+
+resolve() {
+  if [[ -n "${KELPIE_ZIG:-}" ]]; then
+    echo "$KELPIE_ZIG"
+    return 0
+  fi
+
+  if command -v zvm >/dev/null 2>&1; then
+    local zvm_path
+    zvm_path="$(zvm which "$REQUIRED_VERSION" 2>/dev/null || true)"
+    if [[ -n "$zvm_path" && -x "$zvm_path" ]]; then
+      echo "$zvm_path"
+      return 0
+    fi
+    if [[ -x "$HOME/.zvm/versions/$REQUIRED_VERSION/zig" ]]; then
+      echo "$HOME/.zvm/versions/$REQUIRED_VERSION/zig"
+      return 0
+    fi
+  fi
+
+  if command -v zigup >/dev/null 2>&1; then
+    if [[ -x "$HOME/.local/share/zigup/$REQUIRED_VERSION/files/zig" ]]; then
+      echo "$HOME/.local/share/zigup/$REQUIRED_VERSION/files/zig"
+      return 0
+    fi
+  fi
+
+  if [[ -x "$HOME/.local/zig/$REQUIRED_VERSION/zig" ]]; then
+    echo "$HOME/.local/zig/$REQUIRED_VERSION/zig"
+    return 0
+  fi
+
+  return 1
+}
+
+ZIG_BIN="$(resolve)" || {
+  echo "error: Zig $REQUIRED_VERSION not found." >&2
+  echo "  Install it (see docs/decisions.md \"Where things run\"), e.g.:" >&2
+  echo "    curl -fL -o /tmp/zig-$REQUIRED_VERSION.tar.xz \\" >&2
+  echo "      https://ziglang.org/download/$REQUIRED_VERSION/zig-aarch64-macos-$REQUIRED_VERSION.tar.xz" >&2
+  echo "    mkdir -p ~/.local/zig && tar -xJf /tmp/zig-$REQUIRED_VERSION.tar.xz -C ~/.local/zig" >&2
+  echo "    mv ~/.local/zig/zig-aarch64-macos-$REQUIRED_VERSION ~/.local/zig/$REQUIRED_VERSION" >&2
+  echo "  Or set \$KELPIE_ZIG to an existing $REQUIRED_VERSION binary." >&2
+  exit 1
+}
+
+exec "$ZIG_BIN" "$@"

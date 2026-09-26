@@ -1,0 +1,20 @@
+# A stop token in a step that writes a checkpoint. A's history row (position 15) completes 16,
+# so the step checkpoints after row 0; the commit keeps [98, 99] (99 is eos) of [98, 99, 100]
+# and finishes A. The checkpoint still enters the ring and is published before the finish frees
+# everything, so C, sharing A's first 16 tokens, resumes from it.
+config max_seq_len=64 max_batch_tokens=64 max_batch_reqs=4 block_size=4 groups=full,state8 num_blocks=32 prefix_cache=1 max_extra=3 reserve_ratio=0 order=running_first eos=99
+submit A prompt=15 base=5000 max_new=16
+step tokens=A:5015
+  expect units A g=1 live=6 ring=[7@8]
+plan tokens=A:98 kept=A:3
+  expect idx A g=1 start=15 read=6 write=[6,9,10,11] ckpt=12@row0
+commit
+  expect finished A reason=finished_eos
+  expect polled A [5015,98,99]
+  expect free 30
+submit C prompt=20 base=5000 max_new=2
+plan
+  expect batch C:4
+  expect idx C g=1 start=16 read=12 write=[14,0,0,0] ckpt=-
+commit
+  expect prefix queries=1 hits=1 tokens=16

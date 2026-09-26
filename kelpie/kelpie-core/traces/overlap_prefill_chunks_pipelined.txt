@@ -1,0 +1,37 @@
+# Overlap in steady state (plan N+1, commit N, plan N+2, ...) over a chunked prefill. Each ahead
+# plan takes the NEXT chunk: its first position is committed + in flight, never a chunk still
+# in flight. A partial chunk has no token, so it is not reserved; the chunk that completes the
+# prompt emits, so the decode planned behind it is reserved.
+config max_batch_tokens=4 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99 overlap=1
+submit A prompt=13 max_new=3
+plan
+  expect batch A:4
+  expect rows A [1000@0,1001@1,1002@2,1003@3]
+plan
+  expect ahead_batch A:4            # N+1: the next chunk, 4..7 (0..3 is in flight)
+  expect ahead_rows A [1004@4,1005@5,1006@6,1007@7]
+  expect reserved A false           # a partial chunk emits nothing: no placeholder
+commit                              # 0..3 committed
+  expect n_computed A 4
+  expect polled A []
+plan
+  expect ahead_batch A:4            # 8..11 (4..7 is in flight)
+  expect ahead_rows A [1008@8,1009@9,1010@10,1011@11]
+commit                              # 4..7 committed
+  expect n_computed A 8
+  expect polled A []
+plan tokens=A:50
+  expect ahead_batch A:1            # the last prompt token: completes the prompt, emits 50
+  expect ahead_rows A [1012@12]
+commit                              # 8..11 committed
+  expect n_computed A 12
+plan tokens=A:51
+  expect ahead_batch A:1            # decode of 50, which is still in flight
+  expect ahead_rows A [-@13]
+  expect reserved A true
+commit
+  expect n_computed A 13
+  expect polled A [50]
+commit
+  expect n_computed A 14
+  expect polled A [51]

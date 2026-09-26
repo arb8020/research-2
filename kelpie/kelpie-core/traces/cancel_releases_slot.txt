@@ -1,0 +1,29 @@
+# max_requests=1: cancel must release the slot itself, or the second submit would report Full.
+config max_requests=1 max_batch_tokens=8 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99
+submit A prompt=4 max_new=4
+step tokens=A:7
+  expect batch A:4
+  expect free 6
+cancel A
+  expect running
+  expect free 7
+submit B prompt=4 max_new=2
+  expect waiting B
+step tokens=B:8
+  expect batch B:4
+expect polled B [8]
+# B finishes by length and is never polled; cancel (client went away) must still release its slot.
+step tokens=B:8
+  expect batch B:1
+  expect running
+  expect free 7
+cancel B
+submit C prompt=2 max_new=1
+  expect waiting C
+# Pool of one: a second submit before C finishes is rejected as Full and counted on the next step's event.
+submit D prompt=1 max_new=1 fails=Full
+step
+  expect batch C:2
+  expect event n_rejected_full=1 n_admitted=1
+step
+expect finished C reason=finished_length

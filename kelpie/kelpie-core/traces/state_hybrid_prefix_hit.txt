@@ -1,0 +1,28 @@
+# Hybrid (attention + recurrent) prefix hit on a checkpoint written MID-CHUNK, while its owner
+# is still running. A's one prefill chunk [0,20) writes the checkpoint at 16 after row 15. B
+# shares A's 20-token prompt; the cross-group grain is lcm(4, 8) = 8, so the hit is 16. The
+# checkpoint is then in both rings (refcount 2): A's cancel drops one reference, B keeps it.
+config max_seq_len=64 max_batch_tokens=64 max_batch_reqs=4 block_size=4 groups=full,state8:2 num_blocks=32 prefix_cache=1 reserve_ratio=0 order=running_first eos=99
+submit A prompt=20 base=5000 max_new=4
+plan
+  expect idx A g=1 start=0 read=Z write=[7] ckpt=8@row15
+commit
+  expect units A g=1 live=7 ring=[8@16]
+  expect free 23
+submit B prompt=24 base=5000 max_new=2
+plan
+  expect batch A:1 B:8
+  expect idx A g=1 start=20 read=7 write=[7] ckpt=-
+  expect idx B g=1 start=16 read=8 write=[12] ckpt=13@row7
+commit
+  expect prefix queries=1 hits=1 tokens=16
+  expect table B g=0 [2,3,4,5,10,11]
+  expect units B g=1 live=12 ring=[8@16,13@24]
+  expect free 18
+# A's cancel frees what only A held (F 6 and 9, live 7); F 2-5 and checkpoint 8 stay with B.
+cancel A
+expect free 21
+expect units B g=1 live=12 ring=[8@16,13@24]
+step
+expect finished B reason=finished_length
+expect free 30

@@ -1,0 +1,30 @@
+# Extra rows on a sliding-window group (W = 8, block 4), Kmax = 3: rejected extra rows, then the
+# window slides past them. A rejected row is simply rewritten by the next entry; slide-out frees
+# rows below firstLiveRow(n_computed) exactly as without extra rows.
+config max_seq_len=64 max_batch_tokens=64 max_batch_reqs=4 block_size=4 groups=full,window8 num_blocks=32 max_extra=3 reserve_ratio=0 order=running_first eos=99
+submit A prompt=8 max_new=24
+step
+  expect table A g=0 [1,2]
+  expect table A g=1 [3,4]
+  expect free 27
+# Positions 8..11: a 3rd row per group. kept=1: every extra row rejected.
+plan kept=A:1
+  expect rows A [1@8,-@9,-@10,-@11]
+  expect table A g=1 [3,4,6]
+commit
+  expect n_computed A 9
+# Positions 9..12 rewrite the rejected rows 9..11. Nothing slides yet (firstLiveRow(9) = 0).
+plan kept=A:4
+  expect rows A [1@9,-@10,-@11,-@12]
+  expect table A g=1 [3,4,6,8]
+commit
+  expect n_computed A 13
+# firstLiveRow(13) = 1: window row 0 is freed (a hole) before the step allocates row 4.
+plan kept=A:2
+  expect rows A [4@13,-@14,-@15,-@16]
+  expect table A g=1 [0,4,6,8,10]
+  expect table A g=0 [1,2,5,7,9]
+commit
+  expect n_computed A 15
+# 5 full rows + 4 live window rows (the hole holds nothing).
+  expect free 22

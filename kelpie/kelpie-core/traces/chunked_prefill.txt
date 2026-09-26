@@ -1,0 +1,17 @@
+# Prompt 10 over budget 8: chunk of 8 (block aligned), then the final 2, then decodes.
+# The token sampled from the first chunk is discarded; only the chunk that completes the prompt yields a token.
+config max_batch_tokens=8 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99
+submit A prompt=10 max_new=2
+step tokens=A:50
+  expect batch A:8
+  expect free 5
+  expect running A
+step tokens=A:7
+  expect batch A:2
+  expect free 4
+  expect polled A [7]
+step tokens=A:8
+  expect batch A:1
+  expect free 7
+expect finished A reason=finished_length
+expect polled A [8]

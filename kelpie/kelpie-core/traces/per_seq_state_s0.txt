@@ -1,0 +1,27 @@
+# A per_seq (recurrent) group with S = 0: never checkpoint, no ring, one live unit per request
+# for its whole life, updated in place every step.
+config max_seq_len=64 max_batch_tokens=64 max_batch_reqs=4 block_size=4 groups=full,state0 num_blocks=8 reserve_ratio=0 order=running_first eos=99
+expect free 6
+submit A prompt=8 max_new=4
+plan
+  expect batch A:8
+  expect idx A g=1 start=0 read=Z write=[4] ckpt=-
+commit
+  expect table A g=0 [2,3]
+  expect units A g=1 live=4 ring=[]
+  expect free 3
+# Decode: F grows every 4 tokens (token 8 opens F row 2), the state unit never does.
+plan
+  expect batch A:1
+  expect idx A g=1 start=8 read=4 write=[4] ckpt=-
+commit
+  expect table A g=0 [2,3,5]
+  expect units A g=1 live=4 ring=[]
+  expect free 2
+step
+  expect units A g=1 live=4 ring=[]
+  expect free 2
+step
+expect finished A reason=finished_length
+# Finishing returns every unit but ZERO.
+expect free 6

@@ -1,0 +1,36 @@
+# Checkpoints land mid-chunk: the model writes the state after row ckpt_row (counted from the
+# entry's first row) into ckpt, while write[0] still gets the state after the last row.
+# S = 8, 2 checkpoints kept, chunks of at most 12 tokens (block-aligned by the F group).
+config max_seq_len=64 max_batch_tokens=12 max_batch_reqs=4 block_size=4 groups=full,state8:2 num_blocks=32 reserve_ratio=0 order=running_first eos=99
+expect free 30
+submit A prompt=20 max_new=8
+# Chunk [0,12): boundary 8 -> ckpt after row 7. A partial chunk: nothing is emitted, but the
+# history rows commit, so live and the checkpoint are kept.
+plan
+  expect batch A:12
+  expect idx A g=1 start=0 read=Z write=[5] ckpt=6@row7
+commit
+  expect n_computed A 12
+  expect units A g=1 live=5 ring=[6@8]
+  expect free 25
+# Chunk [12,20): boundary 16 -> row 3.
+plan
+  expect batch A:8
+  expect idx A g=1 start=12 read=5 write=[5] ckpt=9@row3
+commit
+  expect units A g=1 live=5 ring=[6@8,9@16]
+  expect free 22
+# Decode 20, 21, 22: no boundary. Token 20 opens F row 5.
+step
+  expect units A g=1 live=5 ring=[6@8,9@16]
+  expect free 21
+step
+step
+# Token 23 completes 24: ckpt after row 0 of a one-row decode entry. The ring is full, so its
+# oldest (6@8) slides out.
+plan
+  expect batch A:1
+  expect idx A g=1 start=23 read=5 write=[5] ckpt=11@row0
+commit
+  expect units A g=1 live=5 ring=[9@16,11@24]
+  expect free 21

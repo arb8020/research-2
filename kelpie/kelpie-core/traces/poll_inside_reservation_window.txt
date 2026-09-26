@@ -1,0 +1,27 @@
+# Regression for the sentinel-poll bug (docs/m3-overlap-grammar.md, "Native overlap proof
+# blocker"). reserve_ahead writes a placeholder (-1 in the reference, maxInt(u32) in Zig) into
+# tokens[n-1] and advances n; commit(N) overwrites it in place. A poller that lands in that
+# window must see NOTHING new -- if poll reported the placeholder it would also advance n_polled
+# past it, so the real token that replaces it would be lost forever.
+#
+# The other overlap traces poll only after commit, which is exactly why they never caught this:
+# scripts/prove_overlap.py polls every 1 ms against a ~2 ms step and lost every token after the
+# first. This trace pins the window itself: poll between plan(N+1) and commit(N) yields [], and
+# the very next poll after commit(N) yields the real token, not a hole.
+config max_batch_tokens=8 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99 overlap=1
+submit A prompt=4 max_new=5
+step tokens=A:7
+  expect polled A [7]
+plan tokens=A:8                   # N: real decode
+  expect batch A:1
+  expect polled A []              # nothing reserved yet: N's token is not committed
+plan tokens=A:9                   # N+1: reserve_ahead stamps the placeholder into A's last row
+  expect batch A:1
+  expect reserved A true
+  expect polled A []              # THE BUG: this reported the sentinel and burned n_polled
+  expect polled A []              # idempotent -- repeated polling in the window stays empty
+commit                            # commits N: the placeholder becomes the real token 8
+  expect reserved A false
+  expect polled A [8]             # the token the buggy poll would have swallowed
+commit                            # commits N+1: ordinary append
+  expect polled A [9]

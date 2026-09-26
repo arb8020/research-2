@@ -1,0 +1,26 @@
+# `set` queues a knob; the next step's plan drains it, so the batch after the set follows the new
+# order and that step's config_hash differs from the previous step's. Same submissions as
+# two_requests_*: under running_first A+B keep the budget; under waiting_first C is admitted first.
+config max_batch_tokens=8 max_batch_reqs=4 block_size=4 num_blocks=16 reserve_ratio=0 order=running_first eos=99
+submit A prompt=4 max_new=4
+submit B prompt=6 max_new=2
+step
+  expect batch A:4 B:4
+  expect config_hash unchanged
+  expect event order=0
+submit C prompt=6 max_new=2
+set order=waiting_first
+step
+  expect batch A:1 C:6          # waiting_first: C's prefill takes the budget, B waits
+  expect config_hash changed
+  expect event order=1
+  expect running A B C
+step
+  expect batch A:1 C:1 B:2
+  expect config_hash unchanged  # nothing set: same hash as the previous step
+set order=running_first
+set reserve_ratio=0.25
+step
+  expect batch A:1 B:1
+  expect config_hash changed
+  expect event order=0

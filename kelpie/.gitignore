@@ -1,0 +1,4 @@
+__pycache__/
+
+# scripts/check_endpoint.py evidence: traces, lm-eval/harbor outputs, per-row score files.
+/check_endpoint_out/

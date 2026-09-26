@@ -1,0 +1,23 @@
+# One-step overlap (docs/spike-overlap-ref.md). Prompt=4 prefilled, then two decode steps N, N+1
+# are planned back to back before N is committed: plan(N) reserves nothing (nothing outstanding
+# yet); plan(N+1) reserves A's row assuming commit(N) will supply exactly one token (placeholder
+# id -1, n_computed += 1, tokens grows by one -1 entry). commit(N) supplies the real token and
+# OVERWRITES the placeholder in place (no new append); commit(N+1) then supplies its own real
+# token as a normal append. Net effect on A.tokens: identical to two ordinary (non-overlapped)
+# decode steps -- overlap changes scheduling order, never the committed history.
+config max_batch_tokens=8 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99 overlap=1
+submit A prompt=4 max_new=5
+step tokens=A:7
+  expect polled A [7]
+plan tokens=A:8                   # N: decode, real n_computed 4 -> read at plan time
+  expect batch A:1
+plan tokens=A:9                   # N+1: decode, ahead=True; reserve_ahead already bumped n_computed
+  expect batch A:1
+  expect reserved A true
+commit                            # commits N (the OLDEST outstanding plan): fills the placeholder
+  expect reserved A false         # N+1 is now plan_out; N's own reservation is resolved
+  expect n_computed A 5
+  expect polled A [8]
+commit                            # commits N+1: ordinary append
+  expect n_computed A 6
+  expect polled A [9]

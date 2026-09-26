@@ -1,0 +1,23 @@
+# A prefix hit, then the first decode with extra rows. The hit step reads the shared checkpoint
+# and writes a FRESH unit (live 0 after the hit). The decode writes that unit in place as
+# write[0] plus 3 fresh ones; kept=2 makes write[1] live and frees write[0] -- the unit the
+# hit step allocated -- and write[2], write[3]. The shared checkpoint stays in the ring.
+config max_seq_len=64 max_batch_tokens=64 max_batch_reqs=4 block_size=4 groups=full,state8 num_blocks=32 prefix_cache=1 max_extra=3 reserve_ratio=0 order=running_first eos=99
+submit A prompt=17 base=5000 max_new=1
+step
+  expect finished A reason=finished_length
+submit B prompt=20 base=5000 max_new=8
+plan
+  expect batch B:4
+  expect idx B g=1 start=16 read=8 write=[10,0,0,0] ckpt=-
+commit
+  expect prefix queries=1 hits=1 tokens=16
+  expect units B g=1 live=10 ring=[8@16]
+  expect free 23
+plan kept=B:2
+  expect batch B:1+3
+  expect idx B g=1 start=20 read=10 write=[10,12,13,14] ckpt=-
+commit
+# F grows to 6 rows (+1); G took 3 fresh and freed 3 (10, 13, 14): 8 held.
+  expect units B g=1 live=12 ring=[8@16]
+  expect free 22

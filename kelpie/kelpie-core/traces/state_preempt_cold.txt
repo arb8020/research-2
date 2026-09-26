@@ -1,0 +1,16 @@
+# state_preempt_recompute without the prefix cache: the readmitted A recomputes from token 0,
+# reads ZERO, and writes the checkpoint at 16 afresh (row 15 of the 21-row chunk).
+config max_seq_len=64 max_batch_tokens=64 max_batch_reqs=4 block_size=4 groups=full,state8:2 num_blocks=12 prefix_cache=0 reserve_ratio=0 order=running_first eos=99
+submit C prompt=4 max_new=2
+submit A prompt=20 base=3000 max_new=8
+step
+step
+  expect event n_preempted=1
+  expect waiting A
+plan
+  expect batch A:21
+  expect idx A g=1 start=0 read=Z write=[4] ckpt=3@row15
+commit
+  expect units A g=1 live=4 ring=[3@16]
+  expect n_computed A 21
+  expect free 2

@@ -1,0 +1,79 @@
+[project]
+name = "kelpie-models"
+version = "0.1.0"
+description = "Torch model forwards (GPT-2, Qwen3) against the kelpie StepBatch / paged-KV contract"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.4",
+    "safetensors>=0.4",
+    "huggingface_hub>=0.24",
+    "numpy>=1.26",
+    "pillow>=12.3.0",
+    # bench/probe: the recording reverse proxy (copied from crucible) speaks ASGI over these.
+    "trio>=0.27",
+    "hypercorn>=0.17",
+    "httpx>=0.27",
+    "starlette>=0.40",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "transformers>=4.51",
+    "ruff>=0.6",
+    "torchvision>=0.28.0",
+    "kelpie-engine",
+    "pytest-timeout>=2.4.0",
+]
+
+[tool.uv.sources]
+kelpie-engine = { path = "../kelpie-engine", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["kelpie_models"]
+
+[tool.pytest.ini_options]
+timeout = 120
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "W",      # pycodestyle warnings
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # bugbear
+    "PLR",    # pylint refactor (too-many-args, nesting, statements, etc.)
+    "PLW",    # pylint warnings
+    "TRY",    # tryceratops (error channel hygiene)
+    "RET",    # return hygiene (implicit None, superfluous return)
+    "SIM",    # simplifications (suppress, ternary, etc.)
+    "C901",   # McCabe cyclomatic complexity
+    "ERA",    # commented-out code
+    "PERF",   # perf antipatterns (try in loop, etc.)
+    "BLE",    # blind/broad except
+    "ANN401", # no `Any` in annotations
+]
+ignore = [
+    "TRY003",  # long message at raise site — our style: inline motivation
+    "RET505",  # superfluous else after return — sometimes clearer to keep
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+# attention entry points take (q, k, v, batch, kv, layer, out[, extra]); no bundling struct yet.
+max-args = 8
+max-positional-args = 8
+max-nested-blocks = 4
+max-branches = 8
+

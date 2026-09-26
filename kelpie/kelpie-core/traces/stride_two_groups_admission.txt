@@ -1,0 +1,23 @@
+# full + stride4 groups, block 4 (a stride block spans 16 tokens). 6 usable blocks; reserve 0.
+# A: prompt 8 takes 2 full rows + 1 stride row = 3. B: prompt 8 needs 3 more: fits exactly.
+# C: prompt 4 needs 2 (1 + 1) but nothing is free: waits (head-of-line). A finishes at step 1
+# (max_new 1), freeing 3; step 2 gives B its decode row (full only: the stride row still has
+# room for 16 tokens) and admits C.
+config max_batch_tokens=32 max_batch_reqs=4 block_size=4 groups=full,stride4 num_blocks=7 reserve_ratio=0 order=running_first eos=99
+submit A prompt=8 max_new=1
+submit B prompt=8 max_new=4
+submit C prompt=4 max_new=2
+step
+  expect batch A:8 B:8
+  expect table B g=0 [4,5]
+  expect table B g=1 [6]
+  expect waiting C
+  expect finished A reason=finished_length
+  expect free 3
+step
+  expect batch B:1 C:4
+  expect free 0
+  expect table B g=0 [4,5,3]
+  expect table B g=1 [6]
+  expect table C g=0 [2]
+  expect table C g=1 [1]

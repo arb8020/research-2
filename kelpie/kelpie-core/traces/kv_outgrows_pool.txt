@@ -1,0 +1,24 @@
+# A lone request that outgrows the pool used to preempt itself and never be re-admitted: every
+# later plan was idle with it still waiting (this trace's first version). Submit now rejects it:
+# its worst case is 8 + 12 - 1 = 19 computed tokens, 5 blocks; the pool has 4.
+config max_batch_tokens=32 max_batch_reqs=4 block_size=4 num_blocks=5 reserve_ratio=0 order=running_first eos=99
+submit A prompt=8 max_new=12 fails=ExceedsKvPool
+# One token less is 16 computed tokens, exactly 4 blocks: accepted, and it runs to the end alone.
+submit B prompt=8 max_new=9
+step
+  expect batch B:8
+  expect free 2
+step
+step
+step
+step
+step
+step
+step
+  expect n_computed B 15
+  expect free 0
+step
+  expect batch B:1
+  expect free 4
+  expect event n_preempted=0 n_finished=1
+expect finished B reason=finished_length
