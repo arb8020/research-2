@@ -1,0 +1,22 @@
+{
+    "pod": {
+        "id": "pod-abc",
+        "desiredStatus": "RUNNING",
+        "costPerHr": 2.89,
+        "gpuCount": 1,
+        "runtime": {
+            "ports": [
+                {
+                    "isIpPublic": true,
+                    "type": "tcp"
+                }
+            ]
+        },
+        "machine": {
+            "gpuType": {
+                "displayName": "NVIDIA H100 80GB HBM3",
+                "memoryInGb": 80
+            }
+        }
+    }
+}
