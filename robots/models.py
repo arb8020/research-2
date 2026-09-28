@@ -8,6 +8,8 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 
+from robots.tree import register_pytree
+
 
 # ---------------------------------------------------------------------------
 # Shared init helper
@@ -25,6 +27,7 @@ def _linear(out_dim: int, in_dim: int) -> tuple[torch.Tensor, torch.Tensor]:
 # Policy
 # ---------------------------------------------------------------------------
 
+@register_pytree
 @dataclass(frozen=True)
 class PolicyWeights:
     """All tensors for a 2-layer MLP policy with action and value heads.
@@ -103,6 +106,7 @@ class Transition:
     done: bool
 
 
+@register_pytree
 @dataclass(frozen=True)
 class WMWeights:
     """All tensors for a 2-layer MLP world model.

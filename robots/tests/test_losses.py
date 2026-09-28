@@ -8,7 +8,6 @@ import functools
 import gymnasium
 import numpy as np
 import torch
-import torch.utils._pytree as pytree
 
 from robots.collect import Batch, Step, collect, rollout_init
 from robots.models import PolicyWeights, init_policy, policy_forward
@@ -20,12 +19,6 @@ from robots.train import (
     reinforce_loss,
     value_loss,
 )
-
-# PHASE-A STOPGAP: forward_backward needs PolicyWeights registered as a pytree.
-# The optimizer branch registers weight dataclasses in robots/tree.py; delete this at merge.
-if PolicyWeights not in pytree.SUPPORTED_NODES:
-    pytree.register_dataclass(PolicyWeights)
-
 
 # ---------------------------------------------------------------------------
 # Helpers
