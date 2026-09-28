@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, TypeVar
 
 import gymnasium
 import torch
+import torch.nn.functional as F
 
+from robots.collect import Batch, Step
 from robots.models import PolicyWeights, policy_act, policy_forward
 from robots.optim import AdamParams, OptimizerHandle, ParamGroup, make_optimizer
-from robots.rollout import PolicyStep
 
 log = logging.getLogger("robots.train")
 
@@ -76,52 +78,151 @@ def train_loop(
 
 
 # ---------------------------------------------------------------------------
-# RL-specific: loss functions, returns, eval
+# Generic: gradients as data (torch.func)
 # ---------------------------------------------------------------------------
 
-def compute_returns(steps: list[PolicyStep], gamma: float = 0.99) -> list[float]:
-    """Discounted returns, computed backwards."""
+W = TypeVar("W")
+I = TypeVar("I")
+FuncLossFn = Callable[[W, I], tuple[torch.Tensor, dict[str, torch.Tensor]]]
+
+
+def forward_backward(
+    loss_fn: FuncLossFn[W, I],
+    weights: W,
+    inputs: I,
+) -> tuple[W, dict[str, torch.Tensor]]:
+    """Gradients of loss_fn w.r.t. weights, plus the loss_fn's metrics.
+
+    grads has the same dataclass type as weights (one grad tensor per weight
+    tensor). Nothing is mutated: no .grad, no optimizer. Requires the weight
+    dataclass to be registered as a pytree. metrics gains a "loss" entry.
+    """
+    grad_fn = torch.func.grad_and_value(loss_fn, argnums=0, has_aux=True)
+    grads, (loss, metrics) = grad_fn(weights, inputs)
+    assert type(grads) is type(weights)
+    assert "loss" not in metrics
+    return grads, {**metrics, "loss": loss.detach()}
+
+
+# ---------------------------------------------------------------------------
+# RL-specific: batch -> loss inputs (pure)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class LossFnInputs:
+    """A processed Batch: exactly the per-step tensors the RL losses read."""
+
+    obs: torch.Tensor         # (T, obs_dim)
+    actions: torch.Tensor     # (T,) long
+    logprobs: torch.Tensor    # (T,) log pi_old(a|s) from collection time (for PPO ratios)
+    returns: torch.Tensor     # (T,) value target
+    advantages: torch.Tensor  # (T,) returns - collected V(obs); constants, no grad
+
+
+def compute_returns(steps: list[Step], last_value: float, gamma: float) -> list[float]:
+    """Discounted, bootstrapped returns, computed backwards.
+
+    Where the future comes from, per step:
+        episode ended here (terminated or truncated) -> step.bootstrap_value
+            (0.0 on termination, V(next_obs) on truncation — recorded at collection)
+        otherwise -> the next step's return (last_value for the batch's final step)
+    """
+    assert 0.0 <= gamma <= 1.0
     returns: list[float] = []
-    g = 0.0
+    g = last_value
     for step in reversed(steps):
-        g = step.reward + gamma * g * (1.0 - float(step.done))
-        returns.insert(0, g)
+        ended = step.terminated or step.truncated
+        future = step.bootstrap_value if ended else g
+        g = step.reward + gamma * future
+        returns.append(g)
+    returns.reverse()
     return returns
+
+
+def compute_loss_fn_inputs(batch: Batch, gamma: float) -> LossFnInputs:
+    """Batch -> LossFnInputs. Pure: no network calls, everything was recorded at collection."""
+    assert len(batch.steps) > 0
+    returns = torch.tensor(compute_returns(batch.steps, batch.last_value, gamma), dtype=torch.float32)
+    values = torch.tensor([s.value for s in batch.steps], dtype=torch.float32)
+    return LossFnInputs(
+        obs=torch.stack([s.obs for s in batch.steps]),
+        actions=torch.tensor([s.action for s in batch.steps], dtype=torch.long),
+        logprobs=torch.tensor([s.logprob for s in batch.steps], dtype=torch.float32),
+        returns=returns,
+        advantages=returns - values,
+    )
+
+
+# ---------------------------------------------------------------------------
+# RL-specific: losses. All (weights, inputs) -> (loss, metrics), torch.func-safe:
+# no .item(), no data-dependent Python control flow, metrics are tensors.
+#
+#   *_from_logits / *_from_values: the loss term given a forward pass you already did
+#   reinforce_loss / value_loss:   one forward + one term
+#   actor_critic_loss:             one forward + both terms
+# ---------------------------------------------------------------------------
+
+def reinforce_loss_from_logits(
+    logits: torch.Tensor,
+    inputs: LossFnInputs,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Policy-gradient term: mean(-log pi(a|s) * advantage). logits (T, act_dim)."""
+    log_probs_all = F.log_softmax(logits, dim=-1)                                   # (T, act_dim)
+    logprob = log_probs_all.gather(1, inputs.actions.unsqueeze(1)).squeeze(1)       # (T,)
+    entropy = -(log_probs_all.exp() * log_probs_all).sum(dim=-1)                    # (T,)
+    advantages = inputs.advantages.detach()
+    loss = -(logprob * advantages).mean()
+    metrics = {
+        "pi_loss": loss.detach(),
+        "entropy": entropy.mean().detach(),
+        "advantage_mean": advantages.mean(),
+        "advantage_std": advantages.std(correction=0),
+    }
+    return loss, metrics
+
+
+def value_loss_from_values(
+    values: torch.Tensor,
+    inputs: LossFnInputs,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Value regression term: mean((V(s) - return)^2). values (T,)."""
+    loss = ((values - inputs.returns.detach()) ** 2).mean()
+    metrics = {
+        "value_loss": loss.detach(),
+        "value_mean": values.mean().detach(),
+        "return_mean": inputs.returns.mean(),
+    }
+    return loss, metrics
 
 
 def reinforce_loss(
     pi: PolicyWeights,
-    batch: list[PolicyStep],
-) -> tuple[torch.Tensor, dict[str, float]]:
-    """REINFORCE with baseline. Computes returns internally.
+    inputs: LossFnInputs,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Classic REINFORCE (with the collected value as baseline). Does not train the value head."""
+    logits, _ = policy_forward(pi, inputs.obs)
+    return reinforce_loss_from_logits(logits, inputs)
 
-    Returns (loss, metrics_dict).
-    """
-    returns = compute_returns(batch)
-    loss = torch.tensor(0.0)
-    entropies: list[float] = []
-    value_errors: list[float] = []
-    advantages: list[float] = []
-    for step, ret in zip(batch, returns, strict=True):
-        advantage = ret - step.value
-        advantages.append(advantage)
-        value_errors.append((ret - step.value) ** 2)
-        logits, _ = policy_forward(pi, step.obs.unsqueeze(0))  # (1, act_dim)
-        dist = torch.distributions.Categorical(logits=logits)
-        entropies.append(dist.entropy().item())
-        logprob = dist.log_prob(torch.tensor(step.action))
-        loss = loss - logprob * advantage
-    n = len(batch)
-    adv_t = torch.tensor(advantages)
-    m = {
-        "pi_loss": (loss / n).item(),
-        "entropy": sum(entropies) / n,
-        "value_loss": sum(value_errors) / n,
-        "advantage_mean": adv_t.mean().item(),
-        "advantage_std": adv_t.std().item() if n > 1 else 0.0,
-    }
-    return loss / n, m
 
+def value_loss(
+    pi: PolicyWeights,
+    inputs: LossFnInputs,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Trains V(obs) toward the bootstrapped returns."""
+    _, values = policy_forward(pi, inputs.obs)
+    return value_loss_from_values(values, inputs)
+
+
+def actor_critic_loss(
+    pi: PolicyWeights,
+    inputs: LossFnInputs,
+    vf_coef: float = 0.5,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """reinforce_loss + vf_coef * value_loss, sharing one forward pass."""
+    logits, values = policy_forward(pi, inputs.obs)
+    pg, pg_metrics = reinforce_loss_from_logits(logits, inputs)
+    vl, v_metrics = value_loss_from_values(values, inputs)
+    return pg + vf_coef * vl, {**pg_metrics, **v_metrics}
 
 
 # ---------------------------------------------------------------------------
