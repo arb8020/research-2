@@ -1,4 +1,7 @@
-"""Produce experience — from the real env or from the world model."""
+"""Produce experience for the world model, and imagined experience from it.
+
+On-policy collection from the real env lives in robots/collect.py.
+"""
 
 from __future__ import annotations
 
@@ -73,68 +76,6 @@ def collect_transitions(
     return transitions
 
 
-def collect_policy_rollout(
-    env: gymnasium.Env,
-    pi: PolicyWeights,
-    num_steps: int,
-) -> list[PolicyStep]:
-    """Collect on-policy experience from a real env.
-
-    Each step records the logprob and value from the policy at collection time,
-    which is what REINFORCE needs for its gradient.
-    """
-    steps: list[PolicyStep] = []
-    obs, _ = env.reset()
-    obs_t = torch.tensor(obs, dtype=torch.float32)
-
-    for _ in range(num_steps):
-        logits, value = policy_forward(pi, obs_t.unsqueeze(0))  # (1, act_dim), (1,)
-        dist = torch.distributions.Categorical(logits=logits)
-        action = dist.sample()
-        logprob = dist.log_prob(action).item()
-
-        next_obs, reward, terminated, truncated, _ = env.step(action.item())
-        next_obs_t = torch.tensor(next_obs, dtype=torch.float32)
-        done = terminated or truncated
-
-        steps.append(
-            PolicyStep(
-                obs=obs_t,
-                action=action.item(),
-                reward=float(reward),
-                done=done,
-                logprob=logprob,
-                value=value.item(),
-            )
-        )
-
-        if done:
-            obs, _ = env.reset()
-            obs_t = torch.tensor(obs, dtype=torch.float32)
-        else:
-            obs_t = next_obs_t
-
-    return steps
-
-
-def policy_collector(
-    env: gymnasium.Env,
-    pi: PolicyWeights,
-    num_steps: int,
-) -> Callable[[], list[PolicyStep]]:
-    """Returns a get_batch() callable for model-free RL.
-
-    Each call collects num_steps of on-policy experience (full episodes,
-    resetting on done). The returned function closes over env and pi so the
-    caller just calls get_batch() with no args.
-    """
-
-    def get_batch() -> list[PolicyStep]:
-        return collect_policy_rollout(env, pi, num_steps)
-
-    return get_batch
-
-
 # ---------------------------------------------------------------------------
 # Imagine from world model
 # ---------------------------------------------------------------------------
@@ -145,7 +86,17 @@ def imagine_rollout(
     start_obs: torch.Tensor,
     horizon: int,
 ) -> list[PolicyStep]:
-    """Roll out the policy inside the world model for up to `horizon` steps."""
+    """Roll out the policy inside the world model for up to `horizon` steps.
+
+    PHASE B: still emits the old PolicyStep (merged `done`) and cannot feed
+    compute_loss_fn_inputs. To migrate it should return a collect.Batch:
+      - terminated = predicted done; truncated = never (the horizon is a batch cut)
+      - bootstrap_value = 0.0 (no truncation inside imagination)
+      - last_value = V(final predicted obs) if the rollout hit the horizon, else
+        irrelevant (last step terminated)
+      - next_obs = predicted obs; policy_forward under no_grad (logprob/value are
+        detached floats anyway)
+    """
     steps: list[PolicyStep] = []
     obs = start_obs
 
