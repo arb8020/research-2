@@ -16,6 +16,7 @@ from robots.models import init_policy
 from robots.optim import AdamParams, init_adam
 from robots.train import (
     actor_critic_loss,
+    reinforce_loss,
     compute_loss_fn_inputs,
     evaluate,
     record_episode,
@@ -31,6 +32,8 @@ p.add_argument("--rollout-steps", type=int, default=200)
 p.add_argument("--gamma", type=float, default=0.99)
 p.add_argument("--vf-coef", type=float, default=0.5)
 p.add_argument("--seed", type=int, default=0)
+p.add_argument("--loss", choices=["actor_critic", "reinforce"], default="actor_critic",
+               help="reinforce = policy term only (value head untrained; for diagnostics)")
 args = p.parse_args()
 
 # --- setup ---
@@ -48,7 +51,7 @@ eval_env = gymnasium.make("CartPole-v1")
 pi = init_policy(obs_dim=4, act_dim=2)
 cfg = AdamParams(lr=args.lr)
 opt_state = init_adam(pi)
-loss_fn = functools.partial(actor_critic_loss, vf_coef=args.vf_coef)
+loss_fn = functools.partial(actor_critic_loss, vf_coef=args.vf_coef) if args.loss == "actor_critic" else reinforce_loss
 state = rollout_init(env, seed=args.seed)
 
 # --- train ---
@@ -73,5 +76,5 @@ for i in range(1, args.iters + 1):
         print(
             f"step {i}: eval_reward={eval_reward:.1f} "
             f"train_ep_return={m_log.get('train_ep_return', float('nan')):.1f} "
-            f"value_loss={m_log['value_loss']:.2f} entropy={m_log['entropy']:.3f}"
+            f"value_loss={m_log.get('value_loss', float('nan')):.2f} entropy={m_log['entropy']:.3f}"
         )
