@@ -21,7 +21,7 @@ from dataclasses import dataclass, replace
 import gymnasium
 import torch
 
-from robots.models import PolicyWeights, policy_forward
+from robots.models import PolicyWeights, policy_forward, policy_value
 
 
 @dataclass(frozen=True)
@@ -43,7 +43,6 @@ class Step:
     terminated: bool           # real ending (pole fell): future reward = 0
     truncated: bool            # time limit: future reward unknown -> bootstrap with V(next_obs)
     next_obs: torch.Tensor     # (obs_dim,) true next obs, BEFORE any reset
-    logprob: float             # detached, from collection time
     value: float               # detached V(obs), from collection time
     bootstrap_value: float     # detached V(next_obs) if truncated (and not terminated), else 0.0
 
@@ -54,7 +53,9 @@ class EpisodeEnd:
 
     episode_return: float
     episode_len: int
-    truncated: bool
+    timed_out: bool   # ended by the time limit with the future unknown (bootstrapped).
+                      # False if terminated, even when gymnasium also set Step.truncated
+                      # on the same step (termination wins). Not the raw truncated flag.
 
 
 @dataclass(frozen=True)
@@ -67,13 +68,6 @@ class Batch:
 
 def _to_tensor(obs) -> torch.Tensor:
     return torch.tensor(obs, dtype=torch.float32)
-
-
-def value_of(pi: PolicyWeights, obs: torch.Tensor) -> float:
-    """Detached V(obs) for a single obs (obs_dim,)."""
-    with torch.no_grad():
-        _, value = policy_forward(pi, obs.unsqueeze(0))  # (1,)
-    return value.item()
 
 
 def rollout_init(env: gymnasium.Env, seed: int | None = None) -> RolloutState:
@@ -91,7 +85,6 @@ def collect_step(
         logits, value = policy_forward(pi, state.obs.unsqueeze(0))  # (1, act_dim), (1,)
         dist = torch.distributions.Categorical(logits=logits)
         action = dist.sample()
-        logprob = dist.log_prob(action)
 
     next_obs, reward, terminated, truncated, _ = env.step(action.item())
     next_obs_t = _to_tensor(next_obs)
@@ -99,7 +92,7 @@ def collect_step(
     # gymnasium can report terminated AND truncated on the time-limit step.
     # A real ending wins: the future is known to be zero, nothing to bootstrap.
     needs_bootstrap = bool(truncated) and not bool(terminated)
-    bootstrap_value = value_of(pi, next_obs_t) if needs_bootstrap else 0.0
+    bootstrap_value = policy_value(pi, next_obs_t) if needs_bootstrap else 0.0
 
     step = Step(
         obs=state.obs,
@@ -108,7 +101,6 @@ def collect_step(
         terminated=bool(terminated),
         truncated=bool(truncated),
         next_obs=next_obs_t,
-        logprob=logprob.item(),
         value=value.item(),
         bootstrap_value=bootstrap_value,
     )
@@ -117,7 +109,7 @@ def collect_step(
     ep_len = state.episode_len + 1
 
     if terminated or truncated:
-        ended = EpisodeEnd(episode_return=ep_return, episode_len=ep_len, truncated=needs_bootstrap)
+        ended = EpisodeEnd(episode_return=ep_return, episode_len=ep_len, timed_out=needs_bootstrap)
         return rollout_init(env), step, ended
 
     return replace(state, obs=next_obs_t, episode_return=ep_return, episode_len=ep_len), step, None
@@ -142,6 +134,6 @@ def collect(
         steps=steps,
         episodes=episodes,
         last_obs=state.obs,
-        last_value=value_of(pi, state.obs),
+        last_value=policy_value(pi, state.obs),
     )
     return state, batch
