@@ -16,6 +16,8 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
+from robots.tree import register_pytree
+
 
 # ---------------------------------------------------------------------------
 # Weight dataclasses (same shapes as kelpie/gpt2.py)
@@ -35,18 +37,21 @@ class GPT2Config:
         return self.hidden // self.n_heads
 
 
+@register_pytree
 @dataclass(frozen=True)
 class Norm:
     w: torch.Tensor  # (hidden,)
     b: torch.Tensor  # (hidden,)
 
 
+@register_pytree
 @dataclass(frozen=True)
 class Linear:
     w: torch.Tensor  # (in, out) — Conv1D layout, applied as x @ w
     b: torch.Tensor
 
 
+@register_pytree
 @dataclass(frozen=True)
 class Layer:
     ln_1: Norm
@@ -57,6 +62,7 @@ class Layer:
     proj: Linear        # (4 * hidden, hidden)
 
 
+@register_pytree
 @dataclass(frozen=True)
 class GPT2:
     wte: torch.Tensor   # (vocab, hidden) — also the lm head (tied)
