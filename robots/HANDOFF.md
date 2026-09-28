@@ -6,24 +6,31 @@ All on `main`. Design notes in `robots/docs/notes.md`.
 
 **SDK** (`robots/`) — a minimal training toolkit. Data + functions, no nn.Module.
 
-- **`optim.py`** — Adam from scratch (15 lines of math, parity-tested against torch.optim).
-  `AdamParams` config dataclass (tinker-style). `OptimizerHandle` (zero/step pair).
-  LR scheduling, gradient accumulation, param groups.
-- **`train.py`** — `train_step(get_batch, loss_fn, weights, opt)` — one training step.
-  `reinforce_loss`, `evaluate`, `record_episode` for RL.
-- **`models.py`** — `PolicyWeights`, `WMWeights` frozen dataclasses + free forward functions.
-  Explicit matmuls (`obs @ w.w1.T + w.b1`), no nn.Module.
-- **`rollout.py`** — `PolicyStep`, `Transition`, `collect_transitions`, `imagine_rollout`,
-  `policy_collector` (returns a `() -> batch` callable for model-free RL).
-- **`tree.py`** — `tensor_leaves(tree)` walks any frozen dataclass, returns all tensors.
-  `trainable(tree)` clones with requires_grad. Replaces hand-written `*_params()`.
-- **`lm.py`** — GPT-2 frozen dataclasses + training forward (standard causal attention,
-  `F.scaled_dot_product_attention(is_causal=True)`). `cross_entropy_loss`, `token_loader`,
+- **`tree.py`** — `register_pytree(cls)` (weight dataclasses are torch pytrees, so
+  `torch.func.grad` takes/returns them), `tree_map`, `tree_copy_`, `tensor_leaves`.
+- **`optim.py`** — Adam as data + pure functions. `AdamParams` (config), `AdamState(m, v)`,
+  `init_adam(params)`, `adam_scalars(cfg, step, device)` (host side, 1-based),
+  `adam_update` (pure) / `adam_update_` (in place). The loop owns the int step.
+- **`train.py`** — generic: `forward_backward(loss_fn, w, inputs) -> (grads: W, metrics)`,
+  `train_step(loss_fn, w, opt_state, inputs, cfg, step) -> (opt_state, metrics)`
+  (= forward_backward + adam_update_), `train_loop`, `to_floats`. Loss fns return
+  `(loss, dict[str, Tensor])`, no `.item()`. RL: `compute_loss_fn_inputs(batch, gamma)
+  -> LossFnInputs` (dict: obs/actions/returns/advantages; bootstrapped, pure),
+  `reinforce_loss`, `value_loss`, `actor_critic_loss`, `evaluate`, `record_episode`.
+- **`collect.py`** — on-policy collection, state in / state out:
+  `rollout_init(env)`, `collect(env, pi, state, n) -> (state, Batch)`. Episodes span batches;
+  records `bootstrap_value` (truncation) and `last_value` (batch cut).
+- **`models.py`** — `PolicyWeights`, `WMWeights` + free forward functions, `policy_value`,
+  `wm_loss`, `transitions_to_inputs`.
+- **`rollout.py`** — `collect_transitions` (world-model data), `imagine_rollout -> Batch`.
+- **`lm.py`** — GPT-2 frozen dataclasses + forward, `cross_entropy_loss`, `token_loader`,
   `generate`. Self-contained, no kelpie dependency.
 
 **Examples** (`examples/`):
-- `cartpole_modelfree.py` — model-free REINFORCE. Learns: eval_reward 25 → 300.
-- `cartpole_modelbased.py` — model-based (world model + imagined rollouts). Doesn't learn yet.
+- `cartpole_modelfree.py` — model-free actor-critic (collect → compute_loss_fn_inputs → train_step).
+  After the 2026-09-27 fixes it learns much slower than the old buggy REINFORCE (see notes below).
+- `compare_runs.py` — compare run jsonl files (eval curves + metric trends).
+- `cartpole_modelbased.py` — model-based (world model + imagined rollouts). Runs on the new API; doesn't learn yet.
 - `gpt2_pretrain.py` — GPT-2 (124M) on tiny shakespeare. Loss 4.87 → 4.54 in 10 steps.
 
 **Dashboard** (`observe/dashboard/`) — Vega-Lite charts, DuckDB queries, CartPole rollout
@@ -54,12 +61,13 @@ Gates: `cd robots && uv run pytest`, `cd observe/dashboard && bun run typecheck 
   mutable state. If you don't have that, a function and a dataclass are simpler."
 - **Loss function returns `(loss, metrics_dict)`.** Tinker/leviathan pattern. The dashboard
   auto-discovers metric names.
-- **Optimizer is a config dataclass** (`AdamParams`), not a closure or an object. Matches tinker's
-  `optim_step(AdamParams(...))`. `make_optimizer` dispatches on config type.
+- **Optimizer is config + state data** (`AdamParams`, `AdamState`) and pure functions; the loop
+  owns the step counter and calls `train_step(..., cfg, step)`.
 - **Examples own their loops.** No `run()` or `train_loop` in the sdk. The example writes
   `for i in range(n): m = train_step(...)`. Simpler to read, extend, modify.
-- **`get_batch` is pluggable.** Model-free: `policy_collector(env, pi)`. Model-based: imagine
-  from world model. LLM: `token_loader(text, seq_len, batch_size)`. Same `train_step`.
+- **Inputs are whatever the loss reads.** Model-free: `collect` + `compute_loss_fn_inputs`.
+  Model-based: `imagine_rollout` + `compute_loss_fn_inputs`. LLM: `(token_loader(...)(), config)`.
+  Same `train_step`.
 - **Mutation now, functional signature later.** Adam mutates tensors in place. The API shape
   (return metrics, could return new weights) is designed for torch.compile/JIT later, where
   the compiler can reuse memory automatically.

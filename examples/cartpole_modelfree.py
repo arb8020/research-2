@@ -48,6 +48,7 @@ torch.manual_seed(args.seed)
 # (which resets its env) must not share it.
 env = gymnasium.make("CartPole-v1")
 eval_env = gymnasium.make("CartPole-v1")
+eval_env.reset(seed=args.seed + 1)  # later unseeded resets continue this RNG: runs are reproducible
 pi = init_policy(obs_dim=4, act_dim=2)
 cfg = AdamParams(lr=args.lr)
 opt_state = init_adam(pi)
