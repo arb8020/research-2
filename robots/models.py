@@ -161,8 +161,7 @@ def wm_forward(
 
     obs: (batch, obs_dim), action: (batch,) int — one-hot encoded internally.
     """
-    action_onehot = torch.zeros(obs.shape[0], w.act_dim, device=obs.device)
-    action_onehot.scatter_(1, action.unsqueeze(1), 1.0)
+    action_onehot = F.one_hot(action, w.act_dim).to(obs.dtype)  # (batch, act_dim)
 
     x = torch.cat([obs, action_onehot], dim=1)  # (batch, obs_dim + act_dim)
     h = F.relu(x @ w.w1.T + w.b1)  # (batch, hidden)
@@ -174,27 +173,30 @@ def wm_forward(
     return pred_obs, pred_reward, pred_done
 
 
-def wm_train_step(
+def transitions_to_inputs(transitions: list[Transition]) -> dict[str, torch.Tensor]:
+    """list[Transition] -> named tensors for wm_loss (keys: obs, actions, next_obs, rewards, dones)."""
+    assert len(transitions) > 0
+    return {
+        "obs": torch.stack([t.obs for t in transitions]),
+        "actions": torch.tensor([t.action for t in transitions], dtype=torch.long),
+        "next_obs": torch.stack([t.next_obs for t in transitions]),
+        "rewards": torch.tensor([t.reward for t in transitions], dtype=torch.float32),
+        "dones": torch.tensor([t.done for t in transitions], dtype=torch.float32),
+    }
+
+
+def wm_loss(
     w: WMWeights,
-    opt: "robots.optim.OptimizerHandle",
-    transitions: list[Transition],
-) -> float:
-    """One gradient step on a batch of transitions. Returns loss."""
-    obs = torch.stack([t.obs for t in transitions])
-    actions = torch.tensor([t.action for t in transitions], dtype=torch.long)
-    next_obs = torch.stack([t.next_obs for t in transitions])
-    rewards = torch.tensor([t.reward for t in transitions], dtype=torch.float32)
-    dones = torch.tensor([t.done for t in transitions], dtype=torch.float32)
-
-    pred_obs, pred_reward, pred_done = wm_forward(w, obs, actions)
-
-    loss_obs = F.mse_loss(pred_obs, next_obs)
-    loss_reward = F.mse_loss(pred_reward, rewards)
-    loss_done = F.binary_cross_entropy_with_logits(pred_done, dones)
-    loss = loss_obs + loss_reward + loss_done
-
-    opt.zero()
-    loss.backward()
-    opt.step()
-
-    return loss.item()
+    inputs: dict[str, torch.Tensor],
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Supervised world-model loss: MSE(next_obs) + MSE(reward) + BCE(done). torch.func-safe."""
+    pred_obs, pred_reward, pred_done = wm_forward(w, inputs["obs"], inputs["actions"])
+    loss_obs = F.mse_loss(pred_obs, inputs["next_obs"])
+    loss_reward = F.mse_loss(pred_reward, inputs["rewards"])
+    loss_done = F.binary_cross_entropy_with_logits(pred_done, inputs["dones"])
+    metrics = {
+        "wm_obs_loss": loss_obs.detach(),
+        "wm_reward_loss": loss_reward.detach(),
+        "wm_done_loss": loss_done.detach(),
+    }
+    return loss_obs + loss_reward + loss_done, metrics

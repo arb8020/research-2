@@ -6,31 +6,19 @@ On-policy collection from the real env lives in robots/collect.py.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import gymnasium
 import torch
 
+from robots.collect import Batch, EpisodeEnd, Step
 from robots.models import (
     PolicyWeights,
     Transition,
     WMWeights,
-    policy_act,
     policy_forward,
+    policy_value,
     wm_forward,
 )
-
-
-@dataclass(frozen=True)
-class PolicyStep:
-    """One step of policy experience. Works for both real and imagined rollouts."""
-
-    obs: torch.Tensor
-    action: int
-    reward: float
-    done: bool
-    logprob: float
-    value: float
 
 
 # ---------------------------------------------------------------------------
@@ -85,44 +73,46 @@ def imagine_rollout(
     pi: PolicyWeights,
     start_obs: torch.Tensor,
     horizon: int,
-) -> list[PolicyStep]:
+) -> Batch:
     """Roll out the policy inside the world model for up to `horizon` steps.
 
-    PHASE B: still emits the old PolicyStep (merged `done`) and cannot feed
-    compute_loss_fn_inputs. To migrate it should return a collect.Batch:
-      - terminated = predicted done; truncated = never (the horizon is a batch cut)
-      - bootstrap_value = 0.0 (no truncation inside imagination)
-      - last_value = V(final predicted obs) if the rollout hit the horizon, else
-        irrelevant (last step terminated)
-      - next_obs = predicted obs; policy_forward under no_grad (value is a
-        detached float anyway); drop logprob (Step has none until PPO)
-      - terminated steps must carry bootstrap_value == 0.0 (compute_returns asserts it)
+    Emits the same Batch as robots.collect.collect, so compute_loss_fn_inputs
+    works unchanged:
+      terminated      = predicted done (sigmoid > 0.5); the rollout stops there
+      truncated       = False (imagination has no time limit)
+      bootstrap_value = 0.0 (only truncation bootstraps)
+      last_value      = V(final imagined obs): the horizon is a batch cut. Unused
+                        when the last step terminated.
     """
-    steps: list[PolicyStep] = []
-    obs = start_obs
+    assert horizon > 0
+    steps: list[Step] = []
+    episodes: list[EpisodeEnd] = []
+    obs = start_obs.detach()
+    episode_return = 0.0
 
     for _ in range(horizon):
-        logits, value = policy_forward(pi, obs.unsqueeze(0))  # (1, act_dim), (1,)
-        dist = torch.distributions.Categorical(logits=logits)
-        action = dist.sample()
-        logprob = dist.log_prob(action).item()
-
         with torch.no_grad():
+            logits, value = policy_forward(pi, obs.unsqueeze(0))  # (1, act_dim), (1,)
+            action = torch.distributions.Categorical(logits=logits).sample()  # (1,)
             pred_obs, pred_reward, pred_done = wm_forward(wm, obs.unsqueeze(0), action)
-
+        next_obs = pred_obs.squeeze(0)
+        terminated = pred_done.sigmoid().item() > 0.5
         steps.append(
-            PolicyStep(
-                obs=obs.detach(),
+            Step(
+                obs=obs,
                 action=action.item(),
                 reward=pred_reward.item(),
-                done=pred_done.sigmoid().item() > 0.5,
-                logprob=logprob,
+                terminated=terminated,
+                truncated=False,
+                next_obs=next_obs,
                 value=value.item(),
+                bootstrap_value=0.0,
             )
         )
-
-        obs = pred_obs.squeeze(0).detach()
-        if steps[-1].done:
+        episode_return += pred_reward.item()
+        obs = next_obs
+        if terminated:
+            episodes.append(EpisodeEnd(episode_return=episode_return, episode_len=len(steps), timed_out=False))
             break
 
-    return steps
+    return Batch(steps=steps, episodes=episodes, last_obs=obs, last_value=policy_value(pi, obs))
