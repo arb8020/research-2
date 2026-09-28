@@ -90,8 +90,8 @@ Gates: `cd robots && uv run pytest`, `cd observe/dashboard && bun run typecheck 
 2. **PPO.** Write `ppo_loss` with same `LossFn` signature. Clipping is a fix for REINFORCE's
    high variance. The functional refactor makes this a ~30 line addition.
 3. **Extract the training sdk** into its own package (working name: the intersection of
-   kelpie + leviathan + robots). `tensor_leaves`, `trainable`, `train_step`, `AdamParams`,
-   `make_optimizer` are already generic.
+   kelpie + leviathan + robots). `tree_map`, `forward_backward`, `train_step`, `AdamParams`,
+   `adam_update_` are already generic.
 4. **Muon optimizer.** Write `MuonParams` + `muon_step`. Needed for LLM training at scale
    (nanochat/modded-nanogpt style).
 5. **RL understanding doc.** Discovery-fiction style (like the LLM/GPT notes on arb8020.github.io).
