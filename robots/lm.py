@@ -9,7 +9,6 @@ function on the same weights.
 from __future__ import annotations
 
 import json
-import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -128,8 +127,8 @@ def attention(h: torch.Tensor, layer: Layer, config: GPT2Config) -> torch.Tensor
 def cross_entropy_loss(
     weights: GPT2,
     batch: tuple[torch.Tensor, GPT2Config],
-) -> tuple[torch.Tensor, dict[str, float]]:
-    """(weights, (tokens, config)) -> (loss, metrics).
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """(weights, (tokens, config)) -> (loss, metrics). torch.func-safe (no .item()).
 
     tokens: (batch, seq_len+1). Input = tokens[:, :-1], target = tokens[:, 1:].
     """
@@ -140,10 +139,8 @@ def cross_entropy_loss(
     logits = gpt2_forward(weights, config, inputs)  # (B, T, vocab)
     loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.reshape(-1))
 
-    return loss, {
-        "loss": loss.item(),
-        "ppl": math.exp(min(loss.item(), 20.0)),  # cap to avoid overflow
-    }
+    # "loss" itself is added by forward_backward; ppl capped to avoid overflow.
+    return loss, {"ppl": loss.detach().clamp(max=20.0).exp()}
 
 
 # ---------------------------------------------------------------------------

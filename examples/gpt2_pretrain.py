@@ -17,9 +17,9 @@ import torch
 from observe import metrics, setup_logging
 from observe.git import git_info
 from robots.lm import GPT2Config, cross_entropy_loss, generate, load_gpt2, token_loader
-from robots.optim import AdamParams, make_optimizer
-from robots.train import train_step
-from robots.tree import tensor_leaves, trainable
+from robots.optim import AdamParams, init_adam
+from robots.train import to_floats, train_step
+from robots.tree import tensor_leaves
 
 SHAKESPEARE_URL = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
 
@@ -62,28 +62,24 @@ text = download_shakespeare()
 token_ids = enc.encode(text)
 print(f"  {len(text):,} chars -> {len(token_ids):,} tokens")
 
-# Load GPT-2 weights and make trainable
+# Load GPT-2 weights. No requires_grad needed: forward_backward uses torch.func.grad.
 print("Loading GPT-2 weights...")
 weights, config = load_gpt2(device=args.device)
-weights = trainable(weights)
-params = tensor_leaves(weights)
-print(f"  {sum(p.numel() for p in params):,} parameters")
+print(f"  {sum(p.numel() for p in tensor_leaves(weights)):,} parameters")
 
-# Optimizer
-opt = make_optimizer(params, AdamParams(lr=args.lr))
+# Optimizer: config + state; the loop owns the step counter
+cfg = AdamParams(lr=args.lr)
+opt_state = init_adam(weights)
 
-# Data loader — returns (tokens,) batch; cross_entropy_loss needs (tokens, config)
+# Data loader — returns tokens; cross_entropy_loss takes (tokens, config)
 raw_loader = token_loader(token_ids, seq_len=args.seq_len, batch_size=args.batch_size, device=args.device)
-
-
-def get_batch():
-    return (raw_loader(), config)
 
 
 # --- train ---
 print(f"\nTraining for {args.iters} steps...")
 for i in range(1, args.iters + 1):
-    m = train_step(get_batch, cross_entropy_loss, weights, opt)
+    opt_state, m_t = train_step(cross_entropy_loss, weights, opt_state, (raw_loader(), config), cfg, step=i)
+    m = to_floats(m_t)
     metrics(m, step=i)
 
     if i % 10 == 0 or i == 1:
