@@ -7,7 +7,7 @@ import torch
 
 from robots.lm import GPT2, Layer, Linear, Norm
 from robots.models import PolicyWeights, WMWeights, init_policy, init_wm, policy_forward, wm_forward
-from robots.tree import tensor_leaves, trainable, tree_copy_, tree_map
+from robots.tree import register_pytree, tensor_leaves, trainable, tree_copy_, tree_map
 
 
 def test_grad_over_policy_weights_returns_policy_weights():
@@ -82,3 +82,21 @@ def test_unregistered_dataclass_is_an_error():
 
     with pytest.raises(TypeError, match="register_pytree"):
         tree_map(lambda x: x, [Loose(w=torch.ones(1))])
+
+
+def test_none_vs_tensor_field_mismatch_names_the_field():
+    @register_pytree
+    @dataclass(frozen=True)
+    class MaybeBias:
+        w: torch.Tensor
+        b: torch.Tensor | None
+
+    with_bias = MaybeBias(w=torch.ones(1), b=torch.ones(1))
+    without = MaybeBias(w=torch.ones(1), b=None)
+    with pytest.raises(ValueError, match=r"structure mismatch.*only in first: \['\.b'\]"):
+        tree_map(lambda a, b: a + b, with_bias, without)
+
+
+def test_non_tensor_leaf_in_list_names_the_path():
+    with pytest.raises(TypeError, match=r"\[1\]: non-tensor leaf int"):
+        tree_map(lambda x: x, [torch.ones(1), 3])

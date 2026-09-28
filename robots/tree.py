@@ -77,24 +77,47 @@ def register_pytree(cls: type) -> type:
     return cls
 
 
-def _check_no_unregistered(leaves: list[Any]) -> None:
-    # An unregistered dataclass would silently become a single opaque leaf.
-    for leaf in leaves:
+def _flatten(tree: Any) -> tuple[list[torch.Tensor], Any]:
+    """Flatten and check every leaf is a Tensor; errors name the offending path."""
+    path_leaves, spec = pytree.tree_flatten_with_path(tree)
+    for path, leaf in path_leaves:
+        if isinstance(leaf, torch.Tensor):
+            continue
+        where = pytree.keystr(path) or "<root>"
         if dataclasses.is_dataclass(leaf) and not isinstance(leaf, type):
             raise TypeError(
-                f"{type(leaf).__qualname__} is a dataclass but not a registered pytree; "
+                f"{where}: {type(leaf).__qualname__} is a dataclass but not a registered pytree; "
                 f"decorate it with @robots.tree.register_pytree"
             )
+        raise TypeError(
+            f"{where}: non-tensor leaf {type(leaf).__name__} ({leaf!r}). Weight trees hold only "
+            f"tensors in containers; scalars belong in dataclass fields (static), not in lists/tuples/dicts"
+        )
+    return [leaf for _, leaf in path_leaves], spec
+
+
+def _flatten_like(tree: Any, spec: Any, ref: Any) -> list[torch.Tensor]:
+    """Flatten `tree` and require the same structure as `ref` (whose spec is `spec`)."""
+    leaves, other_spec = _flatten(tree)
+    if other_spec != spec:
+        ref_paths = {pytree.keystr(p) for p, _ in pytree.tree_flatten_with_path(ref)[0]}
+        other_paths = {pytree.keystr(p) for p, _ in pytree.tree_flatten_with_path(tree)[0]}
+        raise ValueError(
+            "tree structure mismatch "
+            f"(e.g. a field is None/scalar in one tree and a tensor in the other, or static fields differ). "
+            f"only in first: {sorted(ref_paths - other_paths)}; only in other: {sorted(other_paths - ref_paths)}"
+        )
+    return leaves
 
 
 def tree_map(fn: Callable[..., Any], tree: Any, *rest: Any) -> Any:
     """Apply fn leafwise across trees of identical structure. Returns a tree like `tree`.
 
-    Static (non-tensor) fields come from `tree` and must match in `rest`.
+    Every leaf must be a Tensor. Static (non-tensor) dataclass fields come from
+    `tree` and must be equal in `rest`.
     """
-    leaves, spec = pytree.tree_flatten(tree)
-    _check_no_unregistered(leaves)
-    rest_leaves = [spec.flatten_up_to(r) for r in rest]
+    leaves, spec = _flatten(tree)
+    rest_leaves = [_flatten_like(r, spec, tree) for r in rest]
     mapped = [fn(*xs) for xs in zip(leaves, *rest_leaves, strict=True)]
     return pytree.tree_unflatten(mapped, spec)
 
@@ -106,25 +129,17 @@ def tree_copy_(dst: Any, src: Any) -> None:
     (no full-size temporaries). Caller decides grad mode (leaves that require grad
     need torch.no_grad()).
     """
-    dst_leaves, spec = pytree.tree_flatten(dst)
-    _check_no_unregistered(dst_leaves)
-    src_leaves = spec.flatten_up_to(src)
+    dst_leaves, spec = _flatten(dst)
+    src_leaves = _flatten_like(src, spec, dst)
     for d, s in zip(dst_leaves, src_leaves, strict=True):
         d.copy_(s)
 
 
 def tensor_leaves(tree: Any) -> list[torch.Tensor]:
     """Every Tensor in the tree, in stable pytree order (field order, depth-first)."""
-    leaves = pytree.tree_leaves(tree)
-    _check_no_unregistered(leaves)
-    return [x for x in leaves if isinstance(x, torch.Tensor)]
+    return _flatten(tree)[0]
 
 
 def trainable(tree: Any) -> Any:
     """Clone every tensor with requires_grad=True. Returns a new tree; the original is untouched."""
-    def clone(x: Any) -> Any:
-        if isinstance(x, torch.Tensor):
-            return x.clone().detach().requires_grad_(True)
-        return x  # scalars inside lists/tuples pass through
-
-    return tree_map(clone, tree)
+    return tree_map(lambda x: x.clone().detach().requires_grad_(True), tree)
