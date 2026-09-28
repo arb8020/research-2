@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gymnasium
+import pytest
 import torch
 
 from robots.collect import collect, rollout_init
@@ -55,18 +56,26 @@ class TestTerminatedTruncated:
         state, batch = collect(env, pi, state, num_steps=n)
         return pi, batch
 
-    def test_flags_match_time_limit(self) -> None:
+    @pytest.mark.parametrize("seed", range(40))
+    def test_flags_match_time_limit(self, seed: int) -> None:
         # Limit 30: random CartPole sometimes falls before 30 (terminated), sometimes hits 30 (truncated).
-        pi, batch = self._steps(max_episode_steps=30, n=600)
+        pi, batch = self._steps(max_episode_steps=30, n=600, seed=seed)
         terminated = [s for s in batch.steps if s.terminated]
         truncated = [s for s in batch.steps if s.truncated]
         assert terminated, "expected some real endings"
         assert truncated, "expected some time-limit endings"
-        # Truncation happens exactly at the limit: its episode is 30 long.
-        truncated_eps = [e for e in batch.episodes if e.truncated]
-        terminated_eps = [e for e in batch.episodes if not e.truncated]
-        assert all(e.episode_len == 30 for e in truncated_eps)
-        assert all(e.episode_len < 30 for e in terminated_eps)
+        # A time-out happens exactly at the limit. A real ending can happen at any
+        # length <= 30 -- including ON the limit step, where gymnasium sets both
+        # flags and termination wins (timed_out=False, len 30).
+        timed_out_eps = [e for e in batch.episodes if e.timed_out]
+        terminated_eps = [e for e in batch.episodes if not e.timed_out]
+        assert all(e.episode_len == 30 for e in timed_out_eps)
+        assert all(e.episode_len <= 30 for e in terminated_eps)
+        # Step flags -> EpisodeEnd.timed_out, one ending step per finished episode.
+        ending_steps = [s for s in batch.steps if s.terminated or s.truncated]
+        assert len(ending_steps) == len(batch.episodes)
+        for s, e in zip(ending_steps, batch.episodes):
+            assert e.timed_out == (s.truncated and not s.terminated)
 
     def test_bootstrap_value_only_on_truncated(self) -> None:
         pi, batch = self._steps(max_episode_steps=30, n=600)

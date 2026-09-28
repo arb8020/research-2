@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, TypeAlias, TypeVar
 
 import gymnasium
 import torch
@@ -22,13 +21,18 @@ log = logging.getLogger("robots.train")
 # Generic training loop (extract to loop.py when a second caller exists)
 # ---------------------------------------------------------------------------
 
+W = TypeVar("W")
+I = TypeVar("I")
+
 GetBatch = Callable[[], Any]
-LossFn = Callable[[Any, Any], tuple[torch.Tensor, dict[str, float]]]
+# (weights, inputs) -> (scalar loss, metrics). Metrics are tensors so a LossFn
+# stays torch.func-safe (no .item()); convert to floats at the logging edge.
+LossFn = Callable[[W, I], tuple[torch.Tensor, dict[str, torch.Tensor]]]
 
 
 def train_step(
     get_batch: GetBatch,
-    loss_fn: LossFn,
+    loss_fn: LossFn[Any, Any],
     weights: Any,
     opt: OptimizerHandle,
     grad_accum_steps: int = 1,
@@ -55,7 +59,7 @@ OnIter = Callable[[int, dict[str, float]], None]
 
 def train_loop(
     get_batch: GetBatch,
-    loss_fn: LossFn,
+    loss_fn: LossFn[Any, Any],
     weights: Any,
     params: list[torch.Tensor] | None = None,
     optimizer: AdamParams | list[ParamGroup] = AdamParams(),
@@ -81,13 +85,8 @@ def train_loop(
 # Generic: gradients as data (torch.func)
 # ---------------------------------------------------------------------------
 
-W = TypeVar("W")
-I = TypeVar("I")
-FuncLossFn = Callable[[W, I], tuple[torch.Tensor, dict[str, torch.Tensor]]]
-
-
 def forward_backward(
-    loss_fn: FuncLossFn[W, I],
+    loss_fn: LossFn[W, I],
     weights: W,
     inputs: I,
 ) -> tuple[W, dict[str, torch.Tensor]]:
@@ -108,15 +107,13 @@ def forward_backward(
 # RL-specific: batch -> loss inputs (pure)
 # ---------------------------------------------------------------------------
 
-@dataclass(frozen=True)
-class LossFnInputs:
-    """A processed Batch: exactly the per-step tensors the RL losses read."""
-
-    obs: torch.Tensor         # (T, obs_dim)
-    actions: torch.Tensor     # (T,) long
-    logprobs: torch.Tensor    # (T,) log pi_old(a|s) from collection time (for PPO ratios)
-    returns: torch.Tensor     # (T,) value target
-    advantages: torch.Tensor  # (T,) returns - collected V(obs); constants, no grad
+# A processed Batch (Tinker style: named tensors, losses read the keys they need).
+# compute_loss_fn_inputs produces:
+#   "obs"        (T, obs_dim) float
+#   "actions"    (T,) long
+#   "returns"    (T,) value target
+#   "advantages" (T,) returns - collected V(obs); constants, no grad
+LossFnInputs: TypeAlias = dict[str, torch.Tensor]
 
 
 def compute_returns(steps: list[Step], last_value: float, gamma: float) -> list[float]:
@@ -131,6 +128,8 @@ def compute_returns(steps: list[Step], last_value: float, gamma: float) -> list[
     returns: list[float] = []
     g = last_value
     for step in reversed(steps):
+        # Invalid state: a real ending has no future to bootstrap from.
+        assert not step.terminated or step.bootstrap_value == 0.0, step
         ended = step.terminated or step.truncated
         future = step.bootstrap_value if ended else g
         g = step.reward + gamma * future
@@ -144,13 +143,12 @@ def compute_loss_fn_inputs(batch: Batch, gamma: float) -> LossFnInputs:
     assert len(batch.steps) > 0
     returns = torch.tensor(compute_returns(batch.steps, batch.last_value, gamma), dtype=torch.float32)
     values = torch.tensor([s.value for s in batch.steps], dtype=torch.float32)
-    return LossFnInputs(
-        obs=torch.stack([s.obs for s in batch.steps]),
-        actions=torch.tensor([s.action for s in batch.steps], dtype=torch.long),
-        logprobs=torch.tensor([s.logprob for s in batch.steps], dtype=torch.float32),
-        returns=returns,
-        advantages=returns - values,
-    )
+    return {
+        "obs": torch.stack([s.obs for s in batch.steps]),
+        "actions": torch.tensor([s.action for s in batch.steps], dtype=torch.long),
+        "returns": returns,
+        "advantages": returns - values,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -168,9 +166,9 @@ def reinforce_loss_from_logits(
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Policy-gradient term: mean(-log pi(a|s) * advantage). logits (T, act_dim)."""
     log_probs_all = F.log_softmax(logits, dim=-1)                                   # (T, act_dim)
-    logprob = log_probs_all.gather(1, inputs.actions.unsqueeze(1)).squeeze(1)       # (T,)
+    logprob = log_probs_all.gather(1, inputs["actions"].unsqueeze(1)).squeeze(1)       # (T,)
     entropy = -(log_probs_all.exp() * log_probs_all).sum(dim=-1)                    # (T,)
-    advantages = inputs.advantages.detach()
+    advantages = inputs["advantages"].detach()
     loss = -(logprob * advantages).mean()
     metrics = {
         "pi_loss": loss.detach(),
@@ -186,11 +184,11 @@ def value_loss_from_values(
     inputs: LossFnInputs,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Value regression term: mean((V(s) - return)^2). values (T,)."""
-    loss = ((values - inputs.returns.detach()) ** 2).mean()
+    loss = ((values - inputs["returns"].detach()) ** 2).mean()
     metrics = {
         "value_loss": loss.detach(),
         "value_mean": values.mean().detach(),
-        "return_mean": inputs.returns.mean(),
+        "return_mean": inputs["returns"].mean(),
     }
     return loss, metrics
 
@@ -200,7 +198,7 @@ def reinforce_loss(
     inputs: LossFnInputs,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Classic REINFORCE (with the collected value as baseline). Does not train the value head."""
-    logits, _ = policy_forward(pi, inputs.obs)
+    logits, _ = policy_forward(pi, inputs["obs"])
     return reinforce_loss_from_logits(logits, inputs)
 
 
@@ -209,7 +207,7 @@ def value_loss(
     inputs: LossFnInputs,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Trains V(obs) toward the bootstrapped returns."""
-    _, values = policy_forward(pi, inputs.obs)
+    _, values = policy_forward(pi, inputs["obs"])
     return value_loss_from_values(values, inputs)
 
 
@@ -219,7 +217,7 @@ def actor_critic_loss(
     vf_coef: float = 0.5,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """reinforce_loss + vf_coef * value_loss, sharing one forward pass."""
-    logits, values = policy_forward(pi, inputs.obs)
+    logits, values = policy_forward(pi, inputs["obs"])
     pg, pg_metrics = reinforce_loss_from_logits(logits, inputs)
     vl, v_metrics = value_loss_from_values(values, inputs)
     return pg + vf_coef * vl, {**pg_metrics, **v_metrics}

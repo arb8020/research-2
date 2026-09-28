@@ -36,7 +36,7 @@ def _step(reward: float, *, terminated: bool = False, truncated: bool = False,
     return Step(
         obs=torch.zeros(4), action=action, reward=reward,
         terminated=terminated, truncated=truncated, next_obs=torch.zeros(4),
-        logprob=-0.7, value=value, bootstrap_value=bootstrap_value,
+        value=value, bootstrap_value=bootstrap_value,
     )
 
 
@@ -46,20 +46,19 @@ def _batch(steps: list[Step], last_value: float) -> Batch:
 
 def check_returns(steps: list[Step], last_value: float, gamma: float, expected: list[float]) -> None:
     inputs = compute_loss_fn_inputs(_batch(steps, last_value), gamma)
-    got = inputs.returns.tolist()
+    got = inputs["returns"].tolist()
     assert np.allclose(got, expected, atol=1e-6), f"returns: expected {expected}, got {got}"
 
 
 def _random_inputs(T: int = 8, seed: int = 0) -> LossFnInputs:
     g = torch.Generator().manual_seed(seed)
     returns = torch.randn(T, generator=g)
-    return LossFnInputs(
-        obs=torch.randn(T, 4, generator=g),
-        actions=torch.randint(0, 2, (T,), generator=g),
-        logprobs=torch.full((T,), -0.7),
-        returns=returns,
-        advantages=returns - torch.randn(T, generator=g),
-    )
+    return {
+        "obs": torch.randn(T, 4, generator=g),
+        "actions": torch.randint(0, 2, (T,), generator=g),
+        "returns": returns,
+        "advantages": returns - torch.randn(T, generator=g),
+    }
 
 
 def _sgd(w: PolicyWeights, g: PolicyWeights, lr: float) -> PolicyWeights:
@@ -107,17 +106,18 @@ class TestReturns:
     def test_advantages_are_returns_minus_collected_value(self) -> None:
         steps = [_step(1.0, value=0.25), _step(1.0, terminated=True, value=2.0)]
         inputs = compute_loss_fn_inputs(_batch(steps, last_value=0.0), gamma=1.0)
-        assert np.allclose(inputs.returns.tolist(), [2.0, 1.0])
-        assert np.allclose(inputs.advantages.tolist(), [1.75, -1.0])
-        assert not inputs.advantages.requires_grad
+        assert np.allclose(inputs["returns"].tolist(), [2.0, 1.0])
+        assert np.allclose(inputs["advantages"].tolist(), [1.75, -1.0])
+        assert not inputs["advantages"].requires_grad
 
     def test_shapes_and_dtypes(self) -> None:
         steps = [_step(1.0, action=1), _step(0.0)]
         inputs = compute_loss_fn_inputs(_batch(steps, last_value=0.0), gamma=0.9)
-        assert inputs.obs.shape == (2, 4)
-        assert inputs.actions.dtype == torch.long
-        assert inputs.actions.tolist() == [1, 0]
-        for t in (inputs.logprobs, inputs.returns, inputs.advantages):
+        assert inputs["obs"].shape == (2, 4)
+        assert inputs["actions"].dtype == torch.long
+        assert inputs["actions"].tolist() == [1, 0]
+        assert set(inputs) == {"obs", "actions", "returns", "advantages"}
+        for t in (inputs["returns"], inputs["advantages"]):
             assert t.shape == (2,)
             assert t.dtype == torch.float32
 
@@ -195,25 +195,48 @@ class ConstantRewardEnv(gymnasium.Env):
 
     observation_space = gymnasium.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
     action_space = gymnasium.spaces.Discrete(2)
+    terminated = True
+    truncated = False
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
         return np.ones(1, dtype=np.float32), {}
 
     def step(self, action):
-        return np.ones(1, dtype=np.float32), 1.0, True, False, {}
+        return np.ones(1, dtype=np.float32), 1.0, self.terminated, self.truncated, {}
 
 
-def _train_on_probe(loss_fn, iters: int, lr: float) -> tuple[PolicyWeights, PolicyWeights]:
-    """Returns (initial weights, trained weights)."""
+class AlwaysTruncatesEnv(ConstantRewardEnv):
+    """Probe: every episode is cut by a time limit after one step. The future is
+    unknown, so V(s) = 1 + gamma*V(s) -> 1/(1-gamma). Only correct if truncation
+    bootstraps with V(next_obs)."""
+
+    terminated = False
+    truncated = True
+
+
+class NeverEndsEnv(ConstantRewardEnv):
+    """Probe: the episode never ends; only batch cuts. V -> 1/(1-gamma), only
+    correct if the batch end bootstraps with last_value."""
+
+    terminated = False
+    truncated = False
+
+
+PROBE_ITERS = 800
+
+
+def _train_on_probe(
+    env: gymnasium.Env, loss_fn, *, gamma: float, num_steps: int, iters: int, lr: float,
+) -> tuple[PolicyWeights, PolicyWeights]:
+    """collect -> compute_loss_fn_inputs -> forward_backward -> p - lr*g. Returns (initial, trained)."""
     torch.manual_seed(0)
-    env = ConstantRewardEnv()
     pi0 = init_policy(obs_dim=1, act_dim=2, hidden=16)
     pi = pi0
     state = rollout_init(env, seed=0)
     for _ in range(iters):
-        state, batch = collect(env, pi, state, num_steps=16)
-        inputs = compute_loss_fn_inputs(batch, gamma=0.99)
+        state, batch = collect(env, pi, state, num_steps=num_steps)
+        inputs = compute_loss_fn_inputs(batch, gamma=gamma)
         grads, _ = forward_backward(loss_fn, pi, inputs)
         pi = _sgd(pi, grads, lr)
     return pi0, pi
@@ -224,15 +247,30 @@ def _v(pi: PolicyWeights) -> float:
         return policy_forward(pi, torch.ones(1, 1))[1].item()
 
 
-class TestProbeConstantReward:
-    def test_actor_critic_learns_value(self) -> None:
-        _, pi = _train_on_probe(actor_critic_loss, iters=300, lr=0.05)
+class TestProbes:
+    def test_termination_actor_critic_learns_value(self) -> None:
+        _, pi = _train_on_probe(ConstantRewardEnv(), actor_critic_loss,
+                                gamma=0.99, num_steps=16, iters=300, lr=0.05)
         assert abs(_v(pi) - 1.0) < 0.05, f"V should converge to reward 1.0, got {_v(pi):.4f}"
 
-    def test_reinforce_alone_never_learns_value(self) -> None:
+    def test_termination_reinforce_alone_never_learns_value(self) -> None:
         # Negative control: the old bug. No value loss -> value head never moves, V stays wrong.
         # (V itself can drift a little because the shared trunk is trained by the policy term.)
-        pi0, pi = _train_on_probe(reinforce_loss, iters=300, lr=0.05)
+        pi0, pi = _train_on_probe(ConstantRewardEnv(), reinforce_loss,
+                                  gamma=0.99, num_steps=16, iters=300, lr=0.05)
         for name in VALUE_HEAD:
             assert torch.equal(getattr(pi0, name), getattr(pi, name)), f"{name} moved"
         assert abs(_v(pi) - 1.0) > 0.5, f"V={_v(pi):.4f} should be nowhere near 1.0"
+
+    def test_truncation_bootstraps(self) -> None:
+        # gamma=0.5 -> target 2.0. Treating truncation as termination would give 1.0.
+        _, pi = _train_on_probe(AlwaysTruncatesEnv(), value_loss,
+                                gamma=0.5, num_steps=16, iters=PROBE_ITERS, lr=0.02)
+        assert abs(_v(pi) - 2.0) < 0.05, f"V should converge to 1/(1-0.5)=2.0, got {_v(pi):.4f}"
+
+    def test_batch_cut_bootstraps(self) -> None:
+        # gamma=0.5 -> target 2.0. Using g=0 at the batch end (old bug) would give < 2.
+        _, pi = _train_on_probe(NeverEndsEnv(), value_loss,
+                                gamma=0.5, num_steps=4, iters=PROBE_ITERS, lr=0.02)
+        assert abs(_v(pi) - 2.0) < 0.05, f"V should converge to 1/(1-0.5)=2.0, got {_v(pi):.4f}"
+

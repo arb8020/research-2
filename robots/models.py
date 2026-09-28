@@ -81,6 +81,13 @@ def policy_act(w: PolicyWeights, obs: torch.Tensor) -> int:
         return dist.sample().item()
 
 
+def policy_value(w: PolicyWeights, obs: torch.Tensor) -> float:
+    """Detached V(obs) for one obs. obs: (obs_dim,)."""
+    with torch.no_grad():
+        _, value = policy_forward(w, obs.unsqueeze(0))  # (1,)
+        return value.item()
+
+
 # ---------------------------------------------------------------------------
 # World model
 # ---------------------------------------------------------------------------

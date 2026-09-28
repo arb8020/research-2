@@ -94,8 +94,9 @@ def imagine_rollout(
       - bootstrap_value = 0.0 (no truncation inside imagination)
       - last_value = V(final predicted obs) if the rollout hit the horizon, else
         irrelevant (last step terminated)
-      - next_obs = predicted obs; policy_forward under no_grad (logprob/value are
-        detached floats anyway)
+      - next_obs = predicted obs; policy_forward under no_grad (value is a
+        detached float anyway); drop logprob (Step has none until PPO)
+      - terminated steps must carry bootstrap_value == 0.0 (compute_returns asserts it)
     """
     steps: list[PolicyStep] = []
     obs = start_obs

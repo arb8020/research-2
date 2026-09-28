@@ -15,13 +15,12 @@ from robots.train import LossFnInputs, reinforce_loss, train_step
 
 def _dummy_inputs(n: int = 5) -> LossFnInputs:
     returns = torch.linspace(1.0, 0.2, n)
-    return LossFnInputs(
-        obs=torch.randn(n, 4),
-        actions=torch.arange(n) % 2,
-        logprobs=torch.full((n,), -0.5),
-        returns=returns,
-        advantages=returns - 0.5,
-    )
+    return {
+        "obs": torch.randn(n, 4),
+        "actions": torch.arange(n) % 2,
+        "returns": returns,
+        "advantages": returns - 0.5,
+    }
 
 
 class TestTrainStep:
