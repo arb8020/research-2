@@ -12,95 +12,129 @@ import torch.nn.functional as F
 
 from robots.collect import Batch, Step
 from robots.models import PolicyWeights, policy_act, policy_forward
-from robots.optim import AdamParams, OptimizerHandle, ParamGroup, make_optimizer
+from robots.optim import AdamParams, AdamState, adam_scalars, adam_update_, init_adam
+from robots.tree import tensor_leaves, tree_map
 
 log = logging.getLogger("robots.train")
 
 
 # ---------------------------------------------------------------------------
-# Generic training loop (extract to loop.py when a second caller exists)
+# Generic training step (extract to loop.py when a second caller exists)
+#
+# Granularity, each level replaceable by a few calls to the one below:
+#   train_loop(get_inputs, loss_fn, weights, cfg, num_iters)    the loop owns the int step
+#   train_step(loss_fn, weights, opt_state, inputs, cfg, step)
+#     = forward_backward(loss_fn, weights, inputs)             -> grads, metrics
+#     + adam_update_(weights, grads, opt_state, cfg, adam_scalars(cfg, step, device_of(weights)))
 # ---------------------------------------------------------------------------
 
 W = TypeVar("W")
 I = TypeVar("I")
 
-GetBatch = Callable[[], Any]
 # (weights, inputs) -> (scalar loss, metrics). Metrics are tensors so a LossFn
-# stays torch.func-safe (no .item()); convert to floats at the logging edge.
+# stays torch.func-safe (no .item()); convert with to_floats at the logging edge.
 LossFn = Callable[[W, I], tuple[torch.Tensor, dict[str, torch.Tensor]]]
+Metrics = dict[str, torch.Tensor]
 
-
-def train_step(
-    get_batch: GetBatch,
-    loss_fn: LossFn[Any, Any],
-    weights: Any,
-    opt: OptimizerHandle,
-    grad_accum_steps: int = 1,
-) -> dict[str, float]:
-    """One training step: get batch(es), compute loss, update weights.
-
-    With grad_accum_steps > 1, accumulates gradients across multiple
-    micro-batches before stepping. Metrics are averaged across micro-batches.
-    """
-    opt.zero()
-    m_accum: dict[str, float] = {}
-    for micro in range(grad_accum_steps):
-        batch = get_batch()
-        loss, m = loss_fn(weights, batch)
-        (loss / grad_accum_steps).backward()
-        for k, v in m.items():
-            m_accum[k] = m_accum.get(k, 0.0) + v / grad_accum_steps
-    opt.step()
-    return m_accum
-
-
-OnIter = Callable[[int, dict[str, float]], None]
-
-
-def train_loop(
-    get_batch: GetBatch,
-    loss_fn: LossFn[Any, Any],
-    weights: Any,
-    params: list[torch.Tensor] | None = None,
-    optimizer: AdamParams | list[ParamGroup] = AdamParams(),
-    num_iters: int = 100,
-    grad_accum_steps: int = 1,
-    on_iter: OnIter | None = None,
-) -> list[dict[str, float]]:
-    """Generic: get batch, compute loss, update weights, repeat.
-
-    Returns the full metrics history.
-    """
-    opt = make_optimizer(params, optimizer)
-    history: list[dict[str, float]] = []
-    for i in range(num_iters):
-        m = train_step(get_batch, loss_fn, weights, opt, grad_accum_steps)
-        if on_iter is not None:
-            on_iter(i + 1, m)
-        history.append(m)
-    return history
-
-
-# ---------------------------------------------------------------------------
-# Generic: gradients as data (torch.func)
-# ---------------------------------------------------------------------------
 
 def forward_backward(
     loss_fn: LossFn[W, I],
     weights: W,
     inputs: I,
-) -> tuple[W, dict[str, torch.Tensor]]:
+) -> tuple[W, Metrics]:
     """Gradients of loss_fn w.r.t. weights, plus the loss_fn's metrics.
 
     grads has the same dataclass type as weights (one grad tensor per weight
     tensor). Nothing is mutated: no .grad, no optimizer. Requires the weight
-    dataclass to be registered as a pytree. metrics gains a "loss" entry.
+    dataclass to be a registered pytree (robots.tree.register_pytree).
+    metrics gains a "loss" entry.
     """
     grad_fn = torch.func.grad_and_value(loss_fn, argnums=0, has_aux=True)
     grads, (loss, metrics) = grad_fn(weights, inputs)
     assert type(grads) is type(weights)
     assert "loss" not in metrics
     return grads, {**metrics, "loss": loss.detach()}
+
+
+def forward_backward_accum(
+    loss_fn: LossFn[W, I],
+    weights: W,
+    micro_inputs: list[I],
+) -> tuple[W, Metrics]:
+    """forward_backward averaged over micro-batches (gradient accumulation).
+
+    Equal to one forward_backward on the concatenated batch when loss_fn is a
+    mean and the micro-batches are the same size.
+    """
+    assert len(micro_inputs) > 0
+    n = len(micro_inputs)
+    grads, metrics = forward_backward(loss_fn, weights, micro_inputs[0])
+    for inputs in micro_inputs[1:]:
+        g, m = forward_backward(loss_fn, weights, inputs)
+        grads = tree_map(torch.add, grads, g)
+        metrics = {k: metrics[k] + m[k] for k in metrics}
+    return tree_map(lambda x: x / n, grads), {k: v / n for k, v in metrics.items()}
+
+
+def device_of(weights: Any) -> torch.device:
+    """The device of a weight tree (asserts all leaves agree)."""
+    leaves = tensor_leaves(weights)
+    assert len(leaves) > 0
+    device = leaves[0].device
+    assert all(x.device == device for x in leaves), "weights span multiple devices"
+    return device
+
+
+def train_step(
+    loss_fn: LossFn[W, I],
+    weights: W,
+    opt_state: AdamState[W],
+    inputs: I,
+    cfg: AdamParams,
+    step: int,
+) -> tuple[AdamState[W], Metrics]:
+    """One update: forward_backward, then Adam in place on weights. step is 1-based."""
+    grads, metrics = forward_backward(loss_fn, weights, inputs)
+    scalars = adam_scalars(cfg, step, device_of(weights))
+    new_state = adam_update_(weights, grads, opt_state, cfg, scalars)
+    return new_state, metrics
+
+
+def to_floats(metrics: Metrics) -> dict[str, float]:
+    """Logging edge: tensor metrics -> Python floats (one host sync per metric)."""
+    return {k: v.item() for k, v in metrics.items()}
+
+
+OnIter = Callable[[int, Metrics], None]
+
+
+def train_loop(
+    get_inputs: Callable[[], I],
+    loss_fn: LossFn[W, I],
+    weights: W,
+    cfg: AdamParams = AdamParams(),
+    num_iters: int = 100,
+    grad_accum_steps: int = 1,
+    on_iter: OnIter | None = None,
+) -> tuple[AdamState[W], list[Metrics]]:
+    """Get inputs, update weights in place, repeat. Owns the 1-based step counter.
+
+    With grad_accum_steps > 1, each step averages grads over that many
+    get_inputs() micro-batches. Returns (final optimizer state, metrics history).
+    """
+    assert num_iters >= 0
+    assert grad_accum_steps >= 1
+    opt_state = init_adam(weights)
+    device = device_of(weights)
+    history: list[Metrics] = []
+    for step in range(1, num_iters + 1):
+        micro_inputs = [get_inputs() for _ in range(grad_accum_steps)]
+        grads, m = forward_backward_accum(loss_fn, weights, micro_inputs)
+        opt_state = adam_update_(weights, grads, opt_state, cfg, adam_scalars(cfg, step, device))
+        if on_iter is not None:
+            on_iter(step, m)
+        history.append(m)
+    return opt_state, history
 
 
 # ---------------------------------------------------------------------------
