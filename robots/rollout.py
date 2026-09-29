@@ -17,7 +17,7 @@ from robots.models import (
     ValueWeights,
     WMWeights,
     policy_forward,
-    policy_value,
+    get_value,
     wm_forward,
 )
 
@@ -107,7 +107,7 @@ def imagine_rollout(
                 terminated=terminated,
                 truncated=False,
                 next_obs=next_obs,
-                value=policy_value(vf, obs),
+                value=get_value(vf, obs),
                 bootstrap_value=0.0,
             )
         )
@@ -117,4 +117,4 @@ def imagine_rollout(
             episodes.append(EpisodeEnd(episode_return=episode_return, episode_len=len(steps), timed_out=False))
             break
 
-    return Batch(steps=steps, episodes=episodes, last_obs=obs, last_value=policy_value(vf, obs))
+    return Batch(steps=steps, episodes=episodes, last_obs=obs, last_value=get_value(vf, obs))

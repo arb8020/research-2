@@ -103,7 +103,7 @@ def value_forward(w: ValueWeights, obs: torch.Tensor) -> torch.Tensor:
     return (h @ w.w_value.T + w.b_value)[:, 0]  # (batch, 1) -> (batch,)
 
 
-def policy_value(w: ValueWeights, obs: torch.Tensor) -> float:
+def get_value(w: ValueWeights, obs: torch.Tensor) -> float:
     """Detached V(obs) for one obs. obs: (obs_dim,)."""
     with torch.no_grad():
         return value_forward(w, obs.unsqueeze(0)).item()
