@@ -23,7 +23,7 @@ from dataclasses import dataclass, replace
 import gymnasium
 import torch
 
-from robots.models import PolicyWeights, ValueWeights, policy_forward, policy_value
+from robots.models import PolicyWeights, ValueWeights, policy_forward, get_value
 
 
 @dataclass(frozen=True)
@@ -89,14 +89,14 @@ def collect_step(
         dist = torch.distributions.Categorical(logits=logits)
         action = dist.sample()
 
-    value = policy_value(vf, state.obs)
+    value = get_value(vf, state.obs)
     next_obs, reward, terminated, truncated, _ = env.step(action.item())
     next_obs_t = _to_tensor(next_obs)
 
     # gymnasium can report terminated AND truncated on the time-limit step.
     # A real ending wins: the future is known to be zero, nothing to bootstrap.
     needs_bootstrap = bool(truncated) and not bool(terminated)
-    bootstrap_value = policy_value(vf, next_obs_t) if needs_bootstrap else 0.0
+    bootstrap_value = get_value(vf, next_obs_t) if needs_bootstrap else 0.0
 
     step = Step(
         obs=state.obs,
@@ -139,6 +139,6 @@ def collect(
         steps=steps,
         episodes=episodes,
         last_obs=state.obs,
-        last_value=policy_value(vf, state.obs),
+        last_value=get_value(vf, state.obs),
     )
     return state, batch

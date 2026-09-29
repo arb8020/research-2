@@ -22,7 +22,7 @@ All on `main`. Design notes in `robots/docs/notes.md`.
   `rollout_init(env)`, `collect(env, pi, vf, state, n) -> (state, Batch)`. Episodes span batches;
   records `bootstrap_value` (truncation) and `last_value` (batch cut).
 - **`models.py`** — `PolicyWeights` (logits only), `ValueWeights` (own trunk), `WMWeights` +
-  free forward functions (`policy_forward`, `value_forward`, `wm_forward`), `policy_value`,
+  free forward functions (`policy_forward`, `value_forward`, `wm_forward`), `get_value`,
   `wm_loss`, `transitions_to_inputs`.
 - **`rollout.py`** — `collect_transitions` (world-model data), `imagine_rollout(wm, pi, vf, ...) -> Batch`.
 - **`lm.py`** — GPT-2 frozen dataclasses + forward, `cross_entropy_loss`, `token_loader`,

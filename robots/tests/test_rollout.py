@@ -7,7 +7,7 @@ import dataclasses
 import gymnasium
 import torch
 
-from robots.models import init_policy, init_value, init_wm, policy_value, transitions_to_inputs, wm_loss
+from robots.models import init_policy, init_value, init_wm, get_value, transitions_to_inputs, wm_loss
 from robots.optim import AdamParams, init_adam
 from robots.rollout import collect_transitions, imagine_rollout
 from robots.train import compute_loss_fn_inputs, train_step
@@ -28,7 +28,7 @@ class TestImagineRollout:
         assert len(batch.steps) == 7
         assert not any(s.terminated or s.truncated for s in batch.steps)
         assert batch.episodes == []
-        assert abs(batch.last_value - policy_value(vf, batch.last_obs)) < 1e-6
+        assert abs(batch.last_value - get_value(vf, batch.last_obs)) < 1e-6
         for s, nxt in zip(batch.steps, batch.steps[1:]):
             assert torch.equal(s.next_obs, nxt.obs)
 
