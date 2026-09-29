@@ -7,7 +7,7 @@ import json
 import gymnasium
 import torch
 
-from robots.models import PolicyWeights, WMWeights, init_policy, init_wm, policy_forward, wm_forward
+from robots.models import PolicyWeights, WMWeights, init_policy, init_value, init_wm, policy_forward, value_forward, wm_forward
 from robots.train import record_episode
 
 
@@ -37,9 +37,15 @@ class TestWorldModel:
 
 class TestPolicy:
     def test_forward_shapes(self) -> None:
-        """Forward pass: logits and value shapes."""
-        logits, value = policy_forward(_pi(), torch.randn(3, 4))
+        """Forward pass: logits shape."""
+        logits = policy_forward(_pi(), torch.randn(3, 4))
         assert logits.shape == (3, 2)
+
+
+class TestValue:
+    def test_forward_shapes(self) -> None:
+        """Forward pass: one value per obs."""
+        value = value_forward(init_value(obs_dim=4), torch.randn(3, 4))
         assert value.shape == (3,)
 
 

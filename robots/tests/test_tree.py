@@ -16,8 +16,8 @@ def test_grad_over_policy_weights_returns_policy_weights():
     obs = torch.randn(5, 4)
 
     def loss(w: PolicyWeights) -> torch.Tensor:
-        logits, value = policy_forward(w, obs)
-        return logits.sum() + value.sum()
+        logits = policy_forward(w, obs)
+        return logits.sum()
 
     grads = torch.func.grad(loss)(w)
     assert isinstance(grads, PolicyWeights)

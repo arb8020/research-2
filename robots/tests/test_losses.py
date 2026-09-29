@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import dataclasses
-import functools
 
 import gymnasium
 import numpy as np
 import torch
 
 from robots.collect import Batch, Step, collect, rollout_init
-from robots.models import PolicyWeights, init_policy, policy_forward
+from robots.models import PolicyWeights, ValueWeights, init_policy, init_value, value_forward
 from robots.train import (
     LossFnInputs,
-    actor_critic_loss,
     compute_loss_fn_inputs,
     forward_backward,
     reinforce_loss,
@@ -54,7 +52,7 @@ def _random_inputs(T: int = 8, seed: int = 0) -> LossFnInputs:
     }
 
 
-def _sgd(w: PolicyWeights, g: PolicyWeights, lr: float) -> PolicyWeights:
+def _sgd(w, g, lr: float):
     """Plain p - lr*g, so these tests don't depend on the optimizer branch."""
     with torch.no_grad():
         return type(w)(**{f.name: getattr(w, f.name) - lr * getattr(g, f.name) for f in dataclasses.fields(w)})
@@ -119,64 +117,53 @@ class TestReturns:
 # Losses + forward_backward
 # ---------------------------------------------------------------------------
 
-VALUE_HEAD = ("w_value", "b_value")
-ACTION_HEAD = ("w_action", "b_action")
+def _nonzero_everywhere(grads) -> None:
+    for f in dataclasses.fields(grads):
+        assert getattr(grads, f.name).abs().sum() > 0, f"no grad reached {f.name}"
 
 
 class TestLosses:
-    def test_forward_backward_returns_weight_shaped_grads(self) -> None:
+    def test_reinforce_grads_are_policy_weights(self) -> None:
+        # Separate weight objects: reinforce_loss cannot touch the value function by construction.
         pi = init_policy(obs_dim=4, act_dim=2)
-        grads, m = forward_backward(actor_critic_loss, pi, _random_inputs())
+        grads, m = forward_backward(reinforce_loss, pi, _random_inputs())
         assert type(grads) is PolicyWeights
         for f in dataclasses.fields(pi):
             assert getattr(grads, f.name).shape == getattr(pi, f.name).shape
-        for key in ("loss", "pi_loss", "entropy", "advantage_mean", "advantage_std",
-                    "value_loss", "value_mean", "return_mean"):
+        _nonzero_everywhere(grads)
+        for key in ("loss", "pi_loss", "entropy", "advantage_mean", "advantage_std"):
             assert key in m, f"missing metric {key}"
             assert isinstance(m[key], torch.Tensor)
             assert m[key].ndim == 0
 
-    def test_value_loss_reaches_value_head_only(self) -> None:
-        pi = init_policy(obs_dim=4, act_dim=2)
-        grads, _ = forward_backward(value_loss, pi, _random_inputs())
-        for name in VALUE_HEAD:
-            assert getattr(grads, name).abs().sum() > 0, f"value_loss gave no grad to {name}"
-        for name in ACTION_HEAD:
-            assert torch.all(getattr(grads, name) == 0), f"value_loss leaked into {name}"
+    def test_value_grads_are_value_weights(self) -> None:
+        vf = init_value(obs_dim=4)
+        grads, m = forward_backward(value_loss, vf, _random_inputs())
+        assert type(grads) is ValueWeights
+        for f in dataclasses.fields(vf):
+            assert getattr(grads, f.name).shape == getattr(vf, f.name).shape
+        _nonzero_everywhere(grads)
+        for key in ("loss", "value_loss", "value_mean", "return_mean"):
+            assert key in m, f"missing metric {key}"
+            assert m[key].ndim == 0
 
-    def test_reinforce_loss_does_not_touch_value_head(self) -> None:
-        pi = init_policy(obs_dim=4, act_dim=2)
-        grads, _ = forward_backward(reinforce_loss, pi, _random_inputs())
-        for name in VALUE_HEAD:
-            assert torch.all(getattr(grads, name) == 0), f"reinforce_loss leaked into {name}"
-        for name in ACTION_HEAD:
-            assert getattr(grads, name).abs().sum() > 0
-
-    def test_actor_critic_is_reinforce_plus_scaled_value(self) -> None:
-        pi = init_policy(obs_dim=4, act_dim=2)
-        inputs = _random_inputs()
-        vf_coef = 0.37
-        ac, _ = actor_critic_loss(pi, inputs, vf_coef=vf_coef)
-        pg, _ = reinforce_loss(pi, inputs)
-        vl, _ = value_loss(pi, inputs)
-        assert torch.allclose(ac, pg + vf_coef * vl, atol=1e-6)
-
-        g_ac, _ = forward_backward(functools.partial(actor_critic_loss, vf_coef=vf_coef), pi, inputs)
-        g_pg, _ = forward_backward(reinforce_loss, pi, inputs)
-        g_vl, _ = forward_backward(value_loss, pi, inputs)
-        for f in dataclasses.fields(pi):
-            expected = getattr(g_pg, f.name) + vf_coef * getattr(g_vl, f.name)
-            assert torch.allclose(getattr(g_ac, f.name), expected, atol=1e-6), f.name
+    def test_value_loss_hand_computed(self) -> None:
+        # Zero the head so V(obs) = b_value = 0.5 everywhere: loss = mean((0.5 - r)^2).
+        vf = init_value(obs_dim=4)
+        vf = dataclasses.replace(vf, w_value=torch.zeros_like(vf.w_value), b_value=torch.full((1,), 0.5))
+        inputs = {**_random_inputs(T=3), "returns": torch.tensor([0.5, 1.5, -0.5])}
+        loss, _ = value_loss(vf, inputs)
+        assert abs(loss.item() - (0.0 + 1.0 + 1.0) / 3) < 1e-6
 
     def test_matches_eager_autograd(self) -> None:
-        pi = init_policy(obs_dim=4, act_dim=2)
-        inputs = _random_inputs()
-        grads, _ = forward_backward(actor_critic_loss, pi, inputs)
-        loss, _ = actor_critic_loss(pi, inputs)
-        leaves = [getattr(pi, f.name) for f in dataclasses.fields(pi)]
-        eager = torch.autograd.grad(loss, leaves)
-        for f, e in zip(dataclasses.fields(pi), eager):
-            assert torch.allclose(getattr(grads, f.name), e, atol=1e-6), f.name
+        for loss_fn, w in ((reinforce_loss, init_policy(obs_dim=4, act_dim=2)), (value_loss, init_value(obs_dim=4))):
+            inputs = _random_inputs()
+            grads, _ = forward_backward(loss_fn, w, inputs)
+            loss, _ = loss_fn(w, inputs)
+            leaves = [getattr(w, f.name) for f in dataclasses.fields(w)]
+            eager = torch.autograd.grad(loss, leaves)
+            for f, e in zip(dataclasses.fields(w), eager):
+                assert torch.allclose(getattr(grads, f.name), e, atol=1e-6), f.name
 
 
 # ---------------------------------------------------------------------------
@@ -219,51 +206,41 @@ class NeverEndsEnv(ConstantRewardEnv):
 PROBE_ITERS = 800
 
 
-def _train_on_probe(
-    env: gymnasium.Env, loss_fn, *, gamma: float, num_steps: int, iters: int, lr: float,
-) -> tuple[PolicyWeights, PolicyWeights]:
-    """collect -> compute_loss_fn_inputs -> forward_backward -> p - lr*g. Returns (initial, trained)."""
+def _train_value_on_probe(
+    env: gymnasium.Env, *, gamma: float, num_steps: int, iters: int, lr: float,
+) -> ValueWeights:
+    """collect -> compute_loss_fn_inputs -> forward_backward(value_loss) -> v - lr*g.
+
+    Only vf is trained; pi stays at its random init (its actions don't affect these envs).
+    """
     torch.manual_seed(0)
-    pi0 = init_policy(obs_dim=1, act_dim=2, hidden=16)
-    pi = pi0
+    pi = init_policy(obs_dim=1, act_dim=2, hidden=16)
+    vf = init_value(obs_dim=1, hidden=16)
     state = rollout_init(env, seed=0)
     for _ in range(iters):
-        state, batch = collect(env, pi, state, num_steps=num_steps)
+        state, batch = collect(env, pi, vf, state, num_steps=num_steps)
         inputs = compute_loss_fn_inputs(batch, gamma=gamma)
-        grads, _ = forward_backward(loss_fn, pi, inputs)
-        pi = _sgd(pi, grads, lr)
-    return pi0, pi
+        grads, _ = forward_backward(value_loss, vf, inputs)
+        vf = _sgd(vf, grads, lr)
+    return vf
 
 
-def _v(pi: PolicyWeights) -> float:
+def _v(vf: ValueWeights) -> float:
     with torch.no_grad():
-        return policy_forward(pi, torch.ones(1, 1))[1].item()
+        return value_forward(vf, torch.ones(1, 1)).item()
 
 
 class TestProbes:
-    def test_termination_actor_critic_learns_value(self) -> None:
-        _, pi = _train_on_probe(ConstantRewardEnv(), actor_critic_loss,
-                                gamma=0.99, num_steps=16, iters=300, lr=0.05)
-        assert abs(_v(pi) - 1.0) < 0.05, f"V should converge to reward 1.0, got {_v(pi):.4f}"
-
-    def test_termination_reinforce_alone_never_learns_value(self) -> None:
-        # Negative control: the old bug. No value loss -> value head never moves, V stays wrong.
-        # (V itself can drift a little because the shared trunk is trained by the policy term.)
-        pi0, pi = _train_on_probe(ConstantRewardEnv(), reinforce_loss,
-                                  gamma=0.99, num_steps=16, iters=300, lr=0.05)
-        for name in VALUE_HEAD:
-            assert torch.equal(getattr(pi0, name), getattr(pi, name)), f"{name} moved"
-        assert abs(_v(pi) - 1.0) > 0.5, f"V={_v(pi):.4f} should be nowhere near 1.0"
+    def test_termination_learns_reward(self) -> None:
+        vf = _train_value_on_probe(ConstantRewardEnv(), gamma=0.99, num_steps=16, iters=300, lr=0.05)
+        assert abs(_v(vf) - 1.0) < 0.05, f"V should converge to reward 1.0, got {_v(vf):.4f}"
 
     def test_truncation_bootstraps(self) -> None:
         # gamma=0.5 -> target 2.0. Treating truncation as termination would give 1.0.
-        _, pi = _train_on_probe(AlwaysTruncatesEnv(), value_loss,
-                                gamma=0.5, num_steps=16, iters=PROBE_ITERS, lr=0.02)
-        assert abs(_v(pi) - 2.0) < 0.05, f"V should converge to 1/(1-0.5)=2.0, got {_v(pi):.4f}"
+        vf = _train_value_on_probe(AlwaysTruncatesEnv(), gamma=0.5, num_steps=16, iters=PROBE_ITERS, lr=0.02)
+        assert abs(_v(vf) - 2.0) < 0.05, f"V should converge to 1/(1-0.5)=2.0, got {_v(vf):.4f}"
 
     def test_batch_cut_bootstraps(self) -> None:
         # gamma=0.5 -> target 2.0. Using g=0 at the batch end (old bug) would give < 2.
-        _, pi = _train_on_probe(NeverEndsEnv(), value_loss,
-                                gamma=0.5, num_steps=4, iters=PROBE_ITERS, lr=0.02)
-        assert abs(_v(pi) - 2.0) < 0.05, f"V should converge to 1/(1-0.5)=2.0, got {_v(pi):.4f}"
-
+        vf = _train_value_on_probe(NeverEndsEnv(), gamma=0.5, num_steps=4, iters=PROBE_ITERS, lr=0.02)
+        assert abs(_v(vf) - 2.0) < 0.05, f"V should converge to 1/(1-0.5)=2.0, got {_v(vf):.4f}"

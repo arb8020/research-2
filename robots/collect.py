@@ -2,8 +2,10 @@
 
 Layers (each built from the one above it):
     rollout_init(env, seed)      -> RolloutState                         # reset once, at the start
-    collect_step(env, pi, state) -> (state, Step, EpisodeEnd | None)     # one env step
-    collect(env, pi, state, n)   -> (state, Batch)                       # n steps, continues episodes
+    collect_step(env, pi, vf, state) -> (state, Step, EpisodeEnd | None)   # one env step
+    collect(env, pi, vf, state, n)   -> (state, Batch)                     # n steps, continues episodes
+
+pi picks actions; vf supplies every recorded value (Step.value, bootstrap_value, last_value).
 
 Nothing here resets between batches: the only resets happen in rollout_init and
 inside collect_step when an episode ends. So an episode can span many batches.
@@ -21,7 +23,7 @@ from dataclasses import dataclass, replace
 import gymnasium
 import torch
 
-from robots.models import PolicyWeights, policy_forward, policy_value
+from robots.models import PolicyWeights, ValueWeights, policy_forward, policy_value
 
 
 @dataclass(frozen=True)
@@ -78,21 +80,23 @@ def rollout_init(env: gymnasium.Env, seed: int | None = None) -> RolloutState:
 def collect_step(
     env: gymnasium.Env,
     pi: PolicyWeights,
+    vf: ValueWeights,
     state: RolloutState,
 ) -> tuple[RolloutState, Step, EpisodeEnd | None]:
     """Act once, step the env, record it. Resets the env if the episode ended."""
     with torch.no_grad():
-        logits, value = policy_forward(pi, state.obs.unsqueeze(0))  # (1, act_dim), (1,)
+        logits = policy_forward(pi, state.obs.unsqueeze(0))  # (1, act_dim)
         dist = torch.distributions.Categorical(logits=logits)
         action = dist.sample()
 
+    value = policy_value(vf, state.obs)
     next_obs, reward, terminated, truncated, _ = env.step(action.item())
     next_obs_t = _to_tensor(next_obs)
 
     # gymnasium can report terminated AND truncated on the time-limit step.
     # A real ending wins: the future is known to be zero, nothing to bootstrap.
     needs_bootstrap = bool(truncated) and not bool(terminated)
-    bootstrap_value = policy_value(pi, next_obs_t) if needs_bootstrap else 0.0
+    bootstrap_value = policy_value(vf, next_obs_t) if needs_bootstrap else 0.0
 
     step = Step(
         obs=state.obs,
@@ -101,7 +105,7 @@ def collect_step(
         terminated=bool(terminated),
         truncated=bool(truncated),
         next_obs=next_obs_t,
-        value=value.item(),
+        value=value,
         bootstrap_value=bootstrap_value,
     )
 
@@ -118,6 +122,7 @@ def collect_step(
 def collect(
     env: gymnasium.Env,
     pi: PolicyWeights,
+    vf: ValueWeights,
     state: RolloutState,
     num_steps: int,
 ) -> tuple[RolloutState, Batch]:
@@ -126,7 +131,7 @@ def collect(
     steps: list[Step] = []
     episodes: list[EpisodeEnd] = []
     for _ in range(num_steps):
-        state, step, ended = collect_step(env, pi, state)
+        state, step, ended = collect_step(env, pi, vf, state)
         steps.append(step)
         if ended is not None:
             episodes.append(ended)
@@ -134,6 +139,6 @@ def collect(
         steps=steps,
         episodes=episodes,
         last_obs=state.obs,
-        last_value=policy_value(pi, state.obs),
+        last_value=policy_value(vf, state.obs),
     )
     return state, batch

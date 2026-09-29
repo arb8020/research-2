@@ -11,7 +11,7 @@ import torch
 import torch.nn.functional as F
 
 from robots.collect import Batch, Step
-from robots.models import PolicyWeights, policy_act, policy_forward
+from robots.models import PolicyWeights, ValueWeights, policy_act, policy_forward, value_forward
 from robots.optim import AdamParams, AdamState, adam_scalars, adam_update_, init_adam
 from robots.tree import tensor_leaves, tree_map
 
@@ -188,19 +188,17 @@ def compute_loss_fn_inputs(batch: Batch, gamma: float) -> LossFnInputs:
 # ---------------------------------------------------------------------------
 # RL-specific: losses. All (weights, inputs) -> (loss, metrics), torch.func-safe:
 # no .item(), no data-dependent Python control flow, metrics are tensors.
-#
-#   *_from_logits / *_from_values: the loss term given a forward pass you already did
-#   reinforce_loss / value_loss:   one forward + one term
-#   actor_critic_loss:             one forward + both terms
+# Policy and value are separate weight objects, trained by separate train_steps.
 # ---------------------------------------------------------------------------
 
-def reinforce_loss_from_logits(
-    logits: torch.Tensor,
+def reinforce_loss(
+    pi: PolicyWeights,
     inputs: LossFnInputs,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    """Policy-gradient term: mean(-log pi(a|s) * advantage). logits (T, act_dim)."""
+    """Policy-gradient term: mean(-log pi(a|s) * advantage). Reads obs, actions, advantages."""
+    logits = policy_forward(pi, inputs["obs"])                                      # (T, act_dim)
     log_probs_all = F.log_softmax(logits, dim=-1)                                   # (T, act_dim)
-    logprob = log_probs_all.gather(1, inputs["actions"].unsqueeze(1)).squeeze(1)       # (T,)
+    logprob = log_probs_all.gather(1, inputs["actions"].unsqueeze(1)).squeeze(1)    # (T,)
     entropy = -(log_probs_all.exp() * log_probs_all).sum(dim=-1)                    # (T,)
     advantages = inputs["advantages"].detach()
     loss = -(logprob * advantages).mean()
@@ -213,48 +211,20 @@ def reinforce_loss_from_logits(
     return loss, metrics
 
 
-def value_loss_from_values(
-    values: torch.Tensor,
+def value_loss(
+    vf: ValueWeights,
     inputs: LossFnInputs,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    """Value regression term: mean((V(s) - return)^2). values (T,)."""
-    loss = ((values - inputs["returns"].detach()) ** 2).mean()
+    """Value regression: mean((V(obs) - return)^2). Reads obs, returns."""
+    values = value_forward(vf, inputs["obs"])                                       # (T,)
+    returns = inputs["returns"].detach()
+    loss = ((values - returns) ** 2).mean()
     metrics = {
         "value_loss": loss.detach(),
         "value_mean": values.mean().detach(),
-        "return_mean": inputs["returns"].mean(),
+        "return_mean": returns.mean(),
     }
     return loss, metrics
-
-
-def reinforce_loss(
-    pi: PolicyWeights,
-    inputs: LossFnInputs,
-) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    """Classic REINFORCE (with the collected value as baseline). Does not train the value head."""
-    logits, _ = policy_forward(pi, inputs["obs"])
-    return reinforce_loss_from_logits(logits, inputs)
-
-
-def value_loss(
-    pi: PolicyWeights,
-    inputs: LossFnInputs,
-) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    """Trains V(obs) toward the bootstrapped returns."""
-    _, values = policy_forward(pi, inputs["obs"])
-    return value_loss_from_values(values, inputs)
-
-
-def actor_critic_loss(
-    pi: PolicyWeights,
-    inputs: LossFnInputs,
-    vf_coef: float = 0.5,
-) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    """reinforce_loss + vf_coef * value_loss, sharing one forward pass."""
-    logits, values = policy_forward(pi, inputs["obs"])
-    pg, pg_metrics = reinforce_loss_from_logits(logits, inputs)
-    vl, v_metrics = value_loss_from_values(values, inputs)
-    return pg + vf_coef * vl, {**pg_metrics, **v_metrics}
 
 
 # ---------------------------------------------------------------------------

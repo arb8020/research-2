@@ -14,6 +14,7 @@ from robots.collect import Batch, EpisodeEnd, Step
 from robots.models import (
     PolicyWeights,
     Transition,
+    ValueWeights,
     WMWeights,
     policy_forward,
     policy_value,
@@ -71,10 +72,11 @@ def collect_transitions(
 def imagine_rollout(
     wm: WMWeights,
     pi: PolicyWeights,
+    vf: ValueWeights,
     start_obs: torch.Tensor,
     horizon: int,
 ) -> Batch:
-    """Roll out the policy inside the world model for up to `horizon` steps.
+    """Roll out pi inside the world model (vf supplies the recorded values) for up to `horizon` steps.
 
     Emits the same Batch as robots.collect.collect, so compute_loss_fn_inputs
     works unchanged:
@@ -92,7 +94,7 @@ def imagine_rollout(
 
     for _ in range(horizon):
         with torch.no_grad():
-            logits, value = policy_forward(pi, obs.unsqueeze(0))  # (1, act_dim), (1,)
+            logits = policy_forward(pi, obs.unsqueeze(0))  # (1, act_dim)
             action = torch.distributions.Categorical(logits=logits).sample()  # (1,)
             pred_obs, pred_reward, pred_done = wm_forward(wm, obs.unsqueeze(0), action)
         next_obs = pred_obs.squeeze(0)
@@ -105,7 +107,7 @@ def imagine_rollout(
                 terminated=terminated,
                 truncated=False,
                 next_obs=next_obs,
-                value=value.item(),
+                value=policy_value(vf, obs),
                 bootstrap_value=0.0,
             )
         )
@@ -115,4 +117,4 @@ def imagine_rollout(
             episodes.append(EpisodeEnd(episode_return=episode_return, episode_len=len(steps), timed_out=False))
             break
 
-    return Batch(steps=steps, episodes=episodes, last_obs=obs, last_value=policy_value(pi, obs))
+    return Batch(steps=steps, episodes=episodes, last_obs=obs, last_value=policy_value(vf, obs))

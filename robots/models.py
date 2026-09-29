@@ -30,10 +30,10 @@ def _linear(out_dim: int, in_dim: int) -> tuple[torch.Tensor, torch.Tensor]:
 @register_pytree
 @dataclass(frozen=True)
 class PolicyWeights:
-    """All tensors for a 2-layer MLP policy with action and value heads.
+    """2-layer MLP policy: obs -> action logits. No value head (see ValueWeights).
 
     Frozen dataclass — fields can't be reassigned, but the tensors themselves
-    are mutable (requires_grad=True, optimizer updates them in place).
+    are mutable (the optimizer updates them in place).
     """
 
     # MLP trunk: two hidden layers
@@ -44,9 +44,6 @@ class PolicyWeights:
     # Action head
     w_action: torch.Tensor  # (act_dim, hidden)
     b_action: torch.Tensor  # (act_dim,)
-    # Value head
-    w_value: torch.Tensor  # (1, hidden)
-    b_value: torch.Tensor  # (1,)
 
 
 def init_policy(obs_dim: int, act_dim: int, hidden: int = 64) -> PolicyWeights:
@@ -54,41 +51,62 @@ def init_policy(obs_dim: int, act_dim: int, hidden: int = 64) -> PolicyWeights:
     w1, b1 = _linear(hidden, obs_dim)
     w2, b2 = _linear(hidden, hidden)
     w_action, b_action = _linear(act_dim, hidden)
-    w_value, b_value = _linear(1, hidden)
-    return PolicyWeights(
-        w1=w1, b1=b1, w2=w2, b2=b2,
-        w_action=w_action, b_action=b_action,
-        w_value=w_value, b_value=b_value,
-    )
+    return PolicyWeights(w1=w1, b1=b1, w2=w2, b2=b2, w_action=w_action, b_action=b_action)
 
 
-def policy_params(w: PolicyWeights) -> list[torch.Tensor]:
-    """All trainable parameters, for optimizer construction."""
-    return [w.w1, w.b1, w.w2, w.b2, w.w_action, w.b_action, w.w_value, w.b_value]
-
-
-def policy_forward(w: PolicyWeights, obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """obs (batch, obs_dim) -> (logits (batch, act_dim), value (batch,))."""
+def policy_forward(w: PolicyWeights, obs: torch.Tensor) -> torch.Tensor:
+    """obs (batch, obs_dim) -> logits (batch, act_dim)."""
     h = F.relu(obs @ w.w1.T + w.b1)  # (batch, hidden)
     h = F.relu(h @ w.w2.T + w.b2)  # (batch, hidden)
-    logits = h @ w.w_action.T + w.b_action  # (batch, act_dim)
-    value = (h @ w.w_value.T + w.b_value)[:, 0]  # (batch, 1) -> (batch,)
-    return logits, value
+    return h @ w.w_action.T + w.b_action  # (batch, act_dim)
 
 
 def policy_act(w: PolicyWeights, obs: torch.Tensor) -> int:
     """Sample one action from the policy. obs: (obs_dim,)."""
     with torch.no_grad():
-        logits, _ = policy_forward(w, obs.unsqueeze(0))  # (1, act_dim)
+        logits = policy_forward(w, obs.unsqueeze(0))  # (1, act_dim)
         dist = torch.distributions.Categorical(logits=logits)
         return dist.sample().item()
 
 
-def policy_value(w: PolicyWeights, obs: torch.Tensor) -> float:
+# ---------------------------------------------------------------------------
+# Value function (separate network: no shared trunk with the policy)
+# ---------------------------------------------------------------------------
+
+@register_pytree
+@dataclass(frozen=True)
+class ValueWeights:
+    """2-layer MLP state-value function: obs -> V(obs). Own trunk."""
+
+    # MLP trunk: two hidden layers
+    w1: torch.Tensor  # (hidden, obs_dim)
+    b1: torch.Tensor  # (hidden,)
+    w2: torch.Tensor  # (hidden, hidden)
+    b2: torch.Tensor  # (hidden,)
+    # Value head
+    w_value: torch.Tensor  # (1, hidden)
+    b_value: torch.Tensor  # (1,)
+
+
+def init_value(obs_dim: int, hidden: int = 64) -> ValueWeights:
+    """Initialize value weights with Xavier uniform (matching nn.Linear defaults)."""
+    w1, b1 = _linear(hidden, obs_dim)
+    w2, b2 = _linear(hidden, hidden)
+    w_value, b_value = _linear(1, hidden)
+    return ValueWeights(w1=w1, b1=b1, w2=w2, b2=b2, w_value=w_value, b_value=b_value)
+
+
+def value_forward(w: ValueWeights, obs: torch.Tensor) -> torch.Tensor:
+    """obs (batch, obs_dim) -> value (batch,)."""
+    h = F.relu(obs @ w.w1.T + w.b1)  # (batch, hidden)
+    h = F.relu(h @ w.w2.T + w.b2)  # (batch, hidden)
+    return (h @ w.w_value.T + w.b_value)[:, 0]  # (batch, 1) -> (batch,)
+
+
+def policy_value(w: ValueWeights, obs: torch.Tensor) -> float:
     """Detached V(obs) for one obs. obs: (obs_dim,)."""
     with torch.no_grad():
-        _, value = policy_forward(w, obs.unsqueeze(0))  # (1,)
-        return value.item()
+        return value_forward(w, obs.unsqueeze(0)).item()
 
 
 # ---------------------------------------------------------------------------
@@ -145,11 +163,6 @@ def init_wm(obs_dim: int, act_dim: int, hidden: int = 64) -> WMWeights:
         w_reward=w_reward, b_reward=b_reward,
         w_done=w_done, b_done=b_done,
     )
-
-
-def wm_params(w: WMWeights) -> list[torch.Tensor]:
-    """All trainable parameters, for optimizer construction."""
-    return [w.w1, w.b1, w.w2, w.b2, w.w_obs, w.b_obs, w.w_reward, w.b_reward, w.w_done, w.b_done]
 
 
 def wm_forward(
