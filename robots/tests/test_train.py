@@ -7,14 +7,14 @@ from __future__ import annotations
 
 import torch
 
-from robots.models import init_policy
+from robots.models import init_policy, init_value
 from robots.optim import AdamParams, adam_scalars, adam_update_, init_adam
 from robots.train import (
     LossFnInputs,
-    actor_critic_loss,
     forward_backward,
     forward_backward_accum,
     reinforce_loss,
+    value_loss,
     to_floats,
     train_loop,
     train_step,
@@ -42,11 +42,11 @@ class TestTrainStep:
         pi = init_policy(obs_dim=4, act_dim=2)
         before = _clone(pi)
         cfg = AdamParams(lr=1e-2)
-        state, m = train_step(actor_critic_loss, pi, init_adam(pi), _dummy_inputs(), cfg, step=1)
+        state, m = train_step(reinforce_loss, pi, init_adam(pi), _dummy_inputs(), cfg, step=1)
 
         moved = any((p - o).abs().max().item() > 0 for p, o in zip(tensor_leaves(pi), tensor_leaves(before)))
         assert moved, "train_step did not update any parameters"
-        assert set(to_floats(m)) >= {"loss", "pi_loss", "value_loss", "entropy"}
+        assert set(to_floats(m)) >= {"loss", "pi_loss", "entropy"}
         assert all(isinstance(v, float) for v in to_floats(m).values())
 
     def test_equals_its_lower_level_calls(self) -> None:
@@ -58,8 +58,8 @@ class TestTrainStep:
         inputs = _dummy_inputs()
         state_a, state_b = init_adam(pi_a), init_adam(pi_b)
         for step in (1, 2, 3):
-            state_a, _ = train_step(actor_critic_loss, pi_a, state_a, inputs, cfg, step)
-            grads, _ = forward_backward(actor_critic_loss, pi_b, inputs)
+            state_a, _ = train_step(reinforce_loss, pi_a, state_a, inputs, cfg, step)
+            grads, _ = forward_backward(reinforce_loss, pi_b, inputs)
             state_b = adam_update_(pi_b, grads, state_b, cfg, adam_scalars(cfg, step, "cpu"))
         for a, b in zip(tensor_leaves(pi_a), tensor_leaves(pi_b)):
             assert torch.equal(a, b)
@@ -81,11 +81,11 @@ class TestGradAccum:
 class TestTrainLoop:
     def test_loop_runs_and_reduces_value_loss(self) -> None:
         torch.manual_seed(0)
-        pi = init_policy(obs_dim=4, act_dim=2)
+        vf = init_value(obs_dim=4)
         inputs = _dummy_inputs()
         seen: list[int] = []
         _, history = train_loop(
-            get_inputs=lambda: inputs, loss_fn=actor_critic_loss, weights=pi,
+            get_inputs=lambda: inputs, loss_fn=value_loss, weights=vf,
             cfg=AdamParams(lr=1e-2), num_iters=30, grad_accum_steps=2,
             on_iter=lambda step, m: seen.append(step),
         )

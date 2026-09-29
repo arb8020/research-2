@@ -1,10 +1,9 @@
-"""Model-free actor-critic (REINFORCE + learned value baseline) on CartPole. Uses the robots sdk.
+"""Model-free actor-critic on CartPole: separate policy and value networks, two train_steps. Uses the robots sdk.
 
   PYTHONPATH=. robots/.venv/bin/python examples/cartpole_modelfree.py --name modelfree-fixed --iters 500
 """
 
 import argparse
-import functools
 
 import gymnasium
 import torch
@@ -12,16 +11,16 @@ import torch
 from observe import artifact, metrics, setup_logging, span
 from observe.git import git_info
 from robots.collect import collect, rollout_init
-from robots.models import init_policy
+from robots.models import init_policy, init_value
 from robots.optim import AdamParams, init_adam
 from robots.train import (
-    actor_critic_loss,
-    reinforce_loss,
     compute_loss_fn_inputs,
     evaluate,
     record_episode,
+    reinforce_loss,
     to_floats,
     train_step,
+    value_loss,
 )
 
 
@@ -32,10 +31,8 @@ def main() -> None:
     p.add_argument("--lr", type=float, default=3e-4)
     p.add_argument("--rollout-steps", type=int, default=200)
     p.add_argument("--gamma", type=float, default=0.99)
-    p.add_argument("--vf-coef", type=float, default=0.5)
+    p.add_argument("--vf-lr", type=float, default=None, help="Value-function lr (default: --lr)")
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--loss", choices=["actor_critic", "reinforce"], default="actor_critic",
-                   help="reinforce = policy term only (value head untrained; for diagnostics)")
     args = p.parse_args()
 
     # --- setup ---
@@ -52,18 +49,21 @@ def main() -> None:
     eval_env = gymnasium.make("CartPole-v1")
     eval_env.reset(seed=args.seed + 1)  # later unseeded resets continue this RNG: runs are reproducible
     pi = init_policy(obs_dim=4, act_dim=2)
-    cfg = AdamParams(lr=args.lr)
-    opt_state = init_adam(pi)
-    loss_fn = functools.partial(actor_critic_loss, vf_coef=args.vf_coef) if args.loss == "actor_critic" else reinforce_loss
+    vf = init_value(obs_dim=4)
+    pi_cfg = AdamParams(lr=args.lr)
+    vf_cfg = AdamParams(lr=args.vf_lr if args.vf_lr is not None else args.lr)
+    pi_opt, vf_opt = init_adam(pi), init_adam(vf)
     state = rollout_init(env, seed=args.seed)
 
     # --- train ---
     for i in range(1, args.iters + 1):
-        state, batch = collect(env, pi, state, num_steps=args.rollout_steps)
-        inputs = compute_loss_fn_inputs(batch, gamma=args.gamma)
-        opt_state, m = train_step(loss_fn, pi, opt_state, inputs, cfg, step=i)
+        state, batch = collect(env, pi, vf, state, num_steps=args.rollout_steps)
+        inputs = compute_loss_fn_inputs(batch, gamma=args.gamma)  # advantages use the pre-update vf
+        pi_opt, m_pi = train_step(reinforce_loss, pi, pi_opt, inputs, pi_cfg, step=i)
+        vf_opt, m_vf = train_step(value_loss, vf, vf_opt, inputs, vf_cfg, step=i)
 
-        m_log = to_floats(m)
+        # Each "loss" duplicates pi_loss / value_loss; drop it so the keys don't collide.
+        m_log = {k: v for k, v in to_floats({**m_pi, **m_vf}).items() if k != "loss"}
         m_log["train_episodes"] = float(len(batch.episodes))
         if batch.episodes:
             m_log["train_ep_return"] = sum(e.episode_return for e in batch.episodes) / len(batch.episodes)
@@ -79,7 +79,7 @@ def main() -> None:
             print(
                 f"step {i}: eval_reward={eval_reward:.1f} "
                 f"train_ep_return={m_log.get('train_ep_return', float('nan')):.1f} "
-                f"value_loss={m_log.get('value_loss', float('nan')):.2f} entropy={m_log['entropy']:.3f}"
+                f"value_loss={m_log['value_loss']:.2f} entropy={m_log['entropy']:.3f}"
             )
 
 

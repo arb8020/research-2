@@ -16,19 +16,22 @@ All on `main`. Design notes in `robots/docs/notes.md`.
   (= forward_backward + adam_update_), `train_loop`, `to_floats`. Loss fns return
   `(loss, dict[str, Tensor])`, no `.item()`. RL: `compute_loss_fn_inputs(batch, gamma)
   -> LossFnInputs` (dict: obs/actions/returns/advantages; bootstrapped, pure),
-  `reinforce_loss`, `value_loss`, `actor_critic_loss`, `evaluate`, `record_episode`.
+  `reinforce_loss(pi, inputs)`, `value_loss(vf, inputs)` (separate weights, separate
+  train_steps), `evaluate`, `record_episode`.
 - **`collect.py`** — on-policy collection, state in / state out:
-  `rollout_init(env)`, `collect(env, pi, state, n) -> (state, Batch)`. Episodes span batches;
+  `rollout_init(env)`, `collect(env, pi, vf, state, n) -> (state, Batch)`. Episodes span batches;
   records `bootstrap_value` (truncation) and `last_value` (batch cut).
-- **`models.py`** — `PolicyWeights`, `WMWeights` + free forward functions, `policy_value`,
+- **`models.py`** — `PolicyWeights` (logits only), `ValueWeights` (own trunk), `WMWeights` +
+  free forward functions (`policy_forward`, `value_forward`, `wm_forward`), `policy_value`,
   `wm_loss`, `transitions_to_inputs`.
-- **`rollout.py`** — `collect_transitions` (world-model data), `imagine_rollout -> Batch`.
+- **`rollout.py`** — `collect_transitions` (world-model data), `imagine_rollout(wm, pi, vf, ...) -> Batch`.
 - **`lm.py`** — GPT-2 frozen dataclasses + forward, `cross_entropy_loss`, `token_loader`,
   `generate`. Self-contained, no kelpie dependency.
 
 **Examples** (`examples/`):
-- `cartpole_modelfree.py` — model-free actor-critic (collect → compute_loss_fn_inputs → train_step).
-  After the 2026-09-27 fixes it learns much slower than the old buggy REINFORCE (see notes below).
+- `cartpole_modelfree.py` — model-free actor-critic: collect → compute_loss_fn_inputs → two
+  train_steps (policy, value). With a shared trunk (2026-09-27) the value loss swamped the policy;
+  policy and value are now separate networks. Learning quality not re-measured yet.
 - `compare_runs.py` — compare run jsonl files (eval curves + metric trends).
 - `cartpole_modelbased.py` — model-based (world model + imagined rollouts). Runs on the new API; doesn't learn yet.
 - `gpt2_pretrain.py` — GPT-2 (124M) on tiny shakespeare. Loss 4.87 → 4.54 in 10 steps.

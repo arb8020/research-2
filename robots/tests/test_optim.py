@@ -17,8 +17,8 @@ def _detached(w: PolicyWeights) -> PolicyWeights:
 
 
 def _loss(w: PolicyWeights, obs: torch.Tensor) -> torch.Tensor:
-    logits, value = policy_forward(w, obs)
-    return (logits**2).mean() + (value**2).mean()
+    logits = policy_forward(w, obs)
+    return (logits**2).mean()
 
 
 def _max_diff(a, b) -> float:
