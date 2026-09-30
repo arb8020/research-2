@@ -29,7 +29,7 @@ def plan(files: dict[str, Handle], opt: str) -> Key:
     compile_step, link_step, test_step = steps(keys.recipe)
 
     def planned(step: Step, *args: object) -> Handle:
-        return Handle(key=step.key(step, args, {}), digest=None, path="")
+        return Handle(key=step.key(step, args, {}), path="")
     a_obj = planned(compile_step, files["a.c"], [files["util.h"]], opt)
     b_obj = planned(compile_step, files["b.c"], [files["util.h"]], opt)
     return planned(test_step, planned(link_step, [a_obj, b_obj])).key

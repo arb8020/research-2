@@ -1,7 +1,7 @@
 import hashlib
 from pathlib import Path
 
-from tally import Ctx, Handle, Step, ast_fp, key_stability, keys, value_fp
+from tally import Ctx, Hashed, KeyFn, Step, ast_fp, key_stability, keys, value_fp
 
 
 def good(ctx: Ctx, x: int, *, out: Path) -> int:
@@ -19,8 +19,8 @@ def id_key(step: Step, args: tuple, kwargs: dict) -> str:
 
 
 GOOD = Step(good)
-BAD_HASH = Step(good, key=hash_key)
-BAD_ID = Step(good, key=id_key)
+BAD_HASH = Step(good, key=KeyFn("key", hash_key))
+BAD_ID = Step(good, key=KeyFn("key", id_key))
 
 
 def test_builtin_key_is_stable_across_processes() -> None:
@@ -66,7 +66,7 @@ def test_value_fp_is_canonical() -> None:
 
 
 def test_recipe_vs_bytes_read_different_handle_fields() -> None:
-    a = Handle(key="k" * 64, digest="d" * 64, path="/x")
-    b = Handle(key="K" * 64, digest="d" * 64, path="/y")  # different recipe, same bytes
+    a = Hashed(key="k" * 64, path="/x", digest="d" * 64)
+    b = Hashed(key="K" * 64, path="/y", digest="d" * 64)  # different recipe, same bytes
     assert keys.bytes(GOOD, (a,), {}) == keys.bytes(GOOD, (b,), {})
     assert keys.recipe(GOOD, (a,), {}) != keys.recipe(GOOD, (b,), {})

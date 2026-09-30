@@ -44,12 +44,12 @@ def test_sprsh1_values_and_rebuild_only_dependents(tmp_path: Path) -> None:
 def test_sprsh1_early_cutoff_bytes_vs_recipe(tmp_path: Path) -> None:
     # A1+A2 still 30 after 10,20 -> 15,15: B1 reruns, B2 is cut off only under bytes keys.
     for key, expect in [(keys.bytes, ["b1_sum"]), (keys.recipe, ["b1_sum", "b2_double"])]:
-        ctx = open_ctx(tmp_path / key.__name__)
+        ctx = open_ctx(tmp_path / key.needs)
         build1(ctx, key, 10, 20)
         n = len(ctx.ran)
         _, b2 = build1(ctx, key, 15, 15)
         assert ctx.load(b2) == 60
-        assert ctx.ran[n:] == expect, key.__name__
+        assert ctx.ran[n:] == expect, key.needs
         assert_matches_clean(lambda c, key=key: build1(c, key, 15, 15), ctx)
 
 

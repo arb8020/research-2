@@ -15,10 +15,10 @@ from tally.core import (
     step,
     value_fp,
 )
-from tally.store import Handle, Key, LocalBlobStore, Meta, StoreError, dir_digest
+from tally.store import Handle, Hashed, Key, LocalBlobStore, Meta, StoreError, dir_digest
 
 __all__ = [
-    "JSON", "Ctx", "Fingerprint", "Handle", "Key", "KeyFn", "LocalBlobStore", "Meta", "Serializer", "Step", "StoreError",
+    "JSON", "Ctx", "Fingerprint", "Handle", "Hashed", "Key", "KeyFn", "LocalBlobStore", "Meta", "Serializer", "Step", "StoreError",
     "assert_matches_clean", "ast_fp", "dir_digest", "file_fp", "key_stability", "keys", "module_fp", "open_ctx", "src",
     "step", "value_fp",
 ]

@@ -14,13 +14,13 @@ import shutil
 import sys
 import textwrap
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from string import hexdigits
 from types import SimpleNamespace
 from typing import Any, Literal, Protocol
 
-from tally.store import Handle, Key, LocalBlobStore, Meta, dir_digest
+from tally.store import Handle, Hashed, Key, LocalBlobStore, Meta, dir_digest
 
 SHA256_HEX_LEN = 64
 META_DB = "meta.sqlite"
@@ -33,14 +33,27 @@ class Fingerprint(Protocol):
     def __call__(self, thing: Any) -> str: ...
 
 
-class KeyFn(Protocol):
+type Needs = Literal["key", "digest"]
+
+
+@dataclass(frozen=True)
+class KeyFn:
     """
-    User-owned. Contract:
+    User-owned. Declares up front what it reads from Handle args:
+      needs="key"    -> args arrive as Handle (recipe only, nothing hashed)
+      needs="digest" -> fetch hashes every Handle arg first; args arrive as Hashed
+    TODO: all-or-nothing per KeyFn. A mixed case (hash the small config, recipe the 20GB ckpt) needs per-arg needs.
+
+    Contract for fn:
       1. computable before running, from step + args alone
       2. sound: non-equivalent (step, args) -> different keys
       3. stable across processes and machines (no id(), hash(), repr of objects)
     """
-    def __call__(self, step: "Step", args: tuple, kwargs: dict) -> Key: ...
+    needs: Needs
+    fn: Callable[["Step", tuple, dict], Key]
+
+    def __call__(self, step: "Step", args: tuple, kwargs: dict) -> Key:
+        return self.fn(step, args, kwargs)
 
 
 @dataclass(frozen=True)
@@ -82,17 +95,20 @@ def ast_fp(fn: Callable[..., Any]) -> str:
     return sha(ast.dump(node))
 
 
-type HandleField = Literal["key", "digest"] | None  # None: Handle args are rejected (value_fp)
+type HandleField = Needs | None  # None: Handle args are rejected (value_fp)
 
 
 def _canon(value: Any, handle_field: HandleField) -> Any:
     """Canonical JSON-able form. Dicts are wrapped so a user dict can never collide with a Handle tag."""
     match value:
+        case Hashed() if handle_field == "digest":
+            return {"handle.digest": value.digest}
+        case Handle() if handle_field == "digest":
+            raise TypeError(f"KeyFn needs digests but got an unhashed Handle (declare needs='digest'): {value.path}")
+        case Handle() if handle_field == "key":
+            return {"handle.key": value.key}
         case Handle():
-            if handle_field is None: raise TypeError("Handle is not a plain value")
-            field_value = getattr(value, handle_field)
-            assert field_value, f"Handle.{handle_field} is empty: {value}"
-            return {f"handle.{handle_field}": field_value}
+            raise TypeError("Handle is not a plain value")
         case None | bool() | int() | float() | str():
             return value
         case list() | tuple():
@@ -117,19 +133,12 @@ def _trace(step: "Step", args: tuple, kwargs: dict, handle_field: HandleField) -
     return sha(_encode([step.name, step.code_fp(step.fn), list(args), kwargs], handle_field))
 
 
-def recipe_key(step: "Step", args: tuple, kwargs: dict) -> Key:
-    """Nix-style deep trace: Handle args contribute their key. No early cutoff."""
-    return _trace(step, args, kwargs, "key")
+# Nix-style deep trace: Handle args contribute their key. No early cutoff.
+recipe_key = KeyFn("key", lambda step, args, kwargs: _trace(step, args, kwargs, "key"))
+# Bazel-style constructive trace: Handle args contribute their digest. Early cutoff.
+bytes_key = KeyFn("digest", lambda step, args, kwargs: _trace(step, args, kwargs, "digest"))
 
-
-def bytes_key(step: "Step", args: tuple, kwargs: dict) -> Key:
-    """Bazel-style constructive trace: Handle args contribute their digest. Early cutoff."""
-    return _trace(step, args, kwargs, "digest")
-
-
-bytes_key.wants_digest = True  # type: ignore[attr-defined]  # tells Ctx to hash Handle args (lazily) before calling
-
-# user-facing names: keys.recipe / keys.bytes (defined as *_key here so this module never shadows builtin bytes)
+# user-facing names: keys.recipe / keys.bytes (the module never binds `bytes`, so the builtin stays usable)
 keys = SimpleNamespace(recipe=recipe_key, bytes=bytes_key)
 
 
@@ -174,9 +183,9 @@ class Ctx:
     active: set[Key] = field(default_factory=set)      # keys on the call stack, for cycle detection
 
     def fetch(self, step: Step, *args: Any, **kwargs: Any) -> Handle:
-        wants_digest = getattr(step.key, "wants_digest", False)  # bytes-keyed consumer pays for hashing, lazily
-        keyed_args = tuple(self._digested(arg, step) for arg in args) if wants_digest else args
-        keyed_kwargs = {name: self._digested(arg, step) for name, arg in kwargs.items()} if wants_digest else kwargs
+        hashes = step.key.needs == "digest"  # the consumer pays for hashing its inputs, lazily
+        keyed_args = tuple(self._digested(arg, step) for arg in args) if hashes else args
+        keyed_kwargs = {name: self._digested(arg, step) for name, arg in kwargs.items()} if hashes else kwargs
         key = step.key(step, keyed_args, keyed_kwargs)
         assert len(key) == SHA256_HEX_LEN, f"{step.name}: KeyFn must return hex sha256, got {key!r}"
         assert all(char in hexdigits for char in key), f"{step.name}: KeyFn must return hex sha256, got {key!r}"
@@ -202,19 +211,21 @@ class Ctx:
         self.ran.append(step.name)
         return self.meta.get(key) or committed  # first writer wins: return whatever meta committed
 
-    def digest(self, handle: Handle) -> Handle:
-        """Handle with its content hash filled in. Computed at most once per key, then remembered in meta."""
-        if handle.digest is not None: return handle
+    def digest(self, handle: Handle) -> Hashed:
+        """Handle with its content hash known. Computed at most once per key, then remembered in meta."""
+        if isinstance(handle, Hashed): return handle
         stored = self.meta.get(handle.key)
-        if stored is not None and stored.digest is not None: return stored
+        if isinstance(stored, Hashed): return stored
         blob_path = Path(handle.path)
         content_digest = dir_digest(blob_path) if blob_path.is_dir() else file_fp(blob_path)
         self.meta.set_digest(handle.key, content_digest)
-        return replace(handle, digest=content_digest)
+        return Hashed(handle.key, handle.path, content_digest)
 
     def _digested(self, arg: Any, consumer: Step) -> Any:
         match arg:
-            case Handle(digest=None):
+            case Hashed():
+                return arg
+            case Handle():
                 if consumer.warn_hash: print(f"tally: {consumer.name} is hashing {arg.path}", file=sys.stderr)
                 return self.digest(arg)
             case list() | tuple():
@@ -239,4 +250,4 @@ def src(path: str | Path) -> Handle:
     source_path = Path(path).resolve()
     if not source_path.is_file(): raise FileNotFoundError(f"src must be a file: {source_path}")
     content_digest = file_fp(source_path)
-    return Handle(key=content_digest, digest=content_digest, path=str(source_path))
+    return Hashed(key=content_digest, path=str(source_path), digest=content_digest)

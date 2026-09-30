@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tally import Step, keys, open_ctx
+from tally import Handle, Hashed, Step, keys, open_ctx
 
 
 def _write(ctx, x: int, out: Path):  # noqa: ANN001, ANN201
@@ -22,19 +22,19 @@ WRITE = Step(_write)
 def test_recipe_steps_never_hash(tmp_path: Path) -> None:
     ctx = open_ctx(tmp_path)
     h = ctx.fetch(WRITE, 10)
-    assert h.digest is None                                   # commit did not read the bytes
+    assert not isinstance(h, Hashed)                          # commit did not read the bytes
     ctx.fetch(Step(_use, key=keys.recipe), h)
-    assert ctx.meta.get(h.key).digest is None                 # recipe consumer never asked for it
+    assert not isinstance(ctx.meta.get(h.key), Hashed)        # recipe consumer never asked for it
 
 
 def test_bytes_consumer_hashes_once_and_remembers(tmp_path: Path) -> None:
     ctx = open_ctx(tmp_path)
     h = ctx.fetch(WRITE, 10)
     ctx.fetch(Step(_use, key=keys.bytes), h)
-    stored = ctx.meta.get(h.key).digest
-    assert stored is not None                                 # hashed lazily, saved to meta
+    stored = ctx.meta.get(h.key)
+    assert isinstance(stored, Hashed)                         # hashed lazily, saved to meta
     ctx.fetch(Step(_use, key=keys.bytes), h)                  # second consumer: served from meta
-    assert ctx.meta.get(h.key).digest == stored
+    assert ctx.meta.get(h.key) == stored
 
 
 def test_second_writer_does_not_clobber_first(tmp_path: Path) -> None:
@@ -75,3 +75,9 @@ def test_raising_step_leaves_no_tmp(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError):
         ctx.fetch(Step(_boom))
     assert list((tmp_path / "tmp").iterdir()) == []
+
+
+def test_digest_keyfn_rejects_unhashed_handle() -> None:
+    step = Step(_use, key=keys.bytes)
+    with pytest.raises(TypeError, match="unhashed"):
+        keys.bytes(step, (Handle(key="k" * 64, path="/x"),), {})  # called directly, bypassing fetch's hashing

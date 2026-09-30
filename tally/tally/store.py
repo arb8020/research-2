@@ -16,10 +16,15 @@ TMP_DIR = "tmp"
 
 @dataclass(frozen=True)
 class Handle:
-    """Pointer to a stored output."""
-    key: Key            # how it was made (recipe-keyed consumers read this)
-    digest: str | None  # what it is (bytes-keyed consumers read this); None = not hashed yet, filled lazily
-    path: str           # where the bytes live: a committed dir, or a source file
+    """Pointer to a stored output. Not hashed: hashing is lazy, only bytes-keyed consumers pay for it."""
+    key: Key   # how it was made
+    path: str  # where the bytes live: a committed dir, or a source file
+
+
+@dataclass(frozen=True)
+class Hashed(Handle):
+    """A Handle whose content hash is known. Only way to get one: src() or ctx.digest()."""
+    digest: str  # what it is
 
 
 class StoreError(Exception):
@@ -28,7 +33,7 @@ class StoreError(Exception):
 
 @dataclass(frozen=True)
 class Meta:
-    """key -> pending | done(handle). Only `done` is ever a hit. Digest may be filled in later, lazily."""
+    """key -> pending | done(handle). Only `done` is ever a hit. Digest is filled in later, if ever."""
     db: sqlite3.Connection
 
     @staticmethod
@@ -42,7 +47,7 @@ class Meta:
         if row is None: return None
         digest, path = row
         if not isinstance(path, str): raise StoreError(f"done row without path: {key}")
-        return Handle(key, digest, path)
+        return Handle(key, path) if digest is None else Hashed(key, path, digest)
 
     def state(self, key: Key) -> State | None:
         row = self.db.execute("select state from derivations where key = ?", (key,)).fetchone()
@@ -62,7 +67,7 @@ class Meta:
         # first writer wins: if another process marked it done already, keep theirs
         self.db.execute(
             "update derivations set state = 'done', digest = ?, path = ? where key = ? and state = 'pending'",
-            (handle.digest, handle.path, handle.key),
+            (handle.digest if isinstance(handle, Hashed) else None, handle.path, handle.key),
         )
         if self.state(handle.key) != "done": raise StoreError(f"done without pending: {handle.key}")
 
@@ -102,4 +107,4 @@ class LocalBlobStore:
         except OSError:  # dest exists and is non-empty: someone else committed first
             if not dest.is_dir(): raise
             shutil.rmtree(tmp)
-        return Handle(key=key, digest=None, path=str(dest))
+        return Handle(key=key, path=str(dest))
