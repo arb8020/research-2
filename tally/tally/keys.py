@@ -13,7 +13,7 @@ from tally.types import Handle, Key
 if TYPE_CHECKING:
     from tally.step import Step
 
-type Pick = Literal["key", "digest"] | None  # which Handle field a trace reads; None = Handles banned
+type HandleField = Literal["key", "digest"] | None  # None: Handle args are rejected (value_fp)
 
 
 def sha(text: str) -> str:
@@ -41,34 +41,34 @@ def ast_fp(fn: Callable[..., Any]) -> str:
     return sha(ast.dump(node))
 
 
-def _canon(v: Any, pick: Pick) -> Any:
+def _canon(value: Any, field: HandleField) -> Any:
     """Canonical JSON-able form. Dicts are wrapped so a user dict can never collide with a Handle tag."""
-    match v:
+    match value:
         case Handle():
-            if pick is None: raise TypeError("Handle is not a plain value")
-            field = getattr(v, pick)
-            assert field, f"Handle.{pick} is empty: {v}"
-            return {f"handle.{pick}": field}
+            if field is None: raise TypeError("Handle is not a plain value")
+            field_value = getattr(value, field)
+            assert field_value, f"Handle.{field} is empty: {value}"
+            return {f"handle.{field}": field_value}
         case None | bool() | int() | float() | str():
-            return v
+            return value
         case list() | tuple():
-            return [_canon(x, pick) for x in v]
+            return [_canon(item, field) for item in value]
         case dict():
-            assert all(isinstance(k, str) for k in v), f"dict keys must be str: {list(v)}"
-            return {"dict": {k: _canon(x, pick) for k, x in v.items()}}
-    raise TypeError(f"not a plain value or Handle: {type(v).__name__}")
+            assert all(isinstance(name, str) for name in value), f"dict keys must be str: {list(value)}"
+            return {"dict": {name: _canon(item, field) for name, item in value.items()}}
+    raise TypeError(f"not a plain value or Handle: {type(value).__name__}")
 
 
-def _encode(v: Any, pick: Pick) -> str:
-    return json.dumps(_canon(v, pick), sort_keys=True, separators=(",", ":"), allow_nan=False)
+def _encode(value: Any, field: HandleField) -> str:
+    return json.dumps(_canon(value, field), sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
-def value_fp(v: Any) -> str:
-    return sha(_encode(v, None))
+def value_fp(value: Any) -> str:
+    return sha(_encode(value, None))
 
 
-def _trace(step: "Step", args: tuple, kwargs: dict, pick: Pick) -> Key:
-    return sha(_encode([step.name, step.code_fp(step.fn), list(args), kwargs], pick))
+def _trace(step: "Step", args: tuple, kwargs: dict, field: HandleField) -> Key:
+    return sha(_encode([step.name, step.code_fp(step.fn), list(args), kwargs], field))
 
 
 def recipe(step: "Step", args: tuple, kwargs: dict) -> Key:

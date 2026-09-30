@@ -26,31 +26,31 @@ def assert_matches_clean(build: Build, ctx: Ctx) -> None:
     output digests must match. "Correct = same as building from scratch."
     """
     before = len(ctx.ran)
-    cached = _handles(build(ctx))
+    cached_raw = _handles(build(ctx))
     assert ctx.ran[before:] == [], f"rebuild right after build did work: {ctx.ran[before:]}"
     with tempfile.TemporaryDirectory() as d:
         fresh = open_ctx(Path(d))
-        clean = tuple(fresh.digest(h) for h in _handles(build(fresh)))
-    cached = tuple(ctx.digest(h) for h in cached)
+        clean = tuple(fresh.digest(handle) for handle in _handles(build(fresh)))
+    cached = tuple(ctx.digest(handle) for handle in cached_raw)
     assert len(cached) == len(clean), f"{len(cached)} handles vs {len(clean)} from clean"
-    for a, b in zip(cached, clean, strict=True):
-        assert a.digest == b.digest, f"cached {a.path} != clean build (key {a.key[:12]})"
+    for cached_out, clean_out in zip(cached, clean, strict=True):
+        assert cached_out.digest == clean_out.digest, f"cached {cached_out.path} != clean build (key {cached_out.key[:12]})"
 
 
 _CHILD = """
 import importlib, pickle, sys
 ref, args, kwargs = pickle.load(sys.stdin.buffer)
 mod, name = ref.split(":")
-s = getattr(importlib.import_module(mod), name)
-print(s.key(s, args, kwargs))
+step = getattr(importlib.import_module(mod), name)
+print(step.key(step, args, kwargs))
 """
 
 
 def _resolve(ref: str) -> Step:
     mod, name = ref.split(":")
-    s = getattr(importlib.import_module(mod), name)
-    if not isinstance(s, Step): raise TypeError(f"{ref} is not a Step")
-    return s
+    step = getattr(importlib.import_module(mod), name)
+    if not isinstance(step, Step): raise TypeError(f"{ref} is not a Step")
+    return step
 
 
 def key_stability(ref: str, args: tuple = (), kwargs: dict | None = None, seeds: tuple[int, ...] = (1, 2)) -> tuple[Key, ...]:
@@ -61,7 +61,7 @@ def key_stability(ref: str, args: tuple = (), kwargs: dict | None = None, seeds:
     kw: dict[str, Any] = kwargs or {}
     step = _resolve(ref)
     local = (step.key(step, args, kw), step.key(step, args, kw))
-    env_path = os.pathsep.join(p for p in sys.path if p)
+    env_path = os.pathsep.join(entry for entry in sys.path if entry)
     remote = tuple(
         subprocess.run(
             [sys.executable, "-c", _CHILD], input=pickle.dumps((ref, args, kw)), capture_output=True, check=True, timeout=60,

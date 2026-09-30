@@ -11,6 +11,9 @@ from tally.types import Handle, Key
 
 type State = Literal["pending", "done"]
 
+BLOBS_DIR = "blobs"
+TMP_DIR = "tmp"
+
 
 class StoreError(Exception):
     """The on-disk store disagrees with what the protocol expects (world-caused, so raise, not assert)."""
@@ -24,46 +27,50 @@ class Meta:
     @staticmethod
     def open(path: Path) -> "Meta":
         db = sqlite3.connect(path, isolation_level=None)  # autocommit: each write is durable on return
-        db.execute("create table if not exists rows (key text primary key, state text not null, digest text, path text)")
+        db.execute("create table if not exists derivations (key text primary key, state text not null, digest text, path text)")
         return Meta(db)
 
     def get(self, key: Key) -> Handle | None:
-        row = self.db.execute("select digest, path from rows where key = ? and state = 'done'", (key,)).fetchone()
+        row = self.db.execute("select digest, path from derivations where key = ? and state = 'done'", (key,)).fetchone()
         if row is None: return None
         digest, path = row
         if not isinstance(path, str): raise StoreError(f"done row without path: {key}")
         return Handle(key, digest, path)
 
     def state(self, key: Key) -> State | None:
-        row = self.db.execute("select state from rows where key = ?", (key,)).fetchone()
+        row = self.db.execute("select state from derivations where key = ?", (key,)).fetchone()
         if row is None: return None
-        if row[0] not in ("pending", "done"): raise StoreError(f"bad state {row[0]!r} for {key}")
-        return row[0]
+        (state,) = row
+        if state not in ("pending", "done"): raise StoreError(f"bad state {state!r} for {key}")
+        return state
 
     def pending(self, key: Key) -> None:
         # never demote a row another process already finished
         self.db.execute(
-            "insert into rows values (?, 'pending', null, null) on conflict(key) do update set state = 'pending' where state != 'done'",
+            "insert into derivations values (?, 'pending', null, null) on conflict(key) do update set state = 'pending' where state != 'done'",
             (key,),
         )
 
-    def done(self, h: Handle) -> None:
+    def done(self, handle: Handle) -> None:
         # first writer wins: if another process marked it done already, keep theirs
-        self.db.execute("update rows set state = 'done', digest = ?, path = ? where key = ? and state = 'pending'", (h.digest, h.path, h.key))
-        if self.state(h.key) != "done": raise StoreError(f"done without pending: {h.key}")
+        self.db.execute(
+            "update derivations set state = 'done', digest = ?, path = ? where key = ? and state = 'pending'",
+            (handle.digest, handle.path, handle.key),
+        )
+        if self.state(handle.key) != "done": raise StoreError(f"done without pending: {handle.key}")
 
     def set_digest(self, key: Key, digest: str) -> None:
-        self.db.execute("update rows set digest = ? where key = ? and state = 'done'", (digest, key))
+        self.db.execute("update derivations set digest = ? where key = ? and state = 'done'", (digest, key))
 
 
 def dir_digest(root: Path) -> str:
     """sha256 over sorted (relative path, file bytes). Empty dirs and absolute location don't count."""
-    h = hashlib.sha256()
-    for p in sorted(root.rglob("*")):
-        if p.is_file():
-            h.update(p.relative_to(root).as_posix().encode() + b"\0")
-            h.update(hashlib.sha256(p.read_bytes()).digest())
-    return h.hexdigest()
+    hasher = hashlib.sha256()
+    for file_path in sorted(root.rglob("*")):
+        if file_path.is_file():
+            hasher.update(file_path.relative_to(root).as_posix().encode() + b"\0")
+            hasher.update(hashlib.sha256(file_path.read_bytes()).digest())
+    return hasher.hexdigest()
 
 
 @dataclass(frozen=True)
@@ -71,8 +78,8 @@ class LocalBlobStore:
     root: Path
 
     def tmp(self) -> Path:
-        (self.root / "tmp").mkdir(parents=True, exist_ok=True)
-        return Path(tempfile.mkdtemp(dir=self.root / "tmp"))
+        (self.root / TMP_DIR).mkdir(parents=True, exist_ok=True)
+        return Path(tempfile.mkdtemp(dir=self.root / TMP_DIR))
 
     def commit(self, tmp: Path, key: Key) -> Handle:
         """
@@ -81,7 +88,7 @@ class LocalBlobStore:
         crash before meta.done. Same key = equivalent output, so first writer wins and ours is discarded.
         """
         if not tmp.is_dir(): raise StoreError(f"missing tmp dir {tmp}")
-        dest = self.root / "blobs" / key
+        dest = self.root / BLOBS_DIR / key
         dest.parent.mkdir(parents=True, exist_ok=True)
         try:
             os.rename(tmp, dest)
