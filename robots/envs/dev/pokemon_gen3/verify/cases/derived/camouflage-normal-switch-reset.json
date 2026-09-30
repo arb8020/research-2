@@ -1,0 +1,27 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "camouflage-normal-switch-reset",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen4/moves.ts; sim/pokemon.ts; test/sim/moves/camouflage.js",
+    "test_name": "Gen 3 Camouflage installs the inherited Normal overlay and switching restores base typing",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1701, 1702, 1703, 1704],
+  "teams": [
+    {"source": "starmie-camouflage-p1.txt", "normalized": [
+      {"species": "starmie", "level": 100, "gender": "N", "nature": "hardy", "ability": "naturalcure", "item": "", "moves": ["camouflage"], "stats": [261,186,206,236,206,266], "status": null},
+      {"species": "blissey", "level": 100, "gender": "F", "nature": "hardy", "ability": "naturalcure", "item": "", "moves": ["splash"], "stats": [651,56,56,186,306,146], "status": null}
+    ]},
+    {"source": "blissey-camouflage-p2.txt", "normalized": [
+      {"species": "blissey", "level": 100, "gender": "F", "nature": "hardy", "ability": "naturalcure", "item": "", "moves": ["splash"], "stats": [651,56,56,186,306,146], "status": null}
+    ]}
+  ],
+  "source_choices": [["move 1", "move 1"], ["switch 2", "move 1"]],
+  "choices": [["move 1", "move 1"], ["switch 2", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["state.canonical", "state.effective-type", "choice.switch"],
+  "boundaries": ["choice", "events", "handlers", "prng", "queue", "request", "state"],
+  "limits": {"max_boundaries": 3, "max_actions": 4}
+}

@@ -1,0 +1,6 @@
+Starmie @ Mystic Water
+Ability: Natural Cure
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Surf

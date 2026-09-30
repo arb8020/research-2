@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"sandstorm-ground-immunity",
+  "provenance":{"kind":"showdown-derived","source_file":"data/typechart.ts","test_name":"Checkpoint 4: Ground typing is naturally immune to Sandstorm residual damage","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"blissey-sandstorm-p1.txt","normalized":[{"species":"blissey","level":100,"gender":"F","ability":"naturalcure","item":"","moves":["sandstorm"],"stats":[651,56,56,186,306,146],"status":null}]},{"source":"marowak-earthquake-p2.txt","normalized":[{"species":"marowak","level":100,"gender":"M","ability":"rockhead","item":"","moves":["earthquake"],"stats":[261,196,256,136,196,126],"status":null}]}],
+  "source_choices":[["move 1","move 1"]],"choices":[["move 1","move 1"]],"forced_outcomes":[],
+  "features":["choice.move","condition.weather","damage.residual","handler.residual","state.canonical","weather.sandstorm","weather.type-immunity"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],"limits":{"max_boundaries":2,"max_actions":2}
+}

@@ -1,0 +1,7 @@
+Starmie
+Ability: Natural Cure
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Rain Dance
+- Sunny Day

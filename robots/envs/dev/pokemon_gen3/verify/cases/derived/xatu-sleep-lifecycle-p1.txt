@@ -1,0 +1,6 @@
+Xatu (M)
+Ability: Early Bird
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Splash

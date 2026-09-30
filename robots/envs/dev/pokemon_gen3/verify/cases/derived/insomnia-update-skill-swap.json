@@ -1,0 +1,27 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "insomnia-update-skill-swap",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/abilities.ts",
+    "test_name": "Insomnia cures existing sleep through ordered Update after Skill Swap",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {"source": "smeargle-banette-insomnia-skill-swap-p1.txt", "normalized": [
+      {"species":"smeargle","level":100,"gender":"M","nature":"hardy","ability":"owntempo","item":"","moves":["spore"],"stats":[251,76,106,76,126,186],"status":null},
+      {"species":"banette","level":100,"gender":"M","nature":"hardy","ability":"insomnia","item":"","moves":["skillswap"],"stats":[269,266,166,202,162,166],"status":null}
+    ]},
+    {"source": "machop-splash-p2.txt", "normalized": [
+      {"species":"machop","level":100,"gender":"M","nature":"hardy","ability":"guts","item":"","moves":["splash"],"stats":[281,196,136,106,106,106],"status":null}
+    ]}
+  ],
+  "source_choices": [["move 1","move 1"],["switch 2","move 1"],["move 1","move 1"]],
+  "choices": [["move 1","move 1"],["switch 2","move 1"],["move 1","move 1"]],
+  "forced_outcomes": [],
+  "features": ["ability.insomnia","choice.move","condition.nonvolatile-status","handler.update","move.skill-swap","prng.labeled","state.canonical"],
+  "boundaries": ["choice","events","handlers","prng","queue","request","state"],
+  "limits": {"max_boundaries":4,"max_actions":6}
+}

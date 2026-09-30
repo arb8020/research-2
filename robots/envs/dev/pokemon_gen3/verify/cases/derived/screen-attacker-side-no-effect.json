@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"screen-attacker-side-no-effect",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen4/moves.ts","test_name":"Checkpoint 6: attacker-side Reflect does not reduce outgoing physical damage","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,8],
+  "teams":[{"source":"alakazam-reflect-thief-p1.txt","normalized":[{"species":"alakazam","level":100,"gender":"M","ability":"synchronize","item":"","moves":["reflect","thief"],"stats":[251,136,126,306,206,276],"status":null}]},{"source":"magikarp-splash-screen-p2.txt","normalized":[{"species":"magikarp","level":100,"gender":"M","ability":"swiftswim","item":"","moves":["splash"],"stats":[181,56,146,66,76,196],"status":null}]}],
+  "source_choices":[["move 1","move 1"],["move 2","move 1"]],"choices":[["move 1","move 1"],["move 2","move 1"]],"forced_outcomes":[],
+  "features":["condition.side","damage.reflect","handler.modify-damage-phase1","side.reflect","state.canonical"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],"limits":{"max_boundaries":3,"max_actions":4}
+}

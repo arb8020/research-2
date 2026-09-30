@@ -1,0 +1,101 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "pain-split-protect-block",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#painsplit; sim/battle-actions.ts; sim/pokemon.ts#sethp",
+    "test_name": "Protect prevents the Pain Split hit callback and both assignments",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    831,
+    832,
+    833,
+    834
+  ],
+  "teams": [
+    {
+      "source": "pain-split-protect-block-p1.txt",
+      "normalized": [
+        {
+          "species": "dusclops",
+          "level": 100,
+          "gender": "M",
+          "ability": "pressure",
+          "item": "",
+          "moves": [
+            "painsplit"
+          ],
+          "stats": [
+            221,
+            176,
+            296,
+            156,
+            296,
+            86
+          ],
+          "status": null,
+          "initial_hp": 101
+        }
+      ]
+    },
+    {
+      "source": "pain-split-protect-block-p2.txt",
+      "normalized": [
+        {
+          "species": "aggron",
+          "level": 100,
+          "gender": "M",
+          "ability": "sturdy",
+          "item": "",
+          "moves": [
+            "protect"
+          ],
+          "stats": [
+            281,
+            256,
+            396,
+            156,
+            156,
+            136
+          ],
+          "status": null,
+          "initial_hp": 200
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "hit.protect",
+    "hit.substitute",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

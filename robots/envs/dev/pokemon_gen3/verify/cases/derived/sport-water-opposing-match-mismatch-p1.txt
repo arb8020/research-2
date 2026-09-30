@@ -1,0 +1,7 @@
+Smeargle (M)
+Ability: Illuminate
+Level: 100
+EVs: 252 Spe
+Hardy Nature
+- Water Sport
+- Splash

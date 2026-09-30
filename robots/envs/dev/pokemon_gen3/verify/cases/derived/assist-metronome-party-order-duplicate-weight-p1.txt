@@ -1,0 +1,21 @@
+Smeargle (M)
+Ability: Own Tempo
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Metronome
+
+Persian (M)
+Ability: Limber
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Scratch
+
+Charmander (M)
+Ability: Blaze
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Ember
+- Scratch

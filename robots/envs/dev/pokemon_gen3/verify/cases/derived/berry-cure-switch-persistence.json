@@ -1,0 +1,16 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"berry-cure-switch-persistence",
+  "provenance":{"kind":"showdown-derived","source_file":"data/items.ts; data/mods/gen3/scripts.ts","test_name":"Rawst and Aspear cure on active Update and persist through switching","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[19,23,29,37],
+  "teams":[
+    {"source":"cure-berry-switch-p1.txt","normalized":[
+      {"species":"persian","level":100,"gender":"M","ability":"limber","item":"rawstberry","moves":["splash"],"stats":[271,176,156,166,166,266],"status":"brn"},
+      {"species":"articuno","level":100,"gender":"N","ability":"pressure","item":"aspearberry","moves":["splash"],"stats":[321,206,236,226,286,206],"status":"frz"}
+    ]},
+    {"source":"magikarp-splash-p2.txt","normalized":[{"species":"magikarp","level":100,"gender":"M","ability":"swiftswim","item":"","moves":["splash"],"stats":[181,56,146,66,76,196],"status":null}]}
+  ],
+  "source_choices":[["move 1","move 1"],["switch 2","move 1"]],
+  "choices":[["move 1","move 1"],["switch 2","move 1"]],"forced_outcomes":[],
+  "features":["condition.nonvolatile-status","item.consumption","handler.status-update","choice.switch","state.canonical"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":3,"max_actions":4}
+}

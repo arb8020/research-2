@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"recharge-frenzy-plant",
+  "provenance":{"kind":"showdown-derived","source_file":"data/moves.ts; data/conditions.ts; sim/pokemon.ts; sim/battle-actions.ts","test_name":"Frenzy Plant enters the shared connected-hit recharge lifecycle","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"recharge-frenzy-plant-p1.txt","normalized":[{"species":"venusaur","level":100,"gender":"M","ability":"overgrow","item":"","moves":["frenzyplant"],"stats":[301,200,202,236,236,196],"status":null}]},{"source":"recharge-torkoal-rest-p2.txt","normalized":[{"species":"torkoal","level":100,"gender":"M","ability":"whitesmoke","item":"","moves":["rest"],"stats":[281,206,316,206,176,76],"status":null}]}],
+  "source_choices":[["move 1","move 1"],["move 1","move 1"]],"choices":[["move 1","move 1"],["move 1","move 1"]],"forced_outcomes":[],
+  "features":["choice.move","request.legal-choices","condition.volatile","lifecycle.condition-duration","state.canonical","prng.labeled"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],"limits":{"max_boundaries":3,"max_actions":4}
+}

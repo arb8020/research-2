@@ -1,0 +1,7 @@
+Smeargle (M)
+Ability: Own Tempo
+Level: 50
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+IVs: 31 HP / 31 Atk / 31 Def / 31 SpA / 31 SpD / 31 Spe
+Hardy Nature
+- Mirror Coat

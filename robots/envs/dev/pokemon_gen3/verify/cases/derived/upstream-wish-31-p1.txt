@@ -1,0 +1,13 @@
+Pichu (M)
+Ability: Static
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Wish
+
+Parasect (M)
+Ability: Effect Spore
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Sleep Talk

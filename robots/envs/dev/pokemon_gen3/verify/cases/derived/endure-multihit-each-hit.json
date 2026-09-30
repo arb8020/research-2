@@ -1,0 +1,142 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "endure-multihit-each-hit",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/scripts.ts",
+    "test_name": "Endure applies the Damage relay independently to every lethal multihit strike",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    1
+  ],
+  "teams": [
+    {
+      "source": "endure-multihit-each-hit-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "endure"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null,
+          "initial_hp": 5
+        }
+      ]
+    },
+    {
+      "source": "endure-multihit-each-hit-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 99,
+          "gender": "F",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "furyattack"
+          ],
+          "stats": [
+            248,
+            75,
+            104,
+            75,
+            124,
+            184
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 54
+    },
+    {
+      "label": "move.multihit_count",
+      "occurrence": 1,
+      "range": 8,
+      "result": 0
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 1,
+      "range": 16,
+      "result": 8
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 1,
+      "range": 16,
+      "result": 13
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 2,
+      "range": 16,
+      "result": 4
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 2,
+      "range": 16,
+      "result": 15
+    }
+  ],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "damage.endure",
+    "hit.accuracy",
+    "hit.multihit",
+    "prng.labeled",
+    "prng.multihit",
+    "state.canonical",
+    "volatile.endure"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

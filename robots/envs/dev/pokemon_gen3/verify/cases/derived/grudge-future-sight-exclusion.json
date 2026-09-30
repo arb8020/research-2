@@ -1,0 +1,140 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "grudge-future-sight-exclusion",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; sim/battle-actions.ts; sim/pokemon.ts",
+    "test_name": "Grudge ignores a delayed Future Sight KO",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    179,
+    180,
+    181,
+    182
+  ],
+  "teams": [
+    {
+      "source": "grudge-future-sight-exclusion-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "splash",
+            "grudge"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null,
+          "initial_hp": 1
+        },
+        {
+          "species": "magikarp",
+          "level": 50,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            95,
+            30,
+            75,
+            35,
+            40,
+            100
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "grudge-future-sight-exclusion-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 50,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "futuresight",
+            "splash"
+          ],
+          "stats": [
+            130,
+            40,
+            55,
+            40,
+            65,
+            95
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.before-move",
+    "handler.prepare-hit",
+    "lifecycle.faint",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state",
+    "terminal"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "pressure-magic-coat-no-double-deduction",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/abilities/pressure.js:172; sim/battle-actions.ts#useMoveInner",
+    "test_name": "a Magic Coat reflected move does not deduct its unused local slot or a second source PP",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "pressure-magic-coat-no-double-deduction-p1.txt",
+      "normalized": [
+        {
+          "species": "spoink",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "magiccoat",
+            "confuseray"
+          ],
+          "stats": [
+            261,
+            86,
+            106,
+            176,
+            196,
+            156
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "pressure-magic-coat-no-double-deduction-p2.txt",
+      "normalized": [
+        {
+          "species": "dusclops",
+          "level": 100,
+          "gender": "M",
+          "ability": "pressure",
+          "item": "",
+          "moves": [
+            "confuseray"
+          ],
+          "stats": [
+            221,
+            176,
+            296,
+            156,
+            296,
+            86
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "ability.pressure",
+    "choice.move",
+    "handler.deduct-pp",
+    "move.magic-coat",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

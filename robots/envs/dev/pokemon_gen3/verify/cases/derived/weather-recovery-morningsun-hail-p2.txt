@@ -1,0 +1,5 @@
+Magikarp (M)
+Ability: Swiftswim
+Level: 100
+Hardy Nature
+- Splash

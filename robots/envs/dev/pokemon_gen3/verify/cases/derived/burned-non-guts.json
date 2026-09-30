@@ -1,0 +1,13 @@
+{
+  "schema":"pokemon-native-differential-case-v1", "id":"burned-non-guts",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen3/scripts.ts","test_name":"Checkpoint 3: burn halves physical damage without Guts","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou", "seed":[1,2,3,4],
+  "teams":[
+    {"source":"hitmonchan-l60-mach-punch-p1.txt","normalized":[{"species":"hitmonchan","level":60,"gender":"M","ability":"keeneye","item":"","moves":["machpunch"],"stats":[148,149,118,65,155,114],"status":"brn"}]},
+    {"source":"marowak-earthquake-p2.txt","normalized":[{"species":"marowak","level":100,"gender":"M","ability":"rockhead","item":"","moves":["earthquake"],"stats":[261,196,256,136,196,126],"status":null}]}
+  ],
+  "source_choices":[["move 1","move 1"]], "choices":[["move 1","move 1"]], "forced_outcomes":[],
+  "features":["choice.move","damage.burn","damage.gen3","handler.modify-attack","hit.accuracy","lifecycle.faint","lifecycle.terminal","prng.labeled","queue.move-priority","state.canonical"],
+  "boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],
+  "limits":{"max_boundaries":2,"max_actions":2}
+}

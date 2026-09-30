@@ -1,0 +1,117 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "hidden-power-electric-ground-immunity",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/dex.ts; sim/pokemon.ts; data/mods/gen3/moves.ts",
+    "test_name": "mixed IV bits construct Electric Hidden Power and the dynamic type observes Ground immunity",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    121,
+    122,
+    123,
+    124
+  ],
+  "teams": [
+    {
+      "source": "hidden-power-electric-ground-immunity-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "hiddenpower"
+          ],
+          "stats": [
+            250,
+            75,
+            105,
+            76,
+            126,
+            185
+          ],
+          "ivs": [
+            30,
+            30,
+            30,
+            31,
+            31,
+            30
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "hidden-power-electric-ground-immunity-p2.txt",
+      "normalized": [
+        {
+          "species": "golem",
+          "level": 100,
+          "gender": "M",
+          "ability": "rockhead",
+          "item": "",
+          "moves": [
+            "earthquake"
+          ],
+          "stats": [
+            301,
+            256,
+            296,
+            146,
+            166,
+            126
+          ],
+          "ivs": [
+            31,
+            31,
+            31,
+            31,
+            31,
+            31
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "damage.variable-power",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

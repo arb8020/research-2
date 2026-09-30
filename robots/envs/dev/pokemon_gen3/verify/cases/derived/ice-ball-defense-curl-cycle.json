@@ -1,0 +1,264 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "ice-ball-defense-curl-cycle",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#rollout,data/moves.ts#iceball; test/sim/moves/rollout.js:18,42,72,100",
+    "test_name": "iceball has Defense Curl-adjusted base powers 60, 120, 240, 480, 960, then 60",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    0,
+    71,
+    29,
+    7
+  ],
+  "teams": [
+    {
+      "source": "ice-ball-defense-curl-cycle-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "defensecurl",
+            "iceball"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "ice-ball-defense-curl-cycle-p2.txt",
+      "normalized": [
+        {
+          "species": "cloyster",
+          "level": 100,
+          "gender": "M",
+          "ability": "shellarmor",
+          "item": "",
+          "moves": [
+            "withdraw"
+          ],
+          "stats": [
+            241,
+            226,
+            396,
+            206,
+            126,
+            176
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 28
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 2,
+      "range": 100,
+      "result": 34
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 3,
+      "range": 100,
+      "result": 18
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 4,
+      "range": 100,
+      "result": 43
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 5,
+      "range": 100,
+      "result": 4
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 6,
+      "range": 100,
+      "result": 9
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 1,
+      "range": 16,
+      "result": 10
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 2,
+      "range": 16,
+      "result": 6
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 3,
+      "range": 16,
+      "result": 9
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 4,
+      "range": 16,
+      "result": 10
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 5,
+      "range": 16,
+      "result": 7
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 6,
+      "range": 16,
+      "result": 7
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 1,
+      "range": 16,
+      "result": 10
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 2,
+      "range": 16,
+      "result": 8
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 3,
+      "range": 16,
+      "result": 0
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 4,
+      "range": 16,
+      "result": 0
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 5,
+      "range": 16,
+      "result": 11
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 6,
+      "range": 16,
+      "result": 1
+    }
+  ],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "effect.boost",
+    "handler.base-power",
+    "handler.damaging-hit",
+    "hit.accuracy",
+    "lifecycle.condition-duration",
+    "prng.labeled",
+    "request.legal-choices",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 8,
+    "max_actions": 14
+  }
+}

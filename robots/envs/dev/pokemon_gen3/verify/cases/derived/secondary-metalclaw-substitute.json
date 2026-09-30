@@ -1,0 +1,17 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "secondary-metalclaw-substitute",
+  "provenance": {"kind":"showdown-derived","source_file":"sim/battle-actions.ts","test_name":"Reached self secondary remains eligible behind Substitute","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format": "gen3ou",
+  "seed": [1,2,3,4],
+  "teams": [
+    {"source":"secondary-metalclaw-p1.txt","normalized":[{"species":"aggron","level":100,"gender":"M","ability":"rockhead","item":"","moves":["metalclaw"],"stats":[281,256,396,156,156,136],"status":null}]},
+    {"source":"persian-substitute-p2.txt","normalized":[{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["substitute","splash"],"stats":[271,176,156,166,166,266],"status":null}]}
+  ],
+  "source_choices": [["move 1","move 1"]],
+  "choices": [["move 1","move 1"]],
+  "forced_outcomes": [],
+  "features": ["effect.secondary","effect.boost","hit.substitute","prng.secondary","state.canonical"],
+  "boundaries": ["request","choice","queue","handlers","state","events","prng"],
+  "limits": {"max_boundaries":2,"max_actions":2}
+}

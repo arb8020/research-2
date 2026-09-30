@@ -1,0 +1,2302 @@
+diff --git a/data/abilities.ts b/data/abilities.ts
+index 410480fc5..0c5f751fc 100644
+--- a/data/abilities.ts
++++ b/data/abilities.ts
+@@ -3861,7 +3861,12 @@ export const Abilities: import('../sim/dex-abilities').AbilityDataTable = {
+ 		onDamage(damage, target, source, effect) {
+ 			if (effect.id === 'recoil') {
+ 				if (!this.activeMove) throw new Error("Battle.activeMove is null");
+-				if (this.activeMove.id !== 'struggle') return null;
++				if (this.activeMove.id !== 'struggle') {
++					this.recordVerificationRecoilPrevention(
++						this.activeMove, target, source, damage, 'rockhead'
++					);
++					return null;
++				}
+ 			}
+ 		},
+ 		flags: {},
+@@ -4142,7 +4147,8 @@ export const Abilities: import('../sim/dex-abilities').AbilityDataTable = {
+ 		onResidualOrder: 5,
+ 		onResidualSubOrder: 3,
+ 		onResidual(pokemon) {
+-			if (pokemon.hp && pokemon.status && this.randomChance(33, 100)) {
++			if (pokemon.hp && pokemon.status &&
++				this.verificationRandomChance('ability.residual_status_cure', 33, 100)) {
+ 				this.debug('shed skin');
+ 				this.add('-activate', pokemon, 'ability: Shed Skin');
+ 				pokemon.cureStatus();
+diff --git a/data/conditions.ts b/data/conditions.ts
+index 9d6ee15ca..8699d7185 100644
+--- a/data/conditions.ts
++++ b/data/conditions.ts
+@@ -171,7 +171,8 @@ export const Conditions: import('../sim/dex-conditions').ConditionDataTable = {
+ 				this.add('-start', target, 'confusion');
+ 			}
+ 			const min = sourceEffect?.id === 'axekick' ? 3 : 2;
+-			this.effectState.time = this.random(min, 6);
++			this.effectState.time = min + this.verificationRandom(
++				'condition.confusion.duration', () => this.random(6 - min));
+ 		},
+ 		onEnd(target) {
+ 			this.add('-end', target, 'confusion');
+@@ -262,7 +263,9 @@ export const Conditions: import('../sim/dex-conditions').ConditionDataTable = {
+ 			this.effectState.trueDuration--;
+ 		},
+ 		onStart(target, source, effect) {
+-			this.effectState.trueDuration = this.random(2, 4);
++			this.effectState.trueDuration = 2 + this.verificationRandom(
++				'condition.lockedmove.duration', () => this.random(2)
++			);
+ 			this.effectState.move = effect.id;
+ 		},
+ 		onRestart() {
+diff --git a/data/items.ts b/data/items.ts
+index fb53bdc56..c7e85c370 100644
+--- a/data/items.ts
++++ b/data/items.ts
+@@ -2253,7 +2253,8 @@ export const Items: import('../sim/dex-items').ItemDataTable = {
+ 		},
+ 		onDamagePriority: -40,
+ 		onDamage(damage, target, source, effect) {
+-			if (this.randomChance(1, 10) && damage >= target.hp && effect && effect.effectType === 'Move') {
++			if (this.verificationRandomChance('item.focus_band', 1, 10) &&
++				damage >= target.hp && effect && effect.effectType === 'Move') {
+ 				this.add("-activate", target, "item: Focus Band");
+ 				return target.hp - 1;
+ 			}
+@@ -6004,7 +6005,8 @@ export const Items: import('../sim/dex-items').ItemDataTable = {
+ 				}
+ 			}
+ 			if (stats.length) {
+-				const randomStat = this.sample(stats);
++				const randomStat = this.verificationRandom(
++					'item.starfberry.stat', () => this.sample(stats));
+ 				const boost: SparseBoostsTable = {};
+ 				boost[randomStat] = 2;
+ 				this.boost(boost);
+diff --git a/data/mods/gen3/abilities.ts b/data/mods/gen3/abilities.ts
+index 05d84a50c..03bd92d67 100644
+--- a/data/mods/gen3/abilities.ts
++++ b/data/mods/gen3/abilities.ts
+@@ -3,7 +3,7 @@ export const Abilities: import('../../../sim/dex-abilities').ModdedAbilityDataTa
+ 		inherit: true,
+ 		onDamagingHit(damage, target, source, move) {
+ 			if (damage && move.flags['contact']) {
+-				if (this.randomChance(1, 3)) {
++				if (this.verificationRandomChance('ability.contact_response.activation', 1, 3)) {
+ 					source.addVolatile('attract', target);
+ 				}
+ 			}
+@@ -12,8 +12,12 @@ export const Abilities: import('../../../sim/dex-abilities').ModdedAbilityDataTa
+ 	effectspore: {
+ 		inherit: true,
+ 		onDamagingHit(damage, target, source, move) {
+-			if (damage && move.flags['contact'] && this.randomChance(1, 10)) {
+-				const status = this.sample(['slp', 'par', 'psn']);
++			if (damage && move.flags['contact'] &&
++				this.verificationRandomChance('ability.contact_response.activation', 1, 10)) {
++				const statuses = ['slp', 'par', 'psn'] as const;
++				const status = statuses[this.verificationRandom(
++					'ability.contact_response.status', () => this.random(statuses.length)
++				)];
+ 				source.trySetStatus(status, target);
+ 			}
+ 		},
+@@ -22,7 +26,7 @@ export const Abilities: import('../../../sim/dex-abilities').ModdedAbilityDataTa
+ 		inherit: true,
+ 		onDamagingHit(damage, target, source, move) {
+ 			if (damage && move.flags['contact']) {
+-				if (this.randomChance(1, 3)) {
++				if (this.verificationRandomChance('ability.contact_response.activation', 1, 3)) {
+ 					source.trySetStatus('brn', target);
+ 				}
+ 			}
+@@ -136,7 +140,7 @@ export const Abilities: import('../../../sim/dex-abilities').ModdedAbilityDataTa
+ 		inherit: true,
+ 		onDamagingHit(damage, target, source, move) {
+ 			if (damage && move.flags['contact']) {
+-				if (this.randomChance(1, 3)) {
++				if (this.verificationRandomChance('ability.contact_response.activation', 1, 3)) {
+ 					source.trySetStatus('psn', target);
+ 				}
+ 			}
+@@ -177,7 +181,7 @@ export const Abilities: import('../../../sim/dex-abilities').ModdedAbilityDataTa
+ 		inherit: true,
+ 		onDamagingHit(damage, target, source, move) {
+ 			if (damage && move.flags['contact']) {
+-				if (this.randomChance(1, 3)) {
++				if (this.verificationRandomChance('ability.contact_response.activation', 1, 3)) {
+ 					source.trySetStatus('par', target);
+ 				}
+ 			}
+@@ -187,7 +191,9 @@ export const Abilities: import('../../../sim/dex-abilities').ModdedAbilityDataTa
+ 		inherit: true,
+ 		onUpdate: undefined, // no inherit
+ 		onStart(pokemon) {
+-			const target = pokemon.side.randomFoe();
++			const target = this.verificationRandom(
++				'ability.trace.target', () => pokemon.side.randomFoe()
++			);
+ 			if (!target || target.fainted) return;
+ 			const ability = target.getAbility();
+ 			pokemon.setAbility(ability, target);
+diff --git a/data/mods/gen3/moves.ts b/data/mods/gen3/moves.ts
+index 06cdde7a0..24a4447da 100644
+--- a/data/mods/gen3/moves.ts
++++ b/data/mods/gen3/moves.ts
+@@ -92,7 +92,12 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 						effectType: 'Move',
+ 						type: 'Normal',
+ 					} as unknown as ActiveMove;
+-					this.actions.tryMoveHit(target, pokemon, moveData);
++					const hpBefore = target.hp;
++					const result = this.actions.tryMoveHit(target, pokemon, moveData);
++					if (typeof result === 'number' && result > 0) {
++						this.recordVerificationConstructedHit(
++							moveData, pokemon, target, hpBefore - target.hp);
++					}
+ 					pokemon.removeVolatile('bide');
+ 					return false;
+ 				}
+@@ -154,7 +159,8 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 			if (!possibleTypes.length) {
+ 				return false;
+ 			}
+-			const randomType = this.sample(possibleTypes);
++			const randomType = this.verificationRandom(
++				'move.type_response.selection', () => this.sample(possibleTypes));
+ 
+ 			if (!source.setType(randomType)) return false;
+ 			this.add('-start', source, 'typechange', randomType);
+@@ -205,7 +211,9 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 		condition: {
+ 			inherit: true,
+ 			durationCallback() {
+-				return this.random(2, 6);
++				return 2 + this.verificationRandom(
++					'condition.disable.duration', () => this.random(4)
++				);
+ 			},
+ 			"onResidualOrder": undefined, // no inherit
+ 			"onResidualSubOrder": undefined, // no inherit
+@@ -219,6 +227,7 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 		inherit: true,
+ 		onTry(source, target) {
+ 			if (!target.side.addSlotCondition(target, 'futuremove')) return false;
++			const before = { ...target.side.slotConditions[target.position]['futuremove'] };
+ 			const moveData = {
+ 				name: "Doom Desire",
+ 				basePower: 120,
+@@ -244,6 +253,10 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 					type: '???',
+ 				},
+ 			});
++			this.recordVerificationCondition(
++				'update', this.dex.conditions.get('futuremove'), target.side, before,
++				{ ...target.side.slotConditions[target.position]['futuremove'] }, null, undefined, target.position
++			);
+ 			this.add('-start', source, 'Doom Desire');
+ 			return null;
+ 		},
+@@ -254,7 +267,9 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 		condition: {
+ 			inherit: true,
+ 			durationCallback() {
+-				return this.random(3, 7);
++				return 3 + this.verificationRandom(
++					'condition.encore.duration', () => this.random(4)
++				);
+ 			},
+ 		},
+ 	},
+@@ -275,19 +290,29 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 		basePowerCallback(pokemon) {
+ 			const ratio = Math.max(Math.floor(pokemon.hp * 48 / pokemon.maxhp), 1);
+ 			let bp;
++			let bracket;
+ 			if (ratio < 2) {
+ 				bp = 200;
++				bracket = 0;
+ 			} else if (ratio < 5) {
+ 				bp = 150;
++				bracket = 1;
+ 			} else if (ratio < 10) {
+ 				bp = 100;
++				bracket = 2;
+ 			} else if (ratio < 17) {
+ 				bp = 80;
++				bracket = 3;
+ 			} else if (ratio < 33) {
+ 				bp = 40;
++				bracket = 4;
+ 			} else {
+ 				bp = 20;
++				bracket = 5;
+ 			}
++			this.recordVerificationVariablePower(
++				this.activeMove!, pokemon, this.activeTarget!, 'hp-bracket', ratio, bracket, bp
++			);
+ 			this.debug(`BP: ${bp}`);
+ 			return bp;
+ 		},
+@@ -359,9 +384,15 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 		basePower: 85,
+ 		onMoveFail(target, source, move) {
+ 			if (target.runImmunity('Fighting')) {
++				const traceStart = this.verificationTraceSequence;
+ 				const damage = this.actions.getDamage(source, target, move, true);
+ 				if (typeof damage !== 'number') throw new Error("HJK recoil failed");
+-				this.damage(this.clampIntRange(damage / 2, 1, Math.floor(target.maxhp / 2)), source, source, move);
++				const requested = this.clampIntRange(damage / 2, 1, Math.floor(target.maxhp / 2));
++				const hpBefore = source.hp;
++				const result = this.damage(requested, source, source, move);
++				this.recordVerificationCrashDamage(
++					move, source, target, damage, requested, hpBefore, source.hp, traceStart, result
++				);
+ 			}
+ 		},
+ 	},
+@@ -374,9 +405,15 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 		basePower: 70,
+ 		onMoveFail(target, source, move) {
+ 			if (target.runImmunity('Fighting')) {
++				const traceStart = this.verificationTraceSequence;
+ 				const damage = this.actions.getDamage(source, target, move, true);
+ 				if (typeof damage !== 'number') throw new Error("Jump Kick didn't recoil");
+-				this.damage(this.clampIntRange(damage / 2, 1, Math.floor(target.maxhp / 2)), source, source, move);
++				const requested = this.clampIntRange(damage / 2, 1, Math.floor(target.maxhp / 2));
++				const hpBefore = source.hp;
++				const result = this.damage(requested, source, source, move);
++				this.recordVerificationCrashDamage(
++					move, source, target, damage, requested, hpBefore, source.hp, traceStart, result
++				);
+ 			}
+ 		},
+ 	},
+@@ -498,19 +535,29 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 		basePowerCallback(pokemon) {
+ 			const ratio = Math.max(Math.floor(pokemon.hp * 48 / pokemon.maxhp), 1);
+ 			let bp;
++			let bracket;
+ 			if (ratio < 2) {
+ 				bp = 200;
++				bracket = 0;
+ 			} else if (ratio < 5) {
+ 				bp = 150;
++				bracket = 1;
+ 			} else if (ratio < 10) {
+ 				bp = 100;
++				bracket = 2;
+ 			} else if (ratio < 17) {
+ 				bp = 80;
++				bracket = 3;
+ 			} else if (ratio < 33) {
+ 				bp = 40;
++				bracket = 4;
+ 			} else {
+ 				bp = 20;
++				bracket = 5;
+ 			}
++			this.recordVerificationVariablePower(
++				this.activeMove!, pokemon, this.activeTarget!, 'hp-bracket', ratio, bracket, bp
++			);
+ 			this.debug(`BP: ${bp}`);
+ 			return bp;
+ 		},
+@@ -614,7 +661,9 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 		condition: {
+ 			inherit: true,
+ 			durationCallback() {
+-				return this.random(2, 6);
++				return 2 + this.verificationRandom(
++					'condition.uproar.duration', () => this.random(4)
++				);
+ 			},
+ 		},
+ 	},
+diff --git a/data/mods/gen3/scripts.ts b/data/mods/gen3/scripts.ts
+index de3150b0f..a5b340e5d 100644
+--- a/data/mods/gen3/scripts.ts
++++ b/data/mods/gen3/scripts.ts
+@@ -38,8 +38,25 @@ export const Scripts: ModdedBattleScriptsData = {
+ 			const type = move.type;
+ 
+ 			// Burn
+-			if (pokemon.status === 'brn' && baseDamage && move.category === 'Physical' && !pokemon.hasAbility('guts')) {
++			const damageBeforeBurn = baseDamage;
++			let burnReason: 'applied' | 'not-burned' | 'zero-damage' | 'not-physical' | 'guts';
++			if (pokemon.status !== 'brn') {
++				burnReason = 'not-burned';
++			} else if (!baseDamage) {
++				burnReason = 'zero-damage';
++			} else if (move.category !== 'Physical') {
++				burnReason = 'not-physical';
++			} else if (pokemon.hasAbility('guts')) {
++				burnReason = 'guts';
++			} else {
+ 				baseDamage = this.battle.modify(baseDamage, 0.5);
++				burnReason = 'applied';
++			}
++			if (pokemon.status === 'brn') {
++				this.battle.recordVerificationDamageStage(
++					'burn', pokemon, target, move, damageBeforeBurn, baseDamage,
++					burnReason === 'applied', burnReason
++				);
+ 			}
+ 
+ 			// Other modifiers (Reflect/Light Screen/etc)
+@@ -361,7 +378,8 @@ export const Scripts: ModdedBattleScriptsData = {
+ 			} else {
+ 				accuracy = this.battle.runEvent('Accuracy', target, pokemon, move, accuracy);
+ 			}
+-			if (accuracy !== true && !this.battle.randomChance(accuracy, 100)) {
++			if (accuracy !== true &&
++				!this.battle.verificationRandomChance('move.accuracy', accuracy, 100)) {
+ 				accPass = false;
+ 			}
+ 
+@@ -395,12 +413,15 @@ export const Scripts: ModdedBattleScriptsData = {
+ 				if (Array.isArray(hits)) {
+ 					// yes, it's hardcoded... meh
+ 					if (hits[0] === 2 && hits[1] === 5) {
+-						hits = this.battle.sample([2, 2, 2, 3, 3, 3, 4, 5]);
++						hits = this.battle.verificationRandom(
++							'move.multihit_count', () => this.battle.sample([2, 2, 2, 3, 3, 3, 4, 5]));
+ 					} else {
+-						hits = this.battle.random(hits[0], hits[1] + 1);
++						hits = this.battle.verificationRandom(
++							'move.multihit_count', () => this.battle.random(hits[0], hits[1] + 1));
+ 					}
+ 				}
+ 				hits = Math.floor(hits);
++				this.battle.recordVerificationMultiHitPlan(move, pokemon, target, hits);
+ 				let nullDamage = true;
+ 				let moveDamage: number | undefined | false;
+ 				// There is no need to recursively check the ´sleepUsable´ flag as Sleep Talk can only be used while asleep.
+@@ -436,12 +457,17 @@ export const Scripts: ModdedBattleScriptsData = {
+ 						accuracy = this.battle.runEvent('ModifyAccuracy', target, pokemon, move, accuracy);
+ 						if (!move.alwaysHit) {
+ 							accuracy = this.battle.runEvent('Accuracy', target, pokemon, move, accuracy);
+-							if (accuracy !== true && !this.battle.randomChance(accuracy, 100)) break;
++							if (accuracy !== true &&
++								!this.battle.verificationRandomChance('move.accuracy', accuracy, 100)) break;
+ 						}
+ 					}
+ 
++					const verificationHitStart = this.battle.verificationTraceSequence;
+ 					moveDamage = this.moveHit(target, pokemon, move);
+ 					if (moveDamage === false) break;
++					this.battle.recordVerificationMultiHit(
++						move, pokemon, target, hits, i + 1, moveDamage || 0, verificationHitStart
++					);
+ 					if (nullDamage && (moveDamage || moveDamage === 0 || moveDamage === undefined)) nullDamage = false;
+ 					// Damage from each hit is individually counted for the
+ 					// purposes of Counter, Metal Burst, and Mirror Coat.
+@@ -449,6 +475,11 @@ export const Scripts: ModdedBattleScriptsData = {
+ 					move.totalDamage += damage;
+ 					this.battle.eachEvent('Update');
+ 				}
++				this.battle.recordVerificationMultiHitResult(
++					move, pokemon, target, hits, i,
++					i === hits ? 'completed' : !target.hp ? 'target-fainted' : !pokemon.hp ? 'source-fainted' :
++						pokemon.status === 'slp' && !isSleepUsable ? 'sleep' : move.multiaccuracy ? 'missed' : 'failed'
++				);
+ 				if (i === 0) return false;
+ 				if (nullDamage) damage = false;
+ 				this.battle.add('-hitcount', target, i);
+@@ -458,7 +489,12 @@ export const Scripts: ModdedBattleScriptsData = {
+ 			}
+ 
+ 			if (move.recoil && move.totalDamage) {
+-				this.battle.damage(this.calcRecoilDamage(move.totalDamage, move, pokemon), pokemon, target, 'recoil');
++				const requested = this.calcRecoilDamage(move.totalDamage, move, pokemon);
++				const hpBefore = pokemon.hp;
++				const result = this.battle.damage(requested, pokemon, target, 'recoil');
++				this.battle.recordVerificationRecoilEffect(
++					move, pokemon, target, move.totalDamage, requested, hpBefore, pokemon.hp, result
++				);
+ 			}
+ 
+ 			if (target && pokemon !== target) target.gotAttacked(move, damage, pokemon);
+diff --git a/data/mods/gen4/conditions.ts b/data/mods/gen4/conditions.ts
+index 1f1d1a2da..e373176e2 100644
+--- a/data/mods/gen4/conditions.ts
++++ b/data/mods/gen4/conditions.ts
+@@ -71,7 +71,7 @@ export const Conditions: import('../../../sim/dex-conditions').ModdedConditionDa
+ 				return;
+ 			}
+ 			this.add('-activate', pokemon, 'confusion');
+-			if (this.randomChance(1, 2)) {
++			if (this.verificationRandomChance('condition.confusion.action', 1, 2)) {
+ 				return;
+ 			}
+ 			const damage = this.actions.getDamage(pokemon, pokemon, 40);
+@@ -111,7 +111,8 @@ export const Conditions: import('../../../sim/dex-conditions').ModdedConditionDa
+ 		inherit: true,
+ 		durationCallback(target, source) {
+ 			if (source.hasItem('gripclaw')) return 6;
+-			return this.random(3, 7);
++			return 3 + this.verificationRandom(
++				'condition.partiallytrapped.duration', () => this.random(4));
+ 		},
+ 		onResidualOrder: 10,
+ 		onResidualSubOrder: 9,
+diff --git a/data/mods/gen4/moves.ts b/data/mods/gen4/moves.ts
+index 795aa6e7c..90d10a04d 100644
+--- a/data/mods/gen4/moves.ts
++++ b/data/mods/gen4/moves.ts
+@@ -62,7 +62,11 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 				}
+ 			}
+ 			let randomMove = '';
+-			if (moves.length) randomMove = this.sample(moves);
++			if (moves.length) {
++				randomMove = this.verificationRandom(
++					'move.delegation.selection', () => this.sample(moves)
++				);
++			}
+ 			if (!randomMove) {
+ 				return false;
+ 			}
+@@ -334,6 +338,7 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 		basePower: 120,
+ 		onTry(source, target) {
+ 			if (!target.side.addSlotCondition(target, 'futuremove')) return false;
++			const before = { ...target.side.slotConditions[target.position]['futuremove'] };
+ 			const moveData = {
+ 				name: "Doom Desire",
+ 				basePower: 120,
+@@ -359,6 +364,10 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 					type: '???',
+ 				},
+ 			});
++			this.recordVerificationCondition(
++				'update', this.dex.conditions.get('futuremove'), target.side, before,
++				{ ...target.side.slotConditions[target.position]['futuremove'] }, null, undefined, target.position
++			);
+ 			this.add('-start', source, 'Doom Desire');
+ 			return null;
+ 		},
+@@ -533,6 +542,7 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 		pp: 15,
+ 		onTry(source, target) {
+ 			if (!target.side.addSlotCondition(target, 'futuremove')) return false;
++			const before = { ...target.side.slotConditions[target.position]['futuremove'] };
+ 			const moveData = {
+ 				name: "Future Sight",
+ 				basePower: 80,
+@@ -558,6 +568,10 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 					type: '???',
+ 				},
+ 			});
++			this.recordVerificationCondition(
++				'update', this.dex.conditions.get('futuremove'), target.side, before,
++				{ ...target.side.slotConditions[target.position]['futuremove'] }, null, undefined, target.position
++			);
+ 			this.add('-start', source, 'Future Sight');
+ 			return null;
+ 		},
+@@ -664,6 +678,7 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 		inherit: true,
+ 		flags: { bypasssub: 1, metronome: 1 },
+ 		onTryHit(pokemon) {
++			this.recordVerificationDirectHandler('TryHit', this.effect, pokemon);
+ 			for (const target of pokemon.foes()) {
+ 				for (const move of pokemon.moves) {
+ 					if (target.moves.includes(move)) return;
+@@ -844,7 +859,9 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 			let randomMove = '';
+ 			if (moves.length) {
+ 				moves.sort((a, b) => a.num - b.num);
+-				randomMove = this.sample(moves).id;
++				randomMove = this.verificationRandom(
++					'move.delegation.selection', () => this.sample(moves)
++				).id;
+ 			}
+ 			if (!randomMove) return false;
+ 			this.actions.useMove(randomMove, pokemon);
+@@ -1207,6 +1224,7 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 	sleeptalk: {
+ 		inherit: true,
+ 		onTryHit(pokemon) {
++			this.recordVerificationDirectHandler('TryHit', this.effect, pokemon);
+ 			return !pokemon.volatiles['choicelock'] && !pokemon.volatiles['encore'];
+ 		},
+ 	},
+@@ -1308,10 +1326,20 @@ export const Moves: import('../../../sim/dex-moves').ModdedMoveDataTable = {
+ 				}
+ 				if (move.ohko) this.add('-ohko');
+ 				if (move.recoil && damage) {
+-					this.damage(this.actions.calcRecoilDamage(damage, move, source), source, target, 'recoil');
++					const requested = this.actions.calcRecoilDamage(damage, move, source);
++					const hpBefore = source.hp;
++					const result = this.damage(requested, source, target, 'recoil');
++					this.recordVerificationRecoilEffect(
++						move, source, target, damage, requested, hpBefore, source.hp, result
++					);
+ 				}
+ 				if (move.drain) {
+-					this.heal(Math.ceil(damage * move.drain[0] / move.drain[1]), source, target, 'drain');
++					const requested = Math.ceil(damage * move.drain[0] / move.drain[1]);
++					const hpBefore = source.hp;
++					const result = this.heal(requested, source, target, 'drain');
++					this.recordVerificationDrainEffect(
++						move, source, target, damage, requested, hpBefore, source.hp, result
++					);
+ 				}
+ 				this.runEvent('AfterSubDamage', target, source, move, damage);
+ 				return this.HIT_SUBSTITUTE;
+diff --git a/data/mods/gen4/scripts.ts b/data/mods/gen4/scripts.ts
+index 2fc269a6c..ab3495ea1 100644
+--- a/data/mods/gen4/scripts.ts
++++ b/data/mods/gen4/scripts.ts
+@@ -189,7 +189,8 @@ export const Scripts: ModdedBattleScriptsData = {
+ 				} else {
+ 					accuracy = this.battle.runEvent('Accuracy', target, pokemon, move, accuracy);
+ 				}
+-				if (accuracy !== true && !this.battle.randomChance(accuracy, 100)) {
++				if (accuracy !== true &&
++					!this.battle.verificationRandomChance('move.accuracy', accuracy, 100)) {
+ 					if (!move.spreadHit) this.battle.attrLastMove('[miss]');
+ 					this.battle.add('-miss', pokemon, target);
+ 					hitResults[i] = false;
+diff --git a/data/mods/gen5/conditions.ts b/data/mods/gen5/conditions.ts
+index 3868e0852..f5cff177f 100644
+--- a/data/mods/gen5/conditions.ts
++++ b/data/mods/gen5/conditions.ts
+@@ -36,7 +36,7 @@ export const Conditions: import('../../../sim/dex-conditions').ModdedConditionDa
+ 				return this.randomChance(1, 2 ** 32);
+ 			}
+ 			this.debug(`Success chance: ${Math.round(100 / counter)}%`);
+-			return this.randomChance(1, counter);
++			return this.verificationRandomChance('stall.success', 1, counter);
+ 		},
+ 		onRestart() {
+ 			if (this.effectState.counter < (this.effect as Condition).counterMax!) {
+diff --git a/data/moves.ts b/data/moves.ts
+index 2d4c05354..588b61b95 100644
+--- a/data/moves.ts
++++ b/data/moves.ts
+@@ -742,7 +742,7 @@ export const Moves: import('../sim/dex-moves').MoveDataTable = {
+ 			onBeforeMovePriority: 2,
+ 			onBeforeMove(pokemon, target, move) {
+ 				this.add('-activate', pokemon, 'move: Attract', '[of] ' + this.effectState.source);
+-				if (this.randomChance(1, 2)) {
++				if (this.verificationRandomChance('condition.attract.action', 1, 2)) {
+ 					this.add('cant', pokemon, 'Attract');
+ 					return false;
+ 				}
+@@ -10892,7 +10892,7 @@ export const Moves: import('../sim/dex-moves').MoveDataTable = {
+ 		priority: 0,
+ 		flags: { protect: 1, mirror: 1, nonsky: 1, metronome: 1 },
+ 		onModifyMove(move, pokemon) {
+-			const i = this.random(100);
++			const i = this.verificationRandom('move.power_variant', () => this.random(100));
+ 			if (i < 5) {
+ 				move.magnitude = 4;
+ 				move.basePower = 10;
+@@ -11792,7 +11792,9 @@ export const Moves: import('../sim/dex-moves').MoveDataTable = {
+ 			let randomMove = '';
+ 			if (moves.length) {
+ 				moves.sort((a, b) => a.num - b.num);
+-				randomMove = this.sample(moves).id;
++				randomMove = this.verificationRandom(
++					'move.delegation.selection', () => this.sample(moves)
++				).id;
+ 			}
+ 			if (!randomMove) return false;
+ 			this.actions.useMove(randomMove, pokemon);
+@@ -13925,7 +13927,8 @@ export const Moves: import('../sim/dex-moves').MoveDataTable = {
+ 		priority: 0,
+ 		flags: { protect: 1, mirror: 1, metronome: 1 },
+ 		onModifyMove(move, pokemon, target) {
+-			const rand = this.random(10);
++			const rand = this.verificationRandom(
++				'move.resolution_variant', () => this.random(10));
+ 			if (rand < 2) {
+ 				move.heal = [1, 4];
+ 				move.infiltrates = true;
+@@ -14293,7 +14296,9 @@ export const Moves: import('../sim/dex-moves').MoveDataTable = {
+ 		accuracy: 100,
+ 		basePower: 0,
+ 		damageCallback(pokemon) {
+-			return (this.random(50, 151) * pokemon.level) / 100;
++			return (this.verificationRandom(
++				'move.damage_formula', () => this.random(50, 151)
++			) * pokemon.level) / 100;
+ 		},
+ 		category: "Special",
+ 		isNonstandard: "Past",
+@@ -19864,8 +19869,16 @@ export const Moves: import('../sim/dex-moves').MoveDataTable = {
+ 		secondary: {
+ 			chance: 20,
+ 			onHit(target, source) {
+-				const status = this.sample(['brn', 'par', 'frz']);
+-				target.trySetStatus(status, source);
++				const statuses = ['brn', 'par', 'frz'] as const;
++				const status = statuses[this.verificationRandom(
++					'move.status_selection', () => this.random(statuses.length)
++				)];
++				const before = target.status || null;
++				const applied = target.trySetStatus(status, source);
++				this.recordVerificationStatusEffect(
++					'secondary', this.activeMove!, source, target, status,
++					before, target.status || null, !!applied
++				);
+ 			},
+ 		},
+ 		target: "normal",
+@@ -20230,6 +20243,7 @@ export const Moves: import('../sim/dex-moves').MoveDataTable = {
+ 			volatileStatus: 'uproar',
+ 		},
+ 		onTryHit(target) {
++			this.recordVerificationDirectHandler('TryHit', this.effect, target);
+ 			const activeTeam = target.side.activeTeam();
+ 			const foeActiveTeam = target.side.foe.activeTeam();
+ 			for (const [i, allyActive] of activeTeam.entries()) {
+diff --git a/sim/battle-actions.ts b/sim/battle-actions.ts
+index 911033d66..1e9059520 100644
+--- a/sim/battle-actions.ts
++++ b/sim/battle-actions.ts
+@@ -179,7 +179,7 @@ export class BattleActions {
+ 			switchersIn.push(nextSwitch!.pokemon!);
+ 		}
+ 		const allActive = this.battle.getAllActive(true);
+-		this.battle.speedSort(allActive);
++		this.battle.verificationRandom('switch_in.active_order', () => this.battle.speedSort(allActive));
+ 		this.battle.speedOrder = allActive.map(a => a.getFieldPositionValue());
+ 		this.battle.fieldEvent('SwitchIn', switchersIn);
+ 
+@@ -730,7 +730,8 @@ export class BattleActions {
+ 			} else {
+ 				accuracy = this.battle.runEvent('Accuracy', target, pokemon, move, accuracy);
+ 			}
+-			if (accuracy !== true && !this.battle.randomChance(accuracy, 100)) {
++			if (accuracy !== true &&
++				!this.battle.verificationRandomChance('move.accuracy', accuracy, 100)) {
+ 				if (move.smartTarget) {
+ 					move.smartTarget = false;
+ 				} else {
+@@ -1220,15 +1221,22 @@ export class BattleActions {
+ 					didSomething = this.combineResults(didSomething, hitResult);
+ 				}
+ 				if (moveData.heal && !target.fainted) {
++					const amount = target.baseMaxhp * moveData.heal[0] / moveData.heal[1];
++					const requested = (this.battle.gen < 5 ? Math.floor : Math.round)(amount);
++					const hpBefore = target.hp;
+ 					if (target.hp >= target.maxhp) {
++						this.battle.recordVerificationDirectHealEffect(
++							move, source, target, requested, hpBefore, target.hp, false);
+ 						this.battle.add('-fail', target, 'heal');
+ 						this.battle.attrLastMove('[still]');
+ 						damage[i] = this.combineResults(damage[i], false);
+ 						didAnything = this.combineResults(didAnything, null);
+ 						continue;
+ 					}
+-					const amount = target.baseMaxhp * moveData.heal[0] / moveData.heal[1];
+-					const d = this.battle.heal((this.battle.gen < 5 ? Math.floor : Math.round)(amount), target, source, move);
++					const d = this.battle.heal(requested, target, source, move);
++					this.battle.recordVerificationDirectHealEffect(
++						move, source, target, requested, hpBefore, target.hp,
++						typeof d === 'number' && d > 0);
+ 					if (!d && d !== 0) {
+ 						if (d !== null) {
+ 							this.battle.add('-fail', source);
+@@ -1242,7 +1250,13 @@ export class BattleActions {
+ 					didSomething = true;
+ 				}
+ 				if (moveData.status) {
++					const verificationStatusBefore = target.status || null;
+ 					hitResult = target.trySetStatus(moveData.status, source, moveData.ability ? moveData.ability : move);
++					this.battle.recordVerificationStatusEffect(
++						isSecondary ? (isSelf ? 'self-secondary' : 'secondary') : 'primary',
++						move, source, target, moveData.status, verificationStatusBefore, target.status || null,
++						!!hitResult
++					);
+ 					if (!hitResult && move.status) {
+ 						damage[i] = this.combineResults(damage[i], false);
+ 						didAnything = this.combineResults(didAnything, null);
+@@ -1343,7 +1357,8 @@ export class BattleActions {
+ 			if (target === false) continue;
+ 			if (moveData.self && !move.selfDropped) {
+ 				if (!isSecondary && moveData.self.boosts) {
+-					const secondaryRoll = this.battle.random(100);
++					const secondaryRoll = this.battle.verificationRandom(
++						'move.secondary', () => this.battle.random(100));
+ 					if (typeof moveData.self.chance === 'undefined' || secondaryRoll < moveData.self.chance) {
+ 						this.moveHit(source, source, move, moveData.self, isSecondary, true);
+ 					}
+@@ -1361,7 +1376,8 @@ export class BattleActions {
+ 			const secondaries: Dex.SecondaryEffect[] =
+ 				this.battle.runEvent('ModifySecondaries', target, source, moveData, moveData.secondaries.slice());
+ 			for (const secondary of secondaries) {
+-				const secondaryRoll = this.battle.random(100);
++				const secondaryRoll = this.battle.verificationRandom(
++					'move.secondary', () => this.battle.random(100));
+ 				// User stat boosts or target stat drops can possibly overflow if it goes beyond 256 in Gen 8 or prior
+ 				const secondaryOverflow = (secondary.boosts || secondary.self) && this.battle.gen <= 8;
+ 				if (typeof secondary.chance === 'undefined' ||
+@@ -1608,10 +1624,18 @@ export class BattleActions {
+ 		}
+ 
+ 		if (move.ohko) return this.battle.gen === 3 ? target.hp : target.maxhp;
+-		if (move.damageCallback) return move.damageCallback.call(this.battle, source, target);
++		if (move.damageCallback) {
++			const damage = move.damageCallback.call(this.battle, source, target);
++			if (typeof damage === 'number') {
++				this.battle.recordVerificationFixedDamage(move, source, target, 'callback', damage);
++			}
++			return damage;
++		}
+ 		if (move.damage === 'level') {
++			this.battle.recordVerificationFixedDamage(move, source, target, 'level', source.level);
+ 			return source.level;
+ 		} else if (move.damage) {
++			this.battle.recordVerificationFixedDamage(move, source, target, 'constant', move.damage);
+ 			return move.damage;
+ 		}
+ 
+@@ -1619,7 +1643,14 @@ export class BattleActions {
+ 
+ 		let basePower: number | false | null = move.basePower;
+ 		if (move.basePowerCallback) {
++			const callbackInput = basePower;
++			const callbackConditionID = move.id === 'spitup' ? 'stockpile' : move.id;
++			const callbackConditionBefore = source.volatiles[callbackConditionID] ?
++				{ ...source.volatiles[callbackConditionID] } : null;
+ 			basePower = move.basePowerCallback.call(this.battle, source, target, move);
++			this.battle.recordVerificationDirectMoveModifier(
++				'BasePower', move, source, callbackInput, basePower, callbackConditionBefore
++			);
+ 		}
+ 		if (!basePower) return basePower === 0 ? undefined : basePower;
+ 		basePower = this.battle.clampIntRange(basePower, 1);
+@@ -1642,7 +1673,7 @@ export class BattleActions {
+ 		moveHit.crit = move.willCrit || false;
+ 		if (move.willCrit === undefined) {
+ 			if (critRatio) {
+-				moveHit.crit = this.battle.randomChance(1, critMult[critRatio]);
++				moveHit.crit = this.battle.verificationRandomChance('move.critical', 1, critMult[critRatio]);
+ 			}
+ 		}
+ 
+diff --git a/sim/battle-queue.ts b/sim/battle-queue.ts
+index 59e5f8065..eeec7b60d 100644
+--- a/sim/battle-queue.ts
++++ b/sim/battle-queue.ts
+@@ -392,7 +392,9 @@ export class BattleQueue {
+ 			this.list.push(...actions);
+ 		} else {
+ 			if (lastIndex === null) lastIndex = this.list.length;
+-			const index = firstIndex === lastIndex ? firstIndex : this.battle.random(firstIndex, lastIndex + 1);
++			const index = firstIndex === lastIndex ? firstIndex : this.battle.verificationRandom(
++				'queue.tie', () => this.battle.random(firstIndex, lastIndex + 1)
++			);
+ 			this.list.splice(index, 0, ...actions);
+ 		}
+ 	}
+@@ -412,7 +414,7 @@ export class BattleQueue {
+ 
+ 	sort() {
+ 		// this.log.push('SORT ' + this.debugQueue());
+-		this.battle.speedSort(this.list);
++		this.battle.verificationRandom('queue.tie', () => this.battle.speedSort(this.list));
+ 		return this;
+ 	}
+ }
+diff --git a/sim/battle.ts b/sim/battle.ts
+index f95c8ea2d..352a995eb 100644
+--- a/sim/battle.ts
++++ b/sim/battle.ts
+@@ -18,7 +18,7 @@ import { Dex, toID } from './dex';
+ import { Teams } from './teams';
+ import { Field } from './field';
+ import { Pokemon, type EffectState, RESTORATIVE_BERRIES } from './pokemon';
+-import { PRNG, type PRNGSeed } from './prng';
++import { PRNG, type PRNGSeed, type PRNGTraceRecord } from './prng';
+ import { type MoveRequest, type ChoiceRequest, Side } from './side';
+ import { State } from './state';
+ import { BattleQueue, type Action } from './battle-queue';
+@@ -94,6 +94,270 @@ interface EventListener extends EventListenerWithoutPriority {
+ 	speed?: number;
+ }
+ 
++interface VerificationHandlerRecord {
++	effect: ID;
++	effectType: EffectType;
++	holder: string;
++	ownerScope: 'status' | 'volatile' | 'ability' | 'item' | 'side' | 'slot' | 'field' | 'battle';
++	order: number | false;
++	priority: number;
++	subOrder: number;
++	effectOrder?: number;
++	speed?: number;
++}
++
++export type VerificationTraceRecord = {
++	kind: 'prng';
++	sequence: number;
++	label: string;
++	move?: ID;
++	moveCategory?: string;
++	draw: PRNGTraceRecord;
++} | {
++	kind: 'handlers';
++	sequence: number;
++	event: string;
++	handlers: VerificationHandlerRecord[];
++} | {
++	kind: 'immunity';
++	sequence: number;
++	target: string;
++	attackType: string;
++	result: 'none' | 'type' | 'ability';
++	effect?: ID;
++	move?: { id: ID; accuracy: number | true; category: string };
++} | {
++	kind: 'condition';
++	sequence: number;
++	phase: 'add' | 'update' | 'restart' | 'remove' | 'residual-discover' | 'residual-execute' | 'damage';
++	scope: 'status' | 'volatile' | 'side' | 'slot' | 'weather';
++	effect: ID;
++	holder: string;
++	durationBefore?: number;
++	durationAfter?: number;
++	counterBefore?: number;
++	counterAfter?: number;
++	stageBefore?: number;
++	stageAfter?: number;
++	order?: number | false;
++	priority?: number;
++	subOrder?: number;
++	amount?: number;
++} | {
++	kind: 'modifier';
++	sequence: number;
++	event: 'ModifyAtk' | 'ModifyDef' | 'ModifySpA' | 'ModifySpD' | 'ModifySpe' | 'ModifyAccuracy' | 'ModifyCritRatio' | 'ModifyDamagePhase1' | 'ModifyDamage' | 'WeatherModifyDamage';
++	phase: 'handler' | 'result';
++	relay: number;
++	modifierQ12Before: number;
++	modifierQ12After: number;
++	result?: number;
++	effect?: ID;
++	effectType?: EffectType;
++	holder?: string;
++} | {
++	kind: 'damage-stage';
++	sequence: number;
++	stage: 'burn';
++	source: string;
++	target: string;
++	move: ID;
++	before: number;
++	after: number;
++	multiplierQ12: number;
++	applied: boolean;
++	reason: 'applied' | 'not-burned' | 'zero-damage' | 'not-physical' | 'guts';
++} | {
++	kind: 'effect';
++	sequence: number;
++	phase: 'primary' | 'secondary' | 'self-secondary';
++	operation: 'boost';
++	move: ID;
++	source: string;
++	target: string;
++	stat: BoostID;
++	delta: number;
++	before: number;
++	after: number;
++	applied: boolean;
++} | {
++	kind: 'effect';
++	sequence: number;
++	phase: 'primary' | 'secondary' | 'self-secondary';
++	operation: 'set-status' | 'cure-status';
++	move: ID;
++	source: string;
++	target: string;
++	status: ID;
++	before: ID | null;
++	after: ID | null;
++	applied: boolean;
++} | {
++	kind: 'effect';
++	sequence: number;
++	phase: 'primary';
++	operation: 'direct-heal';
++	move: ID;
++	source: string;
++	target: string;
++	basis: 'base-max-hp';
++	damageBasis: number;
++	numerator: number;
++	denominator: number;
++	requested: number;
++	hpBefore: number;
++	hpAfter: number;
++	amount: number;
++	applied: boolean;
++} | {
++	kind: 'effect';
++	sequence: number;
++	phase: 'move-fail';
++	operation: 'crash-damage';
++	move: ID;
++	source: string;
++	target: string;
++	damageTarget: string;
++	basis: 'hypothetical-move-damage';
++	damageBasis: number;
++	critical: boolean;
++	damageRoll: number | null;
++	numerator: number;
++	denominator: number;
++	minimum: number;
++	capNumerator: number;
++	capDenominator: number;
++	capValue: number;
++	requested: number;
++	hpBefore: number;
++	hpAfter: number;
++	amount: number;
++	applied: boolean;
++} | {
++	kind: 'effect';
++	sequence: number;
++	phase: 'after-damage';
++	operation: 'drain' | 'recoil';
++	cause: 'move-drain' | 'move-recoil';
++	move: ID;
++	source: string;
++	target: string;
++	damageTarget: string;
++	damageBasis: number;
++	numerator: number;
++	denominator: number;
++	requested: number;
++	hpBefore: number;
++	hpAfter: number;
++	amount: number;
++	applied: boolean;
++} | {
++	kind: 'effect';
++	sequence: number;
++	phase: 'after-damage';
++	operation: 'prevent-recoil';
++	cause: 'rockhead';
++	move: ID;
++	source: string;
++	target: string;
++	damageTarget?: string;
++	requested: number;
++	applied: true;
++} | {
++	kind: 'effect';
++	sequence: number;
++	phase: 'hit-loop';
++	operation: 'multihit-plan';
++	move: ID;
++	source: string;
++	target: string;
++	requested: number;
++} | {
++	kind: 'effect';
++	sequence: number;
++	phase: 'hit-loop';
++	operation: 'multihit-hit';
++	move: ID;
++	source: string;
++	target: string;
++	requested: number;
++	ordinal: number;
++	critical: boolean;
++	damageRoll: number | null;
++	damage: number;
++	targetHPAfter: number;
++	sourceHPAfter: number;
++} | {
++	kind: 'effect';
++	sequence: number;
++	phase: 'hit-loop';
++	operation: 'multihit-result';
++	move: ID;
++	source: string;
++	target: string;
++	requested: number;
++	actual: number;
++	stopReason: 'completed' | 'target-fainted' | 'source-fainted' | 'sleep' | 'missed' | 'failed';
++} | {
++	kind: 'effect';
++	sequence: number;
++	phase: 'damage-formula';
++	operation: 'fixed-damage';
++	formula: 'level' | 'constant' | 'callback';
++	move: ID;
++	source: string;
++	target: string;
++	resolved: number;
++} | {
++	kind: 'effect';
++	sequence: number;
++	phase: 'damage-formula';
++	operation: 'variable-power';
++	formula: 'hp-bracket';
++	move: ID;
++	source: string;
++	target: string;
++	ratio: number;
++	bracket: number;
++	resolved: number;
++} | {
++	kind: 'single-handler';
++	sequence: number;
++	event: string;
++	effect: ID;
++	effectType: EffectType;
++	holder: string;
++	order: number | false;
++	priority: number;
++	subOrder: number;
++	effectOrder?: number;
++	speed?: number;
++} | {
++	kind: 'active-move-frame';
++	sequence: number;
++	event: 'ModifyType' | 'ModifyMove';
++	move: ID;
++	type: string;
++	category: string;
++	basePower: number;
++	accuracy: number | true;
++} | {
++	kind: 'decision';
++	sequence: number;
++	ordinal: number;
++	request: Array<{ kind: 'wait' | 'move' | 'switch' | 'team' | 'none', legal: string[] }>;
++	state: AnyObject;
++	protocol: string[];
++} | {
++	kind: 'queue';
++	sequence: number;
++	choices: Array<{ kind: 'none' | 'move' | 'switch'; slot: number | null }>;
++	actions: Array<{
++		kind: 'move' | 'switch'; side: number; slot: number;
++		order: number; priority: number; speed: number;
++	}>;
++};
++
+ type Part = string | number | boolean | Pokemon | Side | Effect | Move | null | undefined;
+ 
+ // The current request state of the Battle:
+@@ -127,6 +391,12 @@ export class Battle {
+ 	gen: number;
+ 	ruleTable: Dex.RuleTable;
+ 	prng: PRNG;
++	verificationTrace: VerificationTraceRecord[] | null = null;
++	verificationTraceSequence = 0;
++	verificationQueueSpeed = false;
++	verificationDecisionOrdinal = 0;
++	verificationProtocolCursor = 0;
++	verificationPRNGLabel: string | null = null;
+ 	rated: boolean | string;
+ 	reportExactHP: boolean;
+ 	reportPercentages: boolean;
+@@ -222,6 +492,10 @@ export class Battle {
+ 			(format.playerCount > 2 || this.gameType === 'doubles') ? 2 :
+ 			1;
+ 		this.prng = options.prng || new PRNG(options.seed || undefined);
++		if (process.env.PS_GEN3_VERIFY_TRACE === '1') {
++			this.verificationTrace = [];
++			this.prng.observer = draw => this.recordVerificationPRNG(draw);
++		}
+ 		this.prngSeed = this.prng.startingSeed;
+ 		this.rated = options.rated || !!options.rated;
+ 		this.reportExactHP = !!format.debug;
+@@ -343,6 +617,592 @@ export class Battle {
+ 		return `Battle: ${this.format}`;
+ 	}
+ 
++	private recordVerificationPRNG(draw: PRNGTraceRecord) {
++		if (!this.verificationTrace) return;
++		const event = this.event?.id || 'none';
++		const effect = this.effect?.id || 'none';
++		const move = this.activeMove?.id || 'none';
++		this.verificationTrace.push({
++			kind: 'prng', sequence: this.verificationTraceSequence++,
++			label: this.verificationPRNGLabel || `unlabeled:${event}:${effect}:${move}`,
++			...(this.activeMove ? { move: this.activeMove.id, moveCategory: this.activeMove.category } : {}),
++			draw,
++		});
++	}
++
++	verificationRandom<T>(label: string, callback: () => T): T {
++		if (!this.verificationTrace) return callback();
++		const previousLabel = this.verificationPRNGLabel;
++		this.verificationPRNGLabel = label;
++		try {
++			return callback();
++		} finally {
++			this.verificationPRNGLabel = previousLabel;
++		}
++	}
++
++	verificationRandomChance(label: string, numerator: number, denominator: number) {
++		return this.verificationRandom(label, () => this.randomChance(numerator, denominator));
++	}
++
++	private verificationSlotHolder(holder: EventListener['effectHolder'], state: EffectState | null) {
++		if (!state?.isSlotCondition) return null;
++		const side = state.target instanceof Side ? state.target :
++			holder instanceof Side ? holder : holder instanceof Pokemon ? holder.side : null;
++		if (!side) return null;
++		for (let position = 0; position < side.slotConditions.length; position++) {
++			if (Object.values(side.slotConditions[position]).includes(state)) {
++				return `${side.id}:slot:${position}`;
++			}
++		}
++		return holder instanceof Pokemon ? `${side.id}:slot:${holder.position}` : null;
++	}
++
++	private verificationHolder(holder: EventListener['effectHolder'], state: EffectState | null = null) {
++		const slotHolder = this.verificationSlotHolder(holder, state);
++		if (slotHolder) return slotHolder;
++		if (holder instanceof Pokemon) return `${holder.side.id}:${holder.position}:${holder.baseSpecies.id}`;
++		if (holder instanceof Side) return holder.id;
++		if (holder instanceof Field) return 'field';
++		return 'battle';
++	}
++
++	private verificationHandlerScope(handler: EventListener): VerificationHandlerRecord['ownerScope'] {
++		const holder = handler.effectHolder;
++		if (holder instanceof Pokemon) {
++			if (holder.status === handler.effect.id && holder.statusState === handler.state) return 'status';
++			if (holder.volatiles[handler.effect.id] === handler.state) return 'volatile';
++			if (holder.ability === handler.effect.id && holder.abilityState === handler.state) return 'ability';
++			if (holder.item === handler.effect.id && holder.itemState === handler.state) return 'item';
++		}
++		if (handler.state?.isSlotCondition) return 'slot';
++		if (holder instanceof Side) return 'side';
++		if (holder instanceof Field) return 'field';
++		return 'battle';
++	}
++
++	private recordVerificationHandlers(
++		event: string, handlers: EventListener[], sourceEffect?: Effect | null
++	) {
++		if (!this.verificationTrace) return;
++		if (event === 'ModifySpe' && !this.verificationQueueSpeed) return;
++		this.verificationTrace.push({
++			kind: 'handlers',
++			sequence: this.verificationTraceSequence++,
++			event,
++			sourceEffect: sourceEffect ? {
++				id: sourceEffect.id,
++				effectType: sourceEffect.effectType,
++			} : null,
++			handlers: handlers.map(handler => ({
++				effect: handler.effect.id,
++				effectType: handler.effect.effectType,
++				holder: this.verificationHolder(handler.effectHolder, handler.state),
++				ownerScope: this.verificationHandlerScope(handler),
++				order: handler.order,
++				priority: handler.priority,
++				subOrder: handler.subOrder,
++				effectOrder: handler.effectOrder,
++				speed: handler.speed,
++			})),
++		});
++	}
++
++	recordVerificationDirectHandler(event: string, effect: Effect, holder: Pokemon, state?: EffectState) {
++		const callback = (effect as any)[`on${event}`];
++		if (!this.verificationTrace || callback === undefined) return;
++		this.recordVerificationHandlers(event, [this.resolvePriority({
++			effect, callback, state: state || this.initEffectState({}), end: null,
++			effectHolder: holder,
++		}, `on${event}`)], effect);
++	}
++
++	private recordVerificationModifierHandler(
++		event: string, handler: EventListener, relay: unknown, modifierQ12Before: number
++	) {
++		if (!this.verificationTrace || (event === 'ModifySpe' && !this.verificationQueueSpeed) || (event !== 'BasePower' && event !== 'ModifyAtk' && event !== 'ModifyDef' && event !== 'ModifySpA' && event !== 'ModifySpD' && event !== 'ModifySpe' && event !== 'ModifyAccuracy' && event !== 'ModifyCritRatio' && event !== 'ModifyDamagePhase1' && event !== 'ModifyDamage' && event !== 'WeatherModifyDamage') ||
++			typeof relay !== 'number') return;
++		this.verificationTrace.push({
++			kind: 'modifier', sequence: this.verificationTraceSequence++, event,
++			phase: 'handler', relay, modifierQ12Before,
++			modifierQ12After: this.trunc(this.event.modifier * 4096),
++			effect: handler.effect.id, effectType: handler.effect.effectType,
++			holder: this.verificationHolder(handler.effectHolder),
++		});
++	}
++
++	private recordVerificationModifierResult(
++		event: string, relay: unknown, modifierQ12: number, result: unknown, hasHandlers: boolean
++	) {
++		if (!this.verificationTrace || (event === 'ModifySpe' && !this.verificationQueueSpeed) || (event !== 'BasePower' && event !== 'ModifyAtk' && event !== 'ModifyDef' && event !== 'ModifySpA' && event !== 'ModifySpD' && event !== 'ModifySpe' && event !== 'ModifyAccuracy' && event !== 'ModifyCritRatio' && event !== 'ModifyDamagePhase1' && event !== 'ModifyDamage' && event !== 'WeatherModifyDamage') || !hasHandlers ||
++			typeof relay !== 'number' || typeof result !== 'number') return;
++		this.verificationTrace.push({
++			kind: 'modifier', sequence: this.verificationTraceSequence++, event,
++			phase: 'result', relay, modifierQ12Before: modifierQ12,
++			modifierQ12After: modifierQ12, result,
++		});
++	}
++
++	recordVerificationDirectMoveModifier(
++		event: string, move: ActiveMove, holder: Pokemon, relay: number, result: number | false | null,
++		conditionBefore: AnyObject | null
++	) {
++		const condition = this.dex.conditions.get(move.id);
++		const lockedRamp = move.condition?.onLockMove === move.id;
++		if (!this.verificationTrace ||
++			(move.id !== 'beatup' && move.id !== 'furycutter' && move.id !== 'spitup' && move.id !== 'revenge' && !lockedRamp)) return;
++		this.verificationTrace.push({
++			kind: 'single-handler', sequence: this.verificationTraceSequence++, event,
++			effect: move.id, effectType: 'Move', holder: this.verificationHolder(holder),
++			order: false, priority: 0, subOrder: 0, speed: holder.speed,
++		});
++		if (typeof result !== 'number') return;
++		const conditionAfter = holder.volatiles[move.id] || null;
++		if (lockedRamp && conditionBefore && conditionAfter &&
++			(conditionBefore.duration !== conditionAfter.duration ||
++				conditionBefore.contactHitCount !== conditionAfter.contactHitCount)) {
++			this.recordVerificationCondition(
++				'update', condition, holder, conditionBefore, { ...conditionAfter }
++			);
++		}
++		this.verificationTrace.push({
++			kind: 'modifier', sequence: this.verificationTraceSequence++, event,
++			phase: 'handler', relay, modifierQ12Before: 4096,
++			modifierQ12After: 4096, effect: move.id, effectType: 'Move',
++			holder: this.verificationHolder(holder),
++		});
++		this.verificationTrace.push({
++			kind: 'modifier', sequence: this.verificationTraceSequence++, event,
++			phase: 'result', relay, modifierQ12Before: 4096,
++			modifierQ12After: 4096, result,
++		});
++	}
++
++	private verificationConditionScope(
++		effect: Effect, holder: EventListener['effectHolder'], state: EffectState | null, slot: number | null
++	) {
++		if (effect.effectType === 'Status') return 'status' as const;
++		if (effect.effectType === 'Weather') return 'weather' as const;
++		if (state?.isSlotCondition || slot !== null) return 'slot' as const;
++		if (holder instanceof Side) return 'side' as const;
++		return 'volatile' as const;
++	}
++
++	recordVerificationCondition(
++		phase: 'add' | 'update' | 'restart' | 'remove' | 'residual-discover' | 'residual-execute' | 'damage',
++		effect: Effect, holder: EventListener['effectHolder'], before: AnyObject | null = null,
++		after: AnyObject | null = null, handler: EventListener | null = null, amount?: number,
++		slot: number | null = null
++	) {
++		if (!this.verificationTrace || !['brn', 'frz', 'par', 'psn', 'slp', 'tox', 'confusion', 'flinch', 'lockedmove', 'twoturnmove', 'partiallytrapped', 'mustrecharge', 'protect', 'stall', 'reflect', 'lightscreen', 'mist', 'safeguard', 'yawn', 'spikes', 'hail', 'raindance', 'sandstorm', 'sunnyday', 'magiccoat', 'snatch', 'focusenergy', 'focuspunch', 'destinybond', 'grudge', 'charge', 'leechseed', 'flashfire', 'foresight', 'perishsong', 'taunt', 'torment', 'disable', 'encore', 'attract', 'trapped', 'lockon', 'mudsport', 'watersport', 'endure', 'counter', 'mirrorcoat', 'futuremove', 'wish', 'ingrain', 'bide', 'furycutter', 'rollout', 'iceball', 'defensecurl', 'stockpile', 'rage', 'minimize', 'uproar', 'imprison', 'curse', 'beatup'].includes(effect.id)) return;
++		const state = handler?.state || after || before;
++		const scope = this.verificationConditionScope(effect, holder, state, slot);
++		this.verificationTrace.push({
++			kind: 'condition', sequence: this.verificationTraceSequence++, phase,
++			scope, effect: effect.id,
++			holder: slot === null ? this.verificationHolder(holder, handler?.state || null) :
++				holder instanceof Side ? `${holder.id}:slot:${slot}` : this.verificationHolder(holder),
++			...(before?.duration !== undefined ? { durationBefore: before.duration } : {}),
++			...(after?.duration !== undefined ? { durationAfter: after.duration } : {}),
++			...(before?.time !== undefined ? { durationBefore: before.time } : {}),
++			...(after?.time !== undefined ? { durationAfter: after.time } : {}),
++			...(before?.counter !== undefined ? { counterBefore: before.counter } : {}),
++			...(after?.counter !== undefined ? { counterAfter: after.counter } : {}),
++			...(before?.skippedTime !== undefined ? { counterBefore: before.skippedTime } : {}),
++			...(after?.skippedTime !== undefined ? { counterAfter: after.skippedTime } : {}),
++			...(before?.layers !== undefined ? { counterBefore: before.layers } : {}),
++			...(after?.layers !== undefined ? { counterAfter: after.layers } : {}),
++			...(before?.multiplier !== undefined ? { counterBefore: before.multiplier } : {}),
++			...(after?.multiplier !== undefined ? { counterAfter: after.multiplier } : {}),
++			...(before?.contactHitCount !== undefined ? { counterBefore: before.contactHitCount } : {}),
++			...(after?.contactHitCount !== undefined ? { counterAfter: after.contactHitCount } : {}),
++			...(before?.lostFocus !== undefined ? { counterBefore: before.lostFocus ? 1 : 0 } : {}),
++			...(after?.lostFocus !== undefined ? { counterAfter: after.lostFocus ? 1 : 0 } : {}),
++			...(before?.stage !== undefined ? { stageBefore: before.stage } : {}),
++			...(after?.stage !== undefined ? { stageAfter: after.stage } : {}),
++			...(handler ? {
++				order: handler.order, priority: handler.priority, subOrder: handler.subOrder,
++			} : {}),
++			...(amount !== undefined ? { amount } : {}),
++		});
++	}
++
++	recordVerificationDamageStage(
++		stage: 'burn', source: Pokemon, target: Pokemon, move: Move,
++		before: number, after: number, applied: boolean,
++		reason: 'applied' | 'not-burned' | 'zero-damage' | 'not-physical' | 'guts'
++	) {
++		if (!this.verificationTrace) return;
++		this.verificationTrace.push({
++			kind: 'damage-stage', sequence: this.verificationTraceSequence++, stage,
++			source: this.verificationHolder(source), target: this.verificationHolder(target),
++			move: move.id, before, after, multiplierQ12: 2048, applied, reason,
++		});
++	}
++
++	recordVerificationStatusEffect(
++		phase: 'primary' | 'secondary' | 'self-secondary', move: Move,
++		source: Pokemon, target: Pokemon, status: string, before: ID | null, after: ID | null,
++		applied: boolean
++	) {
++		if (!this.verificationTrace) return;
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase,
++			operation: 'set-status', move: move.id, source: this.verificationHolder(source),
++			target: this.verificationHolder(target), status: toID(status), before, after, applied,
++		});
++	}
++
++	recordVerificationCureStatusEffect(target: Pokemon, status: ID, applied: boolean) {
++		if (!this.verificationTrace || !this.activeMove) return;
++		const source = this.activePokemon || target;
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase: 'primary',
++			operation: 'cure-status', move: this.activeMove.id,
++			source: this.verificationHolder(source), target: this.verificationHolder(target),
++			status, before: status || null, after: target.status || null, applied,
++		});
++	}
++
++	recordVerificationDirectHealEffect(
++		move: Move, source: Pokemon, target: Pokemon, requested: number,
++		hpBefore: number, hpAfter: number, applied: boolean,
++		fraction?: readonly [number, number]
++	) {
++		if (!this.verificationTrace || (!move.heal && !fraction)) return;
++		const healFraction = move.heal || fraction!;
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase: 'primary',
++			operation: 'direct-heal', move: move.id,
++			source: this.verificationHolder(source), target: this.verificationHolder(target),
++			basis: 'base-max-hp', damageBasis: target.baseMaxhp,
++			numerator: healFraction[0], denominator: healFraction[1], requested,
++			hpBefore, hpAfter, amount: hpAfter - hpBefore, applied,
++		});
++	}
++
++	recordVerificationDrainEffect(
++		move: Move, source: Pokemon, damageTarget: Pokemon, damageBasis: number,
++		requested: number, hpBefore: number, hpAfter: number, result: number | false | null | undefined
++	) {
++		if (!this.verificationTrace || !move.drain) return;
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase: 'after-damage',
++			operation: 'drain', cause: 'move-drain', move: move.id,
++			source: this.verificationHolder(source), target: this.verificationHolder(source),
++			damageTarget: this.verificationHolder(damageTarget), damageBasis,
++			numerator: move.drain[0], denominator: move.drain[1], requested,
++			hpBefore, hpAfter, amount: hpAfter - hpBefore, applied: typeof result === 'number' && result > 0,
++		});
++	}
++
++	recordVerificationRecoilEffect(
++		move: Move, source: Pokemon, damageTarget: Pokemon, damageBasis: number,
++		requested: number, hpBefore: number, hpAfter: number, result: number | false | undefined
++	) {
++		if (!this.verificationTrace || !move.recoil) return;
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase: 'after-damage',
++			operation: 'recoil', cause: 'move-recoil', move: move.id,
++			source: this.verificationHolder(source), target: this.verificationHolder(source),
++			damageTarget: this.verificationHolder(damageTarget), damageBasis,
++			numerator: move.recoil[0], denominator: move.recoil[1], requested,
++			hpBefore, hpAfter, amount: hpBefore - hpAfter, applied: typeof result === 'number' && result > 0,
++		});
++	}
++
++	recordVerificationCrashDamage(
++		move: Move, source: Pokemon, target: Pokemon, damageBasis: number,
++		requested: number, hpBefore: number, hpAfter: number, traceStart: number,
++		result: number | false | undefined
++	) {
++		if (!this.verificationTrace) return;
++		const draws = this.verificationTrace.filter(record =>
++			record.kind === 'prng' && record.sequence >= traceStart);
++		const damageRoll = draws.find(record => record.label === 'move.damage_roll');
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase: 'move-fail',
++			operation: 'crash-damage', move: move.id,
++			source: this.verificationHolder(source), target: this.verificationHolder(target),
++			damageTarget: this.verificationHolder(source), basis: 'hypothetical-move-damage',
++			damageBasis, critical: target.getMoveHitData(move).crit || false,
++			damageRoll: damageRoll?.draw.result ?? null,
++			numerator: 1, denominator: 2, minimum: 1,
++			capNumerator: 1, capDenominator: 2, capValue: Math.floor(target.maxhp / 2),
++			requested, hpBefore, hpAfter, amount: hpBefore - hpAfter,
++			applied: typeof result === 'number' && result > 0,
++		});
++	}
++
++	recordVerificationRecoilPrevention(
++		move: Move, target: Pokemon, damageTarget: Pokemon | null, requested: number, cause: 'rockhead'
++	) {
++		if (!this.verificationTrace) return;
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase: 'after-damage',
++			operation: 'prevent-recoil', cause, move: move.id,
++			source: this.verificationHolder(target), target: this.verificationHolder(target),
++			...(damageTarget ? { damageTarget: this.verificationHolder(damageTarget) } : {}),
++			requested, applied: true,
++		});
++	}
++
++	recordVerificationMultiHitPlan(move: Move, source: Pokemon, target: Pokemon, requested: number) {
++		if (!this.verificationTrace) return;
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase: 'hit-loop',
++			operation: 'multihit-plan', move: move.id,
++			source: this.verificationHolder(source), target: this.verificationHolder(target), requested,
++		});
++	}
++
++	recordVerificationMultiHit(
++		move: Move, source: Pokemon, target: Pokemon, requested: number, ordinal: number,
++		damage: number, traceStart: number
++	) {
++		if (!this.verificationTrace) return;
++		const draws = this.verificationTrace.filter(record =>
++			record.kind === 'prng' && record.sequence >= traceStart);
++		const damageRoll = draws.find(record => record.label === 'move.damage_roll');
++		const critical = target.getMoveHitData(move).crit || false;
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase: 'hit-loop',
++			operation: 'multihit-hit', move: move.id,
++			source: this.verificationHolder(source), target: this.verificationHolder(target), requested, ordinal,
++			critical, damageRoll: damageRoll?.draw.result ?? null, damage,
++			targetHPAfter: target.hp, sourceHPAfter: source.hp,
++		});
++	}
++
++	recordVerificationConstructedHit(
++		move: Move, source: Pokemon, target: Pokemon, damage: number
++	) {
++		if (!this.verificationTrace) return;
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase: 'hit-loop',
++			operation: 'multihit-hit', move: move.id,
++			source: this.verificationHolder(source), target: this.verificationHolder(target),
++			requested: 1, ordinal: 1, critical: false, damageRoll: 0, damage,
++			targetHPAfter: target.hp, sourceHPAfter: source.hp,
++		});
++	}
++
++	recordVerificationMultiHitResult(
++		move: Move, source: Pokemon, target: Pokemon, requested: number, actual: number,
++		stopReason: 'completed' | 'target-fainted' | 'source-fainted' | 'sleep' | 'missed' | 'failed'
++	) {
++		if (!this.verificationTrace) return;
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase: 'hit-loop',
++			operation: 'multihit-result', move: move.id,
++			source: this.verificationHolder(source), target: this.verificationHolder(target),
++			requested, actual, stopReason,
++		});
++	}
++
++	recordVerificationFixedDamage(
++		move: Move, source: Pokemon, target: Pokemon, formula: 'level' | 'constant' | 'callback', resolved: number
++	) {
++		if (!this.verificationTrace) return;
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase: 'damage-formula',
++			operation: 'fixed-damage', formula, move: move.id,
++			source: this.verificationHolder(source), target: this.verificationHolder(target), resolved,
++		});
++	}
++
++	recordVerificationVariablePower(
++		move: Move, source: Pokemon, target: Pokemon, formula: 'hp-bracket',
++		ratio: number, bracket: number, resolved: number
++	) {
++		if (!this.verificationTrace) return;
++		this.verificationTrace.push({
++			kind: 'effect', sequence: this.verificationTraceSequence++, phase: 'damage-formula',
++			operation: 'variable-power', formula, move: move.id,
++			source: this.verificationHolder(source), target: this.verificationHolder(target),
++			ratio, bracket, resolved,
++		});
++	}
++
++	recordVerificationImmunity(
++		target: Pokemon, attackType: string, result: 'none' | 'type' | 'ability', effect?: ID
++	) {
++		if (!this.verificationTrace) return;
++		this.verificationTrace.push({
++			kind: 'immunity', sequence: this.verificationTraceSequence++,
++			target: this.verificationHolder(target), attackType, result,
++			...(effect ? { effect } : {}),
++			...(this.activeMove ? { move: {
++				id: this.activeMove.id,
++				accuracy: this.activeMove.accuracy,
++				category: this.activeMove.category,
++			} } : {}),
++		});
++	}
++
++	private verificationRequest(request: ChoiceRequest | null, side: number) {
++		if (!request) return { kind: 'none' as const, legal: [] as string[] };
++		const data = request as AnyObject;
++		if (data.wait) return { kind: 'wait' as const, legal: [] as string[] };
++		if (data.forceSwitch) {
++			const legal = data.side.pokemon.flatMap((pokemon: AnyObject, i: number) =>
++				!pokemon.active && pokemon.condition !== '0 fnt' ? [`switch ${i + 1}`] : []);
++			return { kind: 'switch' as const, legal: legal.length ? legal : ['pass'] };
++		}
++		if (data.teamPreview) return { kind: 'team' as const, legal: [] as string[] };
++		if (data.active) {
++			const active = data.active[0];
++			const moves = (active.maybeDisabled ? this.sides[side].active[0].getMoves() : active.moves).flatMap((move: AnyObject, i: number) =>
++				!move.disabled && move.pp > 0 ? [`move ${i + 1}`] : []);
++			if (!moves.length) moves.push('move 1');
++			if (!active.trapped) {
++				moves.unshift(...data.side.pokemon.flatMap((pokemon: AnyObject, i: number) =>
++					!pokemon.active && pokemon.condition !== '0 fnt' ? [`switch ${i + 1}`] : []));
++			}
++			return { kind: 'move' as const, legal: moves };
++		}
++		throw new Error(`Unrecognized verification request`);
++	}
++
++	private recordVerificationDecision(requests: (ChoiceRequest | null)[]) {
++		if (!this.verificationTrace) return;
++		const state = {
++			turn: this.turn,
++			weather: this.field.weather || null,
++			weatherState: this.field.weather ? {
++				id: this.field.weather,
++				duration: this.field.weatherState.duration || 0,
++			} : null,
++			terrain: this.field.terrain || null,
++			pseudoWeather: Object.keys(this.field.pseudoWeather).sort(),
++			sides: this.sides.map(side => ({
++				active: side.active.map(pokemon => pokemon ? pokemon.position : null),
++				sideConditions: Object.keys(side.sideConditions).sort().map(id => ({
++					id, duration: side.sideConditions[id].duration || 0,
++					...(side.sideConditions[id].layers !== undefined ?
++						{ layers: side.sideConditions[id].layers } : {}),
++				})),
++				slotConditions: side.slotConditions.flatMap((conditions, position) =>
++					Object.keys(conditions).sort().map(id => ({
++						position, id, duration: conditions[id].duration || 0,
++						sourceSide: conditions[id].source?.side === this.sides[0] ? 0 : 1,
++						sourceSpecies: conditions[id].source?.baseSpecies.id || null,
++						sourceEffect: conditions[id].sourceEffect?.id || null,
++						sourceEffectType: conditions[id].sourceEffect?.effectType || null,
++						...(conditions[id].move ? { move: conditions[id].move } : {}),
++						...(conditions[id].moveData?.damage !== undefined ?
++							{ damage: conditions[id].moveData.damage } : {}),
++					}))),
++				pokemon: side.pokemon.map(pokemon => ({
++					species: pokemon.baseSpecies.id,
++					position: pokemon.position,
++					hp: pokemon.hp,
++					maxhp: pokemon.maxhp,
++					types: pokemon.getTypes().map(type => type.toLowerCase()),
++					status: pokemon.status || null,
++					statusState: pokemon.status ? {
++						stage: pokemon.statusState.stage || 0,
++						duration: pokemon.statusState.time || pokemon.statusState.duration || 0,
++						...(pokemon.status === 'slp' ?
++							{ skippedTime: pokemon.statusState.skippedTime || 0 } : {}),
++					} : null,
++					boosts: { ...pokemon.boosts },
++					volatiles: Object.keys(pokemon.volatiles).sort().map(id => ({
++						id,
++						duration: pokemon.volatiles[id].time || pokemon.volatiles[id].duration || 0,
++						counter: pokemon.volatiles[id].counter ||
++							pokemon.volatiles[id].multiplier ||
++							pokemon.volatiles[id].layers ||
++							pokemon.volatiles[id].contactHitCount || 0,
++						...(id === 'substitute' ? { hp: pokemon.volatiles[id].hp } : {}),
++						...(id === 'substitutebroken' ? {
++							breakingMove: pokemon.volatiles[id].move || null,
++						} : {}),
++						...(id === 'lockedmove' ? {
++							move: pokemon.volatiles[id].move || null,
++							trueDuration: pokemon.volatiles[id].trueDuration || 0,
++						} : {}),
++						...((id === 'disable' || id === 'encore') ? {
++							move: pokemon.volatiles[id].move || null,
++						} : {}),
++						...((id === 'attract' || id === 'trapped' || id === 'lockon') ? {
++							sourceSide: pokemon.volatiles[id].source?.side === this.sides[0] ? 0 : 1,
++							sourceSpecies: pokemon.volatiles[id].source?.baseSpecies.id || null,
++							sourceEffect: pokemon.volatiles[id].sourceEffect?.id || null,
++							sourceEffectType: pokemon.volatiles[id].sourceEffect?.effectType || null,
++						} : {}),
++						...(id === 'bide' ? {
++							totalDamage: pokemon.volatiles[id].totalDamage || 0,
++							lastSourceSide: pokemon.volatiles[id].lastDamageSource ?
++								(pokemon.volatiles[id].lastDamageSource.side === this.sides[0] ? 0 : 1) : null,
++							lastSourceSpecies: pokemon.volatiles[id].lastDamageSource?.baseSpecies.id || null,
++						} : {}),
++					})),
++					item: pokemon.item || null,
++					lastItem: pokemon.lastItem || null,
++					staleness: pokemon.staleness || null,
++					pendingStaleness: pokemon.pendingStaleness || null,
++					volatileStaleness: pokemon.volatileStaleness || null,
++					usedItemThisTurn: !!pokemon.usedItemThisTurn,
++					ateBerry: !!pokemon.ateBerry,
++					itemKnockedOff: !!pokemon.itemKnockedOff,
++					ability: pokemon.ability || null,
++					moves: pokemon.moveSlots.map(move => ({ id: move.id, pp: move.pp, maxpp: move.maxpp })),
++					lastMove: pokemon.lastMove?.id || null,
++					lastMoveUsed: pokemon.lastMoveUsed ? {
++						move: pokemon.lastMoveUsed.id,
++						resolvedType: pokemon.lastMoveUsed.type,
++					} : null,
++					lastAttackedBy: pokemon.getLastAttackedBy() ? {
++						sourceSide: pokemon.getLastAttackedBy()!.source.side === this.sides[0] ? 0 : 1,
++						sourceSlot: pokemon.getLastAttackedBy()!.source.position,
++						sourceSpecies: pokemon.getLastAttackedBy()!.source.baseSpecies.id,
++						move: pokemon.getLastAttackedBy()!.move,
++						damage: pokemon.getLastAttackedBy()!.damage,
++						damageWasNumber: typeof pokemon.getLastAttackedBy()!.damageValue === 'number',
++						thisTurn: pokemon.getLastAttackedBy()!.thisTurn,
++					} : null,
++					fainted: pokemon.fainted,
++				})),
++			})),
++		};
++		this.verificationTrace.push({
++			kind: 'decision', sequence: this.verificationTraceSequence++,
++			ordinal: this.verificationDecisionOrdinal++,
++			request: requests.map((request, side) => this.verificationRequest(request, side)),
++			state,
++			protocol: this.log.slice(this.verificationProtocolCursor).filter(line => line && !line.startsWith('|t:|')),
++		});
++		this.verificationProtocolCursor = this.log.length;
++	}
++
++	private recordVerificationQueue() {
++		if (!this.verificationTrace) return;
++		const actions: Array<{
++			kind: 'move' | 'switch'; side: number; slot: number;
++			order: number; priority: number; speed: number;
++		}> = [];
++		for (const action of this.queue.list) {
++			if (action.choice === 'move') actions.push({
++				kind: 'move' as const, side: action.pokemon.side.n,
++				slot: action.pokemon.moveSlots.findIndex(slot => slot.id === action.moveid),
++				order: action.order, priority: action.priority ?? 0, speed: action.speed,
++			});
++			if (action.choice === 'switch' || action.choice === 'instaswitch') actions.push({
++				kind: 'switch' as const, side: action.pokemon.side.n, slot: action.target.position,
++				order: action.order, priority: action.priority, speed: action.speed,
++			});
++		}
++		const choices: Array<{ kind: 'none' | 'move' | 'switch'; slot: number | null }> =
++			this.sides.map(() => ({ kind: 'none', slot: null }));
++		for (const action of actions) {
++			choices[action.side] = { kind: action.kind, slot: action.slot };
++		}
++		this.verificationTrace.push({
++			kind: 'queue', sequence: this.verificationTraceSequence++, choices, actions,
++		});
++	}
++
+ 	random(m?: number, n?: number) {
+ 		return this.prng.random(m, n);
+ 	}
+@@ -465,7 +1321,8 @@ export class Battle {
+ 	eachEvent(eventid: string, effect?: Effect | null, relayVar?: boolean) {
+ 		const actives = this.getAllActive();
+ 		if (!effect && this.effect) effect = this.effect;
+-		this.speedSort(actives, (a, b) => b.speed - a.speed);
++		this.verificationRandom(`each_event.${toID(eventid)}.active_order`, () =>
++			this.speedSort(actives, (a, b) => b.speed - a.speed));
+ 		for (const pokemon of actives) {
+ 			this.runEvent(eventid, pokemon, null, effect, relayVar);
+ 		}
+@@ -504,17 +1361,35 @@ export class Battle {
+ 				handlers = handlers.concat(this.findBattleEventHandlers(callbackName, getKey, active));
+ 			}
+ 		}
+-		this.speedSort(handlers);
++		this.verificationRandom(`field_event.${toID(eventid)}.handler_order`, () =>
++			this.speedSort(handlers));
++		if (eventid === 'Residual' || eventid === 'SwitchIn') {
++			this.recordVerificationHandlers(eventid, handlers);
++		}
++		if (eventid === 'Residual') {
++			for (const handler of handlers) {
++				this.recordVerificationCondition(
++					'residual-discover', handler.effect, handler.effectHolder,
++					handler.state ? { ...handler.state } : null,
++					handler.state ? { ...handler.state } : null, handler
++				);
++			}
++		}
+ 		while (handlers.length) {
+ 			const handler = handlers[0];
+ 			handlers.shift();
+ 			const effect = handler.effect;
++			const verificationConditionBefore = handler.state ? { ...handler.state } : null;
+ 			if ((handler.effectHolder as Pokemon).fainted) {
+ 				if (!(handler.state?.isSlotCondition)) continue;
+ 			}
+ 			if (eventid === 'Residual' && handler.end && handler.state?.duration) {
+ 				handler.state.duration--;
+ 				if (!handler.state.duration) {
++					this.recordVerificationCondition(
++						'residual-execute', effect, handler.effectHolder, verificationConditionBefore,
++						{ ...handler.state }, handler
++					);
+ 					const endCallArgs = handler.endCallArgs || [handler.effectHolder, effect.id];
+ 					handler.end.call(...endCallArgs as [any, ...any[]]);
+ 					if (this.ended) return;
+@@ -561,6 +1436,12 @@ export class Battle {
+ 			if (handler.callback) {
+ 				this.singleEvent(handlerEventid, effect, handler.state, handler.effectHolder, null, null, undefined, handler.callback);
+ 			}
++			if (eventid === 'Residual') {
++				this.recordVerificationCondition(
++					'residual-execute', effect, handler.effectHolder, verificationConditionBefore,
++					handler.state ? { ...handler.state } : null, handler
++				);
++			}
+ 
+ 			this.faintMessages();
+ 			if (this.ended) return;
+@@ -636,12 +1517,51 @@ export class Battle {
+ 		const args = [target, source, sourceEffect];
+ 		if (hasRelayVar) args.unshift(relayVar);
+ 
++		const verificationConditionBefore = state ? { ...state } : null;
++		const verificationMoveFrame = (eventid === 'ModifyType' || eventid === 'ModifyMove') &&
++			effect.effectType === 'Move' && target instanceof Pokemon;
++		const verificationSingleMove = (verificationMoveFrame || eventid === 'Try' || eventid === 'TryMove' ||
++			eventid === 'MoveFail' ||
++			eventid === 'UseMoveMessage' ||
++			eventid === 'TryHit' || eventid === 'Hit' || eventid === 'HitField' ||
++			eventid === 'AfterSubDamage' || eventid === 'AfterMove') &&
++			effect.effectType === 'Move' && target instanceof Pokemon;
++		if (this.verificationTrace && ((eventid === 'Start' || eventid === 'Restart' || eventid === 'End' || eventid === 'Eat') &&
++			(target instanceof Pokemon) || verificationSingleMove) && callback !== undefined) {
++			const holder = target as Pokemon;
++			this.verificationTrace.push({
++				kind: 'single-handler', sequence: this.verificationTraceSequence++, event: eventid,
++				effect: effect.id, effectType: effect.effectType,
++				holder: this.verificationHolder(holder),
++				order: false, priority: 0, subOrder: 0,
++				effectOrder: (state as EffectState | null)?.effectOrder,
++				speed: holder.speed,
++			});
++		}
+ 		let returnVal;
+ 		if (typeof callback === 'function') {
+ 			returnVal = callback.apply(this, args);
+ 		} else {
+ 			returnVal = callback;
+ 		}
++		if (this.verificationTrace && verificationMoveFrame && this.activeMove) {
++			this.verificationTrace.push({
++				kind: 'active-move-frame', sequence: this.verificationTraceSequence++,
++				event: eventid as 'ModifyType' | 'ModifyMove', move: this.activeMove.id,
++				type: this.activeMove.type, category: this.activeMove.category,
++				basePower: this.activeMove.basePower, accuracy: this.activeMove.accuracy,
++			});
++		}
++		if (eventid === 'SwitchIn' && target instanceof Pokemon && state &&
++			verificationConditionBefore &&
++			(verificationConditionBefore.stage !== state.stage ||
++				verificationConditionBefore.duration !== state.duration ||
++				verificationConditionBefore.counter !== state.counter ||
++				verificationConditionBefore.time !== state.time ||
++				verificationConditionBefore.skippedTime !== state.skippedTime)) {
++			this.recordVerificationCondition('update', effect, target,
++				verificationConditionBefore, { ...state });
++		}
+ 
+ 		this.eventDepth--;
+ 		this.effect = parentEffect;
+@@ -791,8 +1711,10 @@ export class Battle {
+ 		} else if (fastExit) {
+ 			handlers.sort(Battle.compareRedirectOrder);
+ 		} else {
+-			this.speedSort(handlers);
++			this.verificationRandom(`event.${toID(eventid)}.handler_order`, () =>
++				this.speedSort(handlers));
+ 		}
++		this.recordVerificationHandlers(eventid, handlers, sourceEffect);
+ 		let hasRelayVar = 1;
+ 		const args = [target, source, sourceEffect];
+ 		// console.log('Event: ' + eventid + ' (depth ' + this.eventDepth + ') t:' + target.id + ' s:' + (!source || source.id) + ' e:' + effect.id);
+@@ -894,6 +1816,9 @@ export class Battle {
+ 				continue;
+ 			}
+ 			let returnVal;
++			const verificationRelay = hasRelayVar ? args[0] : undefined;
++			const verificationModifierQ12 = this.trunc(this.event.modifier * 4096);
++			const verificationConditionBefore = handler.state ? { ...handler.state } : null;
+ 			if (typeof handler.callback === 'function') {
+ 				const parentEffect = this.effect;
+ 				const parentEffectState = this.effectState;
+@@ -908,6 +1833,25 @@ export class Battle {
+ 			} else {
+ 				returnVal = handler.callback;
+ 			}
++			this.recordVerificationModifierHandler(
++				eventid, handler, verificationRelay, verificationModifierQ12
++			);
++			const verificationConditionStillInstalled = effect.effectType !== 'Status' ||
++				effectHolder.statusState === handler.state;
++			if (verificationConditionStillInstalled &&
++				(eventid === 'SwitchIn' || effect.effectType === 'Condition' ||
++				effect.effectType === 'Status') &&
++				effectHolder instanceof Pokemon && handler.state &&
++				verificationConditionBefore &&
++				(verificationConditionBefore.stage !== handler.state.stage ||
++					verificationConditionBefore.duration !== handler.state.duration ||
++					verificationConditionBefore.counter !== handler.state.counter ||
++					verificationConditionBefore.time !== handler.state.time ||
++					verificationConditionBefore.skippedTime !== handler.state.skippedTime)) {
++				this.recordVerificationCondition(
++					'update', effect, effectHolder, verificationConditionBefore, { ...handler.state }
++				);
++			}
+ 
+ 			if (returnVal !== undefined) {
+ 				relayVar = returnVal;
+@@ -926,11 +1870,16 @@ export class Battle {
+ 		}
+ 
+ 		this.eventDepth--;
++		const verificationRelay = relayVar;
++		const verificationModifierQ12 = this.trunc(this.event.modifier * 4096);
+ 		if (typeof relayVar === 'number' && relayVar === Math.abs(Math.floor(relayVar))) {
+ 			// this.debug(eventid + ' modifier: 0x' +
+ 			// 	('0000' + (this.event.modifier * 4096).toString(16)).slice(-4).toUpperCase());
+ 			relayVar = this.modify(relayVar, this.event.modifier);
+ 		}
++		this.recordVerificationModifierResult(
++			eventid, verificationRelay, verificationModifierQ12, relayVar, handlers.length > 0
++		);
+ 		this.event = parentEvent;
+ 
+ 		return Array.isArray(target) ? targetRelayVars : relayVar;
+@@ -1397,6 +2346,7 @@ export class Battle {
+ 		for (let i = 0; i < this.sides.length; i++) {
+ 			this.sides[i].activeRequest = requests[i];
+ 		}
++		this.recordVerificationDecision(requests);
+ 		this.sentRequests = false;
+ 
+ 		if (this.sides.every(side => side.isChoiceDone())) {
+@@ -1566,7 +2516,8 @@ export class Battle {
+ 
+ 	getRandomSwitchable(side: Side) {
+ 		const canSwitchIn = this.possibleSwitches(side);
+-		return canSwitchIn.length ? this.sample(canSwitchIn) : null;
++		return canSwitchIn.length ? this.verificationRandom(
++			'drag.switch_candidate', () => this.sample(canSwitchIn)) : null;
+ 	}
+ 
+ 	private possibleSwitches(side: Side) {
+@@ -1792,7 +2743,9 @@ export class Battle {
+ 			}
+ 		}
+ 		if (this.gen === 2) this.quickClawRoll = this.randomChance(60, 256);
+-		if (this.gen === 3) this.quickClawRoll = this.randomChance(1, 5);
++		if (this.gen === 3) {
++			this.quickClawRoll = this.verificationRandomChance('turn.quick_claw', 1, 5);
++		}
+ 
+ 		this.makeRequest('move');
+ 	}
+@@ -2029,6 +2982,7 @@ export class Battle {
+ 		boost = this.runEvent('ChangeBoost', target, source, effect, { ...boost });
+ 		boost = target.getCappedBoost(boost);
+ 		boost = this.runEvent('TryBoost', target, source, effect, { ...boost });
++		const verificationBoostsBefore = { ...target.boosts };
+ 		let success = null;
+ 		let boosted = isSecondary;
+ 		let boostName: BoostID;
+@@ -2037,6 +2991,16 @@ export class Battle {
+ 				[boostName]: boost[boostName],
+ 			};
+ 			let boostBy = target.boostBy(currentBoost);
++			if (this.verificationTrace && effect?.effectType === 'Move') {
++				this.verificationTrace.push({
++					kind: 'effect', sequence: this.verificationTraceSequence++,
++					phase: isSecondary ? (isSelf ? 'self-secondary' : 'secondary') : 'primary',
++					operation: 'boost', move: effect.id, source: this.verificationHolder(source || target),
++					target: this.verificationHolder(target), stat: boostName, delta: boost[boostName]!,
++					before: verificationBoostsBefore[boostName] || 0, after: target.boosts[boostName] || 0,
++					applied: !!boostBy,
++				});
++			}
+ 			let msg = '-boost';
+ 			if (boost[boostName]! < 0 || target.boosts[boostName] === -6) {
+ 				msg = '-unboost';
+@@ -2168,7 +3132,11 @@ export class Battle {
+ 					const amount = this.clampIntRange(Math.floor(targetDamage * effect.drain[0] / effect.drain[1]), 1);
+ 					// Draining can be countered in gen 1
+ 					if (this.gen <= 1) this.lastDamage = amount;
+-					this.heal(amount, source, target, 'drain');
++					const hpBefore = source.hp;
++					const result = this.heal(amount, source, target, 'drain');
++					this.recordVerificationDrainEffect(
++						effect, source, target, targetDamage, amount, hpBefore, source.hp, result
++					);
+ 				}
+ 				if (this.gen > 4 && effect.drain && source) {
+ 					const amount = Math.round(targetDamage * effect.drain[0] / effect.drain[1]);
+@@ -2214,7 +3182,12 @@ export class Battle {
+ 			source ||= this.event.source;
+ 			effect ||= this.effect;
+ 		}
+-		return this.spreadDamage([damage], [target], source, effect, instafaint)[0];
++		const result = this.spreadDamage([damage], [target], source, effect, instafaint)[0];
++		if (target && effect && effect !== 'drain' && effect !== 'recoil' && typeof effect !== 'string') {
++			this.recordVerificationCondition('damage', effect, target, null, null, null,
++				typeof result === 'number' ? result : 0);
++		}
++		return result;
+ 	}
+ 
+ 	directDamage(damage: number, target?: Pokemon, source: Pokemon | null = null, effect: Effect | null = null) {
+@@ -2278,15 +3251,28 @@ export class Battle {
+ 			effect ||= this.effect;
+ 		}
+ 		if (effect === 'drain') effect = this.dex.conditions.getByID(effect as ID);
++		const weatherRecovery = effect?.effectType === 'Move' &&
++			(effect as Move).flags?.heal && !(effect as Move).heal && target && source;
++		const hpBefore = target?.hp || 0;
+ 		if (damage && damage <= 1) damage = 1;
+ 		damage = this.trunc(damage);
++		const requested = damage;
++		const recordWeatherRecovery = (applied: boolean) => {
++			if (!weatherRecovery || !target || !source) return;
++			const current = this.field.effectiveWeather();
++			const fraction: readonly [number, number] = current === 'sunnyday' ? [2, 3] :
++				['raindance', 'sandstorm', 'hail'].includes(current) ? [1, 4] : [1, 2];
++			this.recordVerificationDirectHealEffect(
++				effect as Move, source, target, requested, hpBefore, target.hp, applied, fraction);
++		};
+ 		// for things like Liquid Ooze, the Heal event still happens when nothing is healed.
+ 		damage = this.runEvent('TryHeal', target, source, effect, damage);
+-		if (!damage) return damage;
+-		if (!target?.hp) return false;
+-		if (!target.isActive) return false;
+-		if (target.hp >= target.maxhp) return false;
++		if (!damage) { recordWeatherRecovery(false); return damage; }
++		if (!target?.hp) { recordWeatherRecovery(false); return false; }
++		if (!target.isActive) { recordWeatherRecovery(false); return false; }
++		if (target.hp >= target.maxhp) { recordWeatherRecovery(false); return false; }
+ 		const finalDamage = target.heal(damage, source, effect);
++		recordWeatherRecovery(typeof finalDamage === 'number' && finalDamage > 0);
+ 		switch (effect?.id) {
+ 		case 'leechseed':
+ 		case 'rest':
+@@ -2403,7 +3389,8 @@ export class Battle {
+ 
+ 	randomizer(baseDamage: number) {
+ 		const tr = this.trunc;
+-		return tr(tr(baseDamage * (100 - this.random(16))) / 100);
++		return this.verificationRandom('move.damage_roll', () =>
++			tr(tr(baseDamage * (100 - this.random(16))) / 100));
+ 	}
+ 
+ 	/**
+@@ -2673,12 +3660,18 @@ export class Battle {
+ 		if (!action.pokemon) {
+ 			action.speed = 1;
+ 		} else {
+-			if (this.gen <= 4 && action.choice === 'move' && action.fractionalPriority < 0) {
+-				// in Gen 4, Pokemon with decrease fractional priority act in reverse speed order
+-				// ignores Trick Room, does not ignore boosts and Simple
+-				action.speed = -action.pokemon.getStat('spe', false, false);
+-			} else {
+-				action.speed = action.pokemon.getActionSpeed();
++			const previousQueueSpeed = this.verificationQueueSpeed;
++			this.verificationQueueSpeed = action.choice === 'move';
++			try {
++				if (this.gen <= 4 && action.choice === 'move' && action.fractionalPriority < 0) {
++					// in Gen 4, Pokemon with decrease fractional priority act in reverse speed order
++					// ignores Trick Room, does not ignore boosts and Simple
++					action.speed = -action.pokemon.getStat('spe', false, false);
++				} else {
++					action.speed = action.pokemon.getActionSpeed();
++				}
++			} finally {
++				this.verificationQueueSpeed = previousQueueSpeed;
+ 			}
+ 		}
+ 	}
+@@ -3037,6 +4030,7 @@ export class Battle {
+ 		this.clearRequest();
+ 
+ 		this.queue.sort();
++		this.recordVerificationQueue();
+ 		this.queue.list.push(...oldQueue);
+ 
+ 		this.requestState = '';
+diff --git a/sim/field.ts b/sim/field.ts
+index eb01c17b1..6e4f65341 100644
+--- a/sim/field.ts
++++ b/sim/field.ts
+@@ -85,15 +85,18 @@ export class Field {
+ 			return false;
+ 		}
+ 		this.battle.eachEvent('WeatherChange', sourceEffect);
++		this.battle.recordVerificationCondition('add', status, this, null, { ...this.weatherState });
+ 		return true;
+ 	}
+ 
+ 	clearWeather() {
+ 		if (!this.weather) return false;
+ 		const prevWeather = this.getWeather();
++		const before = { ...this.weatherState };
+ 		this.battle.singleEvent('FieldEnd', prevWeather, this.weatherState, this);
+ 		this.weather = '';
+ 		this.battle.clearEffectState(this.weatherState);
++		this.battle.recordVerificationCondition('remove', prevWeather, this, before, null);
+ 		this.battle.eachEvent('WeatherChange');
+ 		return true;
+ 	}
+diff --git a/sim/pokemon.ts b/sim/pokemon.ts
+index 8c5148abc..a361ddc7e 100644
+--- a/sim/pokemon.ts
++++ b/sim/pokemon.ts
+@@ -337,7 +337,8 @@ export class Pokemon {
+ 		set.level = this.battle.clampIntRange(set.adjustLevel || set.level || 100, 1, 9999);
+ 		this.level = set.level;
+ 		const genders: { [key: string]: GenderName | null } = { __proto__: null, M: 'M', F: 'F', N: 'N' };
+-		this.gender = genders[set.gender] || this.species.gender || this.battle.sample(['M', 'F']);
++		this.gender = genders[set.gender] || this.species.gender ||
++			this.battle.verificationRandom('team.gender', () => this.battle.sample(['M', 'F']));
+ 		if (this.gender === 'N') this.gender = '';
+ 		this.happiness = typeof set.happiness === 'number' ? this.battle.clampIntRange(set.happiness, 0, 255) : 255;
+ 		if (this.battle.format.mod === 'gen7letsgo') this.happiness = 70;
+@@ -1529,6 +1530,11 @@ export class Pokemon {
+ 				this.removeLinkedVolatiles(this.volatiles[i].linkedStatus, this.volatiles[i].linkedPokemon);
+ 			}
+ 		}
++		for (const id of Object.keys(this.volatiles)) {
++			this.battle.recordVerificationCondition(
++				'remove', this.battle.dex.conditions.get(id), this, { ...this.volatiles[id] }, null
++			);
++		}
+ 		if (this.species.name === 'Eternatus-Eternamax' && this.volatiles['dynamax']) {
+ 			this.volatiles = { dynamax: this.volatiles['dynamax'] };
+ 		} else {
+@@ -1674,11 +1680,13 @@ export class Pokemon {
+ 	/** Unlike clearStatus, gives cure message */
+ 	cureStatus(silent = false) {
+ 		if (!this.hp || !this.status) return false;
++		const verificationStatus = this.status;
+ 		this.battle.add('-curestatus', this, this.status, silent ? '[silent]' : '[msg]');
+ 		if (this.status === 'slp' && this.removeVolatile('nightmare')) {
+ 			this.battle.add('-end', this, 'Nightmare', '[silent]');
+ 		}
+ 		this.setStatus('');
++		this.battle.recordVerificationCureStatusEffect(this, verificationStatus, !this.status);
+ 		return true;
+ 	}
+ 
+@@ -1746,6 +1754,15 @@ export class Pokemon {
+ 		if (status.id && !this.battle.runEvent('AfterSetStatus', this, source, sourceEffect, status)) {
+ 			return false;
+ 		}
++		if (prevStatus && prevStatus !== status.id) {
++			this.battle.recordVerificationCondition(
++				'remove', this.battle.dex.conditions.get(prevStatus), this,
++				{ ...prevStatusState }, null
++			);
++		}
++		if (status.id && prevStatus !== status.id) {
++			this.battle.recordVerificationCondition('add', status, this, null, { ...this.statusState });
++		}
+ 		return true;
+ 	}
+ 
+@@ -1982,7 +1999,16 @@ export class Pokemon {
+ 
+ 		if (this.volatiles[status.id]) {
+ 			if (!status.onRestart) return false;
+-			return this.battle.singleEvent('Restart', status, this.volatiles[status.id], this, source, sourceEffect);
++			const before = { ...this.volatiles[status.id] };
++			const restarted = this.battle.singleEvent(
++				'Restart', status, this.volatiles[status.id], this, source, sourceEffect
++			);
++			if (restarted) {
++				this.battle.recordVerificationCondition(
++					'restart', status, this, before, { ...this.volatiles[status.id] }
++				);
++			}
++			return restarted;
+ 		}
+ 		if (!this.runStatusImmunity(status.id)) {
+ 			this.battle.debug('immune to volatile status');
+@@ -2023,6 +2049,7 @@ export class Pokemon {
+ 			this.volatiles[status.toString()].linkedPokemon = [source];
+ 			this.volatiles[status.toString()].linkedStatus = linkedStatus;
+ 		}
++		this.battle.recordVerificationCondition('add', status, this, null, { ...this.volatiles[status.id] });
+ 		return true;
+ 	}
+ 
+@@ -2036,9 +2063,11 @@ export class Pokemon {
+ 		if (!this.hp) return false;
+ 		status = this.battle.dex.conditions.get(status) as Effect;
+ 		if (!this.volatiles[status.id]) return false;
++		const before = { ...this.volatiles[status.id] };
+ 		const { linkedPokemon, linkedStatus } = this.volatiles[status.id];
+ 		this.battle.singleEvent('End', status, this.volatiles[status.id], this);
+ 		delete this.volatiles[status.id];
++		this.battle.recordVerificationCondition('remove', status, this, before, null);
+ 		if (linkedPokemon) {
+ 			this.removeLinkedVolatiles(linkedStatus, linkedPokemon);
+ 		}
+@@ -2239,6 +2268,10 @@ export class Pokemon {
+ 		const notImmune = type === 'Ground' ?
+ 			this.isGrounded(negateImmunity) :
+ 			negateImmunity || this.battle.dex.getImmunity(type, this);
++		this.battle.recordVerificationImmunity(
++			this, type, notImmune ? 'none' : notImmune === null ? 'ability' : 'type',
++			notImmune === null ? toID('levitate') : undefined
++		);
+ 		if (notImmune) return true;
+ 		if (!message) return false;
+ 		if (notImmune === null) {
+diff --git a/sim/prng.ts b/sim/prng.ts
+index d75a85026..c6afbe2d8 100644
+--- a/sim/prng.ts
++++ b/sim/prng.ts
+@@ -20,6 +20,14 @@ export type SodiumRNGSeed = ['sodium', string];
+ /** 64-bit big-endian [high -> low] int */
+ export type Gen5RNGSeed = [number, number, number, number];
+ 
++export interface PRNGTraceRecord {
++	before: PRNGSeed;
++	after: PRNGSeed;
++	from?: number;
++	to?: number;
++	result: number;
++}
++
+ /**
+  * Low-level source of 32-bit random numbers.
+  */
+@@ -41,6 +49,7 @@ interface RNG {
+ export class PRNG {
+ 	readonly startingSeed: PRNGSeed;
+ 	rng!: RNG;
++	observer: ((record: PRNGTraceRecord) => void) | null = null;
+ 	/** Creates a new source of randomness for the given seed. */
+ 	constructor(seed: PRNGSeed | null = null, initialSeed?: PRNGSeed) {
+ 		if (!seed) seed = PRNG.generateSeed();
+@@ -89,17 +98,21 @@ export class PRNG {
+ 	 * m and n are converted to integers via Math.floor. If the result is NaN, they are ignored.
+ 	 */
+ 	random(from?: number, to?: number): number {
++		const before = this.rng.getSeed();
+ 		const result = this.rng.next();
+ 
+ 		if (from) from = Math.floor(from);
+ 		if (to) to = Math.floor(to);
++		let projected: number;
+ 		if (from === undefined) {
+-			return result / 2 ** 32;
++			projected = result / 2 ** 32;
+ 		} else if (!to) {
+-			return Math.floor(result * from / 2 ** 32);
++			projected = Math.floor(result * from / 2 ** 32);
+ 		} else {
+-			return Math.floor(result * (to - from) / 2 ** 32) + from;
++			projected = Math.floor(result * (to - from) / 2 ** 32) + from;
+ 		}
++		this.observer?.({ before, after: this.rng.getSeed(), from, to, result: projected });
++		return projected;
+ 	}
+ 
+ 	/**
+diff --git a/sim/side.ts b/sim/side.ts
+index 7227c6180..7dd2b5081 100644
+--- a/sim/side.ts
++++ b/sim/side.ts
+@@ -404,7 +404,14 @@ export class Side {
+ 		status = this.battle.dex.conditions.get(status);
+ 		if (this.sideConditions[status.id]) {
+ 			if (!(status as any).onSideRestart) return false;
+-			return this.battle.singleEvent('SideRestart', status, this.sideConditions[status.id], this, source, sourceEffect);
++			const before = { ...this.sideConditions[status.id] };
++			const restarted = this.battle.singleEvent(
++				'SideRestart', status, this.sideConditions[status.id], this, source, sourceEffect
++			);
++			if (restarted) this.battle.recordVerificationCondition(
++				'restart', status, this, before, { ...this.sideConditions[status.id] }
++			);
++			return restarted;
+ 		}
+ 		this.sideConditions[status.id] = this.battle.initEffectState({
+ 			id: status.id,
+@@ -422,6 +429,9 @@ export class Side {
+ 			return false;
+ 		}
+ 		this.battle.runEvent('SideConditionStart', this, source, status);
++		this.battle.recordVerificationCondition(
++			'add', status, this, null, { ...this.sideConditions[status.id] }
++		);
+ 		return true;
+ 	}
+ 
+@@ -439,8 +449,10 @@ export class Side {
+ 	removeSideCondition(status: string | Effect): boolean {
+ 		status = this.battle.dex.conditions.get(status) as Effect;
+ 		if (!this.sideConditions[status.id]) return false;
++		const before = { ...this.sideConditions[status.id] };
+ 		this.battle.singleEvent('SideEnd', status, this.sideConditions[status.id], this);
+ 		delete this.sideConditions[status.id];
++		this.battle.recordVerificationCondition('remove', status, this, before, null);
+ 		return true;
+ 	}
+ 
+@@ -456,7 +468,14 @@ export class Side {
+ 		status = this.battle.dex.conditions.get(status);
+ 		if (this.slotConditions[target][status.id]) {
+ 			if (!status.onRestart) return false;
+-			return this.battle.singleEvent('Restart', status, this.slotConditions[target][status.id], this, source, sourceEffect);
++			const before = { ...this.slotConditions[target][status.id] };
++			const restarted = this.battle.singleEvent(
++				'Restart', status, this.slotConditions[target][status.id], this, source, sourceEffect
++			);
++			if (restarted) this.battle.recordVerificationCondition(
++				'restart', status, this, before, { ...this.slotConditions[target][status.id] }, null, undefined, target
++			);
++			return restarted;
+ 		}
+ 		const conditionState = this.slotConditions[target][status.id] = this.battle.initEffectState({
+ 			id: status.id,
+@@ -474,6 +493,9 @@ export class Side {
+ 			delete this.slotConditions[target][status.id];
+ 			return false;
+ 		}
++		this.battle.recordVerificationCondition(
++			'add', status, this, null, { ...conditionState }, null, undefined, target
++		);
+ 		return true;
+ 	}
+ 
+@@ -488,8 +510,12 @@ export class Side {
+ 		if (target instanceof Pokemon) target = target.position;
+ 		status = this.battle.dex.conditions.get(status) as Effect;
+ 		if (!this.slotConditions[target][status.id]) return false;
++		const before = { ...this.slotConditions[target][status.id] };
+ 		this.battle.singleEvent('End', status, this.slotConditions[target][status.id], this.active[target]);
+ 		delete this.slotConditions[target][status.id];
++		this.battle.recordVerificationCondition(
++			'remove', status, this, before, null, null, undefined, target
++		);
+ 		return true;
+ 	}
+ 

@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"rough-skin-contact",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen3/abilities.ts roughskin.onDamagingHit","test_name":"Contact damages the attacker by one sixteenth of base maximum HP","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"persian-tackle-flame-body-p1.txt","normalized":[{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["tackle"],"stats":[271,176,156,166,166,266],"status":null}]},{"source":"sharpedo-rough-skin-surf-p2.txt","normalized":[{"species":"sharpedo","level":100,"gender":"M","ability":"roughskin","item":"","moves":["surf"],"stats":[281,276,116,226,116,226],"status":null}]}],
+  "source_choices":[["move 1","move 1"]],"choices":[["move 1","move 1"]],"forced_outcomes":[],
+  "features":["ability.roughskin","handler.damaging-hit","choice.move","damage.gen3","state.canonical"],"boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":2,"max_actions":2}
+}

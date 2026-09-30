@@ -1,0 +1,6 @@
+Marowak (M) @ Soft Sand
+Ability: Rock Head
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Earthquake

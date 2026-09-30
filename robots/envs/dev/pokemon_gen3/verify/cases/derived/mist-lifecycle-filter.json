@@ -1,0 +1,15 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"mist-lifecycle-filter",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen4/moves.ts","test_name":"Mist side lifecycle, non-refresh, and external negative-boost filtering","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[
+    {"source":"mist-lifecycle-filter-p1.txt","normalized":[{"species":"corsola","level":100,"gender":"M","ability":"naturalcure","item":"","moves":["mist","splash"],"stats":[251,146,206,166,206,106],"status":null}]},
+    {"source":"mist-lifecycle-filter-p2.txt","normalized":[{"species":"torkoal","level":100,"gender":"M","ability":"whitesmoke","item":"","moves":["smokescreen","splash"],"stats":[281,206,316,206,176,76],"status":null}]}
+  ],
+  "source_choices":[["move 1","move 1"],["move 1","move 1"],["move 2","move 1"],["move 2","move 1"],["move 2","move 1"],["move 2","move 1"]],
+  "choices":[["move 1","move 1"],["move 1","move 1"],["move 2","move 1"],["move 2","move 1"],["move 2","move 1"],["move 2","move 1"]],
+  "forced_outcomes":[],
+  "features":["choice.move","condition.side","handler.try-boost","lifecycle.condition-duration","prng.labeled","side.mist","state.canonical"],
+  "boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],
+  "limits":{"max_boundaries":7,"max_actions":12}
+}

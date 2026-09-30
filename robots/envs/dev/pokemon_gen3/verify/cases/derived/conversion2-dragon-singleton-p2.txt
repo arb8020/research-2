@@ -1,0 +1,5 @@
+Charizard (M)
+Ability: Blaze
+Level: 100
+Hardy Nature
+- Dragon Rage

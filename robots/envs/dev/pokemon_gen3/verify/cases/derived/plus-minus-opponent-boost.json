@@ -1,0 +1,100 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "plus-minus-opponent-boost",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/abilities.ts",
+    "test_name": "An opposing active Minus enables the Gen 3 Plus special-attack modifier",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    821,
+    211,
+    53,
+    17
+  ],
+  "teams": [
+    {
+      "source": "plus-minus-opponent-boost-p1.txt",
+      "normalized": [
+        {
+          "species": "plusle",
+          "level": 100,
+          "gender": "M",
+          "ability": "plus",
+          "item": "",
+          "moves": [
+            "thunderbolt"
+          ],
+          "stats": [
+            261,
+            136,
+            116,
+            206,
+            186,
+            226
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "plus-minus-opponent-boost-p2.txt",
+      "normalized": [
+        {
+          "species": "minun",
+          "level": 100,
+          "gender": "M",
+          "ability": "minus",
+          "item": "",
+          "moves": [
+            "growl"
+          ],
+          "stats": [
+            261,
+            116,
+            136,
+            186,
+            206,
+            226
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "handler.modify-special-attack",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

@@ -1,0 +1,13 @@
+Skarmory (M)
+Ability: Keen Eye
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Wing Attack
+
+Vaporeon (M)
+Ability: Water Absorb
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Tackle

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-2.local/pokemon-gen3/verify/inventory-v1.schema.json",
+  "title": "Examined pinned Showdown test inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "oracle_revision", "entries"],
+  "properties": {
+    "schema": {"const": "pokemon-native-test-inventory-v1"},
+    "oracle_revision": {"const": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["source_file", "test_name", "disposition", "case"],
+            "properties": {
+              "source_file": {"type": "string", "minLength": 1},
+              "test_name": {"type": "string", "minLength": 1},
+              "disposition": {"const": "accepted"},
+              "case": {"type": "string", "pattern": "^accepted/[a-z0-9][a-z0-9._-]*\\.json$"}
+            }
+          },
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["source_file", "test_name", "disposition", "reason", "detail"],
+            "properties": {
+              "source_file": {"type": "string", "minLength": 1},
+              "test_name": {"type": "string", "minLength": 1},
+              "disposition": {"const": "rejected"},
+              "reason": {
+                "enum": [
+                  "generation-mismatch", "topology-unsupported", "feature-unsupported",
+                  "observer-boundary-unsupported", "randomness-control-unrepresentable"
+                ]
+              },
+              "detail": {"type": "string", "minLength": 1}
+            }
+          }
+        ]
+      }
+    }
+  }
+}

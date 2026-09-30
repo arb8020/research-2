@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"spikes-switch-ko-forced-replacement",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen4/scripts.ts","test_name":"Checkpoint 6: entry hazard KO suspends for forced replacement","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"skarmory-spikes-p1.txt","normalized":[{"species":"skarmory","level":100,"gender":"M","ability":"keeneye","item":"","moves":["spikes","splash"],"stats":[271,196,316,116,176,176],"status":null}]},{"source":"spikes-ko-p2.txt","normalized":[{"species":"magikarp","level":100,"gender":"M","ability":"swiftswim","item":"","moves":["splash"],"stats":[181,56,146,66,76,196],"status":null},{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["splash"],"stats":[264,176,156,166,166,266],"status":null,"initial_hp":1},{"species":"vaporeon","level":100,"gender":"M","ability":"waterabsorb","item":"","moves":["splash"],"stats":[401,166,156,256,226,166],"status":null}]}],
+  "source_choices":[["move 1","move 1"],["move 1","move 1"],["move 1","move 1"],["move 2","switch 2"],[null,"switch 3"]],"choices":[["move 1","move 1"],["move 1","move 1"],["move 1","move 1"],["move 2","switch 2"],[null,"switch 3"]],"forced_outcomes":[],
+  "features":["choice.move","choice.switch","condition.side","damage.entry-hazard","handler.entry-hazard","lifecycle.faint","lifecycle.forced-replacement","request.legal-choices","side.spikes","state.canonical"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng"],"limits":{"max_boundaries":6,"max_actions":9}
+}

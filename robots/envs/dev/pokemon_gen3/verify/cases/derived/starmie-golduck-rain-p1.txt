@@ -1,0 +1,14 @@
+Starmie
+Ability: Natural Cure
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Rain Dance
+- Surf
+
+Golduck (M)
+Ability: Cloud Nine
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Surf

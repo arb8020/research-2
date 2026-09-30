@@ -1,0 +1,104 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "locked-thrash-immunity",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/conditions.ts; data/mods/gen4/conditions.ts; sim/pokemon.ts; sim/battle-actions.ts",
+    "test_name": "Type immunity prevents initial lock",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    701,
+    29,
+    43,
+    83
+  ],
+  "teams": [
+    {
+      "source": "locked-thrash-immunity-p1.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "thrash"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "locked-thrash-immunity-p2.txt",
+      "normalized": [
+        {
+          "species": "gengar",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "levitate",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            261,
+            166,
+            156,
+            296,
+            186,
+            256
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "request.legal-choices",
+    "queue.speed",
+    "condition.volatile",
+    "lifecycle.condition-duration",
+    "state.canonical",
+    "prng.labeled"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

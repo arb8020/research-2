@@ -1,0 +1,102 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "drain-giga-drain-clamp",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/battle-actions.ts",
+    "test_name": "Checkpoint 5B: Giga Drain healing clamps at missing HP",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "venusaur-drain-p1.txt",
+      "normalized": [
+        {
+          "species": "venusaur",
+          "level": 100,
+          "gender": "M",
+          "ability": "overgrow",
+          "item": "",
+          "moves": [
+            "tackle",
+            "gigadrain",
+            "toxic",
+            "protect"
+          ],
+          "stats": [
+            301,
+            200,
+            202,
+            236,
+            236,
+            196
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "persian-scratch-p2.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "scratch"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {"label":"move.critical","occurrence":2,"range":16,"result":9},
+    {"label":"move.damage_roll","occurrence":2,"range":16,"result":15}
+  ],
+  "features": [
+    "effect.drain",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

@@ -1,0 +1,7 @@
+Persian (M) @ Oran Berry
+Ability: Limber
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Splash
+- Recycle

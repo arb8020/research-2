@@ -1,0 +1,16 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"berry-cure-toxic-mismatch",
+  "provenance":{"kind":"showdown-derived","source_file":"data/items.ts","test_name":"Pecha cures Toxic while mismatched Cheri remains held","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[41,43,47,53],
+  "teams":[
+    {"source":"cure-berry-toxic-p1.txt","normalized":[
+      {"species":"persian","level":100,"gender":"M","ability":"limber","item":"pechaberry","moves":["splash"],"stats":[271,176,156,166,166,266],"status":"tox"},
+      {"species":"vaporeon","level":100,"gender":"M","ability":"waterabsorb","item":"cheriberry","moves":["splash"],"stats":[401,166,156,256,226,166],"status":"tox"}
+    ]},
+    {"source":"magikarp-splash-p2.txt","normalized":[{"species":"magikarp","level":100,"gender":"M","ability":"swiftswim","item":"","moves":["splash"],"stats":[181,56,146,66,76,196],"status":null}]}
+  ],
+  "source_choices":[["move 1","move 1"],["switch 2","move 1"]],
+  "choices":[["move 1","move 1"],["switch 2","move 1"]],"forced_outcomes":[],
+  "features":["condition.nonvolatile-status","item.consumption","handler.status-update","choice.switch","state.canonical","status.poison"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":3,"max_actions":4}
+}

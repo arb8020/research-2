@@ -1,0 +1,29 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "derived-critical-hit",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/misc/critical.js",
+    "test_name": "Checkpoint 1 ordinary-move critical and damage-roll boundary",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 6],
+  "teams": [
+    {"source": "machop-strength-p1.txt", "normalized": [
+      {"species": "machop", "level": 100, "gender": "M", "ability": "guts", "item": "", "moves": ["strength"], "stats": [281,196,136,106,106,106], "status": null}
+    ]},
+    {"source": "machop-strength-l1-p2.txt", "normalized": [
+      {"species": "machop", "level": 1, "gender": "M", "ability": "guts", "item": "", "moves": ["strength"], "stats": [12,6,6,6,6,6], "status": null}
+    ]}
+  ],
+  "source_choices": [["move 1", "move 1"]],
+  "choices": [["move 1", "move 1"]],
+  "forced_outcomes": [
+    {"label": "move.critical", "occurrence": 1, "range": 16, "result": 0},
+    {"label": "move.damage_roll", "occurrence": 1, "range": 16, "result": 8}
+  ],
+  "features": ["choice.move", "damage.critical", "damage.gen3", "hit.accuracy", "lifecycle.faint", "lifecycle.terminal", "prng.labeled", "queue.speed", "state.canonical"],
+  "boundaries": ["request", "choice", "queue", "state", "events", "prng", "terminal"],
+  "limits": {"max_boundaries": 2, "max_actions": 2}
+}

@@ -1,0 +1,112 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "jump-kick-miss-cap-lethal",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/moves.ts#jumpkick,highjumpkick; sim/battle-actions.ts#tryMoveHit",
+    "test_name": "HJK miss crash is capped by target max HP and then source current HP",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    2
+  ],
+  "teams": [
+    {
+      "source": "jump-kick-miss-cap-lethal-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "highjumpkick"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null,
+          "initial_hp": 5
+        }
+      ]
+    },
+    {
+      "source": "jump-kick-miss-cap-lethal-p2.txt",
+      "normalized": [
+        {
+          "species": "charmander",
+          "level": 5,
+          "gender": "M",
+          "ability": "blaze",
+          "item": "",
+          "moves": [
+            "growl"
+          ],
+          "stats": [
+            20,
+            11,
+            10,
+            12,
+            11,
+            13
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 99
+    }
+  ],
+  "features": [
+    "choice.move",
+    "effect.crash-damage",
+    "handler.move-fail",
+    "hit.accuracy",
+    "lifecycle.faint",
+    "lifecycle.terminal",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state",
+    "terminal"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

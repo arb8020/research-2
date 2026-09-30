@@ -1,0 +1,20 @@
+{
+  "schema": "pokemon-gen3ou-ocean-reference-contract-v1",
+  "kind": "independent-verifier-reference",
+  "status": "pending-final-harbor-calibration",
+  "workload": "native-gen3ou-default-2v2-hot-path",
+  "environment_count": 1024,
+  "deterministic_digest": "261ecb091ca9cf07",
+  "candidate_implementation_id": "pokemon-ocean-native-c-kernel",
+  "minimum_reference_ratio": 0.8,
+  "required_evidence": [
+    "exact final Harbor container digest and worker class",
+    "independently identified verifier-owned reference interpreter",
+    "candidate and reference samples collected on the same worker class",
+    "at least five measured repetitions after warm-up",
+    "matching workload and deterministic output digest"
+  ],
+  "reference_implementation_id": null,
+  "container_digest": null,
+  "reference_batch_median_boundaries_per_second": null
+}

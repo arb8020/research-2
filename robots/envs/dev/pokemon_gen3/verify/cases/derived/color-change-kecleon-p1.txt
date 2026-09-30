@@ -1,0 +1,16 @@
+Kecleon (M)
+Ability: Color Change
+Level: 100
+EVs: 4 HP
+Hardy Nature
+- Aerial Ace
+- Protect
+- Substitute
+- Recover
+
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+EVs: 4 HP
+Hardy Nature
+- Splash

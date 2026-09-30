@@ -1,0 +1,15 @@
+Porygon2
+Ability: Trace
+Level: 100
+Happiness: 255
+EVs: 1 HP
+Hardy Nature
+- Recover
+
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+Happiness: 255
+EVs: 1 HP
+Hardy Nature
+- Splash

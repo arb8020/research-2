@@ -1,0 +1,8 @@
+Alakazam (M)
+Ability: Synchronize
+Level: 100
+Hardy Nature
+- Recover
+- Milk Drink
+- Slack Off
+- Soft-Boiled

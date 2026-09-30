@@ -1,0 +1,13 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"choice-disable-switch",
+  "provenance":{"kind":"showdown-derived","source_file":"sim/pokemon.ts","test_name":"Switch clears Disable without dispatching its End callback","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[2,37,53,97],
+  "teams":[
+    {"source":"choice-disable-fast-p1.txt","normalized":[{"species":"alakazam","level":100,"gender":"M","ability":"synchronize","item":"","moves":["splash","disable"],"stats":[252,136,126,306,206,276],"status":null}]},
+    {"source":"choice-disable-switch-p2.txt","normalized":[{"species":"blissey","level":100,"gender":"F","ability":"naturalcure","item":"","moves":["pound","softboiled"],"stats":[652,56,56,186,306,146],"status":null},{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["splash"],"stats":[272,176,156,166,166,266],"status":null}]}
+  ],
+  "source_choices":[["move 1","move 1"],["move 2","move 1"],["move 1","switch 2"]],
+  "choices":[["move 1","move 1"],["move 2","move 1"],["move 1","switch 2"]],
+  "forced_outcomes":[],"features":["choice.move","choice.switch","condition.volatile","lifecycle.condition-duration","lifecycle.switch-persistence","prng.labeled","state.canonical"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":4,"max_actions":6}
+}

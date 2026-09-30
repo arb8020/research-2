@@ -1,0 +1,8 @@
+Blissey (F)
+Ability: Natural Cure
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Substitute
+- Seismic Toss
+- Heal Bell

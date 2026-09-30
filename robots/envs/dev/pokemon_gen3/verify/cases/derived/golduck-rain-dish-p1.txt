@@ -1,0 +1,7 @@
+Golduck (M)
+Ability: Rain Dish
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Rain Dance
+- Splash

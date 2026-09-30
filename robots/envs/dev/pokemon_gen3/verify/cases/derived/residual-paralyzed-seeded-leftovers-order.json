@@ -1,0 +1,65 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "residual-paralyzed-seeded-leftovers-order",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/battle.ts; data/mods/gen3/items.ts; data/mods/gen3/moves.ts",
+    "test_name": "Paralyzed seeded Leftovers holder uses effective speed before residual subOrder",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {
+      "source": "residual-paralyzed-seeded-leftovers-order-p1.txt",
+      "normalized": [{
+        "species": "smeargle",
+        "level": 100,
+        "gender": "M",
+        "nature": "hardy",
+        "ability": "owntempo",
+        "item": "",
+        "moves": ["leechseed", "splash"],
+        "stats": [251, 76, 106, 76, 126, 186],
+        "status": null
+      }]
+    },
+    {
+      "source": "residual-paralyzed-seeded-leftovers-order-p2.txt",
+      "normalized": [{
+        "species": "magikarp",
+        "level": 100,
+        "gender": "M",
+        "nature": "hardy",
+        "ability": "swiftswim",
+        "item": "leftovers",
+        "moves": ["splash"],
+        "stats": [181, 56, 146, 66, 76, 196],
+        "status": "par",
+        "initial_hp": 100
+      }]
+    }
+  ],
+  "source_choices": [["move 1", "move 1"]],
+  "choices": [["move 1", "move 1"]],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "effect.heal",
+    "handler.residual",
+    "item.leftovers",
+    "status.paralysis",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {"max_boundaries": 2, "max_actions": 2}
+}

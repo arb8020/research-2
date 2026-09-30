@@ -1,0 +1,16 @@
+{
+  "schema":"pokemon-native-differential-case-v1",
+  "id":"safeguard-lifecycle-status-confusion",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen4/moves.ts; sim/pokemon.ts","test_name":"Safeguard side lifecycle, external status and confusion interception, switch persistence, and expiry","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[
+    {"source":"safeguard-lifecycle-status-confusion-p1.txt","normalized":[{"species":"alakazam","level":100,"gender":"M","ability":"synchronize","item":"","moves":["safeguard","recover"],"stats":[251,136,126,306,206,276],"status":null},{"species":"magikarp","level":100,"gender":"M","ability":"swiftswim","item":"","moves":["splash"],"stats":[181,56,146,66,76,196],"status":null}]},
+    {"source":"safeguard-lifecycle-status-confusion-p2.txt","normalized":[{"species":"gengar","level":100,"gender":"M","ability":"levitate","item":"","moves":["toxic","confuseray"],"stats":[261,166,156,296,186,256],"status":null}]}
+  ],
+  "source_choices":[["move 1","move 1"],["switch 2","move 2"],["switch 2","move 1"],["switch 2","move 2"],["switch 2","move 1"],["move 2","move 2"]],
+  "choices":[["move 1","move 1"],["switch 2","move 2"],["switch 1","move 1"],["switch 2","move 2"],["switch 1","move 1"],["move 2","move 2"]],
+  "forced_outcomes":[{"label":"move.accuracy","occurrence":2,"range":100,"result":13},{"label":"move.accuracy","occurrence":3,"range":100,"result":57},{"label":"move.accuracy","occurrence":5,"range":100,"result":10},{"label":"move.accuracy","occurrence":6,"range":100,"result":84},{"label":"condition.confusion.duration","occurrence":1,"range":4,"result":1}],
+  "features":["choice.move","choice.switch","condition.nonvolatile-status","condition.side","condition.volatile","handler.set-status","handler.try-add-volatile","lifecycle.condition-duration","lifecycle.switch-persistence","prng.labeled","side.safeguard","state.canonical","status.toxic","volatile.confusion"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],
+  "limits":{"max_boundaries":7,"max_actions":12}
+}

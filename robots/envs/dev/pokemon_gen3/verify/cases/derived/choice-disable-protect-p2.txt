@@ -1,0 +1,7 @@
+Persian (M)
+Ability: Limber
+Level: 100
+EVs: 4 HP
+Hardy Nature
+- Protect
+- Pound

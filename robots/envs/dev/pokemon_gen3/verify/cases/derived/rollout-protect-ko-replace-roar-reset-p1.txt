@@ -1,0 +1,13 @@
+Smeargle (M)
+Ability: Own Tempo
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Rollout
+
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Splash

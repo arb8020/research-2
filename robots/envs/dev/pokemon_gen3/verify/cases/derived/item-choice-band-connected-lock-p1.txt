@@ -1,0 +1,7 @@
+Smeargle (M) @ Choice Band
+Ability: Own Tempo
+Level: 100
+EVs: 1 HP
+Serious Nature
+- Tackle
+- Howl

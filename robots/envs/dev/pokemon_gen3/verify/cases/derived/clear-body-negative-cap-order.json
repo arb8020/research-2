@@ -1,0 +1,150 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "clear-body-negative-cap-order",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/abilities/clearbody.js:86; data/abilities.ts#clearbody",
+    "test_name": "a boost already at -6 rejects before Clear Body prevention",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "clear-body-negative-cap-order-p1.txt",
+      "normalized": [
+        {
+          "species": "registeel",
+          "level": 100,
+          "gender": "M",
+          "ability": "clearbody",
+          "item": "",
+          "moves": [
+            "curse",
+            "rest"
+          ],
+          "stats": [
+            301,
+            186,
+            336,
+            186,
+            336,
+            136
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "clear-body-negative-cap-order-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "splash",
+            "scaryface"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "effect.boost",
+    "handler.try-boost",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 8,
+    "max_actions": 14
+  }
+}

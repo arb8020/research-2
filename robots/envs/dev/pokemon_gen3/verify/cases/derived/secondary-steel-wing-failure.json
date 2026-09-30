@@ -1,0 +1,107 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "secondary-steel-wing-failure",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/battle-actions.ts",
+    "test_name": "Checkpoint 5A: damaging move secondary self boost fails",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    30
+  ],
+  "teams": [
+    {
+      "source": "skarmory-steel-wing-p1.txt",
+      "normalized": [
+        {
+          "species": "skarmory",
+          "level": 100,
+          "gender": "M",
+          "ability": "keeneye",
+          "item": "",
+          "moves": [
+            "steelwing"
+          ],
+          "stats": [
+            271,
+            196,
+            316,
+            116,
+            176,
+            176
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "magikarp-splash-p2.txt",
+      "normalized": [
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {"label":"move.critical","occurrence":1,"range":16,"result":12},
+    {"label":"move.damage_roll","occurrence":1,"range":16,"result":8},
+    {
+      "label": "move.secondary",
+      "occurrence": 1,
+      "range": 100,
+      "result": 43
+    }
+  ],
+  "features": [
+    "effect.boost",
+    "effect.secondary",
+    "prng.secondary",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"weather-sun-freeze-immunity",
+  "provenance":{"kind":"showdown-derived","source_file":"data/conditions.ts; sim/pokemon.ts","test_name":"Sunny Day rejects a reached Ice Beam freeze secondary through weather-owned immunity","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[313,197,83,14],
+  "teams":[{"source":"starmie-sun-splash-p1.txt","normalized":[{"species":"starmie","level":100,"gender":"N","ability":"naturalcure","item":"","moves":["sunnyday","splash"],"stats":[261,186,206,236,206,266],"status":null}]},{"source":"secondary-icebeam-p1.txt","normalized":[{"species":"aggron","level":100,"gender":"M","ability":"rockhead","item":"","moves":["icebeam"],"stats":[281,256,396,156,156,136],"status":null}]}],
+  "source_choices":[["move 1","move 1"]],"choices":[["move 1","move 1"]],"forced_outcomes":[],
+  "features":["choice.move","condition.weather","effect.secondary","handler.status-prevention","prng.labeled","prng.secondary","state.canonical","status.freeze","weather.sun"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":2,"max_actions":2}
+}

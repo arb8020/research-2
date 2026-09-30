@@ -1,0 +1,28 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "future-sight-screen-source-switch",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/moves/futuresight.js:236; data/mods/gen4/moves.ts#futuresight; data/mods/gen3/conditions.ts#futuremove",
+    "test_name": "Future Sight snapshots Light Screen and retains it after the source switches",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 2],
+  "teams": [
+    {"source": "future-sight-screen-source-switch-p1.txt", "normalized": [{
+      "species": "blissey", "level": 100, "gender": "F", "ability": "naturalcure", "item": "", "nature": "timid",
+      "moves": ["lightscreen", "splash"], "stats": [651, 50, 56, 186, 306, 229], "status": null
+    }]},
+    {"source": "future-sight-screen-source-switch-p2.txt", "normalized": [
+      {"species": "smeargle", "level": 100, "gender": "M", "ability": "owntempo", "item": "", "moves": ["futuresight", "splash"], "stats": [251, 76, 106, 76, 126, 186], "status": null},
+      {"species": "persian", "level": 100, "gender": "M", "ability": "limber", "item": "", "moves": ["splash"], "stats": [271, 176, 156, 166, 166, 266], "status": null}
+    ]}
+  ],
+  "source_choices": [["move 1", "move 1"], ["move 2", "switch 2"], ["move 2", "move 1"]],
+  "choices": [["move 1", "move 1"], ["move 2", "switch 2"], ["move 2", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["choice.move", "choice.switch", "condition.slot", "damage.screen", "prng.labeled", "state.canonical"],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 4, "max_actions": 6}
+}

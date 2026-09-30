@@ -1,0 +1,29 @@
+Persian (M)
+Ability: Guts
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Glare
+- Grass Whistle
+- Hypnosis
+- Lovely Kiss
+
+Gengar (M)
+Ability: Levitate
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Poison Gas
+- Poison Powder
+- Sing
+- Sleep Powder
+
+Alakazam (M)
+Ability: Synchronize
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Spore
+- Stun Spore
+- Thunder Wave
+- Will-O-Wisp

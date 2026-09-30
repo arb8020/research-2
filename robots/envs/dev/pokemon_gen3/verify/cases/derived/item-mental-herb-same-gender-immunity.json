@@ -1,0 +1,101 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "item-mental-herb-same-gender-immunity",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen4/items.ts; sim/pokemon.ts; sim/battle.ts",
+    "test_name": "Mental Herb remains held when Attract is immune",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    631,
+    29,
+    43,
+    83
+  ],
+  "teams": [
+    {
+      "source": "item-mental-herb-same-gender-immunity-p1.txt",
+      "normalized": [
+        {
+          "species": "delcatty",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "cutecharm",
+          "item": "",
+          "moves": [
+            "attract"
+          ],
+          "stats": [
+            281,
+            166,
+            166,
+            146,
+            146,
+            176
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "item-mental-herb-same-gender-immunity-p2.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "limber",
+          "item": "mentalherb",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.attract",
+    "item.consumption",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "present-heal-full-hp-failure",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#present; sim/battle-actions.ts",
+    "test_name": "Present healing fails against a full-HP target",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    217,
+    90,
+    15,
+    10
+  ],
+  "teams": [
+    {
+      "source": "present-heal-full-hp-failure-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "present"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "present-heal-full-hp-failure-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "F",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.resolution_variant",
+      "occurrence": 1,
+      "range": 10,
+      "result": 0
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 47
+    }
+  ],
+  "features": [
+    "choice.move",
+    "effect.heal",
+    "hit.accuracy",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

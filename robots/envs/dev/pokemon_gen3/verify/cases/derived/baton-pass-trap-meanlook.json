@@ -1,0 +1,142 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "baton-pass-trap-meanlook",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/misc/trapmoves.js:28",
+    "test_name": "Mean Look does not prevent move-driven switching and its trap is passed by Baton Pass",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    761,
+    29,
+    43,
+    97
+  ],
+  "teams": [
+    {
+      "source": "baton-pass-trap-meanlook-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "meanlook",
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "baton-pass-trap-meanlook-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "tackle",
+            "batonpass"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        },
+        {
+          "species": "starmie",
+          "level": 100,
+          "gender": "N",
+          "nature": "hardy",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "recover"
+          ],
+          "stats": [
+            261,
+            186,
+            206,
+            236,
+            206,
+            266
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      null,
+      "switch 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      null,
+      "switch 2"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "condition.volatile",
+    "handler.trap-pokemon",
+    "lifecycle.source-bound",
+    "request.legal-choices",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

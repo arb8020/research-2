@@ -1,0 +1,5 @@
+Machop (M)
+Ability: Guts
+Level: 100
+Hardy Nature
+- Strength

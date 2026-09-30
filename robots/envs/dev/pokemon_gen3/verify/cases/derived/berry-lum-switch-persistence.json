@@ -1,0 +1,128 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "berry-lum-switch-persistence",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/items.ts; data/moves.ts; sim/battle.ts",
+    "test_name": "Held Lum persists across switching without a cure",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    601,
+    17,
+    31,
+    17
+  ],
+  "teams": [
+    {
+      "source": "berry-lum-switch-persistence-p1.txt",
+      "normalized": [
+        {
+          "species": "machop",
+          "level": 100,
+          "gender": "M",
+          "ability": "guts",
+          "item": "lumberry",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            281,
+            196,
+            136,
+            106,
+            106,
+            106
+          ],
+          "status": null
+        },
+        {
+          "species": "vaporeon",
+          "level": 100,
+          "gender": "M",
+          "ability": "waterabsorb",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            401,
+            166,
+            156,
+            256,
+            226,
+            166
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "berry-lum-switch-persistence-p2.txt",
+      "normalized": [
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "switch 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "item.consumption",
+    "handler.status-update",
+    "state.canonical",
+    "condition.nonvolatile-status",
+    "volatile.confusion"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

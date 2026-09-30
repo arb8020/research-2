@@ -1,0 +1,112 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "item-choice-band-connected-lock",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen4/items.ts; data/mods/gen4/conditions.ts; data/items.ts; data/conditions.ts",
+    "test_name": "Choice Band scales physical Attack and locks a connected selected move at AfterMove",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    17,
+    31,
+    73,
+    107
+  ],
+  "teams": [
+    {
+      "source": "item-choice-band-connected-lock-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "serious",
+          "ability": "owntempo",
+          "item": "choiceband",
+          "moves": [
+            "tackle",
+            "howl"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "item-choice-band-connected-lock-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "nature": "serious",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "handler.modify-attack",
+    "state.canonical",
+    "prng.labeled",
+    "condition.volatile",
+    "request.legal-choices"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

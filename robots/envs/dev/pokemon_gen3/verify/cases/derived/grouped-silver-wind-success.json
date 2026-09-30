@@ -1,0 +1,13 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"grouped-silver-wind-success",
+  "provenance":{"kind":"showdown-derived","source_file":"data/moves.ts; sim/battle-actions.ts","test_name":"Silver Wind applies all five self boosts from one successful secondary roll","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[813,17,43,13],
+  "teams":[
+    {"source":"dustox-silver-wind-p1.txt","normalized":[{"species":"dustox","level":100,"gender":"M","ability":"shielddust","item":"","moves":["silverwind"],"stats":[261,136,176,136,216,166],"status":null}]},
+    {"source":"magikarp-splash-p2.txt","normalized":[{"species":"magikarp","level":100,"gender":"M","ability":"swiftswim","item":"","moves":["splash"],"stats":[181,56,146,66,76,196],"status":null}]}
+  ],
+  "source_choices":[["move 1","move 1"]],"choices":[["move 1","move 1"]],
+  "forced_outcomes":[{"label":"move.secondary","occurrence":1,"range":100,"result":1}],
+  "features":["effect.boost","effect.secondary","prng.secondary","state.canonical"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":2,"max_actions":2}
+}

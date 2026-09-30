@@ -1,0 +1,24 @@
+{
+  "schema": "pokemon-gen3ou-random-battle-manifest-v2",
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "policy": "lcg32-v1",
+  "coverage_dimensions": ["choices", "conditions", "effects", "events", "handlers", "ingredients", "prng", "queue", "requests", "terminal"],
+  "coverage_targets": [
+    {"id":"ordinary-move-request","selector":{"kind":"request","match":{"kind":"move"}},"min_cases":4,"min_team_pairings":4},
+    {"id":"ordinary-move-choice","selector":{"kind":"choice","match":{"kind":"move"}},"min_cases":4,"min_team_pairings":4},
+    {"id":"ordinary-move-queue","selector":{"kind":"queue","match":{"kind":"move"}},"min_cases":4,"min_team_pairings":4},
+    {"id":"forced-switch-request","selector":{"kind":"request","match":{"kind":"switch"}},"min_cases":2,"min_team_pairings":2},
+    {"id":"damage-event","selector":{"kind":"event","match":{"kind":"damage"}},"min_cases":4,"min_team_pairings":4},
+    {"id":"damage-roll-prng","selector":{"kind":"prng","match":{"label":"move.damage_roll"}},"min_cases":4,"min_team_pairings":4},
+    {"id":"leftovers-residual-handler","selector":{"kind":"handler","match":{"event":"residual","source_kind":"item","source_id":"leftovers"}},"min_cases":4,"min_team_pairings":4},
+    {"id":"protect-condition-lifecycle","selector":{"kind":"condition","match":{"scope":"volatile","id":"protect","phase":"add"}},"min_cases":4,"min_team_pairings":4},
+    {"id":"giga-drain-effect","selector":{"kind":"effect","match":{"phase":"after-damage","operation":"drain","move":"gigadrain"}},"min_cases":2,"min_team_pairings":2},
+    {"id":"terminal-win","selector":{"kind":"terminal","match":{"kind":"win"}},"min_cases":4,"min_team_pairings":4}
+  ],
+  "cases": [
+    {"id":"w-r-a","team_pairing":"weather-vs-rain-a","team_p1":"teams/weather.txt","team_p2":"teams/rain.txt","battle_seed":[11,22,33,44],"policy_seed":101,"max_decisions":1023,"expected_decisions":78,"expected_boundaries":79},
+    {"id":"r-w-b","team_pairing":"rain-vs-weather-b","team_p1":"teams/rain.txt","team_p2":"teams/weather.txt","battle_seed":[101,202,303,404],"policy_seed":202,"max_decisions":1023,"expected_decisions":72,"expected_boundaries":73},
+    {"id":"w-bal-c","team_pairing":"weather-vs-balanced-c","team_p1":"teams/weather.txt","team_p2":"../../fixtures/gen3ou/balanced.txt","battle_seed":[7,11,13,17],"policy_seed":303,"max_decisions":1023,"expected_decisions":64,"expected_boundaries":65},
+    {"id":"rain-alt-d","team_pairing":"rain-vs-balanced-alt-d","team_p1":"teams/rain.txt","team_p2":"../../fixtures/gen3ou/balanced-alt.txt","battle_seed":[19,23,29,31],"policy_seed":404,"max_decisions":1023,"expected_decisions":187,"expected_boundaries":188}
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "choice-taunt-filter",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/moves.ts",
+    "test_name": "Taunt filters status choices and prevents an already-queued status move",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [701, 29, 43, 83],
+  "teams": [
+    {
+      "source": "choice-taunt-filter-p1.txt",
+      "normalized": [
+        {"species":"alakazam","level":100,"gender":"M","ability":"synchronize","item":"","moves":["taunt","psychic"],"stats":[252,136,126,306,206,276],"status":null}
+      ]
+    },
+    {
+      "source": "choice-taunt-filter-p2.txt",
+      "normalized": [
+        {"species":"blissey","level":100,"gender":"F","ability":"naturalcure","item":"","moves":["pound","softboiled"],"stats":[652,56,56,186,306,146],"status":null}
+      ]
+    }
+  ],
+  "source_choices": [["move 1", "move 2"], ["move 2", "move 1"]],
+  "choices": [["move 1", "move 2"], ["move 2", "move 1"]],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "lifecycle.condition-duration",
+    "prng.labeled",
+    "queue.speed",
+    "request.legal-choices",
+    "state.canonical"
+  ],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 3, "max_actions": 4}
+}

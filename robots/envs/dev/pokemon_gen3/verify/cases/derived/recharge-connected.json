@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"recharge-connected",
+  "provenance":{"kind":"showdown-derived","source_file":"data/moves.ts; data/conditions.ts; sim/pokemon.ts; sim/battle-actions.ts","test_name":"Checkpoint 6: connected Hyper Beam forces and consumes Recharge","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"recharge-hyper-beam-p1.txt","normalized":[{"species":"snorlax","level":100,"gender":"M","nature":"hardy","ability":"immunity","item":"","moves":["hyperbeam"],"stats":[461,256,166,166,256,96],"status":null}]},{"source":"recharge-metagross-splash-p2.txt","normalized":[{"species":"metagross","level":100,"gender":"N","nature":"hardy","ability":"clearbody","item":"","moves":["splash"],"stats":[301,306,296,226,216,176],"status":null}]}],
+  "source_choices":[["move 1","move 1"],["move 1","move 1"]],"choices":[["move 1","move 1"],["move 1","move 1"]],"forced_outcomes":[],
+  "features":["choice.move","request.legal-choices","condition.volatile","lifecycle.condition-duration","state.canonical","prng.labeled"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],"limits":{"max_boundaries":3,"max_actions":4}
+}

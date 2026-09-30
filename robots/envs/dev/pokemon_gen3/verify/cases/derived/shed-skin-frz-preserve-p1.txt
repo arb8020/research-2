@@ -1,0 +1,6 @@
+Seviper (M)
+Ability: Shed Skin
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Screech

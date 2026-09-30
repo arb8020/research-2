@@ -1,0 +1,7 @@
+Charizard (M)
+Ability: Blaze
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Sunny Day
+- Ember

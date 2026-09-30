@@ -1,0 +1,11 @@
+Bulbasaur
+Ability: Overgrow
+- Tackle
+
+Ivysaur
+Ability: Overgrow
+- Tackle
+
+Venusaur
+Ability: Overgrow
+- Tackle

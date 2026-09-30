@@ -1,0 +1,6 @@
+Smeargle (M)
+Ability: Illuminate
+Level: 100
+Hardy Nature
+- Ember
+- Thunderbolt

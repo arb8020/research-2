@@ -1,0 +1,14 @@
+Smeargle (M)
+Ability: Own Tempo
+Level: 50
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Destiny Bond
+- Splash
+
+Magikarp (M)
+Ability: Swift Swim
+Level: 50
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Splash

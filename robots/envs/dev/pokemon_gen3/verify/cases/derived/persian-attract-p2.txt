@@ -1,0 +1,7 @@
+Persian (M)
+Ability: Limber
+Level: 100
+Hardy Nature
+- Tackle
+- Splash
+

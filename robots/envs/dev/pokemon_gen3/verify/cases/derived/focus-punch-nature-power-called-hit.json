@@ -1,0 +1,43 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "focus-punch-nature-power-called-hit",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/moves/focuspunch.js",
+    "test_name": "Nature Power's called Swift interrupts Focus Punch",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [171, 172, 173, 174],
+  "teams": [
+    {
+      "source": "focus-punch-nature-power-called-hit-p1.txt",
+      "normalized": [
+        {
+          "species": "breloom", "level": 100, "gender": "M",
+          "ability": "effectspore", "item": "", "moves": ["focuspunch"],
+          "stats": [261, 296, 196, 156, 156, 176], "status": null
+        }
+      ]
+    },
+    {
+      "source": "focus-punch-nature-power-called-hit-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle", "level": 100, "gender": "M",
+          "ability": "owntempo", "item": "", "moves": ["naturepower"],
+          "stats": [251, 76, 106, 76, 126, 186], "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [["move 1", "move 1"]],
+  "choices": [["move 1", "move 1"]],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move", "condition.volatile", "handler.try", "move.called-entry",
+    "move.fixed-delegation", "prng.labeled", "state.canonical"
+  ],
+  "boundaries": ["choice", "events", "handlers", "prng", "queue", "request", "state"],
+  "limits": {"max_boundaries": 2, "max_actions": 2}
+}

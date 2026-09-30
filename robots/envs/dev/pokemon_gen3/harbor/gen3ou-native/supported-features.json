@@ -1,0 +1,423 @@
+{
+  "schema_version": 1,
+  "manifest_version": "0.1-review",
+  "oracle": {
+    "repository": "https://github.com/smogon/pokemon-showdown.git",
+    "commit": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+    "format": "gen3ou",
+    "instrumentation_digest": "253eac3fc84c67b0844baf97ad959a077e2e82f97dd39f0d796da918c6301f24"
+  },
+  "format": {
+    "topology": "singles",
+    "team_size": 6,
+    "input_boundary": "validated normalized PokemonBattleInit"
+  },
+  "scope": {
+    "included": [
+      "all sets accepted by the pinned gen3ou validator after normalization",
+      "all battle effects reachable from those sets and pinned format rules",
+      "battle execution from initial placement through win or tie"
+    ],
+    "excluded": [
+      "team parsing and team validation inside the submitted runtime",
+      "doubles, multi, free-for-all, custom, illegal, and non-Gen-3 formats",
+      "team preview when not requested by pinned gen3ou",
+      "chat, timer, concede, matchmaking, tournament, and administration",
+      "presentation-only protocol text, nicknames, timestamps, and duplicate percentage HP lines",
+      "policy learning and opponent AI"
+    ]
+  },
+  "observables": [
+    "choices", "actions", "queue", "handlers", "phase_request",
+    "canonical_state", "events", "prng", "faint_switch_replace",
+    "terminal", "replay", "ocean"
+  ],
+  "inventories": [
+    {
+      "id": "species_forms",
+      "source": "data/gen3_ids.json",
+      "selector": "all frozen species/form identities reachable from normalized validator-legal gen3ou sets",
+      "frozen_digest": null,
+      "count": 392
+    },
+    {
+      "id": "moves",
+      "source": "native/gen3_slice_data.c",
+      "selector": "all frozen moves reachable from normalized validator-legal gen3ou sets plus format-provided Struggle",
+      "frozen_digest": null,
+      "count": 354
+    },
+    {
+      "id": "abilities",
+      "source": "native/gen3_slice_data.c",
+      "selector": "all frozen abilities reachable from normalized validator-legal gen3ou sets",
+      "frozen_digest": null,
+      "count": 76
+    },
+    {
+      "id": "items",
+      "source": "native/gen3_slice_data.c",
+      "selector": "all frozen canonical items reachable from normalized validator-legal gen3ou sets",
+      "frozen_digest": null,
+      "count": 116
+    },
+    {
+      "id": "effects",
+      "source": "pinned Showdown mod inheritance resolved into a freeze-time inventory",
+      "selector": "statuses, weather, pseudo-weather, side/slot conditions, volatiles, and format effects reachable in scope",
+      "frozen_digest": null,
+      "count": 0
+    }
+  ],
+  "features": [
+    {
+      "id": "input.normalized-team",
+      "kind": "boundary",
+      "title": "Normalized legal team input",
+      "required": true,
+      "denotation": "Accept every pinned-validator-legal normalized set and reject malformed or out-of-manifest layouts before mutation.",
+      "members": {"inventory": "species_forms", "selector": "format-closed normalized sets"},
+      "showdown_sources": [
+        {"path": "sim/teams.ts", "symbol": "Teams.unpack/pack"},
+        {"path": "sim/team-validator.ts", "symbol": "TeamValidator"}
+      ],
+      "native_boundaries": [
+        {"path": "native/pokemon_kernel/api.inc", "symbol": "pokemon_battle_init"},
+        {"path": "native/pokemon.h", "symbol": "PokemonBattleInit/PokemonTeamInit"}
+      ],
+      "depends_on": [],
+      "observables": ["canonical_state"],
+      "focused_tests": ["native/test_pokemon.c", "native/test_random_play.c"],
+      "differential_cases": ["verify/slice/checkpoint7-report.json", "verify/random-battles/checkpoint7-report.json"],
+      "coverage_axes": ["species", "move", "ability", "item", "set fields"],
+      "invariants": ["rejection is atomic", "immutable set data does not change after create"],
+      "status": "complete"
+    },
+    {
+      "id": "choice.request-legality",
+      "kind": "boundary",
+      "title": "Requests, legal choices, forced choices, wait, and Struggle",
+      "required": true,
+      "denotation": "Project the exact normalized choices permitted by the current request and reject every other choice atomically.",
+      "members": {"inventory": null, "selector": "move, switch, forced switch, pass/wait, Struggle"},
+      "showdown_sources": [
+        {"path": "sim/side.ts", "symbol": "Side.choose/getChoice/emitRequest"},
+        {"path": "sim/battle.ts", "symbol": "Battle.makeRequest/getRequests"}
+      ],
+      "native_boundaries": [
+        {"path": "native/pokemon_kernel/api.inc", "symbol": "pokemon_battle_request/pokemon_attempt_choice/pokemon_battle_step"}
+      ],
+      "depends_on": ["phase.request-machine"],
+      "observables": ["choices", "phase_request", "canonical_state"],
+      "focused_tests": ["native/test_pokemon.c::test_transactional_choice_attempt/test_request_choice_kind_matrix"],
+      "differential_cases": ["verify/cases/derived/imprison-all-shared-forces-struggle.json", "verify/random-battles/checkpoint7-report.json"],
+      "coverage_axes": ["request kind", "side", "legal and illegal choice"],
+      "invariants": ["legal choices are a pure state projection", "illegal choice changes no state, queue, trace, or PRNG"],
+      "status": "complete"
+    },
+    {
+      "id": "scheduler.action-normalization",
+      "kind": "scheduler",
+      "title": "Choice-to-action normalization",
+      "required": true,
+      "denotation": "Turn each committed choice into a closed typed action with resolved actor, target, effect, and ordering keys.",
+      "members": {"inventory": null, "selector": "move, switch, run-switch, before-turn, residual, event"},
+      "showdown_sources": [
+        {"path": "sim/battle-queue.ts", "symbol": "BattleQueue.resolveAction"},
+        {"path": "sim/side.ts", "symbol": "Side.commitChoices"}
+      ],
+      "native_boundaries": [
+        {"path": "native/pokemon_kernel/choice_queue.inc", "symbol": "compile_choices/compile_move_switch_choice"},
+        {"path": "native/pokemon_kernel/choice_queue.inc", "symbol": "queue_sort/queue_pop"}
+      ],
+      "depends_on": ["choice.request-legality"],
+      "observables": ["actions", "queue"],
+      "focused_tests": ["native/test_pokemon.c::test_transactional_choice_attempt/test_choice_override_changes_execution_not_queue_priority"],
+      "differential_cases": ["verify/cases/derived/boost-agility-queue-order.json", "verify/random-battles/checkpoint7-report.json"],
+      "coverage_axes": ["action kind", "target", "priority", "speed"],
+      "invariants": ["execution never reinterprets raw action integers"],
+      "status": "complete"
+    },
+    {
+      "id": "scheduler.queue-order",
+      "kind": "scheduler",
+      "title": "Queue construction, ordering, tie shuffle, suspension, and resume",
+      "required": true,
+      "denotation": "Order actions by pinned Showdown keys, consume structural tie randomness, and retain untouched continuation work across forced replacement.",
+      "members": {"inventory": null, "selector": "all reachable action kinds and exact ties"},
+      "showdown_sources": [
+        {"path": "sim/battle-queue.ts", "symbol": "BattleQueue.insertChoice/sort/comparePriority"},
+        {"path": "sim/battle.ts", "symbol": "Battle.commitChoices/turnLoop/runAction"}
+      ],
+      "native_boundaries": [
+        {"path": "native/pokemon_kernel/choice_queue.inc", "symbol": "queue_sort/queue_pop/cancel_side_actions"}
+      ],
+      "depends_on": ["scheduler.action-normalization", "random.labeled-prng"],
+      "observables": ["queue", "prng", "phase_request"],
+      "focused_tests": ["native/test_pokemon.c::test_event_handler_tie_ordering/test_switch_faint_replacement_and_terminal"],
+      "differential_cases": ["verify/cases/derived/simultaneous-voluntary-switch-order.json", "verify/cases/derived/doom-desire-lethal-forced-replacement.json"],
+      "coverage_axes": ["priority", "speed tie", "action tie", "suspend/resume"],
+      "invariants": ["continuation queue is not rebuilt or resorted"],
+      "status": "complete"
+    },
+    {
+      "id": "event.discovery-order",
+      "kind": "event",
+      "title": "Event-handler discovery, ordering, relay, and short-circuit",
+      "required": true,
+      "denotation": "Discover every applicable attached handler, order it by event semantics, thread typed relay values, and preserve fail versus silent-fail.",
+      "members": {"inventory": "effects", "selector": "all reachable battle event handlers"},
+      "showdown_sources": [
+        {"path": "sim/battle.ts", "symbol": "singleEvent/runEvent/eachEvent/fieldEvent"}
+      ],
+      "native_boundaries": [
+        {"path": "native/pokemon_kernel/event.inc", "symbol": "discover_handlers/pokemon_run_event"},
+        {"path": "native/pokemon_kernel/condition_install.inc", "symbol": "dispatch_owner_lifecycle"}
+      ],
+      "depends_on": ["scheduler.queue-order", "random.labeled-prng"],
+      "observables": ["handlers", "prng", "canonical_state", "events"],
+      "focused_tests": ["native/test_pokemon.c::test_event_interpreter_contract_and_water_absorb_heal/test_event_handler_tie_ordering"],
+      "differential_cases": ["verify/slice/checkpoint7-report.json", "verify/cases/derived/water-absorb-try-hit.json"],
+      "coverage_axes": ["holder", "event", "order", "priority", "relay type", "short-circuit"],
+      "invariants": ["detached effects cannot execute", "capacity cannot silently truncate handlers"],
+      "status": "complete"
+    },
+    {
+      "id": "phase.request-machine",
+      "kind": "lifecycle",
+      "title": "Battle phases and request transitions",
+      "required": true,
+      "denotation": "Transition explicitly through INIT, AWAIT_MOVE, RUN_QUEUE, AWAIT_SWITCH, RESIDUAL, and TERMINAL with requests derived from state.",
+      "members": {"inventory": null, "selector": "all phase and request variants"},
+      "showdown_sources": [
+        {"path": "sim/battle.ts", "symbol": "start/turnLoop/makeRequest/getRequests/runAction"}
+      ],
+      "native_boundaries": [
+        {"path": "native/pokemon_kernel/api.inc", "symbol": "pokemon_battle_step/project_request"},
+        {"path": "native/pokemon_kernel/residual.inc", "symbol": "build_residual_queue/run_residual"}
+      ],
+      "depends_on": ["scheduler.queue-order"],
+      "observables": ["phase_request", "queue", "canonical_state"],
+      "focused_tests": ["native/test_pokemon.c::test_switch_faint_replacement_and_terminal/test_run_switch_faint_update_request_boundary"],
+      "differential_cases": ["verify/cases/derived/doom-desire-lethal-forced-replacement.json", "verify/random-battles/checkpoint7-report.json"],
+      "coverage_axes": ["phase edge", "one-side wait", "one/both-side replacement", "residual resume"],
+      "invariants": ["request is a pure projection", "terminal has no request"],
+      "status": "complete"
+    },
+    {
+      "id": "random.labeled-prng",
+      "kind": "determinism",
+      "title": "Mechanic and structural PRNG staging",
+      "required": true,
+      "denotation": "Consume exactly one pinned RNG stream at the semantic operation that owns each draw and emit a stable verifier label.",
+      "members": {"inventory": null, "selector": "accuracy, critical, damage, secondary, random target/phaze, action ties, handler ties, residual ordering, Quick Claw"},
+      "showdown_sources": [
+        {"path": "sim/prng.ts", "symbol": "PRNG.random/randomChance/sample/shuffle"},
+        {"path": "sim/battle.ts", "symbol": "Battle.random/randomChance"}
+      ],
+      "native_boundaries": [
+        {"path": "native/pokemon_kernel/prng.h", "symbol": "pokemon_prng_next_u32/pokemon_prng_project_below"},
+        {"path": "native/pokemon_kernel/choice_queue.inc", "symbol": "queue_sort tie draws"}
+      ],
+      "depends_on": [],
+      "observables": ["prng", "replay"],
+      "focused_tests": ["native/test_prng.c", "native/test_pokemon.c::test_deterministic_replay/test_event_handler_tie_ordering"],
+      "differential_cases": ["verify/cases/derived/simultaneous-voluntary-switch-order.json", "verify/random-battles/checkpoint7-report.json"],
+      "coverage_axes": ["draw label", "range", "mechanic/structural", "skipped draw"],
+      "invariants": ["seed changes only through labeled draws", "no guessed frame consumption"],
+      "status": "complete"
+    },
+    {
+      "id": "move.generic-pipeline",
+      "kind": "move_pipeline",
+      "title": "Generic move hit and effect pipeline",
+      "required": true,
+      "denotation": "Resolve target and immunity, accuracy, TryHit, critical, damage stages, primary/secondary effects, and post-hit work compositionally.",
+      "members": {"inventory": "moves", "selector": "all ordinary moves; exceptional behavior delegates to mapped named handlers"},
+      "showdown_sources": [
+        {"path": "data/mods/gen3/scripts.ts", "symbol": "tryMoveHit/getDamage/modifyDamage"},
+        {"path": "sim/battle-actions.ts", "symbol": "move execution pipeline"},
+        {"path": "data/mods/gen3/moves.ts", "symbol": "Gen 3 move overrides"}
+      ],
+      "native_boundaries": [
+        {"path": "native/pokemon_kernel/move.inc", "symbol": "execute_move/discover_try_primary_hit"},
+        {"path": "native/pokemon.h", "symbol": "PokemonMoveDescriptor/PokemonHandlerDescriptor/PokemonHandlerOp"}
+      ],
+      "depends_on": ["event.discovery-order", "random.labeled-prng"],
+      "observables": ["handlers", "canonical_state", "events", "prng"],
+      "focused_tests": ["native/test_pokemon.c", "native/test_plugin.c"],
+      "differential_cases": ["verify/slice/checkpoint7-report.json", "verify/cases/derived/thunder-protect.json"],
+      "coverage_axes": ["immune", "miss", "connected", "critical", "damage roll", "primary", "secondary", "exceptional handler"],
+      "invariants": ["hit outcome is a closed sum type", "ordinary moves do not dispatch by move pair"],
+      "status": "complete"
+    },
+    {
+      "id": "effect.status-volatile",
+      "kind": "effect_family",
+      "title": "Statuses, cures, and volatiles",
+      "required": true,
+      "denotation": "Apply, update, order, cure, and remove every reachable persistent status and volatile at its owning event boundary.",
+      "members": {"inventory": "effects", "selector": "burn, paralysis, poison, toxic, sleep, freeze, and all reachable volatiles"},
+      "showdown_sources": [
+        {"path": "data/mods/gen3/conditions.ts", "symbol": "Gen 3 conditions"},
+        {"path": "data/conditions.ts", "symbol": "inherited conditions"}
+      ],
+      "native_boundaries": [
+        {"path": "native/pokemon_kernel/condition_install.inc", "symbol": "condition installation and lifecycle dispatch"},
+        {"path": "native/gen3_slice_data.c", "symbol": "generated condition and handler programs"}
+      ],
+      "depends_on": ["event.discovery-order", "move.generic-pipeline"],
+      "observables": ["handlers", "canonical_state", "events", "prng"],
+      "focused_tests": ["native/test_pokemon.c::test_primary_major_status_family/test_generic_weather_install_replace_and_expire"],
+      "differential_cases": ["verify/cases/derived/toxic-switch-reset.json", "verify/slice/checkpoint7-report.json"],
+      "coverage_axes": ["status", "volatile", "apply/fail/cure", "switch", "residual"],
+      "invariants": ["toxic counter belongs to toxic status state", "switch-cleared volatiles clear exactly once"],
+      "status": "complete"
+    },
+    {
+      "id": "effect.field-side-item-ability",
+      "kind": "effect_family",
+      "title": "Weather, side conditions, items, and abilities",
+      "required": true,
+      "denotation": "Execute every reachable field, side, item, and ability handler through generated descriptors or a mapped named native handler.",
+      "members": {"inventory": "effects", "selector": "all reachable weather, pseudo-weather, side/slot conditions, items, and abilities"},
+      "showdown_sources": [
+        {"path": "data/mods/gen3/abilities.ts", "symbol": "Gen 3 abilities"},
+        {"path": "data/mods/gen3/items.ts", "symbol": "Gen 3 items"},
+        {"path": "data/mods/gen3/conditions.ts", "symbol": "weather and side conditions"}
+      ],
+      "native_boundaries": [
+        {"path": "native/gen3_slice_data.c", "symbol": "generated owner bindings, handler descriptors, and handler programs"},
+        {"path": "native/pokemon_kernel/event.inc", "symbol": "discover_handlers/pokemon_run_event"}
+      ],
+      "depends_on": ["event.discovery-order"],
+      "observables": ["handlers", "canonical_state", "events", "prng"],
+      "focused_tests": ["native/test_pokemon.c::test_event_discovery_d1_scopes/test_event_discovery_d2_installed_conditions/test_event_discovery_d3_side_and_weather"],
+      "differential_cases": ["verify/cases/derived/weather-rain-lifecycle.json", "verify/slice/checkpoint7-report.json"],
+      "coverage_axes": ["weather", "side condition", "item", "ability", "activation/suppression/removal"],
+      "invariants": ["Flying immunity is type-owned", "Levitate immunity is ability-owned", "descriptors never silently omit executable effects"],
+      "status": "complete"
+    },
+    {
+      "id": "lifecycle.switch-faint-terminal",
+      "kind": "lifecycle",
+      "title": "Switching, fainting, forced replacement, and terminal result",
+      "required": true,
+      "denotation": "Order switch-out/in work, drain faints, suspend for replacements, handle chained hazard KOs, and settle win/tie exactly once.",
+      "members": {"inventory": null, "selector": "voluntary, forced, simultaneous, chained, phazing, single/double KO, win/tie"},
+      "showdown_sources": [
+        {"path": "data/mods/gen4/scripts.ts", "symbol": "runSwitch inherited by Gen 3"},
+        {"path": "sim/battle.ts", "symbol": "faint/faintMessages/checkWin/win/tie"}
+      ],
+      "native_boundaries": [
+        {"path": "native/pokemon_kernel/switch.inc", "symbol": "switch-out/run-switch lifecycle"},
+        {"path": "native/pokemon_kernel/move.inc", "symbol": "queue_faint/drain_faints_internal/check_fainted_request/apply_terminal_policy"}
+      ],
+      "depends_on": ["phase.request-machine", "event.discovery-order"],
+      "observables": ["queue", "handlers", "phase_request", "faint_switch_replace", "terminal", "canonical_state"],
+      "focused_tests": ["native/test_pokemon.c::test_switch_faint_replacement_and_terminal/test_initial_run_switch_lifecycle_order"],
+      "differential_cases": ["verify/cases/derived/doom-desire-lethal-forced-replacement.json", "verify/cases/derived/recoil-ko-terminal.json"],
+      "coverage_axes": ["switch kind", "KO timing", "one/both sides", "hazard chain", "winner/tie"],
+      "invariants": ["faint is drained before replacement request", "terminal result is stable and choices are empty"],
+      "status": "complete"
+    },
+    {
+      "id": "projection.canonical-trace",
+      "kind": "projection",
+      "title": "Canonical state, typed events, and verifier trace",
+      "required": true,
+      "denotation": "Expose a complete canonical battle projection and observation-only ordered semantic trace without presentation noise or truncation.",
+      "members": {"inventory": null, "selector": "all observable record variants"},
+      "showdown_sources": [
+        {"path": "sim/battle.ts", "symbol": "Battle/Side/Pokemon/Field aggregate state and protocol emission"}
+      ],
+      "native_boundaries": [
+        {"path": "native/pokemon.h", "symbol": "PokemonBattleView/PokemonEvent/PokemonHandlerRef"},
+        {"path": "native/pokemon_kernel/api.inc", "symbol": "pokemon_battle_view/pokemon_battle_check_invariants"}
+      ],
+      "depends_on": ["phase.request-machine", "event.discovery-order"],
+      "observables": ["canonical_state", "events", "queue", "handlers", "phase_request", "prng"],
+      "focused_tests": ["native/test_pokemon.c", "native/test_random_play.c"],
+      "differential_cases": ["verify/slice/checkpoint7-report.json", "verify/random-battles/checkpoint7-report.json"],
+      "coverage_axes": ["record kind", "state field", "event kind", "capacity edge"],
+      "invariants": ["trace is observational", "event/trace capacity never silently truncates"],
+      "status": "complete"
+    },
+    {
+      "id": "determinism.replay",
+      "kind": "determinism",
+      "title": "Deterministic isolated and interleaved replay",
+      "required": true,
+      "denotation": "Initial state, seed, and choices uniquely determine all canonical records independent of process address, wall clock, and neighboring environments.",
+      "members": {"inventory": null, "selector": "fresh-process, same-process reset, and 1024-env interleaving"},
+      "showdown_sources": [
+        {"path": "sim/prng.ts", "symbol": "PRNG"}
+      ],
+      "native_boundaries": [
+        {"path": "native/pokemon_kernel/api.inc", "symbol": "pokemon_battle_init/pokemon_battle_step/pokemon_battle_view"},
+        {"path": "native/pokemon_kernel/prng.h", "symbol": "PokemonPrng"
+        }
+      ],
+      "depends_on": ["projection.canonical-trace", "random.labeled-prng"],
+      "observables": ["replay", "canonical_state", "events", "prng"],
+      "focused_tests": ["native/test_pokemon.c::test_deterministic_replay", "native/test_prng.c::test_replay_and_bounded_projection", "native/test_ocean_slice.c"],
+      "differential_cases": ["verify/slice/checkpoint7-report.json", "verify/random-battles/checkpoint7-report.json"],
+      "coverage_axes": ["fresh process", "reset", "interleaving", "terminal reset"],
+      "invariants": ["replay digest is byte-identical"],
+      "status": "complete"
+    },
+    {
+      "id": "integration.ocean",
+      "kind": "integration",
+      "title": "PufferLib 5 Ocean projection and vector lifecycle",
+      "required": true,
+      "denotation": "Project two-agent observations/masks and submit choices through a mechanics-free adapter with defined reward and terminal/reset behavior.",
+      "members": {"inventory": null, "selector": "init, reset, step, render, close, log; two agents; nine actions"},
+      "showdown_sources": [
+        {"path": "sim/battle.ts", "symbol": "terminal result and request denotation"}
+      ],
+      "native_boundaries": [
+        {"path": "ocean/pokemon_slice.h", "symbol": "puf_init/puf_reset/puf_step/puf_render/puf_close/puf_log"}
+      ],
+      "depends_on": ["choice.request-legality", "lifecycle.switch-faint-terminal", "determinism.replay"],
+      "observables": ["ocean", "choices", "canonical_state", "terminal"],
+      "focused_tests": ["native/test_ocean_slice.c", "verify/performance/benchmark.c"],
+      "differential_cases": ["verify/slice/checkpoint7-report.json", "verify/performance/orbstack-gcc14-calibration.json"],
+      "coverage_axes": ["observation symmetry", "mask", "reward", "terminal observation", "reset", "batch interleaving"],
+      "invariants": ["adapter owns no mechanics", "runtime has no Node, Python, Showdown, filesystem oracle, subprocess, or network dependency"],
+      "status": "complete"
+    }
+  ],
+  "interaction_requirements": [
+    {
+      "id": "move-ability-item",
+      "features": ["move.generic-pipeline", "effect.field-side-item-ability", "random.labeled-prng"],
+      "strength": "three_way",
+      "minimum_hidden_cases": 32
+    },
+    {
+      "id": "status-switch-cure",
+      "features": ["effect.status-volatile", "lifecycle.switch-faint-terminal", "event.discovery-order"],
+      "strength": "sequence",
+      "minimum_hidden_cases": 24
+    },
+    {
+      "id": "hazard-ko-replacement",
+      "features": ["effect.field-side-item-ability", "lifecycle.switch-faint-terminal", "phase.request-machine"],
+      "strength": "sequence",
+      "minimum_hidden_cases": 24
+    },
+    {
+      "id": "ties-residual-prng",
+      "features": ["scheduler.queue-order", "event.discovery-order", "random.labeled-prng"],
+      "strength": "three_way",
+      "minimum_hidden_cases": 24
+    },
+    {
+      "id": "entity-family-pairwise",
+      "features": ["move.generic-pipeline", "effect.status-volatile", "effect.field-side-item-ability", "lifecycle.switch-faint-terminal"],
+      "strength": "pairwise",
+      "minimum_hidden_cases": 128
+    }
+  ]
+}

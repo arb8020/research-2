@@ -1,0 +1,631 @@
+{
+  "schema": "pokemon-gen3ou-ability-semantic-transposition-adjudications-v1",
+  "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "summary": {
+    "records": 43,
+    "by_disposition": {
+      "shared_operation_not_equivalent": 22,
+      "gen3_alias_applicable": 7,
+      "owner_specific_terminal": 14
+    }
+  },
+  "records": {
+    "test/sim/abilities/dryskin.js:13:Dry Skin > should take 1/8 max HP every turn that Sunny Day is active": {
+      "key": "test/sim/abilities/dryskin.js:13:Dry Skin > should take 1/8 max HP every turn that Sunny Day is active",
+      "source_file": "test/sim/abilities/dryskin.js",
+      "source_line": 13,
+      "full_test_name": "Dry Skin > should take 1/8 max HP every turn that Sunny Day is active",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "weather residual damage; no Gen3 ability has Dry Skin sun semantics",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#dryskin",
+        "data/conditions.ts#sunnyday"
+      ]
+    },
+    "test/sim/abilities/dryskin.js:23:Dry Skin > should heal 1/8 max HP every turn that Rain Dance is active": {
+      "key": "test/sim/abilities/dryskin.js:23:Dry Skin > should heal 1/8 max HP every turn that Rain Dance is active",
+      "source_file": "test/sim/abilities/dryskin.js",
+      "source_line": 23,
+      "full_test_name": "Dry Skin > should heal 1/8 max HP every turn that Rain Dance is active",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "Rain Dish heals 1/16 in Gen 3, not the asserted Dry Skin 1/8",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/mods/gen3/abilities.ts#raindish",
+        "data/conditions.ts#raindance"
+      ]
+    },
+    "test/sim/abilities/dryskin.js:34:Dry Skin > should grant immunity to Water-type moves and heal 1/4 max HP": {
+      "key": "test/sim/abilities/dryskin.js:34:Dry Skin > should grant immunity to Water-type moves and heal 1/4 max HP",
+      "source_file": "test/sim/abilities/dryskin.js",
+      "source_line": 34,
+      "full_test_name": "Dry Skin > should grant immunity to Water-type moves and heal 1/4 max HP",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "Water Absorb shares a heal operation but does not prove the unavailable Dry Skin owner",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#waterabsorb"
+      ]
+    },
+    "test/sim/abilities/dryskin.js:44:Dry Skin > should cause the user to take 1.25x damage from Fire-type attacks": {
+      "key": "test/sim/abilities/dryskin.js:44:Dry Skin > should cause the user to take 1.25x damage from Fire-type attacks",
+      "source_file": "test/sim/abilities/dryskin.js",
+      "source_line": 44,
+      "full_test_name": "Dry Skin > should cause the user to take 1.25x damage from Fire-type attacks",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "ability: Thick Fat / Fire damage modifier has opposite factor",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#dryskin",
+        "data/abilities.ts#thickfat"
+      ]
+    },
+    "test/sim/abilities/dryskin.js:55:Dry Skin > should be suppressed by Mold Breaker": {
+      "key": "test/sim/abilities/dryskin.js:55:Dry Skin > should be suppressed by Mold Breaker",
+      "source_file": "test/sim/abilities/dryskin.js",
+      "source_line": 55,
+      "full_test_name": "Dry Skin > should be suppressed by Mold Breaker",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#dryskin",
+        "data/abilities.ts#moldbreaker"
+      ]
+    },
+    "test/sim/abilities/imposter.js:13:Imposter > should Transform into the opposing Pokemon facing it": {
+      "key": "test/sim/abilities/imposter.js:13:Imposter > should Transform into the opposing Pokemon facing it",
+      "source_file": "test/sim/abilities/imposter.js",
+      "source_line": 13,
+      "full_test_name": "Imposter > should Transform into the opposing Pokemon facing it",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/moves.ts#transform",
+        "test/sim/moves/transform.js"
+      ]
+    },
+    "test/sim/abilities/imposter.js:22:Imposter > should be blocked by substitutes": {
+      "key": "test/sim/abilities/imposter.js:22:Imposter > should be blocked by substitutes",
+      "source_file": "test/sim/abilities/imposter.js",
+      "source_line": 22,
+      "full_test_name": "Imposter > should be blocked by substitutes",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "Gen 3 Transform bypasses Substitute, the opposite of the asserted Imposter gate",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/moves.ts#transform",
+        "test/sim/moves/transform.js:102",
+        "test/sim/moves/transform.js:296"
+      ]
+    },
+    "test/sim/abilities/imposter.js:34:Imposter > should not activate if Skill Swapped": {
+      "key": "test/sim/abilities/imposter.js:34:Imposter > should not activate if Skill Swapped",
+      "source_file": "test/sim/abilities/imposter.js",
+      "source_line": 34,
+      "full_test_name": "Imposter > should not activate if Skill Swapped",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#imposter"
+      ]
+    },
+    "test/sim/abilities/magicbounce.js:13:Magic Bounce > should bounce Growl": {
+      "key": "test/sim/abilities/magicbounce.js:13:Magic Bounce > should bounce Growl",
+      "source_file": "test/sim/abilities/magicbounce.js",
+      "source_line": 13,
+      "full_test_name": "Magic Bounce > should bounce Growl",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "gen3_alias_applicable",
+      "gen3_alias_owner_or_mechanic": "move: Magic Coat / synchronous reflection",
+      "required_case": null,
+      "evidence_ids": [
+        "differential:magic-coat-growl-reflection"
+      ],
+      "pinned_source_references": [
+        "data/moves.ts#magiccoat"
+      ]
+    },
+    "test/sim/abilities/magicbounce.js:24:Magic Bounce > should bounce once when target and source share the ability": {
+      "key": "test/sim/abilities/magicbounce.js:24:Magic Bounce > should bounce once when target and source share the ability",
+      "source_file": "test/sim/abilities/magicbounce.js",
+      "source_line": 24,
+      "full_test_name": "Magic Bounce > should bounce once when target and source share the ability",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "gen3_alias_applicable",
+      "gen3_alias_owner_or_mechanic": "move: Magic Coat / reflection recursion guard",
+      "required_case": null,
+      "evidence_ids": [
+        "focused-c:native/test_pokemon.c#test_magic_coat_reflects_through_called_move_entry"
+      ],
+      "pinned_source_references": [
+        "data/moves.ts#magiccoat",
+        "sim/battle-actions.ts#useMoveInner"
+      ]
+    },
+    "test/sim/abilities/magicbounce.js:33:Magic Bounce > should not cause a choice-lock": {
+      "key": "test/sim/abilities/magicbounce.js:33:Magic Bounce > should not cause a choice-lock",
+      "source_file": "test/sim/abilities/magicbounce.js",
+      "source_line": 33,
+      "full_test_name": "Magic Bounce > should not cause a choice-lock",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "Magic Coat requires the reflector to select Magic Coat, while Gen 3's only choice item, Choice Band, already locks that selected move; no legal Gen 3 passive reflector preserves the asserted choice-ownership denotation",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/moves.ts#magiccoat",
+        "data/items.ts#choiceband"
+      ]
+    },
+    "test/sim/abilities/magicbounce.js:45:Magic Bounce > should be suppressed by Mold Breaker": {
+      "key": "test/sim/abilities/magicbounce.js:45:Magic Bounce > should be suppressed by Mold Breaker",
+      "source_file": "test/sim/abilities/magicbounce.js",
+      "source_line": 45,
+      "full_test_name": "Magic Bounce > should be suppressed by Mold Breaker",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#magicbounce",
+        "data/abilities.ts#moldbreaker"
+      ]
+    },
+    "test/sim/abilities/magicbounce.js:54:Magic Bounce > should not bounce moves while semi-invulnerable": {
+      "key": "test/sim/abilities/magicbounce.js:54:Magic Bounce > should not bounce moves while semi-invulnerable",
+      "source_file": "test/sim/abilities/magicbounce.js",
+      "source_line": 54,
+      "full_test_name": "Magic Bounce > should not bounce moves while semi-invulnerable",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "move: Magic Coat / reflection eligibility",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/moves.ts#magiccoat",
+        "data/abilities.ts#magicbounce"
+      ]
+    },
+    "test/sim/abilities/magicbounce.js:71:Magic Bounce > should only activate for the fastest Pokemon in a Free-for-all battle": {
+      "key": "test/sim/abilities/magicbounce.js:71:Magic Bounce > should only activate for the fastest Pokemon in a Free-for-all battle",
+      "source_file": "test/sim/abilities/magicbounce.js",
+      "source_line": 71,
+      "full_test_name": "Magic Bounce > should only activate for the fastest Pokemon in a Free-for-all battle",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#magicbounce"
+      ]
+    },
+    "test/sim/abilities/magicbounce.js:85:Magic Bounce > should activate from fastest to slowest based on unmodified speed": {
+      "key": "test/sim/abilities/magicbounce.js:85:Magic Bounce > should activate from fastest to slowest based on unmodified speed",
+      "source_file": "test/sim/abilities/magicbounce.js",
+      "source_line": 85,
+      "full_test_name": "Magic Bounce > should activate from fastest to slowest based on unmodified speed",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#magicbounce"
+      ]
+    },
+    "test/sim/abilities/magicbounce.js:100:Magic Bounce > [Gen 5] should bounce moves that target the foe's side while semi-invulnerable": {
+      "key": "test/sim/abilities/magicbounce.js:100:Magic Bounce > [Gen 5] should bounce moves that target the foe's side while semi-invulnerable",
+      "source_file": "test/sim/abilities/magicbounce.js",
+      "source_line": 100,
+      "full_test_name": "Magic Bounce > [Gen 5] should bounce moves that target the foe's side while semi-invulnerable",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "move: Magic Coat / reflection eligibility",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/moves.ts#magiccoat",
+        "data/abilities.ts#magicbounce"
+      ]
+    },
+    "test/sim/abilities/magician.js:13:Magician > should steal the opponents item": {
+      "key": "test/sim/abilities/magician.js:13:Magician > should steal the opponents item",
+      "source_file": "test/sim/abilities/magician.js",
+      "source_line": 13,
+      "full_test_name": "Magician > should steal the opponents item",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "gen3_alias_applicable",
+      "gen3_alias_owner_or_mechanic": "moves: Thief/Covet / successful-hit item acquisition",
+      "required_case": null,
+      "evidence_ids": [
+        "differential:item-thief-transfer"
+      ],
+      "pinned_source_references": [
+        "data/moves.ts#thief",
+        "data/moves.ts#covet"
+      ]
+    },
+    "test/sim/abilities/magician.js:23:Magician > should steal the opponents item if the target faints": {
+      "key": "test/sim/abilities/magician.js:23:Magician > should steal the opponents item if the target faints",
+      "source_file": "test/sim/abilities/magician.js",
+      "source_line": 23,
+      "full_test_name": "Magician > should steal the opponents item if the target faints",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "gen3_alias_applicable",
+      "gen3_alias_owner_or_mechanic": "moves: Thief/Covet / target-faint transfer before faint drain",
+      "required_case": null,
+      "evidence_ids": [
+        "differential:thief-target-faint-transfer"
+      ],
+      "pinned_source_references": [
+        "data/moves.ts#thief",
+        "data/moves.ts#covet"
+      ]
+    },
+    "test/sim/abilities/magician.js:34:Magician > should not steal the opponents item if the user faints": {
+      "key": "test/sim/abilities/magician.js:34:Magician > should not steal the opponents item if the user faints",
+      "source_file": "test/sim/abilities/magician.js",
+      "source_line": 34,
+      "full_test_name": "Magician > should not steal the opponents item if the user faints",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "moves: Thief/Covet transfer before later Rough Skin source faint",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/moves.ts#thief",
+        "data/moves.ts#covet"
+      ]
+    },
+    "test/sim/abilities/magician.js:46:Magician > should steal the opponents item if the user uses U-turn": {
+      "key": "test/sim/abilities/magician.js:46:Magician > should steal the opponents item if the user uses U-turn",
+      "source_file": "test/sim/abilities/magician.js",
+      "source_line": 46,
+      "full_test_name": "Magician > should steal the opponents item if the user uses U-turn",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "moves: Thief/Covet / item acquisition before switching",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/moves.ts#thief",
+        "data/abilities.ts#magician"
+      ]
+    },
+    "test/sim/abilities/magician.js:57:Magician > should steal the opponents item if the user uses Dragon Tail": {
+      "key": "test/sim/abilities/magician.js:57:Magician > should steal the opponents item if the user uses Dragon Tail",
+      "source_file": "test/sim/abilities/magician.js",
+      "source_line": 57,
+      "full_test_name": "Magician > should steal the opponents item if the user uses Dragon Tail",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "moves: Thief/Covet / item acquisition before forced switching",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/moves.ts#thief",
+        "data/abilities.ts#magician"
+      ]
+    },
+    "test/sim/abilities/magician.js:68:Magician > should not steal Weakness Policy on super-effective hits": {
+      "key": "test/sim/abilities/magician.js:68:Magician > should not steal Weakness Policy on super-effective hits",
+      "source_file": "test/sim/abilities/magician.js",
+      "source_line": 68,
+      "full_test_name": "Magician > should not steal Weakness Policy on super-effective hits",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#magician",
+        "data/items.ts#weaknesspolicy"
+      ]
+    },
+    "test/sim/abilities/magician.js:78:Magician > should not steal an item on the turn Throat Spray activates": {
+      "key": "test/sim/abilities/magician.js:78:Magician > should not steal an item on the turn Throat Spray activates",
+      "source_file": "test/sim/abilities/magician.js",
+      "source_line": 78,
+      "full_test_name": "Magician > should not steal an item on the turn Throat Spray activates",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#magician",
+        "data/items.ts#throatspray"
+      ]
+    },
+    "test/sim/abilities/magician.js:88:Magician > should steal the item from the faster opponent hit": {
+      "key": "test/sim/abilities/magician.js:88:Magician > should steal the item from the faster opponent hit",
+      "source_file": "test/sim/abilities/magician.js",
+      "source_line": 88,
+      "full_test_name": "Magician > should steal the item from the faster opponent hit",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#magician"
+      ]
+    },
+    "test/sim/abilities/mummy.js:13:Mummy > should set the attacker's ability to Mummy when the user is hit by a contact move": {
+      "key": "test/sim/abilities/mummy.js:13:Mummy > should set the attacker's ability to Mummy when the user is hit by a contact move",
+      "source_file": "test/sim/abilities/mummy.js",
+      "source_line": 13,
+      "full_test_name": "Mummy > should set the attacker's ability to Mummy when the user is hit by a contact move",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "Skill Swap/Role Play replace abilities but not by damaging-contact trigger",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#mummy",
+        "data/moves.ts#skillswap",
+        "data/moves.ts#roleplay"
+      ]
+    },
+    "test/sim/abilities/mummy.js:24:Mummy > should not change abilities that can't be suppressed": {
+      "key": "test/sim/abilities/mummy.js:24:Mummy > should not change abilities that can't be suppressed",
+      "source_file": "test/sim/abilities/mummy.js",
+      "source_line": 24,
+      "full_test_name": "Mummy > should not change abilities that can't be suppressed",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "gen3_alias_applicable",
+      "gen3_alias_owner_or_mechanic": "move: Skill Swap / protected-ability rejection",
+      "required_case": null,
+      "evidence_ids": [
+        "focused-c:native/test_pokemon.c#test_skill_swap_transaction"
+      ],
+      "pinned_source_references": [
+        "data/moves.ts#skillswap",
+        "sim/pokemon.ts#setAbility"
+      ]
+    },
+    "test/sim/abilities/mummy.js:35:Mummy > should not activate before all damage calculation is complete": {
+      "key": "test/sim/abilities/mummy.js:35:Mummy > should not activate before all damage calculation is complete",
+      "source_file": "test/sim/abilities/mummy.js",
+      "source_line": 35,
+      "full_test_name": "Mummy > should not activate before all damage calculation is complete",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "ability transaction timing after damage; no Gen3 contact replacement owner",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#mummy",
+        "sim/battle-actions.ts#moveHit"
+      ]
+    },
+    "test/sim/abilities/pastelveil.js:13:Pastel Veil > should prevent itself and its allies from becoming poisoned": {
+      "key": "test/sim/abilities/pastelveil.js:13:Pastel Veil > should prevent itself and its allies from becoming poisoned",
+      "source_file": "test/sim/abilities/pastelveil.js",
+      "source_line": 13,
+      "full_test_name": "Pastel Veil > should prevent itself and its allies from becoming poisoned",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "ability: Immunity plus Safeguard; no single Gen3 owner preserves self+ally aura",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#immunity",
+        "data/moves.ts#safeguard"
+      ]
+    },
+    "test/sim/abilities/pastelveil.js:26:Pastel Veil > should remove poison on itself and allies when switched in": {
+      "key": "test/sim/abilities/pastelveil.js:26:Pastel Veil > should remove poison on itself and allies when switched in",
+      "source_file": "test/sim/abilities/pastelveil.js",
+      "source_line": 26,
+      "full_test_name": "Pastel Veil > should remove poison on itself and allies when switched in",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "Immunity/Heal Bell/Aromatherapy use different ownership and trigger",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#immunity",
+        "data/moves.ts#healbell",
+        "data/moves.ts#aromatherapy"
+      ]
+    },
+    "test/sim/abilities/pastelveil.js:42:Pastel Veil > should remove poison on itself and allies when the ability is acquired via Skill Swap": {
+      "key": "test/sim/abilities/pastelveil.js:42:Pastel Veil > should remove poison on itself and allies when the ability is acquired via Skill Swap",
+      "source_file": "test/sim/abilities/pastelveil.js",
+      "source_line": 42,
+      "full_test_name": "Pastel Veil > should remove poison on itself and allies when the ability is acquired via Skill Swap",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "gen3_alias_applicable",
+      "gen3_alias_owner_or_mechanic": "ability: Immunity / acquired-ability poison cure",
+      "required_case": null,
+      "evidence_ids": [
+        "differential:immunity-skill-swap-cure"
+      ],
+      "pinned_source_references": [
+        "data/abilities.ts#immunity",
+        "data/moves.ts#skillswap"
+      ]
+    },
+    "test/sim/abilities/pastelveil.js:56:Pastel Veil > should prevent a poison originating from an ally": {
+      "key": "test/sim/abilities/pastelveil.js:56:Pastel Veil > should prevent a poison originating from an ally",
+      "source_file": "test/sim/abilities/pastelveil.js",
+      "source_line": 56,
+      "full_test_name": "Pastel Veil > should prevent a poison originating from an ally",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "ability: Immunity / self poison prevention lacks ally aura semantics",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#immunity",
+        "data/abilities.ts#pastelveil"
+      ]
+    },
+    "test/sim/abilities/pastelveil.js:69:Pastel Veil > should be bypassed by Mold Breaker and cured afterwards, but not for the ally": {
+      "key": "test/sim/abilities/pastelveil.js:69:Pastel Veil > should be bypassed by Mold Breaker and cured afterwards, but not for the ally",
+      "source_file": "test/sim/abilities/pastelveil.js",
+      "source_line": 69,
+      "full_test_name": "Pastel Veil > should be bypassed by Mold Breaker and cured afterwards, but not for the ally",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#pastelveil",
+        "data/abilities.ts#moldbreaker"
+      ]
+    },
+    "test/sim/abilities/pastelveil.js:83:Pastel Veil > should only check for Pastel Veil cures after Lum/Pecha Berry": {
+      "key": "test/sim/abilities/pastelveil.js:83:Pastel Veil > should only check for Pastel Veil cures after Lum/Pecha Berry",
+      "source_file": "test/sim/abilities/pastelveil.js",
+      "source_line": 83,
+      "full_test_name": "Pastel Veil > should only check for Pastel Veil cures after Lum/Pecha Berry",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "status-cure ordering; no Gen3 Pastel Veil aura owner",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/items.ts#lumberry",
+        "data/items.ts#pechaberry",
+        "data/abilities.ts#pastelveil"
+      ]
+    },
+    "test/sim/abilities/screencleaner.js:13:Screen Cleaner > should remove screens from both sides when sent out": {
+      "key": "test/sim/abilities/screencleaner.js:13:Screen Cleaner > should remove screens from both sides when sent out",
+      "source_file": "test/sim/abilities/screencleaner.js",
+      "source_line": 13,
+      "full_test_name": "Screen Cleaner > should remove screens from both sides when sent out",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "move: Brick Break / screen deletion differs in trigger and affected sides",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#screencleaner",
+        "data/moves.ts#brickbreak"
+      ]
+    },
+    "test/sim/abilities/stormdrain.js:13:Storm Drain > should grant immunity to Water-type moves and boost Special Attack by 1 stage": {
+      "key": "test/sim/abilities/stormdrain.js:13:Storm Drain > should grant immunity to Water-type moves and boost Special Attack by 1 stage",
+      "source_file": "test/sim/abilities/stormdrain.js",
+      "source_line": 13,
+      "full_test_name": "Storm Drain > should grant immunity to Water-type moves and boost Special Attack by 1 stage",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "Water Absorb preserves immunity but heals instead of boosting",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#stormdrain",
+        "data/abilities.ts#waterabsorb"
+      ]
+    },
+    "test/sim/abilities/stormdrain.js:22:Storm Drain > should redirect Max Geyser": {
+      "key": "test/sim/abilities/stormdrain.js:22:Storm Drain > should redirect Max Geyser",
+      "source_file": "test/sim/abilities/stormdrain.js",
+      "source_line": 22,
+      "full_test_name": "Storm Drain > should redirect Max Geyser",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#stormdrain"
+      ]
+    },
+    "test/sim/abilities/stormdrain.js:37:Storm Drain > should redirect single-target Water-type attacks to the user if it is a valid target": {
+      "key": "test/sim/abilities/stormdrain.js:37:Storm Drain > should redirect single-target Water-type attacks to the user if it is a valid target",
+      "source_file": "test/sim/abilities/stormdrain.js",
+      "source_line": 37,
+      "full_test_name": "Storm Drain > should redirect single-target Water-type attacks to the user if it is a valid target",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "Gen 3 Lightning Rod redirects only when another active target slot exists; the upstream assertion is a triples interaction and is unreachable in the declared Gen 3 OU singles format",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/mods/gen3/abilities.ts#lightningrod"
+      ]
+    },
+    "test/sim/abilities/stormdrain.js:55:Storm Drain > should redirect to the fastest Pokemon with the ability": {
+      "key": "test/sim/abilities/stormdrain.js:55:Storm Drain > should redirect to the fastest Pokemon with the ability",
+      "source_file": "test/sim/abilities/stormdrain.js",
+      "source_line": 55,
+      "full_test_name": "Storm Drain > should redirect to the fastest Pokemon with the ability",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "Choosing the fastest Lightning Rod holder requires multiple simultaneously active holders; that ordering assertion is unreachable in the declared Gen 3 OU singles format",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/mods/gen3/abilities.ts#lightningrod"
+      ]
+    },
+    "test/sim/abilities/stormdrain.js:72:Storm Drain > should not redirect if another Pokemon has used Follow Me": {
+      "key": "test/sim/abilities/stormdrain.js:72:Storm Drain > should not redirect if another Pokemon has used Follow Me",
+      "source_file": "test/sim/abilities/stormdrain.js",
+      "source_line": 72,
+      "full_test_name": "Storm Drain > should not redirect if another Pokemon has used Follow Me",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#stormdrain",
+        "data/moves.ts#followme"
+      ]
+    },
+    "test/sim/abilities/stormdrain.js:88:Storm Drain > should have its Water-type immunity and its ability to redirect moves suppressed by Mold Breaker": {
+      "key": "test/sim/abilities/stormdrain.js:88:Storm Drain > should have its Water-type immunity and its ability to redirect moves suppressed by Mold Breaker",
+      "source_file": "test/sim/abilities/stormdrain.js",
+      "source_line": 88,
+      "full_test_name": "Storm Drain > should have its Water-type immunity and its ability to redirect moves suppressed by Mold Breaker",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#stormdrain",
+        "data/abilities.ts#moldbreaker"
+      ]
+    },
+    "test/sim/abilities/wanderingspirit.js:11:Wandering Spirit > should exchange abilities with an attacker that makes contact": {
+      "key": "test/sim/abilities/wanderingspirit.js:11:Wandering Spirit > should exchange abilities with an attacker that makes contact",
+      "source_file": "test/sim/abilities/wanderingspirit.js",
+      "source_line": 11,
+      "full_test_name": "Wandering Spirit > should exchange abilities with an attacker that makes contact",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "shared_operation_not_equivalent",
+      "gen3_alias_owner_or_mechanic": "Skill Swap exchanges abilities but not by damaging-contact trigger",
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#wanderingspirit",
+        "data/moves.ts#skillswap"
+      ]
+    },
+    "test/sim/abilities/wanderingspirit.js:22:Wandering Spirit > should not activate while Dynamaxed": {
+      "key": "test/sim/abilities/wanderingspirit.js:22:Wandering Spirit > should not activate while Dynamaxed",
+      "source_file": "test/sim/abilities/wanderingspirit.js",
+      "source_line": 22,
+      "full_test_name": "Wandering Spirit > should not activate while Dynamaxed",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "owner_specific_terminal",
+      "gen3_alias_owner_or_mechanic": null,
+      "required_case": null,
+      "pinned_source_references": [
+        "data/abilities.ts#wanderingspirit"
+      ]
+    },
+    "test/sim/abilities/wanderingspirit.js:33:Wandering Spirit > should not swap with Wonder Guard": {
+      "key": "test/sim/abilities/wanderingspirit.js:33:Wandering Spirit > should not swap with Wonder Guard",
+      "source_file": "test/sim/abilities/wanderingspirit.js",
+      "source_line": 33,
+      "full_test_name": "Wandering Spirit > should not swap with Wonder Guard",
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "disposition": "gen3_alias_applicable",
+      "gen3_alias_owner_or_mechanic": "move: Skill Swap / protected Wonder Guard rejection",
+      "required_case": null,
+      "evidence_ids": [
+        "focused-c:native/test_pokemon.c#test_skill_swap_transaction"
+      ],
+      "pinned_source_references": [
+        "data/moves.ts#skillswap",
+        "data/abilities.ts#wonderguard"
+      ]
+    }
+  }
+}

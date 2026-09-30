@@ -1,0 +1,13 @@
+Vigoroth (M)
+Ability: Vital Spirit
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Uproar
+
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Splash

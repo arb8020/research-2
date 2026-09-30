@@ -1,0 +1,6 @@
+Blissey (F)
+Ability: Naturalcure
+Level: 100
+Hardy Nature
+- Sandattack
+- Splash
