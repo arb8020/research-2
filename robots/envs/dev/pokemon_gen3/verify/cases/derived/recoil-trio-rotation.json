@@ -1,0 +1,117 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "recoil-trio-rotation",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/battle-actions.ts",
+    "test_name": "remaining declarative recoil descriptors use generic staging",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "recoil-trio-rotation-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "submission",
+            "takedown",
+            "volttackle"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "recoil-trio-rotation-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "effect.recoil",
+    "hit.accuracy",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

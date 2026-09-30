@@ -1,0 +1,106 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "tri-attack-protect",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#triattack.secondary.onHit; sim/battle-actions.ts#secondaries",
+    "test_name": "Protect stops Tri Attack before damage and secondary work",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    1
+  ],
+  "teams": [
+    {
+      "source": "tri-attack-protect-p1.txt",
+      "normalized": [
+        {
+          "species": "porygon2",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "trace",
+          "item": "",
+          "moves": [
+            "triattack"
+          ],
+          "stats": [
+            311,
+            196,
+            216,
+            246,
+            226,
+            156
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "tri-attack-protect-p2.txt",
+      "normalized": [
+        {
+          "species": "milotic",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "marvelscale",
+          "item": "",
+          "moves": [
+            "protect"
+          ],
+          "stats": [
+            331,
+            156,
+            194,
+            236,
+            286,
+            198
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "effect.secondary",
+    "hit.accuracy",
+    "hit.protect",
+    "prng.labeled",
+    "prng.secondary",
+    "state.canonical",
+    "volatile.protect"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

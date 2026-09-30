@@ -1,0 +1,15 @@
+{
+  "schema": "pokemon-native-slice-case-v1",
+  "id": "gen3-singles2-complete",
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": ["p1.txt", "p2.txt"],
+  "choices": [
+    ["move 1", "move 1"],
+    ["switch 2", "move 1"],
+    ["move 1", "move 1"],
+    [null, "switch 2"],
+    ["move 1", "move 1"]
+  ]
+}

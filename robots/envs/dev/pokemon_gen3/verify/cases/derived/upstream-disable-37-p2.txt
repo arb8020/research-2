@@ -1,0 +1,6 @@
+Blissey (F)
+Ability: Natural Cure
+Level: 100
+EVs: 4 HP
+Hardy Nature
+- Soft-Boiled

@@ -1,0 +1,1322 @@
+{
+  "revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "reachable": {
+    "moves": 354,
+    "abilities": 70,
+    "items": 104
+  },
+  "call_counts": [
+    {
+      "api": "addSlotCondition",
+      "count": 2
+    },
+    {
+      "api": "addVolatile",
+      "count": 41
+    },
+    {
+      "api": "clearStatus",
+      "count": 3
+    },
+    {
+      "api": "cureStatus",
+      "count": 22
+    },
+    {
+      "api": "removeSideCondition",
+      "count": 5
+    },
+    {
+      "api": "removeSlotCondition",
+      "count": 1
+    },
+    {
+      "api": "removeVolatile",
+      "count": 48
+    },
+    {
+      "api": "setStatus",
+      "count": 1
+    },
+    {
+      "api": "setWeather",
+      "count": 1
+    },
+    {
+      "api": "trySetStatus",
+      "count": 7
+    }
+  ],
+  "calls": [
+    {
+      "owner": "move:dive",
+      "path": "onTryMove",
+      "api": "removeVolatile",
+      "args": [
+        "move.id"
+      ]
+    },
+    {
+      "owner": "move:dive",
+      "path": "onTryMove",
+      "api": "addVolatile",
+      "args": [
+        "\"twoturnmove\"",
+        "defender"
+      ]
+    },
+    {
+      "owner": "move:mirrorcoat",
+      "path": "beforeTurnCallback",
+      "api": "addVolatile",
+      "args": [
+        "\"mirrorcoat\""
+      ]
+    },
+    {
+      "owner": "move:protect",
+      "path": "onHit",
+      "api": "addVolatile",
+      "args": [
+        "\"stall\""
+      ]
+    },
+    {
+      "owner": "move:substitute",
+      "path": "condition.onTryPrimaryHit",
+      "api": "removeVolatile",
+      "args": [
+        "\"substitute\""
+      ]
+    },
+    {
+      "owner": "move:substitute",
+      "path": "condition.onTryPrimaryHit",
+      "api": "addVolatile",
+      "args": [
+        "\"substitutebroken\""
+      ]
+    },
+    {
+      "owner": "move:refresh",
+      "path": "onHit",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "move:rest",
+      "path": "onHit",
+      "api": "setStatus",
+      "args": [
+        "\"slp\"",
+        "source",
+        "move"
+      ]
+    },
+    {
+      "owner": "move:attract",
+      "path": "condition.onUpdate",
+      "api": "removeVolatile",
+      "args": [
+        "\"attract\""
+      ]
+    },
+    {
+      "owner": "move:endure",
+      "path": "onHit",
+      "api": "addVolatile",
+      "args": [
+        "\"stall\""
+      ]
+    },
+    {
+      "owner": "move:furycutter",
+      "path": "basePowerCallback",
+      "api": "addVolatile",
+      "args": [
+        "\"furycutter\""
+      ]
+    },
+    {
+      "owner": "move:furycutter",
+      "path": "onHit",
+      "api": "addVolatile",
+      "args": [
+        "\"furycutter\""
+      ]
+    },
+    {
+      "owner": "move:skullbash",
+      "path": "onTryMove",
+      "api": "removeVolatile",
+      "args": [
+        "move.id"
+      ]
+    },
+    {
+      "owner": "move:skullbash",
+      "path": "onTryMove",
+      "api": "addVolatile",
+      "args": [
+        "\"twoturnmove\"",
+        "defender"
+      ]
+    },
+    {
+      "owner": "move:solarbeam",
+      "path": "onTryMove",
+      "api": "removeVolatile",
+      "args": [
+        "move.id"
+      ]
+    },
+    {
+      "owner": "move:solarbeam",
+      "path": "onTryMove",
+      "api": "addVolatile",
+      "args": [
+        "\"twoturnmove\"",
+        "defender"
+      ]
+    },
+    {
+      "owner": "move:beatup",
+      "path": "onModifyMove",
+      "api": "addVolatile",
+      "args": [
+        "\"beatup\""
+      ]
+    },
+    {
+      "owner": "move:brickbreak",
+      "path": "onTryHit",
+      "api": "removeSideCondition",
+      "args": [
+        "\"reflect\""
+      ]
+    },
+    {
+      "owner": "move:brickbreak",
+      "path": "onTryHit",
+      "api": "removeSideCondition",
+      "args": [
+        "\"lightscreen\""
+      ]
+    },
+    {
+      "owner": "move:counter",
+      "path": "beforeTurnCallback",
+      "api": "addVolatile",
+      "args": [
+        "\"counter\""
+      ]
+    },
+    {
+      "owner": "move:dig",
+      "path": "onTryMove",
+      "api": "removeVolatile",
+      "args": [
+        "move.id"
+      ]
+    },
+    {
+      "owner": "move:dig",
+      "path": "onTryMove",
+      "api": "addVolatile",
+      "args": [
+        "\"twoturnmove\"",
+        "defender"
+      ]
+    },
+    {
+      "owner": "move:focuspunch",
+      "path": "beforeTurnCallback",
+      "api": "addVolatile",
+      "args": [
+        "\"focuspunch\""
+      ]
+    },
+    {
+      "owner": "move:rage",
+      "path": "condition.onBeforeMove",
+      "api": "removeVolatile",
+      "args": [
+        "\"rage\""
+      ]
+    },
+    {
+      "owner": "move:fly",
+      "path": "onTryMove",
+      "api": "removeVolatile",
+      "args": [
+        "move.id"
+      ]
+    },
+    {
+      "owner": "move:fly",
+      "path": "onTryMove",
+      "api": "addVolatile",
+      "args": [
+        "\"twoturnmove\"",
+        "defender"
+      ]
+    },
+    {
+      "owner": "move:rapidspin",
+      "path": "onAfterHit",
+      "api": "removeVolatile",
+      "args": [
+        "\"leechseed\""
+      ]
+    },
+    {
+      "owner": "move:rapidspin",
+      "path": "onAfterHit",
+      "api": "removeSideCondition",
+      "args": [
+        "condition"
+      ]
+    },
+    {
+      "owner": "move:rapidspin",
+      "path": "onAfterHit",
+      "api": "removeVolatile",
+      "args": [
+        "\"partiallytrapped\""
+      ]
+    },
+    {
+      "owner": "move:rapidspin",
+      "path": "onAfterSubDamage",
+      "api": "removeVolatile",
+      "args": [
+        "\"leechseed\""
+      ]
+    },
+    {
+      "owner": "move:rapidspin",
+      "path": "onAfterSubDamage",
+      "api": "removeSideCondition",
+      "args": [
+        "condition"
+      ]
+    },
+    {
+      "owner": "move:rapidspin",
+      "path": "onAfterSubDamage",
+      "api": "removeVolatile",
+      "args": [
+        "\"partiallytrapped\""
+      ]
+    },
+    {
+      "owner": "move:rapidspin",
+      "path": "self.onHit",
+      "api": "removeVolatile",
+      "args": [
+        "\"leechseed\""
+      ]
+    },
+    {
+      "owner": "move:rapidspin",
+      "path": "self.onHit",
+      "api": "removeSideCondition",
+      "args": [
+        "condition"
+      ]
+    },
+    {
+      "owner": "move:rapidspin",
+      "path": "self.onHit",
+      "api": "removeVolatile",
+      "args": [
+        "\"partiallytrapped\""
+      ]
+    },
+    {
+      "owner": "move:yawn",
+      "path": "condition.onEnd",
+      "api": "trySetStatus",
+      "args": [
+        "\"slp\"",
+        "this.effectState.source"
+      ]
+    },
+    {
+      "owner": "move:rollout",
+      "path": "onModifyMove",
+      "api": "addVolatile",
+      "args": [
+        "\"rollout\""
+      ]
+    },
+    {
+      "owner": "move:rollout",
+      "path": "onAfterMove",
+      "api": "addVolatile",
+      "args": [
+        "\"rolloutstorage\""
+      ]
+    },
+    {
+      "owner": "move:pursuit",
+      "path": "beforeTurnCallback",
+      "api": "addVolatile",
+      "args": [
+        "\"pursuit\""
+      ]
+    },
+    {
+      "owner": "move:pursuit",
+      "path": "condition.onBeforeSwitchOut",
+      "api": "addVolatile",
+      "args": [
+        "\"choicelock\""
+      ]
+    },
+    {
+      "owner": "move:skyattack",
+      "path": "onTryMove",
+      "api": "removeVolatile",
+      "args": [
+        "move.id"
+      ]
+    },
+    {
+      "owner": "move:skyattack",
+      "path": "onTryMove",
+      "api": "addVolatile",
+      "args": [
+        "\"twoturnmove\"",
+        "defender"
+      ]
+    },
+    {
+      "owner": "move:bide",
+      "path": "condition.onBeforeMove",
+      "api": "removeVolatile",
+      "args": [
+        "\"bide\""
+      ]
+    },
+    {
+      "owner": "move:bide",
+      "path": "condition.onMoveAborted",
+      "api": "removeVolatile",
+      "args": [
+        "\"bide\""
+      ]
+    },
+    {
+      "owner": "move:charge",
+      "path": "condition.onMoveAborted",
+      "api": "removeVolatile",
+      "args": [
+        "\"charge\""
+      ]
+    },
+    {
+      "owner": "move:charge",
+      "path": "condition.onAfterMove",
+      "api": "removeVolatile",
+      "args": [
+        "\"charge\""
+      ]
+    },
+    {
+      "owner": "move:encore",
+      "path": "condition.onResidual",
+      "api": "removeVolatile",
+      "args": [
+        "\"encore\""
+      ]
+    },
+    {
+      "owner": "move:snatch",
+      "path": "condition.onAnyPrepareHit",
+      "api": "removeVolatile",
+      "args": [
+        "\"snatch\""
+      ]
+    },
+    {
+      "owner": "move:perishsong",
+      "path": "onHitField",
+      "api": "addVolatile",
+      "args": [
+        "\"perishsong\""
+      ]
+    },
+    {
+      "owner": "move:aromatherapy",
+      "path": "onHit",
+      "api": "clearStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "move:mindreader",
+      "path": "onHit",
+      "api": "addVolatile",
+      "args": [
+        "\"lockon\"",
+        "target"
+      ]
+    },
+    {
+      "owner": "move:iceball",
+      "path": "onModifyMove",
+      "api": "addVolatile",
+      "args": [
+        "\"iceball\""
+      ]
+    },
+    {
+      "owner": "move:iceball",
+      "path": "onAfterMove",
+      "api": "addVolatile",
+      "args": [
+        "\"rolloutstorage\""
+      ]
+    },
+    {
+      "owner": "move:futuresight",
+      "path": "onTry",
+      "api": "addSlotCondition",
+      "args": [
+        "target",
+        "\"futuremove\""
+      ]
+    },
+    {
+      "owner": "move:swallow",
+      "path": "onHit",
+      "api": "removeVolatile",
+      "args": [
+        "\"stockpile\""
+      ]
+    },
+    {
+      "owner": "move:spitup",
+      "path": "onAfterMove",
+      "api": "removeVolatile",
+      "args": [
+        "\"stockpile\""
+      ]
+    },
+    {
+      "owner": "move:block",
+      "path": "onHit",
+      "api": "addVolatile",
+      "args": [
+        "\"trapped\"",
+        "source",
+        "move",
+        "\"trapper\""
+      ]
+    },
+    {
+      "owner": "move:healbell",
+      "path": "onHit",
+      "api": "cureStatus",
+      "args": [
+        "true"
+      ]
+    },
+    {
+      "owner": "move:detect",
+      "path": "onHit",
+      "api": "addVolatile",
+      "args": [
+        "\"stall\""
+      ]
+    },
+    {
+      "owner": "move:triattack",
+      "path": "secondary.onHit",
+      "api": "trySetStatus",
+      "args": [
+        "status",
+        "source"
+      ]
+    },
+    {
+      "owner": "move:smellingsalts",
+      "path": "onHit",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "move:uproar",
+      "path": "onTryHit",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "move:uproar",
+      "path": "onTryHit",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "move:uproar",
+      "path": "condition.onResidual",
+      "api": "removeVolatile",
+      "args": [
+        "\"uproar\""
+      ]
+    },
+    {
+      "owner": "move:meanlook",
+      "path": "onHit",
+      "api": "addVolatile",
+      "args": [
+        "\"trapped\"",
+        "source",
+        "move",
+        "\"trapper\""
+      ]
+    },
+    {
+      "owner": "move:destinybond",
+      "path": "onPrepareHit",
+      "api": "removeVolatile",
+      "args": [
+        "\"destinybond\""
+      ]
+    },
+    {
+      "owner": "move:destinybond",
+      "path": "condition.onBeforeMove",
+      "api": "removeVolatile",
+      "args": [
+        "\"destinybond\""
+      ]
+    },
+    {
+      "owner": "move:destinybond",
+      "path": "condition.onMoveAborted",
+      "api": "removeVolatile",
+      "args": [
+        "\"destinybond\""
+      ]
+    },
+    {
+      "owner": "move:magiccoat",
+      "path": "condition.onTryHit",
+      "api": "removeVolatile",
+      "args": [
+        "\"magiccoat\""
+      ]
+    },
+    {
+      "owner": "move:grudge",
+      "path": "condition.onBeforeMove",
+      "api": "removeVolatile",
+      "args": [
+        "\"grudge\""
+      ]
+    },
+    {
+      "owner": "move:lockon",
+      "path": "onHit",
+      "api": "addVolatile",
+      "args": [
+        "\"lockon\"",
+        "target"
+      ]
+    },
+    {
+      "owner": "move:spiderweb",
+      "path": "onHit",
+      "api": "addVolatile",
+      "args": [
+        "\"trapped\"",
+        "source",
+        "move",
+        "\"trapper\""
+      ]
+    },
+    {
+      "owner": "move:razorwind",
+      "path": "onTryMove",
+      "api": "removeVolatile",
+      "args": [
+        "move.id"
+      ]
+    },
+    {
+      "owner": "move:razorwind",
+      "path": "onTryMove",
+      "api": "addVolatile",
+      "args": [
+        "\"twoturnmove\"",
+        "defender"
+      ]
+    },
+    {
+      "owner": "move:bounce",
+      "path": "onTryMove",
+      "api": "removeVolatile",
+      "args": [
+        "move.id"
+      ]
+    },
+    {
+      "owner": "move:bounce",
+      "path": "onTryMove",
+      "api": "addVolatile",
+      "args": [
+        "\"twoturnmove\"",
+        "defender"
+      ]
+    },
+    {
+      "owner": "move:doomdesire",
+      "path": "onTry",
+      "api": "addSlotCondition",
+      "args": [
+        "target",
+        "\"futuremove\""
+      ]
+    },
+    {
+      "owner": "ability:static",
+      "path": "onDamagingHit",
+      "api": "trySetStatus",
+      "args": [
+        "\"par\"",
+        "target"
+      ]
+    },
+    {
+      "owner": "ability:poisonpoint",
+      "path": "onDamagingHit",
+      "api": "trySetStatus",
+      "args": [
+        "\"psn\"",
+        "target"
+      ]
+    },
+    {
+      "owner": "ability:cutecharm",
+      "path": "onDamagingHit",
+      "api": "addVolatile",
+      "args": [
+        "\"attract\"",
+        "target"
+      ]
+    },
+    {
+      "owner": "ability:synchronize",
+      "path": "onAfterSetStatus",
+      "api": "trySetStatus",
+      "args": [
+        "id",
+        "target"
+      ]
+    },
+    {
+      "owner": "ability:limber",
+      "path": "onUpdate",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "ability:shedskin",
+      "path": "onResidual",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "ability:insomnia",
+      "path": "onUpdate",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "ability:magmaarmor",
+      "path": "onUpdate",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "ability:flamebody",
+      "path": "onDamagingHit",
+      "api": "trySetStatus",
+      "args": [
+        "\"brn\"",
+        "target"
+      ]
+    },
+    {
+      "owner": "ability:naturalcure",
+      "path": "onSwitchOut",
+      "api": "clearStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "ability:oblivious",
+      "path": "onUpdate",
+      "api": "removeVolatile",
+      "args": [
+        "\"attract\""
+      ]
+    },
+    {
+      "owner": "ability:flashfire",
+      "path": "onTryHit",
+      "api": "addVolatile",
+      "args": [
+        "\"flashfire\""
+      ]
+    },
+    {
+      "owner": "ability:flashfire",
+      "path": "onEnd",
+      "api": "removeVolatile",
+      "args": [
+        "\"flashfire\""
+      ]
+    },
+    {
+      "owner": "ability:effectspore",
+      "path": "onDamagingHit",
+      "api": "trySetStatus",
+      "args": [
+        "status",
+        "target"
+      ]
+    },
+    {
+      "owner": "ability:vitalspirit",
+      "path": "onUpdate",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "ability:owntempo",
+      "path": "onUpdate",
+      "api": "removeVolatile",
+      "args": [
+        "\"confusion\""
+      ]
+    },
+    {
+      "owner": "ability:waterveil",
+      "path": "onUpdate",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "ability:immunity",
+      "path": "onUpdate",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "ability:sandstream",
+      "path": "onStart",
+      "api": "setWeather",
+      "args": [
+        "\"sandstorm\""
+      ]
+    },
+    {
+      "owner": "item:aguavberry",
+      "path": "onEat",
+      "api": "addVolatile",
+      "args": [
+        "\"confusion\""
+      ]
+    },
+    {
+      "owner": "item:figyberry",
+      "path": "onEat",
+      "api": "addVolatile",
+      "args": [
+        "\"confusion\""
+      ]
+    },
+    {
+      "owner": "item:iapapaberry",
+      "path": "onEat",
+      "api": "addVolatile",
+      "args": [
+        "\"confusion\""
+      ]
+    },
+    {
+      "owner": "item:lansatberry",
+      "path": "onEat",
+      "api": "addVolatile",
+      "args": [
+        "\"focusenergy\""
+      ]
+    },
+    {
+      "owner": "item:magoberry",
+      "path": "onEat",
+      "api": "addVolatile",
+      "args": [
+        "\"confusion\""
+      ]
+    },
+    {
+      "owner": "item:wikiberry",
+      "path": "onEat",
+      "api": "addVolatile",
+      "args": [
+        "\"confusion\""
+      ]
+    },
+    {
+      "owner": "item:choiceband",
+      "path": "onAfterMove",
+      "api": "addVolatile",
+      "args": [
+        "\"choicelock\""
+      ]
+    },
+    {
+      "owner": "item:mentalherb",
+      "path": "fling.effect",
+      "api": "removeVolatile",
+      "args": [
+        "\"attract\""
+      ]
+    },
+    {
+      "owner": "item:mentalherb",
+      "path": "onUpdate",
+      "api": "removeVolatile",
+      "args": [
+        "\"attract\""
+      ]
+    },
+    {
+      "owner": "item:aspearberry",
+      "path": "onEat",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "item:cheriberry",
+      "path": "onEat",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "item:chestoberry",
+      "path": "onEat",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "item:lumberry",
+      "path": "onEat",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "item:lumberry",
+      "path": "onEat",
+      "api": "removeVolatile",
+      "args": [
+        "\"confusion\""
+      ]
+    },
+    {
+      "owner": "item:pechaberry",
+      "path": "onEat",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "item:persimberry",
+      "path": "onEat",
+      "api": "removeVolatile",
+      "args": [
+        "\"confusion\""
+      ]
+    },
+    {
+      "owner": "item:rawstberry",
+      "path": "onEat",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "condition:slp",
+      "path": "onStart",
+      "api": "removeVolatile",
+      "args": [
+        "\"nightmare\""
+      ]
+    },
+    {
+      "owner": "condition:slp",
+      "path": "onBeforeMove",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "condition:frz",
+      "path": "onBeforeMove",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "condition:frz",
+      "path": "onModifyMove",
+      "api": "clearStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "condition:frz",
+      "path": "onAfterMoveSecondary",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "condition:frz",
+      "path": "onDamagingHit",
+      "api": "cureStatus",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "owner": "condition:twoturnmove",
+      "path": "onStart",
+      "api": "addVolatile",
+      "args": [
+        "effect.id"
+      ]
+    },
+    {
+      "owner": "condition:twoturnmove",
+      "path": "onEnd",
+      "api": "removeVolatile",
+      "args": [
+        "this.effectState.move"
+      ]
+    },
+    {
+      "owner": "condition:twoturnmove",
+      "path": "onMoveAborted",
+      "api": "removeVolatile",
+      "args": [
+        "\"twoturnmove\""
+      ]
+    },
+    {
+      "owner": "condition:confusion",
+      "path": "onBeforeMove",
+      "api": "removeVolatile",
+      "args": [
+        "\"confusion\""
+      ]
+    },
+    {
+      "owner": "condition:mustrecharge",
+      "path": "onBeforeMove",
+      "api": "removeVolatile",
+      "args": [
+        "\"mustrecharge\""
+      ]
+    },
+    {
+      "owner": "condition:mustrecharge",
+      "path": "onBeforeMove",
+      "api": "removeVolatile",
+      "args": [
+        "\"truant\""
+      ]
+    },
+    {
+      "owner": "condition:lockedmove",
+      "path": "onEnd",
+      "api": "addVolatile",
+      "args": [
+        "\"confusion\""
+      ]
+    },
+    {
+      "owner": "condition:rolloutstorage",
+      "path": "onBasePower",
+      "api": "removeVolatile",
+      "args": [
+        "\"rolloutstorage\""
+      ]
+    },
+    {
+      "owner": "condition:choicelock",
+      "path": "onDisableMove",
+      "api": "removeVolatile",
+      "args": [
+        "\"choicelock\""
+      ]
+    },
+    {
+      "owner": "condition:futuremove",
+      "path": "onResidual",
+      "api": "removeSlotCondition",
+      "args": [
+        "this.getAtSlot(this.effectState.targetSlot)",
+        "\"futuremove\""
+      ]
+    },
+    {
+      "owner": "condition:futuremove",
+      "path": "onEnd",
+      "api": "removeVolatile",
+      "args": [
+        "\"Protect\""
+      ]
+    },
+    {
+      "owner": "condition:futuremove",
+      "path": "onEnd",
+      "api": "removeVolatile",
+      "args": [
+        "\"Endure\""
+      ]
+    }
+  ],
+  "directDeletes": [
+    {
+      "owner": "move:substitute",
+      "path": "condition.onStart",
+      "container": "volatiles",
+      "id": "partiallytrapped"
+    },
+    {
+      "owner": "move:rollout",
+      "path": "condition.onResidual",
+      "container": "volatiles",
+      "id": "rollout"
+    },
+    {
+      "owner": "move:torment",
+      "path": "condition.onStart",
+      "container": "volatiles",
+      "id": "torment"
+    },
+    {
+      "owner": "move:iceball",
+      "path": "condition.onResidual",
+      "container": "volatiles",
+      "id": "iceball"
+    },
+    {
+      "owner": "move:uproar",
+      "path": "condition.onResidual",
+      "container": "volatiles",
+      "id": "uproar"
+    },
+    {
+      "owner": "condition:partiallytrapped",
+      "path": "onResidual",
+      "container": "volatiles",
+      "id": "partiallytrapped"
+    },
+    {
+      "owner": "condition:lockedmove",
+      "path": "onResidual",
+      "container": "volatiles",
+      "id": "lockedmove"
+    }
+  ],
+  "unresolved": [],
+  "scanned_conditions": [
+    "brn",
+    "choicelock",
+    "confusion",
+    "flinch",
+    "frz",
+    "futuremove",
+    "hail",
+    "lockedmove",
+    "mustrecharge",
+    "par",
+    "partiallytrapped",
+    "psn",
+    "raindance",
+    "rolloutstorage",
+    "sandstorm",
+    "slp",
+    "stall",
+    "substitutebroken",
+    "sunnyday",
+    "tox",
+    "trapped",
+    "trapper",
+    "twoturnmove"
+  ],
+  "compare": {
+    "status": {
+      "expected": [
+        "brn",
+        "frz",
+        "par",
+        "psn",
+        "slp",
+        "tox"
+      ],
+      "missing_in_artifact": [],
+      "extra_in_artifact": []
+    },
+    "volatile": {
+      "expected": [
+        "attract",
+        "beatup",
+        "bide",
+        "bounce",
+        "charge",
+        "choicelock",
+        "confusion",
+        "counter",
+        "curse",
+        "defensecurl",
+        "destinybond",
+        "dig",
+        "disable",
+        "dive",
+        "encore",
+        "endure",
+        "flashfire",
+        "flinch",
+        "fly",
+        "focusenergy",
+        "focuspunch",
+        "foresight",
+        "furycutter",
+        "grudge",
+        "helpinghand",
+        "iceball",
+        "imprison",
+        "ingrain",
+        "leechseed",
+        "lockedmove",
+        "lockon",
+        "magiccoat",
+        "minimize",
+        "mirrorcoat",
+        "mudsport",
+        "mustrecharge",
+        "nightmare",
+        "partiallytrapped",
+        "perishsong",
+        "protect",
+        "pursuit",
+        "rage",
+        "razorwind",
+        "rollout",
+        "rolloutstorage",
+        "skullbash",
+        "skyattack",
+        "snatch",
+        "solarbeam",
+        "stall",
+        "stockpile",
+        "substitute",
+        "substitutebroken",
+        "taunt",
+        "torment",
+        "trapped",
+        "trapper",
+        "truant",
+        "twoturnmove",
+        "uproar",
+        "watersport",
+        "yawn"
+      ],
+      "missing_in_artifact": [],
+      "extra_in_artifact": []
+    },
+    "side": {
+      "expected": [
+        "lightscreen",
+        "mist",
+        "reflect",
+        "safeguard",
+        "spikes"
+      ],
+      "missing_in_artifact": [],
+      "extra_in_artifact": []
+    },
+    "slot": {
+      "expected": [
+        "followme",
+        "futuremove",
+        "wish"
+      ],
+      "missing_in_artifact": [],
+      "extra_in_artifact": []
+    },
+    "weather": {
+      "expected": [
+        "hail",
+        "raindance",
+        "sandstorm",
+        "sunnyday"
+      ],
+      "missing_in_artifact": [],
+      "extra_in_artifact": []
+    },
+    "pseudo_weather": {
+      "expected": [
+        "freezeclausemod",
+        "sleepclausemod"
+      ],
+      "missing_in_artifact": [],
+      "extra_in_artifact": []
+    }
+  }
+}

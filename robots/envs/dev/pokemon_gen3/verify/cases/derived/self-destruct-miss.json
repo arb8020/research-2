@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"self-destruct-miss",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen3/scripts.ts useMove; sim/battle-actions.ts tryMoveHit","test_name":"A pre-resolution self-faint remains queued when the later accuracy stage misses","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,5],
+  "teams":[{"source":"smeargle-explosion-blissey-p1.txt","normalized":[{"species":"smeargle","level":100,"gender":"M","ability":"owntempo","item":"","moves":["explosion"],"stats":[251,76,106,76,126,186],"status":null},{"species":"blissey","level":100,"gender":"F","ability":"naturalcure","item":"","moves":["splash"],"stats":[651,56,56,186,306,146],"status":null}]},{"source":"persian-sand-attack-splash-p1.txt","normalized":[{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["sandattack","splash"],"stats":[271,176,156,166,166,266],"status":null}]}],
+  "source_choices":[["move 1","move 1"]],"choices":[["move 1","move 1"]],"forced_outcomes":[{"label":"move.accuracy","occurrence":1,"range":100,"result":32},{"label":"move.accuracy","occurrence":2,"range":100,"result":86}],
+  "features":["choice.move","hit.accuracy","lifecycle.faint","prng.labeled","request.legal-choices","state.canonical"],"boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":2,"max_actions":2}
+}

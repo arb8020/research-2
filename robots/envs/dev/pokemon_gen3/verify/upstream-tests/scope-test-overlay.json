@@ -1,0 +1,72 @@
+{
+  "schema": "pokemon-gen3ou-upstream-scope-overlay-v1",
+  "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "records": [
+    {
+      "source_file": "test/sim/othermetas/mixandmega.js",
+      "source_line": 14,
+      "full_test_name": "Mix and Mega > should overwrite forme-change abilities on Mega Evolution",
+      "disposition": "format_unreachable_gen3ou_singles",
+      "evidence": "The test constructs gen9mixandmega and exercises Mega Evolution, neither of which exists in the resolved Gen 3 OU RuleTable.",
+      "semantic_sources": ["test/sim/othermetas/mixandmega.js:9-21", "config/formats.ts [Gen 3] OU"],
+      "mechanics": ["custom format", "Mega Evolution"],
+      "semantic_boundaries": ["format selection", "forme and ability replacement"],
+      "required_case": null
+    },
+    {
+      "source_file": "test/sim/othermetas/partnersincrime.js",
+      "source_line": 11,
+      "full_test_name": "Partners in Crime > should activate shared abilities at the same time as other abilities",
+      "disposition": "format_unreachable_gen3ou_singles",
+      "evidence": "The test constructs gen9partnersincrime doubles and depends on shared innate abilities; Gen 3 OU is singles and has no Partners in Crime rule.",
+      "semantic_sources": ["test/sim/othermetas/partnersincrime.js:11-36", "config/formats.ts [Gen 3] OU"],
+      "mechanics": ["custom doubles format", "shared innate abilities"],
+      "semantic_boundaries": ["format selection", "ability event ordering"],
+      "required_case": null
+    },
+    {
+      "source_file": "test/sim/othermetas/partnersincrime.js",
+      "source_line": 38,
+      "full_test_name": "Partners in Crime > should activate shared abilities for each ally when only the original holder switches in",
+      "disposition": "format_unreachable_gen3ou_singles",
+      "evidence": "The assertion requires gen9partnersincrime doubles, allied active slots, and shared innate abilities, all absent from Gen 3 OU singles.",
+      "semantic_sources": ["test/sim/othermetas/partnersincrime.js:38-53", "config/formats.ts [Gen 3] OU"],
+      "mechanics": ["custom doubles format", "ally ability sharing"],
+      "semantic_boundaries": ["switch-in lifecycle", "ability event ordering"],
+      "required_case": null
+    },
+    {
+      "source_file": "test/sim/othermetas/partnersincrime.js",
+      "source_line": 55,
+      "full_test_name": "Partners in Crime > should not activate ally's innates if the partner faints on switch-in",
+      "disposition": "format_unreachable_gen3ou_singles",
+      "evidence": "The assertion requires gen9partnersincrime doubles and partner-faint innate suppression; Gen 3 OU has one active per side and no innate-sharing rule.",
+      "semantic_sources": ["test/sim/othermetas/partnersincrime.js:55-74", "config/formats.ts [Gen 3] OU"],
+      "mechanics": ["custom doubles format", "shared innate abilities"],
+      "semantic_boundaries": ["switch-in faint drain", "ability event ordering"],
+      "required_case": null
+    },
+    {
+      "source_file": "test/sim/tools/exhaustive-runner.js",
+      "source_line": 8,
+      "full_test_name": "ExhaustiveRunner (slow) > should run successfully",
+      "disposition": "outside_native_observable_contract",
+      "evidence": "This is a meta-test for Showdown's JavaScript ExhaustiveRunner across its own format list, not a battle-semantic assertion for Gen 3 OU.",
+      "semantic_sources": ["test/sim/tools/exhaustive-runner.js:5-15", "sim/tools/exhaustive-runner.ts"],
+      "mechanics": ["Showdown test infrastructure"],
+      "semantic_boundaries": ["oracle test-runner process result"],
+      "required_case": null
+    },
+    {
+      "source_file": "test/sim/tools/multi-random-runner.js",
+      "source_line": 8,
+      "full_test_name": "MultiRandomRunner (slow) > should run successfully",
+      "disposition": "outside_native_observable_contract",
+      "evidence": "This is a crash/assertion smoke test for Showdown's JavaScript MultiRandomRunner, not an individual Gen 3 OU semantic assertion.",
+      "semantic_sources": ["test/sim/tools/multi-random-runner.js:5-13", "sim/tools/multi-random-runner.ts"],
+      "mechanics": ["Showdown randomized test infrastructure"],
+      "semantic_boundaries": ["oracle test-runner process result"],
+      "required_case": null
+    }
+  ]
+}

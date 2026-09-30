@@ -1,0 +1,143 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "boost-rotation-5",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/battle.ts",
+    "test_name": "Gen 3 direct-boost descriptor rotation row 5",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    91,
+    17,
+    43,
+    5
+  ],
+  "teams": [
+    {
+      "source": "boost-rotation-5-p1.txt",
+      "normalized": [
+        {
+          "species": "machop",
+          "level": 100,
+          "gender": "M",
+          "ability": "guts",
+          "item": "",
+          "moves": [
+            "withdraw",
+            "charm",
+            "cottonspore",
+            "faketears"
+          ],
+          "stats": [
+            281,
+            196,
+            136,
+            106,
+            106,
+            106
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "magikarp-splash-p2.txt",
+      "normalized": [
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 2
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 2,
+      "range": 100,
+      "result": 77
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 3,
+      "range": 100,
+      "result": 87
+    }
+  ],
+  "features": [
+    "effect.boost",
+    "hit.accuracy",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 5,
+    "max_actions": 8
+  }
+}

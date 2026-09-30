@@ -1,0 +1,110 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "two-turn-razorwind-release",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/conditions.ts; sim/battle-actions.ts",
+    "test_name": "two-turn-razorwind-release",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "two-turn-razorwind-release-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "razorwind"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "two-turn-razorwind-release-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "damage.gen3",
+    "hit.accuracy",
+    "prng.labeled",
+    "queue.speed",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

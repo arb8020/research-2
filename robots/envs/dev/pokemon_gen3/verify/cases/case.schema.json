@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-2.local/pokemon-gen3/verify/case-v1.schema.json",
+  "title": "Pokemon native differential case, version 1",
+  "description": "Build-time verifier input. This format is not part of the submitted C runtime.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "id", "provenance", "format", "seed", "teams", "source_choices", "choices",
+    "forced_outcomes", "features", "boundaries", "limits"
+  ],
+  "properties": {
+    "schema": {"const": "pokemon-native-differential-case-v1"},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "source_file", "test_name", "oracle_revision"],
+      "properties": {
+        "kind": {"enum": ["showdown-test", "showdown-derived", "differential-regression"]},
+        "source_file": {"type": "string", "pattern": "^(test|verify|sim|data)/[^\\\\]+$"},
+        "test_name": {"type": "string", "minLength": 1},
+        "oracle_revision": {"const": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"}
+      }
+    },
+    "format": {"const": "gen3ou"},
+    "seed": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {"type": "integer", "minimum": 0, "maximum": 65535}
+    },
+    "teams": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["source", "normalized"],
+        "properties": {
+          "source": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.txt$"},
+          "normalized": {
+            "type": "array", "minItems": 1, "maxItems": 6,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["species", "level", "gender", "ability", "item", "moves", "stats", "status"],
+              "properties": {
+                "species": {"type": "string", "pattern": "^[a-z0-9]+$"},
+                "level": {"type": "integer", "minimum": 1, "maximum": 100},
+                "gender": {"enum": ["M", "F", "N", null]},
+                "ability": {"type": "string", "pattern": "^[a-z0-9]*$"},
+                "item": {"type": "string", "pattern": "^[a-z0-9]*$"},
+                "moves": {
+                  "type": "array", "minItems": 1, "maxItems": 4,
+                  "items": {"type": "string", "pattern": "^[a-z0-9]+$"}
+                },
+                "stats": {
+                  "type": "array", "minItems": 6, "maxItems": 6,
+                  "items": {"type": "integer", "minimum": 1, "maximum": 999}
+                },
+                "ivs": {
+                  "type": "array", "minItems": 6, "maxItems": 6,
+                  "items": {"type": "integer", "minimum": 0, "maximum": 31}
+                },
+                "status": {"enum": [null, "brn", "frz", "par", "psn", "slp", "tox"]},
+                "status_state": {
+                  "oneOf": [
+                    {
+                      "type": "object", "additionalProperties": false,
+                      "required": ["kind", "time", "skipped_time"],
+                      "properties": {
+                        "kind": {"const": "sleep"},
+                        "time": {"type": "integer", "minimum": 1, "maximum": 5},
+                        "skipped_time": {"type": "integer", "minimum": 0, "maximum": 5}
+                      }
+                    },
+                    {
+                      "type": "object", "additionalProperties": false,
+                      "required": ["kind", "stage"],
+                      "properties": {
+                        "kind": {"const": "toxic"},
+                        "stage": {"type": "integer", "minimum": 0, "maximum": 15}
+                      }
+                    }
+                  ]
+                },
+                "initial_hp": {"type": "integer", "minimum": 1, "maximum": 999}
+              },
+              "allOf": [
+                {"if": {"properties": {"status": {"const": "slp"}}},
+                 "then": {"required": ["status_state"]},
+                 "else": {
+                   "if": {"properties": {"status": {"const": "tox"}}},
+                   "else": {"not": {"required": ["status_state"]}}
+                 }}
+              ]
+            }
+          }
+        }
+      }
+    },
+    "source_choices": {
+      "description": "Commands exactly as submitted by the pinned Showdown test, including request-local switch slots.",
+      "$ref": "#/$defs/choices"
+    },
+    "choices": {
+      "description": "The same commands normalized to fixed team slots for the shared native boundary.",
+      "$ref": "#/$defs/choices"
+    },
+    "forced_outcomes": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["label", "occurrence", "range", "result"],
+        "properties": {
+        "label": {"enum": ["team.gender", "queue.tie", "move.accuracy", "move.critical", "move.damage_roll", "move.damage_formula", "move.power_variant", "move.resolution_variant", "move.delegation.selection", "move.type_response.selection", "move.pp_reduction", "move.type_selection", "move.status_selection", "move.secondary", "move.multihit_count", "stall.success", "turn.quick_claw", "status.paralysis.before_move", "status.freeze.before_move", "condition.confusion.duration", "condition.confusion.action", "condition.attract.action", "condition.lockedmove.duration", "condition.partiallytrapped.duration", "condition.disable.duration", "condition.encore.duration", "condition.uproar.duration", "ability.contact_response.activation", "ability.residual_status_cure", "ability.trace.target", "item.starfberry.stat", "item.focus_band", "drag.switch_candidate"]},
+          "occurrence": {"type": "integer", "minimum": 1},
+          "range": {"type": "integer", "minimum": 1, "maximum": 65536},
+          "result": {"type": "integer", "minimum": 0, "maximum": 65535}
+        }
+      }
+    },
+    "features": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"}
+    },
+    "boundaries": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"enum": ["request", "choice", "queue", "handlers", "immunity", "state", "events", "prng", "terminal"]}
+    },
+    "limits": {
+      "type": "object", "additionalProperties": false,
+      "required": ["max_boundaries", "max_actions"],
+      "properties": {
+        "max_boundaries": {"type": "integer", "minimum": 1, "maximum": 1024},
+        "max_actions": {"type": "integer", "minimum": 1, "maximum": 4096}
+      }
+    }
+  },
+  "$defs": {
+    "choices": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "array", "minItems": 2, "maxItems": 2,
+        "items": {"type": ["string", "null"], "pattern": "^(move [1-4]|switch [1-6])$"}
+      }
+    }
+  }
+}

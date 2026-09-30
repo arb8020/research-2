@@ -1,0 +1,121 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "transform-target-rejection",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#transform; sim/pokemon.ts#transformInto; sim/pokemon.ts#clearVolatile",
+    "test_name": "Gen 3 Transform rejects an already-transformed target without copying its boosts",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    139,
+    140,
+    141,
+    142
+  ],
+  "teams": [
+    {
+      "source": "transform-target-rejection-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "transform",
+            "calmmind",
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "transform-target-rejection-p2.txt",
+      "normalized": [
+        {
+          "species": "ditto",
+          "level": 100,
+          "gender": "N",
+          "nature": "hardy",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "transform"
+          ],
+          "stats": [
+            237,
+            132,
+            132,
+            132,
+            132,
+            132
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ]
+  ],
+  "choices": [
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "effect.boost",
+    "prng.labeled",
+    "queue.speed",
+    "state.canonical",
+    "state.transform-profile"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

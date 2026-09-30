@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"color-change-steel-sand-immunity",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen4/abilities.ts;data/conditions.ts;data/mods/gen3/conditions.ts","test_name":"Mutable Steel typing participates in Sandstorm residual immunity","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"color-change-kecleon-p1.txt","normalized":[{"species":"kecleon","level":100,"gender":"M","nature":"hardy","ability":"colorchange","item":"","moves":["aerialace","protect","substitute","recover"],"stats":[262,216,176,156,276,116],"status":null},{"species":"magikarp","level":100,"gender":"M","nature":"hardy","ability":"swiftswim","item":"","moves":["splash"],"stats":[182,56,146,66,76,196],"status":null}]},{"source":"color-change-weather-p2.txt","normalized":[{"species":"salamence","level":100,"gender":"M","nature":"hardy","ability":"intimidate","item":"","moves":["steelwing","sandstorm","rest"],"stats":[331,306,196,256,196,236],"status":null}]}],
+  "source_choices":[["move 4","move 1"],["move 4","move 2"]],"choices":[["move 4","move 1"],["move 4","move 2"]],"forced_outcomes":[],
+  "features":["ability.color-change","condition.weather","state.effective-type","weather.sandstorm"],"boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":3,"max_actions":4}
+}

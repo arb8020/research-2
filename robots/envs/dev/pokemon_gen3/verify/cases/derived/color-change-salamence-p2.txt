@@ -1,0 +1,8 @@
+Salamence (M)
+Ability: Intimidate
+Level: 100
+Hardy Nature
+- Wing Attack
+- Steel Wing
+- Earthquake
+- Toxic

@@ -1,0 +1,100 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "curse-ghost-protect-nonblock",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#curse; data/mods/gen4/moves.ts#curse; sim/battle-actions.ts; sim/pokemon.ts",
+    "test_name": "Protect does not block Gen 3 Ghost Curse because its resolved flags omit protect",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    641,
+    642,
+    643,
+    644
+  ],
+  "teams": [
+    {
+      "source": "curse-ghost-protect-nonblock-p1.txt",
+      "normalized": [
+        {
+          "species": "gengar",
+          "level": 100,
+          "gender": "M",
+          "ability": "levitate",
+          "item": "",
+          "moves": [
+            "curse"
+          ],
+          "stats": [
+            261,
+            166,
+            156,
+            296,
+            186,
+            256
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "curse-ghost-protect-nonblock-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "protect"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "condition.volatile",
+    "handler.modify-move",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

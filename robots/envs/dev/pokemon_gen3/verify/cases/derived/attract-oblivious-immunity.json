@@ -1,0 +1,104 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "attract-oblivious-immunity",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/abilities.ts; data/mods/gen5/abilities.ts; sim/pokemon.ts",
+    "test_name": "Oblivious rejects Attract at volatile Immunity after accuracy",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    641,
+    29,
+    43,
+    89
+  ],
+  "teams": [
+    {
+      "source": "attract-oblivious-immunity-p1.txt",
+      "normalized": [
+        {
+          "species": "delcatty",
+          "level": 100,
+          "gender": "F",
+          "nature": "hardy",
+          "ability": "cutecharm",
+          "item": "",
+          "moves": [
+            "attract",
+            "growl"
+          ],
+          "stats": [
+            281,
+            166,
+            166,
+            146,
+            146,
+            176
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "attract-oblivious-immunity-p2.txt",
+      "normalized": [
+        {
+          "species": "slowpoke",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "oblivious",
+          "item": "",
+          "moves": [
+            "rest",
+            "growl"
+          ],
+          "stats": [
+            321,
+            166,
+            166,
+            116,
+            116,
+            66
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.attract",
+    "ability.oblivious",
+    "handler.immunity",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

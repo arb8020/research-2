@@ -1,0 +1,20 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "intimidate-initial-tie",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/battle-queue.ts;data/mods/gen4/scripts.ts;data/mods/gen3/abilities.ts",
+    "test_name": "Tied initial runSwitch insertion orders independent Intimidate Start handlers",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {"source": "intimidate-salamence-p1.txt", "normalized": [{"species": "salamence", "level": 100, "gender": "M", "ability": "intimidate", "item": "", "moves": ["protect"], "stats": [331, 306, 196, 256, 196, 236], "status": null}]},
+    {"source": "intimidate-gyarados-tie-p2.txt", "normalized": [{"species": "gyarados", "level": 100, "gender": "M", "ability": "intimidate", "item": "", "moves": ["protect"], "stats": [331, 286, 194, 156, 236, 236], "status": null}]}
+  ],
+  "source_choices": [], "choices": [], "forced_outcomes": [],
+  "features": ["ability.intimidate", "prng.labeled", "queue.speed", "state.canonical"],
+  "boundaries": ["request", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 1, "max_actions": 0}
+}

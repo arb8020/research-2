@@ -1,0 +1,195 @@
+{
+  "schema": "pokemon-gen3ou-explicit-upstream-completeness-v1",
+  "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "scope": "Every statically declared test under test/sim whose name, enclosing describe, or body explicitly selects or names Gen 3.",
+  "limitation": "This proves structural inclusion of explicit Gen 3 tests. It does not adjudicate default-generation inherited assertions.",
+  "count": 31,
+  "records": [
+    {
+      "source_file": "test/sim/abilities/flashfire.js",
+      "source_line": 65,
+      "full_test_name": "Flash Fire [Gen 3-4] > should activate and grant Fire-type immunity even if the user is frozen in Gen 3",
+      "map_record": "inherited:g3_explicit"
+    },
+    {
+      "source_file": "test/sim/abilities/flashfire.js",
+      "source_line": 77,
+      "full_test_name": "Flash Fire [Gen 3-4] > should activate and grant Fire-type immunity even if the user is frozen in Gen 4",
+      "map_record": "inherited:different_generation_not_direct_evidence"
+    },
+    {
+      "source_file": "test/sim/abilities/magnetpull.js",
+      "source_line": 56,
+      "full_test_name": "Magnet Pull > [Gen 3] > should prevent Steel-type allies from switching out normally",
+      "map_record": "inherited:format_unreachable_gen3ou_singles"
+    },
+    {
+      "source_file": "test/sim/abilities/thickfat.js",
+      "source_line": 27,
+      "full_test_name": "Thick Fat > should halve damage from Fire- or Ice-type attacks in past generations, even when holding a type-boosting item",
+      "map_record": "inherited:g3_explicit"
+    },
+    {
+      "source_file": "test/sim/items/quickclaw.js",
+      "source_line": 30,
+      "full_test_name": "Quick Claw > [Gen 3] causes Speed ties with every holder when activated",
+      "map_record": "inherited:g3_explicit"
+    },
+    {
+      "source_file": "test/sim/items/sitrusberry.js",
+      "source_line": 69,
+      "full_test_name": "Sitrus Berry > [Gen 3] > should not activate in the same turn that was put below 50% HP by a status condition",
+      "map_record": "inherited:g3_explicit"
+    },
+    {
+      "source_file": "test/sim/misc/faint-order.js",
+      "source_line": 26,
+      "full_test_name": "Fainting > should end the turn in Gen 3",
+      "map_record": "core:gen3-explicit"
+    },
+    {
+      "source_file": "test/sim/misc/ohko.js",
+      "source_line": 38,
+      "full_test_name": "OHKO moves > [Gen 3] > should deal damage equal to the target's HP",
+      "map_record": "core:gen3-explicit"
+    },
+    {
+      "source_file": "test/sim/moves/brickbreak.js",
+      "source_line": 97,
+      "full_test_name": "Brick Break > should break the foe's Reflect when used against an ally in Gen 3",
+      "map_record": "inherited:format_unreachable_gen3ou_singles"
+    },
+    {
+      "source_file": "test/sim/moves/camouflage.js",
+      "source_line": 75,
+      "full_test_name": "Camouflage > should fail in Gen 3-4 if the user already has what Camouflage would change to as either of its types",
+      "map_record": "inherited:g3_source_applicable"
+    },
+    {
+      "source_file": "test/sim/moves/conversion2.js",
+      "source_line": 67,
+      "full_test_name": "Conversion2 > [Gen 3] > should not fail to change to a type the user already has",
+      "map_record": "inherited:g3_source_applicable"
+    },
+    {
+      "source_file": "test/sim/moves/followme.js",
+      "source_line": 88,
+      "full_test_name": "Follow Me > [Gen 3] should continue to redirect moves after the user is knocked out and replaced",
+      "map_record": "inherited:format_unreachable_gen3ou_singles"
+    },
+    {
+      "source_file": "test/sim/moves/furycutter.js",
+      "source_line": 34,
+      "full_test_name": "Fury Cutter > should double in power with each successful hit (Gen 3)",
+      "map_record": "inherited:g3_explicit"
+    },
+    {
+      "source_file": "test/sim/moves/glare.js",
+      "source_line": 27,
+      "full_test_name": "Glare [Gen 3] > should not ignore natural type immunities",
+      "map_record": "inherited:g3_explicit"
+    },
+    {
+      "source_file": "test/sim/moves/haze.js",
+      "source_line": 202,
+      "full_test_name": "[Gen 4] Haze > should not remove focus energy in other gens",
+      "map_record": "inherited:g3_explicit"
+    },
+    {
+      "source_file": "test/sim/moves/pursuit.js",
+      "source_line": 240,
+      "full_test_name": "Pursuit > [Gen 3] > should continue the switch",
+      "map_record": "inherited:g3_explicit"
+    },
+    {
+      "source_file": "test/sim/moves/pursuit.js",
+      "source_line": 251,
+      "full_test_name": "Pursuit > [Gen 3] > should only activate on the targeted opponent",
+      "map_record": "inherited:format_unreachable_gen3ou_singles"
+    },
+    {
+      "source_file": "test/sim/moves/pursuit.js",
+      "source_line": 269,
+      "full_test_name": "Pursuit > [Gen 3] > should not activate on a switching opponent if targeting an ally",
+      "map_record": "inherited:format_unreachable_gen3ou_singles"
+    },
+    {
+      "source_file": "test/sim/moves/weatherball.js",
+      "source_line": 50,
+      "full_test_name": "Weather Ball > [Gen 3] > should not trigger counter when it is special",
+      "map_record": "inherited:g3_explicit"
+    },
+    {
+      "source_file": "test/sim/moves/weatherball.js",
+      "source_line": 58,
+      "full_test_name": "Weather Ball > [Gen 3] > should trigger mirror coat when it is special",
+      "map_record": "inherited:g3_explicit"
+    },
+    {
+      "source_file": "test/sim/moves/weatherball.js",
+      "source_line": 66,
+      "full_test_name": "Weather Ball > [Gen 3] > should not trigger mirror coat when it is physical",
+      "map_record": "inherited:g3_explicit"
+    },
+    {
+      "source_file": "test/sim/moves/weatherball.js",
+      "source_line": 74,
+      "full_test_name": "Weather Ball > [Gen 3] > should trigger counter when it is physical",
+      "map_record": "inherited:g3_explicit"
+    },
+    {
+      "source_file": "test/sim/team-validator/breeding.js",
+      "source_line": 8,
+      "full_test_name": "Team Validator > should validate Shedinja's egg moves correctly",
+      "map_record": "core:verifier-admission"
+    },
+    {
+      "source_file": "test/sim/team-validator/breeding.js",
+      "source_line": 54,
+      "full_test_name": "Team Validator > should reject illegal egg move combinations",
+      "map_record": "core:verifier-admission"
+    },
+    {
+      "source_file": "test/sim/team-validator/breeding.js",
+      "source_line": 81,
+      "full_test_name": "Team Validator > should allow chain breeding",
+      "map_record": "core:verifier-admission"
+    },
+    {
+      "source_file": "test/sim/team-validator/breeding.js",
+      "source_line": 107,
+      "full_test_name": "Team Validator > should accept this chainbreed on Snorlax",
+      "map_record": "core:verifier-admission"
+    },
+    {
+      "source_file": "test/sim/team-validator/breeding.js",
+      "source_line": 200,
+      "full_test_name": "Team Validator > should allow Pomeg glitch with event egg moves",
+      "map_record": "core:verifier-admission"
+    },
+    {
+      "source_file": "test/sim/team-validator/breeding.js",
+      "source_line": 257,
+      "full_test_name": "Team Validator > should not allow egg Pokemon below level 5 in Gens 2-3",
+      "map_record": "core:verifier-admission"
+    },
+    {
+      "source_file": "test/sim/team-validator/formes.js",
+      "source_line": 22,
+      "full_test_name": "Team Validator > should handle Deoxys formes in Gen 3",
+      "map_record": "core:verifier-admission"
+    },
+    {
+      "source_file": "test/sim/team-validator/misc.js",
+      "source_line": 6,
+      "full_test_name": "Team Validator > should allow Shedinja to take exactly one level-up move from Ninjask in gen 3-4",
+      "map_record": "core:verifier-admission"
+    },
+    {
+      "source_file": "test/sim/team-validator/misc.js",
+      "source_line": 101,
+      "full_test_name": "Team Validator > should prevent Pokemon from having a Gen 3 tutor move and a Gen 4 ability together without evolving",
+      "map_record": "core:verifier-admission"
+    }
+  ]
+}

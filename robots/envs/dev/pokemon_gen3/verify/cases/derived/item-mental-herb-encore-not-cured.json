@@ -1,0 +1,101 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "item-mental-herb-encore-not-cured",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen4/items.ts; sim/pokemon.ts; sim/battle.ts",
+    "test_name": "Effective Gen 3 Mental Herb does not cure Encore",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    631,
+    29,
+    43,
+    83
+  ],
+  "teams": [
+    {
+      "source": "item-mental-herb-encore-not-cured-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "F",
+          "nature": "hardy",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "encore"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "item-mental-herb-encore-not-cured-p2.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "limber",
+          "item": "mentalherb",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.attract",
+    "item.consumption",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

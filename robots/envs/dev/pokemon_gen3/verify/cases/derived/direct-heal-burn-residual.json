@@ -1,0 +1,105 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "direct-heal-burn-residual",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/battle-actions.ts; sim/battle.ts",
+    "test_name": "direct-heal-burn-residual direct heal interaction",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "alakazam-direct-heals-p1.txt",
+      "normalized": [
+        {
+          "species": "alakazam",
+          "level": 100,
+          "gender": "M",
+          "ability": "synchronize",
+          "item": "",
+          "moves": [
+            "recover",
+            "milkdrink",
+            "slackoff",
+            "softboiled"
+          ],
+          "stats": [
+            251,
+            136,
+            126,
+            306,
+            206,
+            276
+          ],
+          "status": "brn",
+          "initial_hp": 100
+        }
+      ]
+    },
+    {
+      "source": "magikarp-splash-p2.txt",
+      "normalized": [
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "effect.direct-heal",
+    "handler.try-heal",
+    "state.canonical",
+    "handler.residual",
+    "status.burn"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

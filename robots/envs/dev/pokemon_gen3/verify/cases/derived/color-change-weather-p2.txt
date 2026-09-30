@@ -1,0 +1,7 @@
+Salamence (M)
+Ability: Intimidate
+Level: 100
+Hardy Nature
+- Steel Wing
+- Sandstorm
+- Rest

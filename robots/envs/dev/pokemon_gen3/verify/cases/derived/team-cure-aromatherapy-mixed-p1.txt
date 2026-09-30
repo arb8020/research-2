@@ -1,0 +1,20 @@
+Smeargle (M)
+Ability: Own Tempo
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Aromatherapy
+
+Blissey (F)
+Ability: Natural Cure
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Soft-Boiled
+
+Alakazam (M)
+Ability: Synchronize
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Psychic

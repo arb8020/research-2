@@ -1,0 +1,102 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "sitrus-knock-off-before-residual",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/items/sitrusberry.js:35; data/mods/gen3/items.ts#sitrusberry",
+    "test_name": "Knock Off removes Sitrus before its same-turn residual threshold check",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "sitrus-knock-off-before-residual-p1.txt",
+      "normalized": [
+        {
+          "species": "sableye",
+          "level": 100,
+          "gender": "M",
+          "ability": "keeneye",
+          "item": "",
+          "moves": [
+            "knockoff"
+          ],
+          "stats": [
+            241,
+            186,
+            186,
+            166,
+            166,
+            136
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "sitrus-knock-off-before-residual-p2.txt",
+      "normalized": [
+        {
+          "species": "tyrogue",
+          "level": 100,
+          "gender": "M",
+          "ability": "guts",
+          "item": "sitrusberry",
+          "moves": [
+            "tackle"
+          ],
+          "stats": [
+            211,
+            106,
+            106,
+            106,
+            106,
+            106
+          ],
+          "status": null,
+          "initial_hp": 100
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "handler.take-item",
+    "item.consumption",
+    "item.take",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "swallow-layer-3",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#stockpile,spitup,swallow; data/mods/gen4/moves.ts#swallow; data/mods/gen3/moves.ts#stockpile",
+    "test_name": "Swallow consumes 3 Stockpile layers and applies its exact Q12 heal",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    431,
+    73,
+    31,
+    11
+  ],
+  "teams": [
+    {
+      "source": "swallow-layer-3-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "stockpile",
+            "swallow"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null,
+          "initial_hp": 1
+        }
+      ]
+    },
+    {
+      "source": "swallow-layer-3-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "effect.heal",
+    "handler.try",
+    "handler.try-heal",
+    "lifecycle.condition-duration",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 5,
+    "max_actions": 8
+  }
+}

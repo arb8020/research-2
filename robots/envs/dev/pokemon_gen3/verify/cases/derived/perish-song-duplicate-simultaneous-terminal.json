@@ -1,0 +1,26 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "perish-song-duplicate-simultaneous-terminal",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/mods/gen4/moves.ts; sim/battle.ts",
+    "test_name": "Gen 3 field admission, duplicate no-restart, countdown expiry, and simultaneous terminal tie",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {"source": "perish-song-duplicate-simultaneous-terminal-p1.txt", "normalized": [
+      {"species":"jynx","level":100,"gender":"F","nature":"timid","ability":"oblivious","item":"","moves":["perishsong","rest"],"stats":[272,122,106,329,226,317],"status":null}
+    ]},
+    {"source": "perish-song-duplicate-simultaneous-terminal-p2.txt", "normalized": [
+      {"species":"lapras","level":100,"gender":"F","nature":"calm","ability":"waterabsorb","item":"","moves":["perishsong","rest"],"stats":[464,185,196,207,317,156],"status":null}
+    ]}
+  ],
+  "source_choices": [["move 1","move 1"],["move 1","move 1"],["move 2","move 2"],["move 2","move 2"]],
+  "choices": [["move 1","move 1"],["move 1","move 1"],["move 2","move 2"],["move 2","move 2"]],
+  "forced_outcomes": [],
+  "features": ["choice.move","condition.volatile","handler.residual","lifecycle.condition-duration","lifecycle.faint","lifecycle.terminal","move.perish-song","state.canonical","volatile.perish-song"],
+  "boundaries": ["choice","events","handlers","prng","queue","request","state"],
+  "limits": {"max_boundaries":5,"max_actions":8}
+}

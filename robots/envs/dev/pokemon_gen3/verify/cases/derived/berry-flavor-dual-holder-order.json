@@ -1,0 +1,118 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "berry-flavor-dual-holder-order",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/items.ts; data/mods/gen3/items.ts; sim/pokemon.ts",
+    "test_name": "Two flavor berries heal and install confusion in residual speed order",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    607,
+    19,
+    37,
+    73
+  ],
+  "teams": [
+    {
+      "source": "berry-flavor-dual-holder-order-p1.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "nature": "adamant",
+          "ability": "limber",
+          "item": "wikiberry",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            271,
+            193,
+            156,
+            149,
+            166,
+            266
+          ],
+          "status": null,
+          "initial_hp": 135
+        }
+      ]
+    },
+    {
+      "source": "berry-flavor-dual-holder-order-p2.txt",
+      "normalized": [
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "nature": "modest",
+          "ability": "swiftswim",
+          "item": "figyberry",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            50,
+            146,
+            72,
+            76,
+            196
+          ],
+          "status": null,
+          "initial_hp": 90
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "condition.confusion.duration",
+      "occurrence": 1,
+      "range": 4,
+      "result": 1
+    },
+    {
+      "label": "condition.confusion.duration",
+      "occurrence": 2,
+      "range": 4,
+      "result": 0
+    }
+  ],
+  "features": [
+    "choice.move",
+    "effect.heal",
+    "handler.residual",
+    "item.consumption",
+    "state.canonical",
+    "volatile.confusion"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

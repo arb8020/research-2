@@ -1,0 +1,138 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "destiny-bond-move-aborted-cleanup",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; sim/battle-actions.ts; sim/pokemon.ts",
+    "test_name": "A fully paralyzed attempted move removes Destiny Bond through MoveAborted",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    23,
+    47,
+    71
+  ],
+  "teams": [
+    {
+      "source": "destiny-bond-move-aborted-cleanup-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "destinybond",
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            249
+          ],
+          "status": null
+        },
+        {
+          "species": "magikarp",
+          "level": 50,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            95,
+            30,
+            75,
+            35,
+            40,
+            100
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "destiny-bond-move-aborted-cleanup-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "thunderwave",
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "status.paralysis.before_move",
+      "occurrence": 1,
+      "range": 4,
+      "result": 0
+    }
+  ],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.before-move",
+    "handler.prepare-hit",
+    "lifecycle.faint",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state",
+    "terminal"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

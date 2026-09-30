@@ -1,0 +1,92 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "item-white-herb-start-order-control",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/items.ts; data/mods/gen4/scripts.ts; sim/battle-actions.ts; sim/battle.ts",
+    "test_name": "A faster holder item Start precedes slower opposing Intimidate, leaving the negative stage and item",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    743,
+    31,
+    47,
+    89
+  ],
+  "teams": [
+    {
+      "source": "item-white-herb-start-order-control-p1.txt",
+      "normalized": [
+        {
+          "species": "starmie",
+          "level": 100,
+          "gender": "N",
+          "nature": "serious",
+          "ability": "naturalcure",
+          "item": "whiteherb",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            261,
+            186,
+            206,
+            236,
+            206,
+            266
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "item-white-herb-start-order-control-p2.txt",
+      "normalized": [
+        {
+          "species": "gyarados",
+          "level": 100,
+          "gender": "M",
+          "nature": "serious",
+          "ability": "intimidate",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            331,
+            286,
+            194,
+            156,
+            236,
+            198
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [],
+  "choices": [],
+  "forced_outcomes": [],
+  "features": [
+    "item.consumption",
+    "effect.boost",
+    "state.canonical",
+    "ability.intimidate",
+    "queue.speed"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 1,
+    "max_actions": 0
+  }
+}

@@ -1,0 +1,5 @@
+Vaporeon (F)
+Ability: Water Absorb
+Level: 100
+Hardy Nature
+- Surf

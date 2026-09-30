@@ -1,0 +1,201 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "assist-metronome-party-order-duplicate-weight",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/battle-actions.ts#switchIn; data/moves.ts#assist; data/mods/gen3/moves.ts#metronome",
+    "test_name": "legal Metronome to Assist samples duplicate move slots in mutable party order",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1031,
+    197,
+    83,
+    14
+  ],
+  "teams": [
+    {
+      "source": "assist-metronome-party-order-duplicate-weight-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "metronome"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        },
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "scratch"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": "psn"
+        },
+        {
+          "species": "charmander",
+          "level": 100,
+          "gender": "M",
+          "ability": "blaze",
+          "item": "",
+          "moves": [
+            "ember",
+            "scratch"
+          ],
+          "stats": [
+            219,
+            140,
+            122,
+            156,
+            136,
+            166
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "assist-metronome-party-order-duplicate-weight-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "switch 3",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "switch 3",
+      "move 1"
+    ],
+    [
+      "switch 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.delegation.selection",
+      "occurrence": 1,
+      "range": 336,
+      "result": 257
+    },
+    {
+      "label": "move.delegation.selection",
+      "occurrence": 2,
+      "range": 3,
+      "result": 0
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 43
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 1,
+      "range": 16,
+      "result": 13
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 1,
+      "range": 16,
+      "result": 5
+    },
+    {
+      "label": "move.secondary",
+      "occurrence": 1,
+      "range": 100,
+      "result": 35
+    }
+  ],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "move.called-entry",
+    "prng.labeled",
+    "state.canonical",
+    "status.poison"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 5,
+    "max_actions": 8
+  }
+}

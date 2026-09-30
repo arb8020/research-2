@@ -1,0 +1,608 @@
+{
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "cases": [
+    {
+      "id": "pursuit-switch-survives",
+      "observed": {
+        "active_species": "blissey",
+        "outgoing_hp": 45,
+        "incoming_hp": 611,
+        "pursuit_pp": 31,
+        "outgoing_fainted": false,
+        "initial_draws": [
+          {
+            "label": "turn.quick_claw",
+            "result": 3,
+            "seed_before": "401,402,403,404",
+            "seed_after": "39791,52357,50698,29223"
+          }
+        ],
+        "boundaries": [
+          {
+            "active_species": "blissey",
+            "p1_status": null,
+            "pursuit_pp": 31,
+            "p2_hp": [
+              611,
+              45
+            ],
+            "draws": [
+              {
+                "label": "move.critical",
+                "result": 6,
+                "seed_before": "39791,52357,50698,29223",
+                "seed_after": "25926,20631,19565,34598"
+              },
+              {
+                "label": "move.damage_roll",
+                "result": 8,
+                "seed_before": "25926,20631,19565,34598",
+                "seed_after": "33000,920,32442,18113"
+              },
+              {
+                "label": "turn.quick_claw",
+                "result": 0,
+                "seed_before": "33000,920,32442,18113",
+                "seed_after": "1880,51474,2760,53736"
+              }
+            ]
+          }
+        ],
+        "log": [
+          "|switch|p1a: Tyranitar|Tyranitar, M|341/341",
+          "|switch|p1a: Tyranitar|Tyranitar, M|100/100",
+          "|switch|p2a: Alakazam|Alakazam, M|251/251",
+          "|switch|p2a: Alakazam|Alakazam, M|100/100",
+          "|move|p1a: Tyranitar|Pursuit|p2a: Alakazam|[from] Pursuit",
+          "|switch|p2a: Blissey|Blissey, F|651/651",
+          "|switch|p2a: Blissey|Blissey, F|100/100"
+        ],
+        "draws": [
+          {
+            "label": "turn.quick_claw",
+            "result": 3,
+            "seed_before": "401,402,403,404",
+            "seed_after": "39791,52357,50698,29223"
+          },
+          {
+            "label": "move.critical",
+            "result": 6,
+            "seed_before": "39791,52357,50698,29223",
+            "seed_after": "25926,20631,19565,34598"
+          },
+          {
+            "label": "move.damage_roll",
+            "result": 8,
+            "seed_before": "25926,20631,19565,34598",
+            "seed_after": "33000,920,32442,18113"
+          },
+          {
+            "label": "turn.quick_claw",
+            "result": 0,
+            "seed_before": "33000,920,32442,18113",
+            "seed_after": "1880,51474,2760,53736"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pursuit-switch-ko-continues",
+      "observed": {
+        "active_species": "blissey",
+        "outgoing_hp": 0,
+        "incoming_hp": 611,
+        "pursuit_pp": 31,
+        "outgoing_fainted": true,
+        "initial_draws": [
+          {
+            "label": "turn.quick_claw",
+            "result": 1,
+            "seed_before": "411,412,413,414",
+            "seed_after": "18712,54457,23623,53273"
+          }
+        ],
+        "boundaries": [
+          {
+            "active_species": "blissey",
+            "p1_status": null,
+            "pursuit_pp": 31,
+            "p2_hp": [
+              611,
+              0
+            ],
+            "draws": [
+              {
+                "label": "move.critical",
+                "result": 2,
+                "seed_before": "18712,54457,23623,53273",
+                "seed_after": "10381,40482,5000,6560"
+              },
+              {
+                "label": "move.damage_roll",
+                "result": 0,
+                "seed_before": "10381,40482,5000,6560",
+                "seed_after": "1607,36749,48623,23267"
+              },
+              {
+                "label": "turn.quick_claw",
+                "result": 0,
+                "seed_before": "1607,36749,48623,23267",
+                "seed_after": "6623,50691,18285,62802"
+              }
+            ]
+          }
+        ],
+        "log": [
+          "|switch|p1a: Tyranitar|Tyranitar, M|341/341",
+          "|switch|p1a: Tyranitar|Tyranitar, M|100/100",
+          "|switch|p2a: Alakazam|Alakazam, M|251/251",
+          "|switch|p2a: Alakazam|Alakazam, M|100/100",
+          "|move|p1a: Tyranitar|Pursuit|p2a: Alakazam|[from] Pursuit",
+          "|faint|p2a: Alakazam",
+          "|switch|p2a: Blissey|Blissey, F|651/651",
+          "|switch|p2a: Blissey|Blissey, F|100/100"
+        ],
+        "draws": [
+          {
+            "label": "turn.quick_claw",
+            "result": 1,
+            "seed_before": "411,412,413,414",
+            "seed_after": "18712,54457,23623,53273"
+          },
+          {
+            "label": "move.critical",
+            "result": 2,
+            "seed_before": "18712,54457,23623,53273",
+            "seed_after": "10381,40482,5000,6560"
+          },
+          {
+            "label": "move.damage_roll",
+            "result": 0,
+            "seed_before": "10381,40482,5000,6560",
+            "seed_after": "1607,36749,48623,23267"
+          },
+          {
+            "label": "turn.quick_claw",
+            "result": 0,
+            "seed_before": "1607,36749,48623,23267",
+            "seed_after": "6623,50691,18285,62802"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pursuit-gen3-paralysis-intercept",
+      "observed": {
+        "active_species": "blissey",
+        "outgoing_hp": 0,
+        "incoming_hp": 611,
+        "pursuit_pp": 30,
+        "outgoing_fainted": true,
+        "initial_draws": [
+          {
+            "label": "turn.quick_claw",
+            "result": 1,
+            "seed_before": "100,101,102,103",
+            "seed_after": "25462,21928,13676,58982"
+          }
+        ],
+        "boundaries": [
+          {
+            "active_species": "alakazam",
+            "p1_status": "par",
+            "pursuit_pp": 31,
+            "p2_hp": [
+              129,
+              651
+            ],
+            "draws": [
+              {
+                "label": "move.accuracy",
+                "result": 33,
+                "seed_before": "25462,21928,13676,58982",
+                "seed_after": "21962,32607,45108,6913"
+              },
+              {
+                "label": "event.setstatus.handler_order",
+                "result": 1,
+                "seed_before": "21962,32607,45108,6913",
+                "seed_after": "34194,30018,36911,53032"
+              },
+              {
+                "label": "status.paralysis.before_move",
+                "result": 3,
+                "seed_before": "34194,30018,36911,53032",
+                "seed_after": "62278,29160,759,49547"
+              },
+              {
+                "label": "move.accuracy",
+                "result": 39,
+                "seed_before": "62278,29160,759,49547",
+                "seed_after": "25846,35171,45382,23962"
+              },
+              {
+                "label": "move.critical",
+                "result": 13,
+                "seed_before": "25846,35171,45382,23962",
+                "seed_after": "55763,41567,8246,63109"
+              },
+              {
+                "label": "move.damage_roll",
+                "result": 6,
+                "seed_before": "55763,41567,8246,63109",
+                "seed_after": "24790,33470,63846,3644"
+              },
+              {
+                "label": "turn.quick_claw",
+                "result": 3,
+                "seed_before": "24790,33470,63846,3644",
+                "seed_after": "42151,55879,46764,22639"
+              }
+            ]
+          },
+          {
+            "active_species": "blissey",
+            "p1_status": "par",
+            "pursuit_pp": 30,
+            "p2_hp": [
+              611,
+              0
+            ],
+            "draws": [
+              {
+                "label": "move.critical",
+                "result": 6,
+                "seed_before": "42151,55879,46764,22639",
+                "seed_after": "25147,23517,35969,59790"
+              },
+              {
+                "label": "move.damage_roll",
+                "result": 5,
+                "seed_before": "25147,23517,35969,59790",
+                "seed_after": "22475,46005,16454,49609"
+              },
+              {
+                "label": "turn.quick_claw",
+                "result": 2,
+                "seed_before": "22475,46005,16454,49609",
+                "seed_after": "28887,6373,21060,42000"
+              }
+            ]
+          }
+        ],
+        "log": [
+          "|switch|p1a: Tyranitar|Tyranitar, M|341/341",
+          "|switch|p1a: Tyranitar|Tyranitar, M|100/100",
+          "|switch|p2a: Alakazam|Alakazam, M|251/251",
+          "|switch|p2a: Alakazam|Alakazam, M|100/100",
+          "|move|p2a: Alakazam|Thunder Wave|p1a: Tyranitar",
+          "|move|p1a: Tyranitar|Pursuit|p2a: Alakazam",
+          "|move|p1a: Tyranitar|Pursuit|p2a: Alakazam|[from] Pursuit",
+          "|faint|p2a: Alakazam",
+          "|switch|p2a: Blissey|Blissey, F|651/651",
+          "|switch|p2a: Blissey|Blissey, F|100/100"
+        ],
+        "draws": [
+          {
+            "label": "turn.quick_claw",
+            "result": 1,
+            "seed_before": "100,101,102,103",
+            "seed_after": "25462,21928,13676,58982"
+          },
+          {
+            "label": "move.accuracy",
+            "result": 33,
+            "seed_before": "25462,21928,13676,58982",
+            "seed_after": "21962,32607,45108,6913"
+          },
+          {
+            "label": "event.setstatus.handler_order",
+            "result": 1,
+            "seed_before": "21962,32607,45108,6913",
+            "seed_after": "34194,30018,36911,53032"
+          },
+          {
+            "label": "status.paralysis.before_move",
+            "result": 3,
+            "seed_before": "34194,30018,36911,53032",
+            "seed_after": "62278,29160,759,49547"
+          },
+          {
+            "label": "move.accuracy",
+            "result": 39,
+            "seed_before": "62278,29160,759,49547",
+            "seed_after": "25846,35171,45382,23962"
+          },
+          {
+            "label": "move.critical",
+            "result": 13,
+            "seed_before": "25846,35171,45382,23962",
+            "seed_after": "55763,41567,8246,63109"
+          },
+          {
+            "label": "move.damage_roll",
+            "result": 6,
+            "seed_before": "55763,41567,8246,63109",
+            "seed_after": "24790,33470,63846,3644"
+          },
+          {
+            "label": "turn.quick_claw",
+            "result": 3,
+            "seed_before": "24790,33470,63846,3644",
+            "seed_after": "42151,55879,46764,22639"
+          },
+          {
+            "label": "move.critical",
+            "result": 6,
+            "seed_before": "42151,55879,46764,22639",
+            "seed_after": "25147,23517,35969,59790"
+          },
+          {
+            "label": "move.damage_roll",
+            "result": 5,
+            "seed_before": "25147,23517,35969,59790",
+            "seed_after": "22475,46005,16454,49609"
+          },
+          {
+            "label": "turn.quick_claw",
+            "result": 2,
+            "seed_before": "22475,46005,16454,49609",
+            "seed_after": "28887,6373,21060,42000"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pursuit-sleep-at-turn-start",
+      "observed": {
+        "active_species": "blissey",
+        "outgoing_hp": 245,
+        "incoming_hp": 577,
+        "pursuit_pp": 31,
+        "outgoing_fainted": false,
+        "initial_draws": [
+          {
+            "label": "turn.quick_claw",
+            "result": 3,
+            "seed_before": "431,432,433,434",
+            "seed_after": "42090,58656,35010,35837"
+          }
+        ],
+        "boundaries": [
+          {
+            "active_species": "breloom",
+            "p1_status": "slp",
+            "pursuit_pp": 32,
+            "p2_hp": [
+              245,
+              651
+            ],
+            "draws": [
+              {
+                "label": "move.accuracy",
+                "result": 68,
+                "seed_before": "42090,58656,35010,35837",
+                "seed_after": "44828,14647,41405,16020"
+              },
+              {
+                "label": "event.setstatus.handler_order",
+                "result": 0,
+                "seed_before": "44828,14647,41405,16020",
+                "seed_after": "4358,42872,15449,33575"
+              },
+              {
+                "label": "condition.sleep.duration",
+                "result": 2,
+                "seed_before": "4358,42872,15449,33575",
+                "seed_after": "16109,49125,49336,15398"
+              },
+              {
+                "label": "turn.quick_claw",
+                "result": 3,
+                "seed_before": "16109,49125,49336,15398",
+                "seed_after": "51325,1327,19984,44993"
+              }
+            ]
+          },
+          {
+            "active_species": "blissey",
+            "p1_status": null,
+            "pursuit_pp": 31,
+            "p2_hp": [
+              577,
+              245
+            ],
+            "draws": [
+              {
+                "label": "move.accuracy",
+                "result": 49,
+                "seed_before": "51325,1327,19984,44993",
+                "seed_after": "32174,43823,62737,16104"
+              },
+              {
+                "label": "move.critical",
+                "result": 14,
+                "seed_before": "32174,43823,62737,16104",
+                "seed_after": "60910,63388,33526,38987"
+              },
+              {
+                "label": "move.damage_roll",
+                "result": 11,
+                "seed_before": "60910,63388,33526,38987",
+                "seed_after": "46868,56938,28925,55130"
+              },
+              {
+                "label": "turn.quick_claw",
+                "result": 2,
+                "seed_before": "46868,56938,28925,55130",
+                "seed_after": "33754,47299,18433,48965"
+              }
+            ]
+          }
+        ],
+        "log": [
+          "|switch|p1a: Tyranitar|Tyranitar, M|341/341",
+          "|switch|p1a: Tyranitar|Tyranitar, M|100/100",
+          "|switch|p2a: Breloom|Breloom, M|261/261",
+          "|switch|p2a: Breloom|Breloom, M|100/100",
+          "|move|p2a: Breloom|Spore|p1a: Tyranitar",
+          "|cant|p1a: Tyranitar|slp",
+          "|switch|p2a: Blissey|Blissey, F|651/651",
+          "|switch|p2a: Blissey|Blissey, F|100/100",
+          "|move|p1a: Tyranitar|Pursuit|p2a: Blissey"
+        ],
+        "draws": [
+          {
+            "label": "turn.quick_claw",
+            "result": 3,
+            "seed_before": "431,432,433,434",
+            "seed_after": "42090,58656,35010,35837"
+          },
+          {
+            "label": "move.accuracy",
+            "result": 68,
+            "seed_before": "42090,58656,35010,35837",
+            "seed_after": "44828,14647,41405,16020"
+          },
+          {
+            "label": "event.setstatus.handler_order",
+            "result": 0,
+            "seed_before": "44828,14647,41405,16020",
+            "seed_after": "4358,42872,15449,33575"
+          },
+          {
+            "label": "condition.sleep.duration",
+            "result": 2,
+            "seed_before": "4358,42872,15449,33575",
+            "seed_after": "16109,49125,49336,15398"
+          },
+          {
+            "label": "turn.quick_claw",
+            "result": 3,
+            "seed_before": "16109,49125,49336,15398",
+            "seed_after": "51325,1327,19984,44993"
+          },
+          {
+            "label": "move.accuracy",
+            "result": 49,
+            "seed_before": "51325,1327,19984,44993",
+            "seed_after": "32174,43823,62737,16104"
+          },
+          {
+            "label": "move.critical",
+            "result": 14,
+            "seed_before": "32174,43823,62737,16104",
+            "seed_after": "60910,63388,33526,38987"
+          },
+          {
+            "label": "move.damage_roll",
+            "result": 11,
+            "seed_before": "60910,63388,33526,38987",
+            "seed_after": "46868,56938,28925,55130"
+          },
+          {
+            "label": "turn.quick_claw",
+            "result": 2,
+            "seed_before": "46868,56938,28925,55130",
+            "seed_after": "33754,47299,18433,48965"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pursuit-no-switch-control",
+      "observed": {
+        "active_species": "alakazam",
+        "outgoing_hp": 162,
+        "incoming_hp": 651,
+        "pursuit_pp": 31,
+        "outgoing_fainted": false,
+        "initial_draws": [
+          {
+            "label": "turn.quick_claw",
+            "result": 1,
+            "seed_before": "441,442,443,444",
+            "seed_after": "21011,60756,7935,59887"
+          }
+        ],
+        "boundaries": [
+          {
+            "active_species": "alakazam",
+            "p1_status": null,
+            "pursuit_pp": 31,
+            "p2_hp": [
+              162,
+              651
+            ],
+            "draws": [
+              {
+                "label": "move.accuracy",
+                "result": 44,
+                "seed_before": "21011,60756,7935,59887",
+                "seed_after": "29283,34498,26839,53518"
+              },
+              {
+                "label": "move.critical",
+                "result": 9,
+                "seed_before": "29283,34498,26839,53518",
+                "seed_after": "38502,13165,31630,38729"
+              },
+              {
+                "label": "move.damage_roll",
+                "result": 5,
+                "seed_before": "38502,13165,31630,38729",
+                "seed_after": "20852,48342,64861,24464"
+              },
+              {
+                "label": "turn.quick_claw",
+                "result": 1,
+                "seed_before": "20852,48342,64861,24464",
+                "seed_after": "19227,50199,19217,25235"
+              }
+            ]
+          }
+        ],
+        "log": [
+          "|switch|p1a: Tyranitar|Tyranitar, M|341/341",
+          "|switch|p1a: Tyranitar|Tyranitar, M|100/100",
+          "|switch|p2a: Alakazam|Alakazam, M|251/251",
+          "|switch|p2a: Alakazam|Alakazam, M|100/100",
+          "|move|p2a: Alakazam|Calm Mind|p2a: Alakazam",
+          "|move|p1a: Tyranitar|Pursuit|p2a: Alakazam"
+        ],
+        "draws": [
+          {
+            "label": "turn.quick_claw",
+            "result": 1,
+            "seed_before": "441,442,443,444",
+            "seed_after": "21011,60756,7935,59887"
+          },
+          {
+            "label": "move.accuracy",
+            "result": 44,
+            "seed_before": "21011,60756,7935,59887",
+            "seed_after": "29283,34498,26839,53518"
+          },
+          {
+            "label": "move.critical",
+            "result": 9,
+            "seed_before": "29283,34498,26839,53518",
+            "seed_after": "38502,13165,31630,38729"
+          },
+          {
+            "label": "move.damage_roll",
+            "result": 5,
+            "seed_before": "38502,13165,31630,38729",
+            "seed_after": "20852,48342,64861,24464"
+          },
+          {
+            "label": "turn.quick_claw",
+            "result": 1,
+            "seed_before": "20852,48342,64861,24464",
+            "seed_after": "19227,50199,19217,25235"
+          }
+        ]
+      }
+    }
+  ]
+}

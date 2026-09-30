@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "name": "seed42-battle08-clean-double-switch",
+  "description": "Unequal-speed clean double switch with a Natural Cure switch-out and reversed incoming speed order.",
+  "tags": ["switch", "natural-cure", "prng", "quick-claw"],
+  "format": "gen3ou",
+  "battle_index": 8,
+  "action_seed": 42,
+  "battle_seed": [34, 42, 8, 0],
+  "team_files": [
+    "../../../fixtures/gen3ou/balanced.txt",
+    "../../../fixtures/gen3ou/balanced-alt.txt"
+  ],
+  "choices": [
+    ["move 4", "switch 2"],
+    ["switch 3", "move 2"],
+    ["switch 5", "switch 2"]
+  ],
+  "expected": {"terminal": false}
+}

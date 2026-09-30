@@ -1,0 +1,91 @@
+{
+  "schema": "pokemon-gen3ou-obtainability-random-report-v2",
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "generator": {
+    "algorithm": "LCG32",
+    "manifest": "manifest.json"
+  },
+  "manifest": {
+    "schema": "pokemon-gen3ou-admission-random-manifest-v1",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+    "format": "gen3ou",
+    "seeds": [
+      12648430,
+      9,
+      10,
+      11,
+      12
+    ],
+    "accepted_per_seed": 125,
+    "rejected_per_seed": 125
+  },
+  "coverage": {
+    "cases": 1250,
+    "accepted": 625,
+    "rejected": 625,
+    "species": [
+      "Bulbasaur",
+      "Forretress",
+      "Gligar",
+      "Hitmontop",
+      "Mightyena",
+      "Nidoking",
+      "Pikachu",
+      "Seel",
+      "Shedinja",
+      "Skarmory",
+      "Weezing",
+      "Zigzagoon"
+    ],
+    "team_sizes": [
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "move_counts": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "levels": [
+      50,
+      73,
+      100
+    ],
+    "natures": [
+      "Adamant",
+      "Calm",
+      "Jolly",
+      "Modest",
+      "Serious"
+    ],
+    "genders": [
+      "F",
+      "M",
+      "N"
+    ],
+    "shiny_values": [
+      false,
+      true
+    ],
+    "items": [
+      "",
+      "Leftovers"
+    ]
+  },
+  "result": {
+    "total": 1250,
+    "accepted_as_native_incomplete": 625,
+    "source_rejected": 625,
+    "mismatches": 0,
+    "replay_stable": true
+  },
+  "sha256": {
+    "fixture": "bb625161c1cd6c143f5ea98b286e2decc381f5b82472569de8286dcbdc7ae56d",
+    "oracle_json": "a9a382ac4a4e9b2b5034641f1b23db18b35edbce8dc2bd83845c62c423d3e9e6",
+    "native_json": "a9a382ac4a4e9b2b5034641f1b23db18b35edbce8dc2bd83845c62c423d3e9e6"
+  }
+}

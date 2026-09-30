@@ -1,0 +1,33 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "rage-lifecycle-basis",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts",
+    "test_name": "Rage reactive volatile, per-hit boost, pre-move teardown, and switch cleanup",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 2],
+  "teams": [
+    {
+      "source": "rage-lifecycle-basis-p1.txt",
+      "normalized": [
+        {"species": "smeargle", "level": 100, "gender": "M", "ability": "owntempo", "item": "", "moves": ["rage"], "stats": [251, 76, 106, 76, 126, 186], "status": null},
+        {"species": "starmie", "level": 100, "gender": "N", "ability": "naturalcure", "item": "", "moves": ["recover"], "stats": [261, 186, 206, 236, 206, 266], "status": null}
+      ]
+    },
+    {
+      "source": "rage-lifecycle-basis-p2.txt",
+      "normalized": [
+        {"species": "persian", "level": 100, "gender": "M", "ability": "limber", "item": "", "moves": ["tackle", "tailwhip", "furyswipes"], "stats": [271, 176, 156, 166, 166, 266], "status": null}
+      ]
+    }
+  ],
+  "source_choices": [["move 1", "move 2"], ["move 1", "move 3"], ["move 1", "move 2"], ["switch 2", "move 1"]],
+  "choices": [["move 1", "move 2"], ["move 1", "move 3"], ["move 1", "move 2"], ["switch 2", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["choice.move", "choice.switch", "condition.volatile", "effect.boost", "handler.before-move", "prng.labeled", "state.canonical"],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 5, "max_actions": 8}
+}

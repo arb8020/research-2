@@ -1,0 +1,7 @@
+Snorlax (M)
+Ability: Immunity
+Level: 100
+Happiness: 0
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Return

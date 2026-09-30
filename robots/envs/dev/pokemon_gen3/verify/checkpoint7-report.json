@@ -1,0 +1,62 @@
+{
+  "schema": "pokemon-gen3ou-checkpoint7-authoritative-report-v1",
+  "date": "2026-09-29",
+  "status": "pass",
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "oracle_patch_sha256": "253eac3fc84c67b0844baf97ad959a077e2e82f97dd39f0d796da918c6301f24",
+  "regression_ledger": {
+    "registered": 2172,
+    "applicable": 276,
+    "assertion_specific": 304,
+    "requiring_case": 0,
+    "unresolved_semantic_adjudications": 0
+  },
+  "focused_corpus": {
+    "cases": 722,
+    "boundaries": 3225,
+    "exact": true,
+    "replay_stable": true,
+    "invariants_after_every_native_transition": true,
+    "report_sha256": "a0fb4bbf1c5c14d871f377e3b59f1748272e61f6b59bdba0e48c415f4b0689bd"
+  },
+  "random_full_battles": {
+    "complete_battles": 4,
+    "decisions": 401,
+    "boundaries": 405,
+    "coverage_targets_met": 10,
+    "coverage_targets_total": 10,
+    "exact": true,
+    "replay_stable": true,
+    "failure_retention_minimizer_and_recombination_contracts": "pass",
+    "report_sha256": "be8817f6b4c7368546cb21c2135304e3db907273d1af43247a6270a25413c0cf"
+  },
+  "admission": {
+    "curated_exact": 138,
+    "randomized_total": 1250,
+    "randomized_oracle_accepted_native_incomplete": 625,
+    "randomized_source_rejected": 625,
+    "mismatches": 0,
+    "replay_stable": true,
+    "scope": "declared obtainable-move rejection and normalization contract; native INCOMPLETE is not a claim of full Showdown legality",
+    "report_sha256": "be220b101f4e7fa12d2f80c2a31dda267eb15631b7ffca5b4cf43d6ab2ab762e"
+  },
+  "robustness": {
+    "asan_ubsan": "pass",
+    "random_legal_battles": 10000,
+    "decision_cap": 128
+  },
+  "performance": {
+    "container_image_digest": "sha256:5e927c284bf55a7dc796262e311a0703344f62f41f5621eb56843111b1d37e15",
+    "batch_median_boundaries_per_second": 24007.135,
+    "batch_p99_sweep_latency_ms": 51.333,
+    "incremental_rss_per_environment_bytes": 80.0,
+    "candidate_gate": "pass",
+    "calibration_sha256": "12e4f096fb7035ed7c8704a0822d52b624432200cb69a147899162395d251b89"
+  },
+  "serialized_gate": {
+    "command": "POKEMON_SHOWDOWN_PATCHED_DIR=/path/to/patched POKEMON_SHOWDOWN_CLEAN_DIR=/path/to/clean POKEMON_CHECKPOINT7_EVIDENCE_DIR=/path/to/evidence ./verify/checkpoint7.sh",
+    "status_schema": "pokemon-gen3ou-checkpoint7-status-v1",
+    "passed": true,
+    "exit_code": 0
+  }
+}

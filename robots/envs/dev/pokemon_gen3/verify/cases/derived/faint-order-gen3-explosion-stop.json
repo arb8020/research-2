@@ -1,0 +1,33 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "faint-order-gen3-explosion-stop",
+  "provenance": {
+    "kind": "showdown-test",
+    "source_file": "test/sim/misc/faint-order.js",
+    "test_name": "Fainting > should end the turn in Gen 3",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {
+      "source": "smeargle-explosion-blissey-p1.txt",
+      "normalized": [
+        {"species":"smeargle","level":100,"gender":"M","ability":"owntempo","item":"","moves":["explosion"],"stats":[251,76,106,76,126,186],"status":null},
+        {"species":"blissey","level":100,"gender":"F","ability":"naturalcure","item":"","moves":["splash"],"stats":[651,56,56,186,306,146],"status":null}
+      ]
+    },
+    {
+      "source": "faint-order-gen3-explosion-stop-p2.txt",
+      "normalized": [
+        {"species":"banette","level":100,"gender":"M","ability":"insomnia","item":"","moves":["substitute"],"stats":[269,266,166,202,162,166],"status":null}
+      ]
+    }
+  ],
+  "source_choices": [["move 1", "move 1"], ["switch 2", null]],
+  "choices": [["move 1", "move 1"], ["switch 2", null]],
+  "forced_outcomes": [],
+  "features": ["choice.move", "choice.switch", "lifecycle.faint", "queue.speed", "request.legal-choices", "state.canonical"],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 3, "max_actions": 3}
+}

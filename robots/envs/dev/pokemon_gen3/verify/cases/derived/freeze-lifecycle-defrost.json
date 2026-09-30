@@ -1,0 +1,108 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "freeze-lifecycle-defrost",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/conditions.ts; data/mods/gen4/conditions.ts; data/mods/gen3/conditions.ts",
+    "test_name": "Gen 3 failed random thaw permits a defrost move and ModifyMove cures its user",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    17,
+    29,
+    43,
+    1
+  ],
+  "teams": [
+    {
+      "source": "freeze-lifecycle-defrost-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "flamewheel"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": "frz"
+        }
+      ]
+    },
+    {
+      "source": "freeze-lifecycle-defrost-p2.txt",
+      "normalized": [
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "status.freeze.before_move",
+      "occurrence": 1,
+      "range": 5,
+      "result": 1
+    }
+  ],
+  "features": [
+    "condition.nonvolatile-status",
+    "handler.before-move",
+    "handler.modify-move",
+    "prng.labeled",
+    "state.canonical",
+    "status.freeze"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

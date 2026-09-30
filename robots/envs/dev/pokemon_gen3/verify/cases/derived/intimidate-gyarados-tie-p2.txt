@@ -1,0 +1,6 @@
+Gyarados (M)
+Ability: Intimidate
+Level: 100
+EVs: 1 HP / 152 Spe
+Serious Nature
+- Protect

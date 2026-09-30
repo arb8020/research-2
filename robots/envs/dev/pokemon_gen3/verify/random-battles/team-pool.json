@@ -1,0 +1,28 @@
+{
+  "schema": "pokemon-gen3ou-supported-set-pool-v1",
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "source_teams": [
+    "teams/rain.txt",
+    "teams/weather.txt",
+    "../../fixtures/gen3ou/balanced.txt"
+  ],
+  "sets": [
+    {"id":"pelipper","species":"pelipper","packed":"Pelipper||Leftovers|KeenEye|RainDance,Surf,Toxic,Protect|Bold|252,,252,4,,|M||||"},
+    {"id":"ludicolo","species":"ludicolo","packed":"Ludicolo||Leftovers|SwiftSwim|Surf,GigaDrain,LeechSeed,Protect|Calm|252,,,4,252,|M||||"},
+    {"id":"jolteon","species":"jolteon","packed":"Jolteon||Leftovers|VoltAbsorb|Thunderbolt,Bite,Toxic,Substitute|Timid|4,,,252,,252|M||||"},
+    {"id":"heracross","species":"heracross","packed":"Heracross||ChoiceBand|Guts|Megahorn,BrickBreak,RockSlide,SleepTalk|Jolly|,252,4,,,252|M||||"},
+    {"id":"snorlax","species":"snorlax","packed":"Snorlax||Leftovers|Immunity|BodySlam,ShadowBall,Rest,SleepTalk|Adamant|252,252,4,,,|M||||"},
+    {"id":"gengar","species":"gengar","packed":"Gengar||Leftovers|Levitate|Thunderbolt,IcePunch,WillOWisp,Explosion|Timid|4,,,252,,252|M||||"},
+    {"id":"tyranitar","species":"tyranitar","packed":"Tyranitar||Leftovers|SandStream|RockSlide,Earthquake,Crunch,Protect|Adamant|252,252,,,,4|M||||"},
+    {"id":"metagross","species":"metagross","packed":"Metagross||ChoiceBand|ClearBody|MeteorMash,Earthquake,RockSlide,Explosion|Adamant|252,252,,,,4|||||"},
+    {"id":"zapdos","species":"zapdos","packed":"Zapdos||Leftovers|Pressure|Thunderbolt,DrillPeck,Toxic,Protect|Timid|252,,,4,,252|||||"},
+    {"id":"suicune","species":"suicune","packed":"Suicune||Leftovers|Pressure|Surf,IceBeam,CalmMind,Rest|Bold|252,,252,4,,|||||"},
+    {"id":"flygon","species":"flygon","packed":"Flygon||ChoiceBand|Levitate|Earthquake,RockSlide,Toxic,FireBlast|Jolly|,252,4,,,252|M||||"},
+    {"id":"forretress","species":"forretress","packed":"Forretress||Leftovers|Sturdy|Spikes,RapidSpin,Toxic,Explosion|Impish|252,,252,,4,|M||||"},
+    {"id":"starmie","species":"starmie","packed":"Starmie||Leftovers|NaturalCure|Surf,Thunderbolt,IceBeam,Recover|Timid|4,,,252,,252|||||"},
+    {"id":"skarmory","species":"skarmory","packed":"Skarmory||Leftovers|Sturdy|Spikes,Whirlwind,Protect,Toxic|Impish|252,,252,,4,|M||||"},
+    {"id":"blissey","species":"blissey","packed":"Blissey||Leftovers|NaturalCure|SoftBoiled,SeismicToss,Toxic,Aromatherapy|Calm|,,252,,252,4|F||||"},
+    {"id":"swampert","species":"swampert","packed":"Swampert||Leftovers|Torrent|Earthquake,IceBeam,Protect,Toxic|Relaxed|252,,216,40,,|M||||"},
+    {"id":"celebi","species":"celebi","packed":"Celebi||Leftovers|NaturalCure|Recover,Psychic,LeechSeed,HealBell|Bold|252,,220,,,36|||||"}
+  ]
+}

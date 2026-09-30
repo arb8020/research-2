@@ -1,0 +1,14 @@
+{
+  "schema": "pokemon-native-differential-case-v1", "id": "skill-swap-intimidate-no-start",
+  "provenance": {"kind": "showdown-derived", "source_file": "sim/battle.ts", "test_name": "Gen 3 Skill Swap exchanges current abilities without Start", "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format": "gen3ou", "seed": [1, 2, 3, 4],
+  "teams": [
+    {"source": "alakazam-skill-swap-p1.txt", "normalized": [{"species":"alakazam","level":100,"gender":"M","nature":"hardy","ability":"synchronize","item":"","moves":["skillswap","firepunch"],"stats":[251,136,126,306,206,276],"status":null}]},
+    {"source": "salamence-skill-swap-target-p2.txt", "normalized": [{"species":"salamence","level":100,"gender":"M","nature":"hardy","ability":"intimidate","item":"","moves":["dragonclaw","protect","substitute"],"stats":[331,306,196,256,196,236],"status":null}]}
+  ],
+  "source_choices": [["move 1", "move 1"]], "choices": [["move 1", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["ability.intimidate","choice.move","move.skill-swap","state.canonical"],
+  "boundaries": ["choice","events","handlers","prng","queue","request","state"],
+  "limits": {"max_boundaries":2,"max_actions":2}
+}

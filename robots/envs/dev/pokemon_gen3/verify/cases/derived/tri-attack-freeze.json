@@ -1,0 +1,119 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "tri-attack-freeze",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#triattack.secondary.onHit; sim/battle-actions.ts#secondaries",
+    "test_name": "Tri Attack selects freeze after its secondary gate",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    10
+  ],
+  "teams": [
+    {
+      "source": "tri-attack-freeze-p1.txt",
+      "normalized": [
+        {
+          "species": "porygon2",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "trace",
+          "item": "",
+          "moves": [
+            "triattack"
+          ],
+          "stats": [
+            311,
+            196,
+            216,
+            246,
+            226,
+            156
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "tri-attack-freeze-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.secondary",
+      "occurrence": 1,
+      "range": 100,
+      "result": 14
+    },
+    {
+      "label": "move.status_selection",
+      "occurrence": 1,
+      "range": 3,
+      "result": 2
+    }
+  ],
+  "features": [
+    "choice.move",
+    "condition.nonvolatile-status",
+    "damage.gen3",
+    "effect.secondary",
+    "hit.accuracy",
+    "prng.labeled",
+    "prng.secondary",
+    "state.canonical",
+    "status.freeze"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

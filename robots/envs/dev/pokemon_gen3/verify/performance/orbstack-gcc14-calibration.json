@@ -1,0 +1,29 @@
+{
+  "schema": "pokemon-gen3ou-ocean-candidate-calibration-v1",
+  "kind": "retained-candidate-calibration",
+  "date": "2026-09-29",
+  "container_image": "gcc:14-bookworm",
+  "container_digest": "sha256:5e927c284bf55a7dc796262e311a0703344f62f41f5621eb56843111b1d37e15",
+  "host_runtime": "OrbStack",
+  "workload": "native-gen3ou-default-2v2-hot-path",
+  "environment_count": 1024,
+  "scalar_boundaries_per_second": 24085.386,
+  "batch_rates_boundaries_per_second": [21709.260, 23964.203, 22947.988, 23746.094, 22919.266],
+  "batch_median_boundaries_per_second": 22947.988,
+  "batch_p99_sweep_latency_ms": 57.987831,
+  "deterministic_digest": "261ecb091ca9cf07",
+  "exact_env_and_io_bytes": 32348,
+  "incremental_rss_per_env_bytes": 80.0,
+  "contention_observation": {
+    "batch_rates_boundaries_per_second": [17307.437, 17199.812, 20312.425, 19194.974, 17638.586],
+    "batch_median_boundaries_per_second": 17638.586,
+    "batch_p99_sweep_latency_ms": 126.224047,
+    "incremental_rss_per_env_bytes": 80.0
+  },
+  "candidate_floor": {
+    "batch_median_boundaries_per_second": 15000,
+    "batch_p99_sweep_latency_ms": 150.0,
+    "incremental_rss_per_env_bytes": 131072
+  },
+  "status": "host-calibrated candidate; not an independent reference and not a final Harbor-worker calibration"
+}

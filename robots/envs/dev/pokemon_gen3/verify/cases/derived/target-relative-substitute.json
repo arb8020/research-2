@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"target-relative-substitute",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen4/moves.ts","test_name":"Checkpoint 6: target-relative formulas use real HP before Substitute cap","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"smeargle-substitute-target-relative-p1.txt","normalized":[{"species":"smeargle","level":100,"gender":"M","ability":"owntempo","item":"","moves":["splash","superfang","endeavor"],"stats":[251,76,106,76,126,186],"status":null,"initial_hp":50}]},{"source":"persian-substitute-torment-p2.txt","normalized":[{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["substitute","torment"],"stats":[271,176,156,166,166,266],"status":null}]}],
+  "source_choices":[["move 1","move 1"],["move 2","move 2"],["move 3","move 1"]],"choices":[["move 1","move 1"],["move 2","move 2"],["move 3","move 1"]],"forced_outcomes":[],
+  "features":["damage.target-relative","handler.try-move","hit.accuracy","hit.substitute","prng.labeled","state.canonical"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],"limits":{"max_boundaries":4,"max_actions":6}
+}

@@ -1,0 +1,113 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "bide-paralysis-abort",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts:1261-1309; data/mods/gen3/moves.ts:57-101",
+    "test_name": "full paralysis on a locked Bide turn invokes MoveAborted cleanup without another PP spend",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    16,
+    23,
+    47,
+    71
+  ],
+  "teams": [
+    {
+      "source": "bide-paralysis-abort-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "bide"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": "par"
+        }
+      ]
+    },
+    {
+      "source": "bide-paralysis-abort-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "healbell"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.before-move",
+    "handler.damage",
+    "handler.move-aborted",
+    "handler.try",
+    "prng.labeled",
+    "state.canonical",
+    "status.paralysis"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

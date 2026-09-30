@@ -1,0 +1,12 @@
+{
+  "schema": "pokemon-gen3ou-full-corpus-checkpoint7-report-v1",
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "cases": 722,
+  "boundaries": 3225,
+  "comparison": "exact recursive JSON equality",
+  "oracle_replay": "byte-identical",
+  "native_replay": "byte-identical",
+  "native_invariants_checked_after_every_transition": true,
+  "result": "pass",
+  "reproduce": "make -C verify/slice differential POKEMON_SHOWDOWN_DIR=/path/to/pinned-observer-patched-showdown"
+}

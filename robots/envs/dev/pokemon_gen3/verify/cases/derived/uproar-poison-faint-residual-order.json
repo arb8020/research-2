@@ -1,0 +1,143 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "uproar-poison-faint-residual-order",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#uproar; data/mods/gen5/moves.ts#uproar; data/mods/gen4/moves.ts#uproar; data/mods/gen3/moves.ts#uproar",
+    "test_name": "poison residual faints an Uproar holder before Uproar upkeep and forced replacement observes silent volatile teardown",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    203,
+    31,
+    17,
+    9
+  ],
+  "teams": [
+    {
+      "source": "uproar-poison-faint-residual-order-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "uproar"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": "psn",
+          "initial_hp": 1
+        },
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "uproar-poison-faint-residual-order-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "M",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      null
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      null
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "condition.uproar.duration",
+      "occurrence": 1,
+      "range": 4,
+      "result": 0
+    }
+  ],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.set-status",
+    "handler.try",
+    "handler.try-hit",
+    "lifecycle.condition-duration",
+    "lifecycle.faint",
+    "lifecycle.forced-replacement",
+    "prng.labeled",
+    "request.legal-choices",
+    "state.canonical",
+    "status.poison"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

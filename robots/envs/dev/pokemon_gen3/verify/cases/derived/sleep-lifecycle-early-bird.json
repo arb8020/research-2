@@ -1,0 +1,12 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"sleep-lifecycle-early-bird",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen3/conditions.ts","test_name":"Early Bird applies the generated extra decrement and wakes at time two","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[824,17,43,4],
+  "teams":[
+    {"source":"xatu-sleep-lifecycle-p1.txt","normalized":[{"species":"xatu","level":100,"gender":"M","ability":"earlybird","item":"","moves":["splash"],"stats":[271,186,176,226,176,226],"status":"slp","status_state":{"kind":"sleep","time":2,"skipped_time":0}}]},
+    {"source":"magikarp-splash-p2.txt","normalized":[{"species":"magikarp","level":100,"gender":"M","ability":"swiftswim","item":"","moves":["splash"],"stats":[181,56,146,66,76,196],"status":null}]}
+  ],
+  "source_choices":[["move 1","move 1"]],"choices":[["move 1","move 1"]],"forced_outcomes":[],
+  "features":["handler.before-move","lifecycle.condition-duration","state.canonical","status.sleep"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":2,"max_actions":2}
+}

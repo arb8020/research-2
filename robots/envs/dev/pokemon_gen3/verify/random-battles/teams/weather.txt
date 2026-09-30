@@ -1,0 +1,53 @@
+Tyranitar (M) @ Leftovers
+Ability: Sand Stream
+EVs: 252 HP / 252 Atk / 4 Spe
+Adamant Nature
+- Rock Slide
+- Earthquake
+- Crunch
+- Protect
+
+Metagross @ Choice Band
+Ability: Clear Body
+EVs: 252 HP / 252 Atk / 4 Spe
+Adamant Nature
+- Meteor Mash
+- Earthquake
+- Rock Slide
+- Explosion
+
+Zapdos @ Leftovers
+Ability: Pressure
+EVs: 252 HP / 4 SpA / 252 Spe
+Timid Nature
+- Thunderbolt
+- Drill Peck
+- Toxic
+- Protect
+
+Suicune @ Leftovers
+Ability: Pressure
+EVs: 252 HP / 252 Def / 4 SpA
+Bold Nature
+- Surf
+- Ice Beam
+- Calm Mind
+- Rest
+
+Flygon (M) @ Choice Band
+Ability: Levitate
+EVs: 252 Atk / 4 Def / 252 Spe
+Jolly Nature
+- Earthquake
+- Rock Slide
+- Toxic
+- Fire Blast
+
+Forretress (M) @ Leftovers
+Ability: Sturdy
+EVs: 252 HP / 252 Def / 4 SpD
+Impish Nature
+- Spikes
+- Rapid Spin
+- Toxic
+- Explosion

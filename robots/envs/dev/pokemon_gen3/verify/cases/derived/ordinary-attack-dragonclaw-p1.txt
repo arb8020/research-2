@@ -1,0 +1,6 @@
+Charizard (M) @ dragonfang
+Ability: blaze
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- dragonclaw

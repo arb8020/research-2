@@ -1,0 +1,106 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "imprison-all-shared-forces-struggle",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen4/moves.ts#imprison; data/moves.ts#imprison",
+    "test_name": "Imprison disables every shared move while preserving Struggle as the fallback choice",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    223,
+    31,
+    17,
+    9
+  ],
+  "teams": [
+    {
+      "source": "imprison-all-shared-forces-struggle-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "imprison",
+            "splash",
+            "pound"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "imprison-all-shared-forces-struggle-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "splash",
+            "pound"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.before-move",
+    "handler.disable-move",
+    "handler.try-hit",
+    "lifecycle.switch-persistence",
+    "request.legal-choices",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

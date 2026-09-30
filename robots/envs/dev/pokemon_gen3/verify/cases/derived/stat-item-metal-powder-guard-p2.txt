@@ -1,0 +1,5 @@
+Ditto
+Ability: Limber
+Level: 100
+Hardy Nature
+- Splash

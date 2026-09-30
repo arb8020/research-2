@@ -1,0 +1,117 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "hidden-power-dark30-power-floor",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/dex.ts; sim/pokemon.ts; data/mods/gen3/moves.ts",
+    "test_name": "all-29 IVs preserve Dark type while constructing the minimum 30 base power",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    105,
+    106,
+    107,
+    108
+  ],
+  "teams": [
+    {
+      "source": "hidden-power-dark30-power-floor-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "hiddenpower"
+          ],
+          "stats": [
+            249,
+            74,
+            104,
+            74,
+            124,
+            184
+          ],
+          "ivs": [
+            29,
+            29,
+            29,
+            29,
+            29,
+            29
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "hidden-power-dark30-power-floor-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "ivs": [
+            31,
+            31,
+            31,
+            31,
+            31,
+            31
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "damage.variable-power",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

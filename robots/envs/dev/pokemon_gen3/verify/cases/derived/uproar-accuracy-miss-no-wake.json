@@ -1,0 +1,124 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "uproar-accuracy-miss-no-wake",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#uproar; data/mods/gen5/moves.ts#uproar; data/mods/gen4/moves.ts#uproar; data/mods/gen3/moves.ts#uproar",
+    "test_name": "an accuracy-lowered Uproar misses a newly sleeping target without waking or installing its volatile",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    204,
+    31,
+    17,
+    9
+  ],
+  "teams": [
+    {
+      "source": "uproar-accuracy-miss-no-wake-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 50,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "splash",
+            "uproar"
+          ],
+          "stats": [
+            130,
+            40,
+            55,
+            40,
+            65,
+            95
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "uproar-accuracy-miss-no-wake-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "sandattack",
+            "rest"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 2,
+      "range": 100,
+      "result": 82
+    }
+  ],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.set-status",
+    "handler.try",
+    "handler.try-hit",
+    "hit.accuracy",
+    "lifecycle.condition-duration",
+    "prng.labeled",
+    "request.legal-choices",
+    "state.canonical",
+    "status.sleep"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

@@ -1,0 +1,169 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "leech-seed-source-slot-and-target-switch",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/abilities.ts; sim/battle.ts; sim/pokemon.ts",
+    "test_name": "Leech Seed follows the source slot and clears on target switch",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    701,
+    193,
+    43,
+    11
+  ],
+  "teams": [
+    {
+      "source": "leech-seed-source-slot-and-target-switch-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "leechseed",
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        },
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "nature": "hardy",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null,
+          "initial_hp": 500
+        }
+      ]
+    },
+    {
+      "source": "leech-seed-source-slot-and-target-switch-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "nature": "hardy",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        },
+        {
+          "species": "venusaur",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "overgrow",
+          "item": "",
+          "moves": [
+            "synthesis"
+          ],
+          "stats": [
+            301,
+            200,
+            202,
+            236,
+            236,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "switch 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "switch 2"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 8
+    }
+  ],
+  "features": [
+    "condition.volatile",
+    "effect.heal",
+    "handler.residual",
+    "lifecycle.source-bound",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "immunity",
+    "state",
+    "events",
+    "prng",
+    "terminal"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

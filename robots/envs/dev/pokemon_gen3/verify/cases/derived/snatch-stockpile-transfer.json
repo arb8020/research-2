@@ -1,0 +1,105 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "snatch-stockpile-transfer",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#stockpile,spitup,swallow; data/mods/gen4/moves.ts#swallow; data/mods/gen3/moves.ts#stockpile",
+    "test_name": "Snatch re-enters Stockpile with the snatcher as the condition owner",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    431,
+    73,
+    31,
+    11
+  ],
+  "teams": [
+    {
+      "source": "snatch-stockpile-transfer-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "stockpile"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "snatch-stockpile-transfer-p2.txt",
+      "normalized": [
+        {
+          "species": "alakazam",
+          "level": 100,
+          "gender": "M",
+          "ability": "synchronize",
+          "item": "",
+          "moves": [
+            "snatch"
+          ],
+          "stats": [
+            251,
+            136,
+            126,
+            306,
+            206,
+            276
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.try",
+    "lifecycle.condition-duration",
+    "move.called-entry",
+    "move.snatch",
+    "prng.labeled",
+    "state.canonical",
+    "volatile.snatch"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

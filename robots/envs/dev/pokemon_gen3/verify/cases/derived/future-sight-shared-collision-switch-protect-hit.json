@@ -1,0 +1,150 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "future-sight-shared-collision-switch-protect-hit",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/moves.ts",
+    "test_name": "Future Sight owns the target position, rejects Doom Desire on the shared key, removes Protect, and hits the replacement",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "future-sight-shared-collision-switch-protect-hit-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "futuresight",
+            "doomdesire",
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "future-sight-shared-collision-switch-protect-hit-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "M",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled",
+            "protect"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        },
+        {
+          "species": "snorlax",
+          "level": 100,
+          "gender": "M",
+          "ability": "immunity",
+          "item": "",
+          "moves": [
+            "protect"
+          ],
+          "stats": [
+            461,
+            256,
+            166,
+            166,
+            256,
+            96
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "switch 2"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "switch 2"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 57
+    }
+  ],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "condition.slot",
+    "hit.protect",
+    "lifecycle.condition-duration",
+    "lifecycle.switch-persistence",
+    "prng.delayed-hit",
+    "prng.labeled",
+    "slot.futuremove",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

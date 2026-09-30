@@ -1,0 +1,12 @@
+Smeargle (M)
+Ability: Own Tempo
+Level: 100
+Hardy Nature
+- Sunny Day
+- Splash
+
+Castform (M)
+Ability: Forecast
+Level: 100
+Hardy Nature
+- Rest

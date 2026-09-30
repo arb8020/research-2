@@ -1,0 +1,1761 @@
+{
+  "schema": "pokemon-gen3ou-event-vocabulary-v2",
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "format": "gen3ou",
+  "frozen_hook_records": 514,
+  "hook_derived_events": 70,
+  "runtime_callsite_events": [
+    "ChangeBoost"
+  ],
+  "unique_events": 71,
+  "events": [
+    {
+      "event": "Accuracy",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "condition.onSourceAccuracy"
+      ],
+      "scopes": [
+        "source"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "AfterHit",
+      "algebra": "void-notification",
+      "frozen_handler_count": 4,
+      "raw_hooks": [
+        "onAfterHit"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "AfterMega",
+      "algebra": "void-notification",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "onAnyAfterMega"
+      ],
+      "scopes": [
+        "any"
+      ],
+      "owner_kinds": [
+        "item"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "AfterMove",
+      "algebra": "void-notification",
+      "frozen_handler_count": 6,
+      "raw_hooks": [
+        "condition.onAfterMove",
+        "onAfterMove",
+        "onAnyAfterMove"
+      ],
+      "scopes": [
+        "any",
+        "target"
+      ],
+      "owner_kinds": [
+        "item",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "AfterMoveSecondary",
+      "algebra": "void-notification",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "onAfterMoveSecondary"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "condition"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "AfterMoveSecondarySelf",
+      "algebra": "void-notification",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "onAfterMoveSecondarySelf"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "item"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "AfterSetStatus",
+      "algebra": "void-notification",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "onAfterSetStatus"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "item"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "AfterSubDamage",
+      "algebra": "void-notification",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "onAfterSubDamage"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "BasePower",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 13,
+      "raw_hooks": [
+        "condition.onAnyBasePower",
+        "condition.onBasePower",
+        "condition.onSourceBasePower",
+        "onBasePower",
+        "onSourceBasePower"
+      ],
+      "scopes": [
+        "any",
+        "source",
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "condition",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "BeforeMove",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 15,
+      "raw_hooks": [
+        "condition.onBeforeMove",
+        "condition.onFoeBeforeMove",
+        "onBeforeMove"
+      ],
+      "scopes": [
+        "foe",
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "condition",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "BeforeSwitchOut",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "condition.onBeforeSwitchOut"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Damage",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 8,
+      "raw_hooks": [
+        "condition.onDamage",
+        "onAnyDamage",
+        "onDamage"
+      ],
+      "scopes": [
+        "any",
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "item",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": true
+    },
+    {
+      "event": "DamagingHit",
+      "algebra": "void-notification",
+      "frozen_handler_count": 8,
+      "raw_hooks": [
+        "onDamagingHit"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "condition"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "DeductPP",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "onDeductPP"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "DisableMove",
+      "algebra": "state-mutation-notification",
+      "frozen_handler_count": 6,
+      "raw_hooks": [
+        "condition.onDisableMove",
+        "condition.onFoeDisableMove",
+        "onDisableMove"
+      ],
+      "scopes": [
+        "foe",
+        "target"
+      ],
+      "owner_kinds": [
+        "condition",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "DragOut",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "condition.onDragOut",
+        "onDragOut"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Eat",
+      "algebra": "void-notification",
+      "frozen_handler_count": 22,
+      "raw_hooks": [
+        "onEat"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "item"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "End",
+      "algebra": "void-notification",
+      "frozen_handler_count": 29,
+      "raw_hooks": [
+        "condition.onEnd",
+        "condition.onSideEnd",
+        "onEnd",
+        "onFieldEnd"
+      ],
+      "scopes": [
+        "field",
+        "side",
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "condition",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "EntryHazard",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "condition.onEntryHazard"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Faint",
+      "algebra": "void-notification",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "condition.onFaint"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Hit",
+      "algebra": "void-notification",
+      "frozen_handler_count": 47,
+      "raw_hooks": [
+        "condition.onHit",
+        "onHit",
+        "secondary.onHit",
+        "self.onHit"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "HitField",
+      "algebra": "void-notification",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "onHitField"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Immunity",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 5,
+      "raw_hooks": [
+        "condition.onImmunity",
+        "onImmunity"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "condition",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Invulnerability",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 6,
+      "raw_hooks": [
+        "condition.onInvulnerability",
+        "condition.onSourceInvulnerability"
+      ],
+      "scopes": [
+        "source",
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "LockMove",
+      "algebra": "selector-or-replacement-relay",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "onLockMove"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "condition"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "MaybeTrapPokemon",
+      "algebra": "state-mutation-notification",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "onAnyMaybeTrapPokemon",
+        "onFoeMaybeTrapPokemon"
+      ],
+      "scopes": [
+        "any",
+        "foe"
+      ],
+      "owner_kinds": [
+        "ability"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "ModifyAccuracy",
+      "algebra": "void-notification",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "onSourceModifyAccuracy"
+      ],
+      "scopes": [
+        "source"
+      ],
+      "owner_kinds": [
+        "ability"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "ModifyAtk",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 15,
+      "raw_hooks": [
+        "onModifyAtk"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "item"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": true
+    },
+    {
+      "event": "ModifyBoost",
+      "algebra": "mutable-value-relay",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "condition.onModifyBoost"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": true
+    },
+    {
+      "event": "ModifyCritRatio",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 4,
+      "raw_hooks": [
+        "condition.onModifyCritRatio",
+        "onModifyCritRatio"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "item",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "ModifyDamage",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 4,
+      "raw_hooks": [
+        "condition.onSourceModifyDamage"
+      ],
+      "scopes": [
+        "source"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "ModifyDamagePhase1",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 3,
+      "raw_hooks": [
+        "condition.onAnyModifyDamagePhase1",
+        "condition.onModifyDamagePhase1"
+      ],
+      "scopes": [
+        "any",
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "ModifyDef",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "onModifyDef"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "item"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "ModifyMove",
+      "algebra": "mutable-value-relay",
+      "frozen_handler_count": 15,
+      "raw_hooks": [
+        "onModifyMove"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "condition",
+        "item",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "ModifySecondaries",
+      "algebra": "mutable-value-relay",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "onModifySecondaries"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "ModifySpA",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 15,
+      "raw_hooks": [
+        "condition.onModifySpA",
+        "onModifySpA"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "item",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "ModifySpD",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 3,
+      "raw_hooks": [
+        "condition.onFoeModifySpD",
+        "onModifySpD"
+      ],
+      "scopes": [
+        "foe",
+        "target"
+      ],
+      "owner_kinds": [
+        "item",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": true
+    },
+    {
+      "event": "ModifySpe",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 4,
+      "raw_hooks": [
+        "onModifySpe"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "condition",
+        "item"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "ModifyType",
+      "algebra": "mutable-value-relay",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "onModifyType"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "MoveAborted",
+      "algebra": "void-notification",
+      "frozen_handler_count": 4,
+      "raw_hooks": [
+        "condition.onMoveAborted",
+        "onMoveAborted"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "condition",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "MoveFail",
+      "algebra": "void-notification",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "onMoveFail"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": true
+    },
+    {
+      "event": "NegateImmunity",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "condition.onNegateImmunity"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": true
+    },
+    {
+      "event": "OverrideAction",
+      "algebra": "selector-or-replacement-relay",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "condition.onOverrideAction"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "PrepareHit",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 5,
+      "raw_hooks": [
+        "condition.onAnyPrepareHit",
+        "onPrepareHit"
+      ],
+      "scopes": [
+        "any",
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "RedirectTarget",
+      "algebra": "target-redirect-relay",
+      "frozen_handler_count": 4,
+      "raw_hooks": [
+        "condition.onFoeRedirectTarget",
+        "condition.onRedirectTarget",
+        "onFoeRedirectTarget"
+      ],
+      "scopes": [
+        "foe",
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Residual",
+      "algebra": "void-notification",
+      "frozen_handler_count": 39,
+      "raw_hooks": [
+        "condition.onResidual",
+        "onFieldResidual",
+        "onResidual"
+      ],
+      "scopes": [
+        "field",
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "condition",
+        "item",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Restart",
+      "algebra": "void-notification",
+      "frozen_handler_count": 9,
+      "raw_hooks": [
+        "condition.onRestart",
+        "condition.onSideRestart",
+        "onRestart"
+      ],
+      "scopes": [
+        "side",
+        "target"
+      ],
+      "owner_kinds": [
+        "condition",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "SetStatus",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 9,
+      "raw_hooks": [
+        "condition.onAnySetStatus",
+        "condition.onSetStatus",
+        "onSetStatus"
+      ],
+      "scopes": [
+        "any",
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "format",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "StallMove",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "onStallMove"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "condition"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Start",
+      "algebra": "void-notification",
+      "frozen_handler_count": 67,
+      "raw_hooks": [
+        "condition.onSideStart",
+        "condition.onStart",
+        "onFieldStart",
+        "onStart"
+      ],
+      "scopes": [
+        "field",
+        "side",
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "condition",
+        "item",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "SwitchIn",
+      "algebra": "void-notification",
+      "frozen_handler_count": 4,
+      "raw_hooks": [
+        "onAnySwitchIn",
+        "onSwitchIn"
+      ],
+      "scopes": [
+        "any",
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "condition",
+        "item"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "SwitchOut",
+      "algebra": "void-notification",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "onSwitchOut"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "TakeItem",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "onTakeItem"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "item"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "TrapPokemon",
+      "algebra": "state-mutation-notification",
+      "frozen_handler_count": 5,
+      "raw_hooks": [
+        "condition.onTrapPokemon",
+        "onAnyTrapPokemon",
+        "onFoeTrapPokemon",
+        "onTrapPokemon"
+      ],
+      "scopes": [
+        "any",
+        "foe",
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "condition",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Try",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 15,
+      "raw_hooks": [
+        "onTry"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "TryAddVolatile",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 6,
+      "raw_hooks": [
+        "condition.onTryAddVolatile",
+        "onTryAddVolatile"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "TryBoost",
+      "algebra": "mutable-boost-table-relay",
+      "frozen_handler_count": 5,
+      "raw_hooks": [
+        "condition.onTryBoost",
+        "onTryBoost"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": true
+    },
+    {
+      "event": "TryEatItem",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 7,
+      "raw_hooks": [
+        "onTryEatItem"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "item"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "TryHeal",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "onSourceTryHeal"
+      ],
+      "scopes": [
+        "source"
+      ],
+      "owner_kinds": [
+        "ability"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "TryHit",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 23,
+      "raw_hooks": [
+        "condition.onTryHit",
+        "onTryHit"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": true
+    },
+    {
+      "event": "TryImmunity",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 5,
+      "raw_hooks": [
+        "onTryImmunity"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "TryMove",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 9,
+      "raw_hooks": [
+        "onAnyTryMove",
+        "onTryMove"
+      ],
+      "scopes": [
+        "any",
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "TryPrimaryHit",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "condition.onTryPrimaryHit"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Update",
+      "algebra": "void-notification",
+      "frozen_handler_count": 18,
+      "raw_hooks": [
+        "condition.onUpdate",
+        "onUpdate"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability",
+        "item",
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Use",
+      "algebra": "void-notification",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "onUse"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "item"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "UseMoveMessage",
+      "algebra": "void-notification",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "onUseMoveMessage"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "move"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "Weather",
+      "algebra": "void-notification",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "onWeather"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "condition"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "WeatherChange",
+      "algebra": "void-notification",
+      "frozen_handler_count": 1,
+      "raw_hooks": [
+        "onWeatherChange"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "WeatherModifyDamage",
+      "algebra": "numeric-or-cancel-relay",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "onWeatherModifyDamage"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "condition"
+      ],
+      "discovery": "runEvent target/source topology or direct singleEvent owner; fieldEvent is separate for Residual/SwitchIn",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": false
+    },
+    {
+      "event": "ChangeBoost",
+      "algebra": "mutable-boost-table-relay",
+      "frozen_handler_count": 0,
+      "raw_hooks": [],
+      "scopes": [],
+      "owner_kinds": [],
+      "discovery": "runtime call-site event; ordinary runEvent discovery currently yields zero handlers",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": true
+    },
+    {
+      "event": "CriticalHit",
+      "algebra": "boolean-or-null-gate",
+      "frozen_handler_count": 2,
+      "raw_hooks": [
+        "onCriticalHit"
+      ],
+      "scopes": [
+        "target"
+      ],
+      "owner_kinds": [
+        "ability"
+      ],
+      "discovery": "runEvent target topology; literal false cancels a sampled critical hit",
+      "ordering": [
+        "order",
+        "priority",
+        "speed",
+        "subOrder",
+        "effectOrder for SwitchIn/RedirectTarget ties"
+      ],
+      "current_native_kernel": true
+    }
+  ]
+}

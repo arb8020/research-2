@@ -1,0 +1,106 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "uproar-protect-no-install",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#uproar; data/mods/gen5/moves.ts#uproar; data/mods/gen4/moves.ts#uproar; data/mods/gen3/moves.ts#uproar",
+    "test_name": "Protect cancels before Uproar move-owned TryHit, wake, duration draw, and installation",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    7,
+    31,
+    17,
+    9
+  ],
+  "teams": [
+    {
+      "source": "uproar-protect-no-install-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "uproar"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "uproar-protect-no-install-p2.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "protect"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.set-status",
+    "handler.try",
+    "handler.try-hit",
+    "lifecycle.condition-duration",
+    "prng.labeled",
+    "request.legal-choices",
+    "state.canonical",
+    "volatile.protect"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

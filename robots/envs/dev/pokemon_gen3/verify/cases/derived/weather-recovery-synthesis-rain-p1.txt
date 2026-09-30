@@ -1,0 +1,6 @@
+Alakazam (M)
+Ability: Synchronize
+Level: 100
+Hardy Nature
+- Rain Dance
+- Synthesis

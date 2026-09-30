@@ -1,0 +1,120 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "thief-target-faint-transfer",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/abilities/magician.js:23 (shared post-hit item-transfer operation); data/moves.ts#thief",
+    "test_name": "Thief transfers the target item even when its hit faints the target",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "thief-target-faint-transfer-p1.txt",
+      "normalized": [
+        {
+          "species": "sableye",
+          "level": 100,
+          "gender": "M",
+          "ability": "keeneye",
+          "item": "",
+          "moves": [
+            "thief"
+          ],
+          "stats": [
+            241,
+            186,
+            186,
+            166,
+            166,
+            136
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "thief-target-faint-transfer-p2.txt",
+      "normalized": [
+        {
+          "species": "abra",
+          "level": 1,
+          "gender": "M",
+          "ability": "synchronize",
+          "item": "leftovers",
+          "moves": [
+            "teleport"
+          ],
+          "stats": [
+            11,
+            5,
+            5,
+            7,
+            6,
+            7
+          ],
+          "status": null
+        },
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "handler.take-item",
+    "item.take",
+    "lifecycle.faint",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

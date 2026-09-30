@@ -1,0 +1,7 @@
+Castform (M)
+Ability: Forecast
+Level: 100
+Hardy Nature
+- Sunny Day
+- Rain Dance
+- Rest

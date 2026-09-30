@@ -1,0 +1,104 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "tri-attack-shield-dust",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#triattack.secondary.onHit; sim/battle-actions.ts#secondaries",
+    "test_name": "Shield Dust removes Tri Attack secondary before either owned draw",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    5
+  ],
+  "teams": [
+    {
+      "source": "tri-attack-shield-dust-p1.txt",
+      "normalized": [
+        {
+          "species": "porygon2",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "trace",
+          "item": "",
+          "moves": [
+            "triattack"
+          ],
+          "stats": [
+            311,
+            196,
+            216,
+            246,
+            226,
+            156
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "tri-attack-shield-dust-p2.txt",
+      "normalized": [
+        {
+          "species": "dustox",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "shielddust",
+          "item": "",
+          "moves": [
+            "moonlight"
+          ],
+          "stats": [
+            261,
+            136,
+            176,
+            136,
+            216,
+            166
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "effect.secondary",
+    "hit.accuracy",
+    "prng.labeled",
+    "prng.secondary",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

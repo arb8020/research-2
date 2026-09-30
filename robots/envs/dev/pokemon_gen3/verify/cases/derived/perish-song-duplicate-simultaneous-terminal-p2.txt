@@ -1,0 +1,7 @@
+Lapras (F)
+Ability: Water Absorb
+Level: 100
+EVs: 252 HP / 4 SpA / 252 SpD
+Calm Nature
+- Perish Song
+- Rest

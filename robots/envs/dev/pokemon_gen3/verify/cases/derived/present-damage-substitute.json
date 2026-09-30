@@ -1,0 +1,131 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "present-damage-substitute",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#present; sim/battle-actions.ts",
+    "test_name": "Present damage is absorbed by an existing Substitute",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    217,
+    90,
+    15,
+    0
+  ],
+  "teams": [
+    {
+      "source": "present-damage-substitute-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "present"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "present-damage-substitute-p2.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "F",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "substitute"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null,
+          "initial_hp": 200
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.resolution_variant",
+      "occurrence": 1,
+      "range": 10,
+      "result": 8
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 41
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 1,
+      "range": 16,
+      "result": 13
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 1,
+      "range": 16,
+      "result": 1
+    }
+  ],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "damage.variable-power",
+    "hit.accuracy",
+    "hit.resolved-power",
+    "hit.substitute",
+    "prng.labeled",
+    "state.canonical",
+    "volatile.substitute"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

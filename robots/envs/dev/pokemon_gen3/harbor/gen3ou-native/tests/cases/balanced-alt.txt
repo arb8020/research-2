@@ -1,0 +1,53 @@
+Gengar (M) @ Leftovers
+Ability: Levitate
+EVs: 4 HP / 252 SpA / 252 Spe
+Timid Nature
+- Thunderbolt
+- Ice Punch
+- Will-O-Wisp
+- Explosion
+
+Swampert (M) @ Leftovers
+Ability: Torrent
+EVs: 252 HP / 216 Def / 40 SpA
+Relaxed Nature
+- Earthquake
+- Ice Beam
+- Protect
+- Toxic
+
+Celebi @ Leftovers
+Ability: Natural Cure
+EVs: 252 HP / 220 Def / 36 Spe
+Bold Nature
+- Recover
+- Psychic
+- Leech Seed
+- Heal Bell
+
+Starmie @ Leftovers
+Ability: Natural Cure
+EVs: 4 HP / 252 SpA / 252 Spe
+Timid Nature
+- Surf
+- Thunderbolt
+- Ice Beam
+- Recover
+
+Skarmory (M) @ Leftovers
+Ability: Sturdy
+EVs: 252 HP / 252 Def / 4 SpD
+Impish Nature
+- Spikes
+- Whirlwind
+- Protect
+- Toxic
+
+Blissey (F) @ Leftovers
+Ability: Natural Cure
+EVs: 252 Def / 252 SpD / 4 Spe
+Calm Nature
+- Soft-Boiled
+- Seismic Toss
+- Toxic
+- Aromatherapy

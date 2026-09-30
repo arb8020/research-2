@@ -1,0 +1,17 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"berry-cure-post-move-rotation",
+  "provenance":{"kind":"showdown-derived","source_file":"data/items.ts; data/mods/gen3/scripts.ts","test_name":"Status cure berries activate at Gen 3 post-hit Update","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[17,31,47,59],
+  "teams":[
+    {"source":"smeargle-cure-berry-statuses-p1.txt","normalized":[{"species":"gengar","level":100,"gender":"M","ability":"levitate","item":"","moves":["thunderwave","spore","poisonpowder","willowisp"],"stats":[261,166,156,296,186,256],"status":null}]},
+    {"source":"cure-berry-rotation-p2.txt","normalized":[
+      {"species":"machop","level":100,"gender":"M","ability":"guts","item":"cheriberry","moves":["splash"],"stats":[281,196,136,106,106,106],"status":null},
+      {"species":"vaporeon","level":100,"gender":"M","ability":"waterabsorb","item":"chestoberry","moves":["splash"],"stats":[401,166,156,256,226,166],"status":null},
+      {"species":"persian","level":100,"gender":"M","ability":"limber","item":"pechaberry","moves":["splash"],"stats":[271,176,156,166,166,266],"status":null}
+    ]}
+  ],
+  "source_choices":[["move 1","move 1"],["move 2","switch 2"],["move 2","move 1"],["move 3","switch 3"],["move 3","move 1"]],
+  "choices":[["move 1","move 1"],["move 2","switch 2"],["move 2","move 1"],["move 3","switch 3"],["move 3","move 1"]],
+  "forced_outcomes":[],"features":["condition.nonvolatile-status","item.consumption","handler.status-update","state.canonical"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":6,"max_actions":10}
+}

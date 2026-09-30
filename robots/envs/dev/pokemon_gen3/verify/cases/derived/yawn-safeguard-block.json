@@ -1,0 +1,16 @@
+{
+  "schema":"pokemon-native-differential-case-v1",
+  "id":"yawn-safeguard-block",
+  "provenance":{"kind":"showdown-derived","source_file":"data/moves.ts; data/mods/gen4/moves.ts; sim/pokemon.ts","test_name":"Safeguard blocks external Yawn volatile admission","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[
+    {"source":"yawn-alakazam.txt","normalized":[{"species":"alakazam","level":100,"gender":"M","ability":"synchronize","item":"","moves":["safeguard","recover"],"stats":[251,136,126,306,206,276],"status":null}]},
+    {"source":"yawn-torkoal.txt","normalized":[{"species":"torkoal","level":100,"gender":"M","ability":"whitesmoke","item":"","moves":["yawn","protect"],"stats":[281,206,316,206,176,76],"status":null}]}
+  ],
+  "source_choices":[["move 1","move 1"]],
+  "choices":[["move 1","move 1"]],
+  "forced_outcomes":[],
+  "features":["condition.side","condition.volatile","handler.try-add-volatile","side.safeguard","state.canonical","volatile.yawn"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],
+  "limits":{"max_boundaries":2,"max_actions":2}
+}

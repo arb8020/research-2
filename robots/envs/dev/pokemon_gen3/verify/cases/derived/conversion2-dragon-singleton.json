@@ -1,0 +1,107 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "conversion2-dragon-singleton",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/moves.ts; sim/battle-actions.ts; test/sim/moves/conversion2.js",
+    "test_name": "Conversion 2 fails without history, then samples the singleton Steel response to Dragon even when Steel is already held",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    919,
+    29,
+    43,
+    97
+  ],
+  "teams": [
+    {
+      "source": "conversion2-dragon-singleton-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "jolly",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "conversion2"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            68,
+            126,
+            273
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "conversion2-dragon-singleton-p2.txt",
+      "normalized": [
+        {
+          "species": "charizard",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "blaze",
+          "item": "",
+          "moves": [
+            "dragonrage"
+          ],
+          "stats": [
+            297,
+            204,
+            192,
+            254,
+            206,
+            236
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "state.canonical",
+    "state.effective-type"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

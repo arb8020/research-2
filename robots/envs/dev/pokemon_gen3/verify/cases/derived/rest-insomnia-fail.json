@@ -1,0 +1,17 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "rest-insomnia-fail",
+  "provenance": {"kind": "showdown-derived", "source_file": "data/moves.ts; sim/pokemon.ts", "test_name": "Rest generated sleep-immunity admission failure", "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {"source": "banette-rest-p1.txt", "normalized": [{"species": "banette", "level": 1, "gender": "M", "ability": "insomnia", "item": "", "moves": ["rest"], "stats": [12, 7, 6, 6, 6, 6], "status": null, "initial_hp": 6}]},
+    {"source": "magikarp-splash-p2.txt", "normalized": [{"species": "magikarp", "level": 100, "gender": "M", "ability": "swiftswim", "item": "", "moves": ["splash"], "stats": [181, 56, 146, 66, 76, 196], "status": null}]}
+  ],
+  "source_choices": [["move 1", "move 1"]],
+  "choices": [["move 1", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["choice.move", "handler.status-prevention", "state.canonical", "status.sleep"],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 2, "max_actions": 2}
+}

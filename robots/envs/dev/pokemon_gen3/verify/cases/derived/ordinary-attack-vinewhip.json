@@ -1,0 +1,101 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "ordinary-attack-vinewhip",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts",
+    "test_name": "Gen 3 callback-free constant-power attack: vinewhip",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "ordinary-attack-vinewhip-p1.txt",
+      "normalized": [
+        {
+          "species": "bulbasaur",
+          "level": 100,
+          "gender": "M",
+          "ability": "overgrow",
+          "item": "",
+          "moves": [
+            "vinewhip"
+          ],
+          "stats": [
+            231,
+            134,
+            134,
+            166,
+            166,
+            126
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "tyrogue-tackle-p2.txt",
+      "normalized": [
+        {
+          "species": "tyrogue",
+          "level": 100,
+          "gender": "M",
+          "ability": "guts",
+          "item": "",
+          "moves": [
+            "tackle"
+          ],
+          "stats": [
+            211,
+            106,
+            106,
+            106,
+            106,
+            106
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "hit.accuracy",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng",
+    "terminal"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

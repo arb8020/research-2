@@ -1,0 +1,119 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "memento-white-herb-before-faint",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#memento; data/mods/gen3/moves.ts#memento; sim/battle-actions.ts#moveHit",
+    "test_name": "White Herb clears Memento drops before the source faint is drained",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    941,
+    942,
+    943,
+    944
+  ],
+  "teams": [
+    {
+      "source": "memento-white-herb-before-faint-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "memento"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        },
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "memento-white-herb-before-faint-p2.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "ability": "limber",
+          "item": "whiteherb",
+          "moves": [
+            "scratch"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "effect.boost",
+    "lifecycle.faint",
+    "request.legal-choices",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

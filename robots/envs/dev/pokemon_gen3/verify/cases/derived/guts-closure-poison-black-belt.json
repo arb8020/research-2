@@ -1,0 +1,103 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "guts-closure-poison-black-belt",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/abilities.ts; data/mods/gen3/scripts.ts",
+    "test_name": "Guts precedes Black Belt for poisoned physical damage",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "guts-closure-poison-black-belt.txt",
+      "normalized": [
+        {
+          "species": "machop",
+          "level": 100,
+          "gender": "M",
+          "ability": "guts",
+          "item": "blackbelt",
+          "moves": [
+            "brickbreak"
+          ],
+          "stats": [
+            281,
+            196,
+            136,
+            106,
+            106,
+            106
+          ],
+          "status": "psn"
+        }
+      ]
+    },
+    {
+      "source": "guts-closure-foe.txt",
+      "normalized": [
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "handler.guts",
+    "state.canonical",
+    "handler.modify-attack",
+    "handler.black-belt",
+    "status.poison"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng",
+    "terminal"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

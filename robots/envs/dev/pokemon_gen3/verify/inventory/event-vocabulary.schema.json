@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-2.local/pokemon-gen3/event-vocabulary-v2.schema.json",
+  "title": "Pinned Gen 3 OU event vocabulary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "oracle_revision", "format", "frozen_hook_records", "hook_derived_events", "runtime_callsite_events", "unique_events", "events"],
+  "properties": {
+    "schema": {"const": "pokemon-gen3ou-event-vocabulary-v2"},
+    "oracle_revision": {"const": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+    "format": {"const": "gen3ou"},
+    "frozen_hook_records": {"const": 505},
+    "hook_derived_events": {"const": 70},
+    "runtime_callsite_events": {"const": ["ChangeBoost"]},
+    "unique_events": {"const": 71},
+    "events": {
+      "type": "array", "minItems": 70, "maxItems": 70,
+      "items": {"$ref": "#/$defs/event"}
+    }
+  },
+  "$defs": {
+    "event": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "algebra", "frozen_handler_count", "raw_hooks", "scopes", "owner_kinds", "discovery", "ordering", "current_native_kernel"],
+      "properties": {
+        "event": {"type": "string", "minLength": 1},
+        "algebra": {"enum": ["numeric-or-cancel-relay", "mutable-value-relay", "mutable-boost-table-relay", "boolean-or-null-gate", "target-redirect-relay", "selector-or-replacement-relay", "state-mutation-notification", "void-notification"]},
+        "frozen_handler_count": {"type": "integer", "minimum": 0},
+        "raw_hooks": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "scopes": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "owner_kinds": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "discovery": {"type": "string", "minLength": 1},
+        "ordering": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "current_native_kernel": {"type": "boolean"}
+      }
+    }
+  }
+}

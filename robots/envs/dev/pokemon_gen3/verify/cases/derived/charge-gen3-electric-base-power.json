@@ -1,0 +1,114 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "charge-gen3-electric-base-power",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts:2261-2302; data/mods/gen3/moves.ts:116-119",
+    "test_name": "Gen 3 Charge doubles the next Electric move without a SpD boost",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    811,
+    23,
+    47,
+    71
+  ],
+  "teams": [
+    {
+      "source": "charge-gen3-electric-base-power-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "charge",
+            "thunderbolt"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            249
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "charge-gen3-electric-base-power-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "nature": "hardy",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.after-move",
+    "handler.base-power",
+    "move.charge",
+    "prng.labeled",
+    "state.canonical",
+    "volatile.charge"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

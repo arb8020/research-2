@@ -1,0 +1,7 @@
+Smeargle (M) @ White Herb
+Ability: Own Tempo
+Level: 100
+EVs: 1 HP
+Serious Nature
+- Howl
+- Overheat

@@ -1,0 +1,124 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "haze-substitute-bypass",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/moves.ts; sim/battle-actions.ts",
+    "test_name": "Haze HitField: haze-substitute-bypass",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "haze-substitute-bypass-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "splash",
+            "haze"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "haze-substitute-bypass-p2.txt",
+      "normalized": [
+        {
+          "species": "dusclops",
+          "level": 100,
+          "gender": "M",
+          "ability": "pressure",
+          "item": "",
+          "moves": [
+            "substitute",
+            "calmmind",
+            "protect"
+          ],
+          "stats": [
+            221,
+            176,
+            296,
+            156,
+            296,
+            86
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "effect.boost",
+    "hit.always",
+    "volatile.substitute",
+    "hit.substitute",
+    "hit.protect",
+    "ability.pressure",
+    "handler.deduct-pp",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

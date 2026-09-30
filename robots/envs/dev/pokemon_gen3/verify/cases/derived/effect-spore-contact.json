@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"effect-spore-contact-failure",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen3/abilities.ts effectspore.onDamagingHit","test_name":"Failed Effect Spore activation consumes no status-selection draw","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,3],
+  "teams":[{"source":"persian-tackle-flame-body-p1.txt","normalized":[{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["tackle"],"stats":[271,176,156,166,166,266],"status":null}]},{"source":"breloom-effect-spore-bulk-up-p2.txt","normalized":[{"species":"breloom","level":100,"gender":"M","ability":"effectspore","item":"","moves":["bulkup"],"stats":[261,296,196,156,156,176],"status":null}]}],
+  "source_choices":[["move 1","move 1"]],"choices":[["move 1","move 1"]],"forced_outcomes":[],
+  "features":["ability.effectspore","handler.damaging-hit","choice.move","damage.gen3","status.sleep","status.paralysis","status.poison","state.canonical","prng.labeled"],"boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":2,"max_actions":2}
+}

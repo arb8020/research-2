@@ -1,0 +1,14 @@
+Gengar (M)
+Ability: Levitate
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Spore
+- Splash
+
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Splash

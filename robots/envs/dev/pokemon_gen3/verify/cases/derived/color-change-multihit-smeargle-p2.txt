@@ -1,0 +1,7 @@
+Smeargle (M)
+Ability: Own Tempo
+Level: 70
+EVs: 4 HP / 252 SpA
+Hardy Nature
+- Growth
+- Bullet Seed

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "format": "gen3ou",
+  "showdown_commit": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "cases": [
+    {
+      "name": "seed42-battle03-simultaneous-forced-replacement",
+      "path": "cases/seed42-battle03-simultaneous-forced-replacement.json"
+    },
+    {
+      "name": "seed42-battle04-forced-replacement",
+      "path": "cases/seed42-battle04-forced-replacement.json"
+    },
+    {
+      "name": "seed42-battle04-complete-struggle",
+      "path": "cases/seed42-battle04-complete-struggle.json"
+    },
+    {
+      "name": "seed42-battle08-clean-double-switch",
+      "path": "cases/seed42-battle08-clean-double-switch.json"
+    },
+    {
+      "name": "seed42-battle09-tied-double-switch",
+      "path": "cases/seed42-battle09-tied-double-switch.json"
+    }
+  ]
+}

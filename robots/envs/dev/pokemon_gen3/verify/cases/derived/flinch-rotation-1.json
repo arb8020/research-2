@@ -1,0 +1,128 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "flinch-rotation-1",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/conditions.ts; sim/battle-actions.ts; sim/pokemon.ts",
+    "test_name": "flinch-rotation-1",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    313,
+    197,
+    83,
+    80
+  ],
+  "teams": [
+    {
+      "source": "flinch-rotation-1-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "astonish",
+            "extrasensory",
+            "needlearm",
+            "boneclub"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "flinch-rotation-1-p2.txt",
+      "normalized": [
+        {
+          "species": "golem",
+          "level": 100,
+          "gender": "M",
+          "ability": "rockhead",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            301,
+            256,
+            296,
+            146,
+            166,
+            126
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "volatile.flinch",
+    "effect.secondary",
+    "handler.before-move",
+    "prng.secondary",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 5,
+    "max_actions": 8
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "haze-pressure-staging",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/moves.ts; sim/battle-actions.ts",
+    "test_name": "Haze HitField: haze-pressure-staging",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "haze-pressure-staging-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "haze"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "haze-pressure-staging-p2.txt",
+      "normalized": [
+        {
+          "species": "articuno",
+          "level": 100,
+          "gender": "N",
+          "ability": "pressure",
+          "item": "",
+          "moves": [
+            "agility"
+          ],
+          "stats": [
+            321,
+            206,
+            236,
+            226,
+            286,
+            206
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "effect.boost",
+    "hit.always",
+    "ability.pressure",
+    "handler.deduct-pp",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

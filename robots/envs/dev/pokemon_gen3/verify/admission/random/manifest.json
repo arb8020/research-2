@@ -1,0 +1,8 @@
+{
+  "schema": "pokemon-gen3ou-admission-random-manifest-v1",
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "format": "gen3ou",
+  "seeds": [12648430, 9, 10, 11, 12],
+  "accepted_per_seed": 125,
+  "rejected_per_seed": 125
+}

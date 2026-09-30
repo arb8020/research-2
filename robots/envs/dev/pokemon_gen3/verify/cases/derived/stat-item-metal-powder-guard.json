@@ -1,0 +1,102 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "stat-item-metal-powder-guard",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/items.ts; data/mods/gen3/items.ts; sim/battle.ts",
+    "test_name": "stat-item-metal-powder-guard",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "stat-item-metal-powder-guard-p1.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "ability": "limber",
+          "item": "metalpowder",
+          "moves": [
+            "scratch"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "stat-item-metal-powder-guard-p2.txt",
+      "normalized": [
+        {
+          "species": "ditto",
+          "level": 100,
+          "gender": "N",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            237,
+            132,
+            132,
+            132,
+            132,
+            132
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "queue.speed",
+    "prng.labeled",
+    "state.canonical",
+    "item.metal-powder",
+    "handler.species-guard"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

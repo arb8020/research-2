@@ -1,0 +1,106 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "type-boost-miracle-seed-giga-drain",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/items.ts",
+    "test_name": "Miracle Seed boosts a matching Gen 3 special Grass move",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "venusaur-miracle-seed-drain-p1.txt",
+      "normalized": [
+        {
+          "species": "venusaur",
+          "level": 100,
+          "gender": "M",
+          "ability": "overgrow",
+          "item": "miracleseed",
+          "moves": [
+            "tackle",
+            "gigadrain",
+            "toxic",
+            "protect"
+          ],
+          "stats": [
+            301,
+          200,
+            202,
+            236,
+            236,
+            196
+          ],
+          "status": null,
+          "initial_hp": 201
+        }
+      ]
+    },
+    {
+      "source": "tyrogue-tackle-p2.txt",
+      "normalized": [
+        {
+          "species": "tyrogue",
+          "level": 100,
+          "gender": "M",
+          "ability": "guts",
+          "item": "",
+          "moves": [
+            "tackle"
+          ],
+          "stats": [
+            211,
+            106,
+            106,
+            106,
+            106,
+            106
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "effect.drain",
+    "handler.modify-special-attack",
+    "handler.type-boost-item",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng",
+    "terminal"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

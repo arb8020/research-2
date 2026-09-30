@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"poison-point-steel-immunity",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen3/abilities.ts poisonpoint.onDamagingHit; sim/pokemon.ts trySetStatus","test_name":"Poison Point consumes activation before Steel status immunity","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,3],
+  "teams":[{"source":"metagross-strength-contact-p1.txt","normalized":[{"species":"metagross","level":100,"gender":"N","ability":"clearbody","item":"","moves":["strength"],"stats":[301,306,296,226,216,176],"status":null}]},{"source":"roselia-poison-point-growth-p2.txt","normalized":[{"species":"roselia","level":100,"gender":"F","ability":"poisonpoint","item":"","moves":["growth"],"stats":[241,156,126,236,196,166],"status":null}]}],
+  "source_choices":[["move 1","move 1"]],"choices":[["move 1","move 1"]],"forced_outcomes":[],
+  "features":["ability.poisonpoint","handler.damaging-hit","choice.move","damage.gen3","status.type-immunity","state.canonical","prng.labeled"],"boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":2,"max_actions":2}
+}

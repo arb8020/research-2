@@ -1,0 +1,121 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "spit-up-immune-consumes",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#stockpile,spitup,swallow; data/mods/gen4/moves.ts#swallow; data/mods/gen3/moves.ts#stockpile",
+    "test_name": "Normal immunity still reaches Spit Up AfterMove and consumes Stockpile",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    431,
+    73,
+    31,
+    11
+  ],
+  "teams": [
+    {
+      "source": "spit-up-immune-consumes-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "stockpile",
+            "spitup"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "spit-up-immune-consumes-p2.txt",
+      "normalized": [
+        {
+          "species": "banette",
+          "level": 100,
+          "gender": "M",
+          "ability": "insomnia",
+          "item": "",
+          "moves": [
+            "thief"
+          ],
+          "stats": [
+            269,
+            266,
+            166,
+            202,
+            162,
+            166
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.after-move",
+    "handler.try",
+    "hit.immunity-cause",
+    "lifecycle.condition-duration",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}
