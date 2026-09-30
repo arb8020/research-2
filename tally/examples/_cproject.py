@@ -4,6 +4,8 @@ from pathlib import Path
 
 from tally import Ctx, Handle, KeyFn, Step, assert_matches_clean, open_ctx, src
 
+COMPILE, LINK, TEST = "compile_c", "link", "run_tests"  # step names, as they appear in ctx.ran
+
 DEFAULTS = {"b_body": "return x + 1;", "header_comment": "shared helpers", "opt": "O1"}
 
 
@@ -23,14 +25,14 @@ def _strip(text: str) -> str:
 
 # Everything a step depends on is an arg: util.h reaches compile only via `headers`.
 def compile_c(ctx: Ctx, source: Handle, headers: list[Handle], opt: str, *, out: Path) -> None:
-    decls = [_strip(Path(h.path).read_text()) for h in headers]
+    decls = [_strip(Path(header.path).read_text()) for header in headers]
     body = _strip(Path(source.path).read_text())
-    obj = "\n".join([f"; object -{opt}", *decls, body if opt == "O1" else body.replace(" ", "")])
-    (out / (Path(source.path).stem + ".o")).write_text(obj + "\n")
+    object_text = "\n".join([f"; object -{opt}", *decls, body if opt == "O1" else body.replace(" ", "")])
+    (out / (Path(source.path).stem + ".o")).write_text(object_text + "\n")
 
 
 def link(ctx: Ctx, objs: list[Handle], *, out: Path) -> None:
-    parts = [p.read_text() for h in objs for p in sorted(Path(h.path).glob("*.o"))]
+    parts = [obj_file.read_text() for obj in objs for obj_file in sorted(Path(obj.path).glob("*.o"))]
     assert len(parts) == len(objs), "each compile output holds exactly one .o"
     (out / "app").write_text("".join(parts))
 
@@ -45,11 +47,11 @@ def steps(key: KeyFn) -> tuple[Step, Step, Step]:
 
 
 def build(ctx: Ctx, files: dict[str, Handle], key: KeyFn, opt: str) -> dict[str, Handle]:
-    COMPILE, LINK, TEST = steps(key)
-    a = ctx.fetch(COMPILE, files["a.c"], [files["util.h"]], opt)
-    b = ctx.fetch(COMPILE, files["b.c"], [files["util.h"]], opt)
-    app = ctx.fetch(LINK, [a, b])
-    return {"a.o": a, "b.o": b, "app": app, "test": ctx.fetch(TEST, app)}
+    compile_step, link_step, test_step = steps(key)
+    a_obj = ctx.fetch(compile_step, files["a.c"], [files["util.h"]], opt)
+    b_obj = ctx.fetch(compile_step, files["b.c"], [files["util.h"]], opt)
+    app = ctx.fetch(link_step, [a_obj, b_obj])
+    return {"a.o": a_obj, "b.o": b_obj, "app": app, "test": ctx.fetch(test_step, app)}
 
 
 SCENARIOS: list[tuple[str, dict[str, str]]] = [
@@ -70,10 +72,12 @@ def run_scenarios(root: Path, key: KeyFn) -> list[tuple[str, list[str], dict[str
     for label, edits in SCENARIOS:
         state = {**state, **edits}
         files = write_project(root / "src", state["b_body"], state["header_comment"])
-        n = len(ctx.ran)
+        ran_before = len(ctx.ran)
         outs = build(ctx, files, key, state["opt"])
-        ran = ctx.ran[n:]
-        results.append((label, ran, {k: ctx.digest(h) for k, h in outs.items()}))  # hash for the report only
+        ran = ctx.ran[ran_before:]
+        results.append((label, ran, {name: ctx.digest(out) for name, out in outs.items()}))  # hash for the report only
         assert ctx.load(outs["test"]) == {"passed": True}
-        assert_matches_clean(lambda c, f=files, o=state["opt"]: tuple(build(c, f, key, o).values()), ctx)
+        assert_matches_clean(
+            lambda any_ctx, files=files, opt=state["opt"]: tuple(build(any_ctx, files, key, opt).values()), ctx,
+        )
     return results
