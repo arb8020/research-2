@@ -12,23 +12,32 @@ Slice 1: derivations only — cached pure steps. Stdlib only (sqlite3).
 - `KeyFn` — `key(step, args, kwargs) -> Key`. User-owned; must be computable pre-run, sound, stable.
   Built-ins: `keys.recipe` (Nix: Handle args contribute `.key`, no early cutoff) and
   `keys.bytes` (Bazel: Handle args contribute `.digest`, early cutoff).
-- `Step(fn, key, code_fp, serialize)` — `fn(ctx, *args, out=Path, **kw)` writes into `out` and/or returns a JSON value.
+- `Step(fn, key, code_fp, serialize)` — `fn(step_ctx, *args, out=Path, **kw)` writes into `out` and/or returns a JSON value.
+
+## Who holds what
+
+- `Store(meta, blobs)` — persists across builds; belongs to the build system. `open_store(root)`.
+- `Build(active, ran)` — per-build scratch (cycle detection, what executed); thrown away.
+- `StepCtx(fetch, load, ran)` — all a step or top-level code ever holds. `start(store)` makes a fresh
+  Build and returns its StepCtx. Steps never see Store or Build (paper: tasks get only `fetch`).
+- Module-level functions: `fetch(store, build, step, *args)`, `digest(store, handle)`, `load(handle)`.
 
 ```python
-from tally import open_ctx, step
+from tally import open_store, start, step
 
 @step
 def fib(ctx, n, *, out):
     if n < 2: return n
     return ctx.load(ctx.fetch(fib, n - 1)) + ctx.load(ctx.fetch(fib, n - 2))
 
-ctx = open_ctx(Path("store"))
+store = open_store(Path("store"))
+ctx = start(store)
 ctx.load(ctx.fetch(fib, 10))   # 55; ctx.ran lists what actually executed
 ```
 
 Store: sqlite `Meta` (key -> pending | done) + `LocalBlobStore` (tmp dir -> atomic rename to `blobs/<key>`).
-Only `done` rows are hits. Debug helpers: `assert_matches_clean(build, ctx)` (paper Def. 3.1: same as a
-build from an empty store) and `key_stability("module:STEP", args)` (keys across processes / hash seeds).
+Only `done` rows are hits. Debug helpers: `assert_matches_clean(build, store)` (paper Def. 3.1: same as a
+build from an empty store; `build` takes a StepCtx) and `key_stability("module:STEP", args)` (keys across processes / hash seeds).
 
 ## Run
 

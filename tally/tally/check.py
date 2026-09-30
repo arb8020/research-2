@@ -9,28 +9,28 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from tally.core import Ctx, Step, open_ctx
+from tally.core import Step, StepCtx, Store, digest, open_store, start
 from tally.store import Handle, Key
 
-type Build = Callable[[Ctx], Handle | Sequence[Handle]]
+type BuildFn = Callable[[StepCtx], Handle | Sequence[Handle]]
 
 
 def _handles(out: Handle | Sequence[Handle]) -> tuple[Handle, ...]:
     return (out,) if isinstance(out, Handle) else tuple(out)
 
 
-def assert_matches_clean(build: Build, ctx: Ctx) -> None:
+def assert_matches_clean(build: BuildFn, store: Store) -> None:
     """
-    Rerun `build` on ctx (must be a no-op: everything cached) and on a fresh empty store;
+    Rerun `build` against store (must be a no-op: everything cached) and against a fresh empty store;
     output digests must match. "Correct = same as building from scratch."
     """
-    before = len(ctx.ran)
-    cached_raw = _handles(build(ctx))
-    assert ctx.ran[before:] == [], f"rebuild right after build did work: {ctx.ran[before:]}"
-    with tempfile.TemporaryDirectory() as d:
-        fresh = open_ctx(Path(d))
-        clean = tuple(fresh.digest(handle) for handle in _handles(build(fresh)))
-    cached = tuple(ctx.digest(handle) for handle in cached_raw)
+    cached_ctx = start(store)
+    cached_raw = _handles(build(cached_ctx))
+    assert cached_ctx.ran == [], f"rebuild right after build did work: {cached_ctx.ran}"
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        fresh = open_store(Path(tmp_dir))
+        clean = tuple(digest(fresh, handle) for handle in _handles(build(start(fresh))))
+    cached = tuple(digest(store, handle) for handle in cached_raw)
     assert len(cached) == len(clean), f"{len(cached)} handles vs {len(clean)} from clean"
     for cached_out, clean_out in zip(cached, clean, strict=True):
         assert cached_out.digest == clean_out.digest, f"cached {cached_out.path} != clean build (key {cached_out.key[:12]})"

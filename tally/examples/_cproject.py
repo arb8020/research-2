@@ -2,7 +2,7 @@
 import re
 from pathlib import Path
 
-from tally import Ctx, Handle, KeyFn, Step, assert_matches_clean, open_ctx, src
+from tally import Handle, KeyFn, Step, StepCtx, assert_matches_clean, digest, open_store, src, start
 
 COMPILE, LINK, TEST = "compile_c", "link", "run_tests"  # step names, as they appear in ctx.ran
 
@@ -24,20 +24,20 @@ def _strip(text: str) -> str:
 
 
 # Everything a step depends on is an arg: util.h reaches compile only via `headers`.
-def compile_c(ctx: Ctx, source: Handle, headers: list[Handle], opt: str, *, out: Path) -> None:
+def compile_c(ctx: StepCtx, source: Handle, headers: list[Handle], opt: str, *, out: Path) -> None:
     decls = [_strip(Path(header.path).read_text()) for header in headers]
     body = _strip(Path(source.path).read_text())
     object_text = "\n".join([f"; object -{opt}", *decls, body if opt == "O1" else body.replace(" ", "")])
     (out / (Path(source.path).stem + ".o")).write_text(object_text + "\n")
 
 
-def link(ctx: Ctx, objs: list[Handle], *, out: Path) -> None:
+def link(ctx: StepCtx, objs: list[Handle], *, out: Path) -> None:
     parts = [obj_file.read_text() for obj in objs for obj_file in sorted(Path(obj.path).glob("*.o"))]
     assert len(parts) == len(objs), "each compile output holds exactly one .o"
     (out / "app").write_text("".join(parts))
 
 
-def run_tests(ctx: Ctx, app: Handle, *, out: Path) -> dict:
+def run_tests(ctx: StepCtx, app: Handle, *, out: Path) -> dict:
     text = (Path(app.path) / "app").read_text()
     return {"passed": "main()" in text.replace(" ", "")}
 
@@ -46,7 +46,7 @@ def steps(key: KeyFn) -> tuple[Step, Step, Step]:
     return Step(compile_c, key=key), Step(link, key=key), Step(run_tests, key=key)
 
 
-def build(ctx: Ctx, files: dict[str, Handle], key: KeyFn, opt: str) -> dict[str, Handle]:
+def build(ctx: StepCtx, files: dict[str, Handle], key: KeyFn, opt: str) -> dict[str, Handle]:
     compile_step, link_step, test_step = steps(key)
     a_obj = ctx.fetch(compile_step, files["a.c"], [files["util.h"]], opt)
     b_obj = ctx.fetch(compile_step, files["b.c"], [files["util.h"]], opt)
@@ -66,7 +66,8 @@ SCENARIOS: list[tuple[str, dict[str, str]]] = [
 
 def run_scenarios(root: Path, key: KeyFn) -> list[tuple[str, list[str], dict[str, Handle]]]:
     """Apply each scenario's edits cumulatively; record what ran. Every scenario is checked against a clean build."""
-    ctx = open_ctx(root / "store")
+    store = open_store(root / "store")
+    ctx = start(store)
     state = dict(DEFAULTS)
     results = []
     for label, edits in SCENARIOS:
@@ -75,9 +76,9 @@ def run_scenarios(root: Path, key: KeyFn) -> list[tuple[str, list[str], dict[str
         ran_before = len(ctx.ran)
         outs = build(ctx, files, key, state["opt"])
         ran = ctx.ran[ran_before:]
-        results.append((label, ran, {name: ctx.digest(out) for name, out in outs.items()}))  # hash for the report only
+        results.append((label, ran, {name: digest(store, out) for name, out in outs.items()}))  # hash for the report only
         assert ctx.load(outs["test"]) == {"passed": True}
         assert_matches_clean(
-            lambda any_ctx, files=files, opt=state["opt"]: tuple(build(any_ctx, files, key, opt).values()), ctx,
+            lambda any_ctx, files=files, opt=state["opt"]: tuple(build(any_ctx, files, key, opt).values()), store,
         )
     return results

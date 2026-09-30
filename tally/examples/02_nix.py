@@ -4,7 +4,7 @@ from pathlib import Path
 
 from _cproject import COMPILE, DEFAULTS, LINK, TEST, build, run_scenarios, steps, write_project
 
-from tally import Handle, Key, Step, keys, open_ctx
+from tally import Handle, Key, Step, keys, open_store, start
 
 
 def compare_with_bazel() -> None:
@@ -39,14 +39,14 @@ def one_lookup() -> None:
     print("\none lookup:")
     with tempfile.TemporaryDirectory() as tmp:
         files = write_project(Path(tmp) / "src", DEFAULTS["b_body"], DEFAULTS["header_comment"])
-        ctx = open_ctx(Path(tmp) / "store")
+        store = open_store(Path(tmp) / "store")
         final_key = plan(files, "O1")
-        print(f"  planned final key {final_key[:16]}..  in store: {ctx.meta.get(final_key) is not None}")
-        assert ctx.meta.get(final_key) is None
-        built = build(ctx, files, keys.recipe, "O1")["test"]
+        print(f"  planned final key {final_key[:16]}..  in store: {store.meta.get(final_key) is not None}")
+        assert store.meta.get(final_key) is None
+        built = build(start(store), files, keys.recipe, "O1")["test"]
         assert built.key == final_key
-        print(f"  built; final key  {built.key[:16]}..  in store: {ctx.meta.get(final_key) is not None}")
-        assert ctx.meta.get(final_key) == built  # next time: one lookup answers "is everything up to date?"
+        print(f"  built; final key  {built.key[:16]}..  in store: {store.meta.get(final_key) is not None}")
+        assert store.meta.get(final_key) == built  # next time: one lookup answers "is everything up to date?"
 
 
 def main() -> None:

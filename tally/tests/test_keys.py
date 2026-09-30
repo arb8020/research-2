@@ -1,10 +1,10 @@
 import hashlib
 from pathlib import Path
 
-from tally import Ctx, Hashed, KeyFn, Step, ast_fp, key_stability, keys, value_fp
+from tally import Hashed, KeyFn, Step, StepCtx, ast_fp, key_stability, keys, value_fp
 
 
-def good(ctx: Ctx, x: int, *, out: Path) -> int:
+def good(ctx: StepCtx, x: int, *, out: Path) -> int:
     return x + 1
 
 
