@@ -1,0 +1,109 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "critical-battle-armor-cancel",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/items.ts; data/abilities.ts; sim/battle-actions.ts",
+    "test_name": "critical-battle-armor-cancel",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    419,
+    223,
+    107,
+    53
+  ],
+  "teams": [
+    {
+      "source": "critical-battle-armor-cancel-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "slash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "critical-battle-armor-cancel-p2.txt",
+      "normalized": [
+        {
+          "species": "kabuto",
+          "level": 100,
+          "gender": "M",
+          "ability": "battlearmor",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            201,
+            196,
+            216,
+            146,
+            126,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.critical",
+      "occurrence": 1,
+      "range": 8,
+      "result": 0
+    }
+  ],
+  "features": [
+    "choice.move",
+    "damage.critical",
+    "handler.modify-crit-ratio",
+    "prng.labeled",
+    "state.canonical",
+    "ability.battle-armor",
+    "handler.critical-hit-cancel"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"self-destruct-protect",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen3/scripts.ts useMove; sim/pokemon.ts faint; sim/battle.ts faintMessages","test_name":"Explosion queues its user before Protect blocks the target hit","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"metagross-explosion-blissey-p1.txt","normalized":[{"species":"metagross","level":90,"gender":"N","ability":"clearbody","item":"","moves":["explosion"],"stats":[271,275,266,203,194,158],"status":null},{"species":"blissey","level":100,"gender":"F","ability":"naturalcure","item":"","moves":["splash"],"stats":[651,56,56,186,306,146],"status":null}]},{"source":"persian-protect-p2.txt","normalized":[{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["protect"],"stats":[271,176,156,166,166,266],"status":null}]}],
+  "source_choices":[["move 1","move 1"]],"choices":[["move 1","move 1"]],"forced_outcomes":[{"label":"move.accuracy","occurrence":1,"range":100,"result":88}],
+  "features":["choice.move","damage.gen3","hit.protect","lifecycle.faint","request.legal-choices","state.canonical","volatile.protect"],"boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":2,"max_actions":2}
+}

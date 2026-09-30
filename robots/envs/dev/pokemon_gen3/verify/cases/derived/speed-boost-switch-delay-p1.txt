@@ -1,0 +1,13 @@
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Splash
+
+Ninjask (M)
+Ability: Speed Boost
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Swords Dance

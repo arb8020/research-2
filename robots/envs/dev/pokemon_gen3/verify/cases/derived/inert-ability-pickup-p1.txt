@@ -1,0 +1,6 @@
+Zigzagoon (M) @ Leftovers
+Ability: Pickup
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Tackle

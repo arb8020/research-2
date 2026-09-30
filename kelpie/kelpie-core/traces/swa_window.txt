@@ -1,0 +1,43 @@
+# One sliding-window group, W=8, block 4 (plateau ceil(7/4)+1 = 3 blocks). 15 usable blocks.
+# Rows slide out once the next query cannot see them (keys >= n_computed - 7): row 0 at
+# n_computed=11, row 1 at 15. The table keeps its logical positions with 0 in the holes, and the
+# held count never exceeds 3 no matter how long A runs.
+config max_batch_tokens=16 max_batch_reqs=4 block_size=4 groups=window8 num_blocks=16 reserve_ratio=0 order=running_first eos=99
+submit A prompt=4 max_new=20
+step
+  expect batch A:4
+  expect free 14
+  expect table A g=0 [1]
+step
+  expect free 13
+  expect table A g=0 [1,2]
+step
+step
+step
+step
+  expect free 12
+  expect table A g=0 [1,2,3]
+step
+step
+step
+  expect free 13
+  expect table A g=0 [0,2,3]
+step
+  expect free 12
+  expect table A g=0 [0,2,3,4]
+step
+step
+step
+  expect free 13
+  expect table A g=0 [0,0,3,4]
+step
+  expect free 12
+  expect table A g=0 [0,0,3,4,5]
+step
+step
+step
+step
+step
+step
+expect finished A reason=finished_length
+expect free 15

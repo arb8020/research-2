@@ -1,0 +1,146 @@
+id: no-docstrings-python
+snapshots:
+  ? |-
+    # a comment first
+    '''still the module docstring'''
+  : labels:
+    - source: '''''''still the module docstring'''''''
+      style: primary
+      start: 18
+      end: 50
+    - source: |-
+        # a comment first
+        '''still the module docstring'''
+      style: secondary
+      start: 0
+      end: 50
+    - source: '''''''still the module docstring'''''''
+      style: secondary
+      start: 18
+      end: 50
+  '''''''module docstring''''''':
+    labels:
+    - source: '''''''module docstring'''''''
+      style: primary
+      start: 0
+      end: 22
+    - source: '''''''module docstring'''''''
+      style: secondary
+      start: 0
+      end: 22
+    - source: '''''''module docstring'''''''
+      style: secondary
+      start: 0
+      end: 22
+  ? |-
+    @dec
+    def f():
+        'decorated docstring'
+  : labels:
+    - source: '''decorated docstring'''
+      style: primary
+      start: 18
+      end: 39
+    - source: |-
+        def f():
+            'decorated docstring'
+      style: secondary
+      start: 5
+      end: 39
+    - source: '''decorated docstring'''
+      style: secondary
+      start: 18
+      end: 39
+    - source: '''decorated docstring'''
+      style: secondary
+      start: 18
+      end: 39
+  ? |-
+    async def f():
+        r'''raw docstring'''
+  : labels:
+    - source: r'''raw docstring'''
+      style: primary
+      start: 19
+      end: 39
+    - source: |-
+        async def f():
+            r'''raw docstring'''
+      style: secondary
+      start: 0
+      end: 39
+    - source: r'''raw docstring'''
+      style: secondary
+      start: 19
+      end: 39
+    - source: r'''raw docstring'''
+      style: secondary
+      start: 19
+      end: 39
+  ? |-
+    class K:
+        '''class docstring'''
+  : labels:
+    - source: '''''''class docstring'''''''
+      style: primary
+      start: 13
+      end: 34
+    - source: |-
+        class K:
+            '''class docstring'''
+      style: secondary
+      start: 0
+      end: 34
+    - source: '''''''class docstring'''''''
+      style: secondary
+      start: 13
+      end: 34
+    - source: '''''''class docstring'''''''
+      style: secondary
+      start: 13
+      end: 34
+  ? |-
+    class K:
+        def m(self):
+            'method docstring'
+  : labels:
+    - source: '''method docstring'''
+      style: primary
+      start: 34
+      end: 52
+    - source: |-
+        def m(self):
+                'method docstring'
+      style: secondary
+      start: 13
+      end: 52
+    - source: '''method docstring'''
+      style: secondary
+      start: 34
+      end: 52
+    - source: '''method docstring'''
+      style: secondary
+      start: 34
+      end: 52
+  ? |-
+    def f():
+        '''function docstring'''
+  : labels:
+    - source: '''''''function docstring'''''''
+      style: primary
+      start: 13
+      end: 37
+    - source: |-
+        def f():
+            '''function docstring'''
+      style: secondary
+      start: 0
+      end: 37
+    - source: '''''''function docstring'''''''
+      style: secondary
+      start: 13
+      end: 37
+    - source: '''''''function docstring'''''''
+      style: secondary
+      start: 13
+      end: 37

@@ -1,0 +1,5 @@
+Raikou
+Ability: Pressure
+Level: 100
+Hardy Nature
+- Thunderbolt

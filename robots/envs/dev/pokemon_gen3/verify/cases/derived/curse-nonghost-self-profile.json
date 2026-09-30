@@ -1,0 +1,100 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "curse-nonghost-self-profile",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#curse; data/mods/gen4/moves.ts#curse; sim/battle-actions.ts; sim/pokemon.ts",
+    "test_name": "A non-Ghost Curse retargets its user and changes Attack, Defense, and Speed",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    601,
+    602,
+    603,
+    604
+  ],
+  "teams": [
+    {
+      "source": "curse-nonghost-self-profile-p1.txt",
+      "normalized": [
+        {
+          "species": "snorlax",
+          "level": 100,
+          "gender": "M",
+          "ability": "immunity",
+          "item": "",
+          "moves": [
+            "curse"
+          ],
+          "stats": [
+            461,
+            256,
+            166,
+            166,
+            256,
+            96
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "curse-nonghost-self-profile-p2.txt",
+      "normalized": [
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "condition.volatile",
+    "handler.modify-move",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

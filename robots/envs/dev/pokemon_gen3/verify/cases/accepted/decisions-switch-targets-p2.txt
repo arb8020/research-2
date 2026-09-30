@@ -1,0 +1,11 @@
+Charmander
+Ability: Blaze
+- Scratch
+
+Charmeleon
+Ability: Blaze
+- Scratch
+
+Charizard
+Ability: Blaze
+- Scratch

@@ -1,0 +1,623 @@
+{
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "corpus": [
+    {
+      "kind": "move",
+      "id": "assist",
+      "source_file": "test/sim/moves/assist.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "batonpass",
+      "source_file": "test/sim/moves/batonpass.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "bellydrum",
+      "source_file": "test/sim/moves/bellydrum.js",
+      "test_count": 4
+    },
+    {
+      "kind": "move",
+      "id": "bide",
+      "source_file": "test/sim/moves/bide.js",
+      "test_count": 7
+    },
+    {
+      "kind": "move",
+      "id": "brickbreak",
+      "source_file": "test/sim/moves/brickbreak.js",
+      "test_count": 7
+    },
+    {
+      "kind": "move",
+      "id": "camouflage",
+      "source_file": "test/sim/moves/camouflage.js",
+      "test_count": 3
+    },
+    {
+      "kind": "move",
+      "id": "charge",
+      "source_file": "test/sim/moves/charge.js",
+      "test_count": 4
+    },
+    {
+      "kind": "move",
+      "id": "conversion2",
+      "source_file": "test/sim/moves/conversion2.js",
+      "test_count": 6
+    },
+    {
+      "kind": "move",
+      "id": "counter",
+      "source_file": "test/sim/moves/counter.js",
+      "test_count": 23
+    },
+    {
+      "kind": "move",
+      "id": "curse",
+      "source_file": "test/sim/moves/curse.js",
+      "test_count": 12
+    },
+    {
+      "kind": "move",
+      "id": "destinybond",
+      "source_file": "test/sim/moves/destinybond.js",
+      "test_count": 7
+    },
+    {
+      "kind": "move",
+      "id": "disable",
+      "source_file": "test/sim/moves/disable.js",
+      "test_count": 10
+    },
+    {
+      "kind": "move",
+      "id": "encore",
+      "source_file": "test/sim/moves/encore.js",
+      "test_count": 9
+    },
+    {
+      "kind": "move",
+      "id": "explosion",
+      "source_file": "test/sim/moves/explosion.js",
+      "test_count": 4
+    },
+    {
+      "kind": "move",
+      "id": "fakeout",
+      "source_file": "test/sim/moves/fakeout.js",
+      "test_count": 5
+    },
+    {
+      "kind": "move",
+      "id": "focuspunch",
+      "source_file": "test/sim/moves/focuspunch.js",
+      "test_count": 12
+    },
+    {
+      "kind": "move",
+      "id": "followme",
+      "source_file": "test/sim/moves/followme.js",
+      "test_count": 5
+    },
+    {
+      "kind": "move",
+      "id": "foresight",
+      "source_file": "test/sim/moves/foresight.js",
+      "test_count": 3
+    },
+    {
+      "kind": "move",
+      "id": "furycutter",
+      "source_file": "test/sim/moves/furycutter.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "futuresight",
+      "source_file": "test/sim/moves/futuresight.js",
+      "test_count": 22
+    },
+    {
+      "kind": "move",
+      "id": "glare",
+      "source_file": "test/sim/moves/glare.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "haze",
+      "source_file": "test/sim/moves/haze.js",
+      "test_count": 14
+    },
+    {
+      "kind": "move",
+      "id": "healbell",
+      "source_file": "test/sim/moves/healbell.js",
+      "test_count": 5
+    },
+    {
+      "kind": "move",
+      "id": "highjumpkick",
+      "source_file": "test/sim/moves/highjumpkick.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "hyperbeam",
+      "source_file": "test/sim/moves/hyperbeam.js",
+      "test_count": 11
+    },
+    {
+      "kind": "move",
+      "id": "hypervoice",
+      "source_file": "test/sim/moves/hypervoice.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "imprison",
+      "source_file": "test/sim/moves/imprison.js",
+      "test_count": 13
+    },
+    {
+      "kind": "move",
+      "id": "ingrain",
+      "source_file": "test/sim/moves/ingrain.js",
+      "test_count": 3
+    },
+    {
+      "kind": "move",
+      "id": "knockoff",
+      "source_file": "test/sim/moves/knockoff.js",
+      "test_count": 10
+    },
+    {
+      "kind": "move",
+      "id": "leechseed",
+      "source_file": "test/sim/moves/leechseed.js",
+      "test_count": 1
+    },
+    {
+      "kind": "move",
+      "id": "lockon",
+      "source_file": "test/sim/moves/lockon.js",
+      "test_count": 1
+    },
+    {
+      "kind": "move",
+      "id": "memento",
+      "source_file": "test/sim/moves/memento.js",
+      "test_count": 4
+    },
+    {
+      "kind": "move",
+      "id": "mirrormove",
+      "source_file": "test/sim/moves/mirrormove.js",
+      "test_count": 7
+    },
+    {
+      "kind": "move",
+      "id": "nightmare",
+      "source_file": "test/sim/moves/nightmare.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "painsplit",
+      "source_file": "test/sim/moves/painsplit.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "perishsong",
+      "source_file": "test/sim/moves/perishsong.js",
+      "test_count": 4
+    },
+    {
+      "kind": "move",
+      "id": "psychup",
+      "source_file": "test/sim/moves/psychup.js",
+      "test_count": 3
+    },
+    {
+      "kind": "move",
+      "id": "pursuit",
+      "source_file": "test/sim/moves/pursuit.js",
+      "test_count": 21
+    },
+    {
+      "kind": "move",
+      "id": "rage",
+      "source_file": "test/sim/moves/rage.js",
+      "test_count": 1
+    },
+    {
+      "kind": "move",
+      "id": "rapidspin",
+      "source_file": "test/sim/moves/rapidspin.js",
+      "test_count": 5
+    },
+    {
+      "kind": "move",
+      "id": "recycle",
+      "source_file": "test/sim/moves/recycle.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "rollout",
+      "source_file": "test/sim/moves/rollout.js",
+      "test_count": 9
+    },
+    {
+      "kind": "move",
+      "id": "sheercold",
+      "source_file": "test/sim/moves/sheercold.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "skillswap",
+      "source_file": "test/sim/moves/skillswap.js",
+      "test_count": 1
+    },
+    {
+      "kind": "move",
+      "id": "sleeptalk",
+      "source_file": "test/sim/moves/sleeptalk.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "smellingsalts",
+      "source_file": "test/sim/moves/smellingsalts.js",
+      "test_count": 1
+    },
+    {
+      "kind": "move",
+      "id": "snatch",
+      "source_file": "test/sim/moves/snatch.js",
+      "test_count": 8
+    },
+    {
+      "kind": "move",
+      "id": "spikes",
+      "source_file": "test/sim/moves/spikes.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "spite",
+      "source_file": "test/sim/moves/spite.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "stockpile",
+      "source_file": "test/sim/moves/stockpile.js",
+      "test_count": 1
+    },
+    {
+      "kind": "move",
+      "id": "struggle",
+      "source_file": "test/sim/moves/struggle.js",
+      "test_count": 1
+    },
+    {
+      "kind": "move",
+      "id": "substitute",
+      "source_file": "test/sim/moves/substitute.js",
+      "test_count": 13
+    },
+    {
+      "kind": "move",
+      "id": "taunt",
+      "source_file": "test/sim/moves/taunt.js",
+      "test_count": 3
+    },
+    {
+      "kind": "move",
+      "id": "teleport",
+      "source_file": "test/sim/moves/teleport.js",
+      "test_count": 1
+    },
+    {
+      "kind": "move",
+      "id": "thief",
+      "source_file": "test/sim/moves/thief.js",
+      "test_count": 3
+    },
+    {
+      "kind": "move",
+      "id": "thrash",
+      "source_file": "test/sim/moves/thrash.js",
+      "test_count": 8
+    },
+    {
+      "kind": "move",
+      "id": "thunderwave",
+      "source_file": "test/sim/moves/thunderwave.js",
+      "test_count": 1
+    },
+    {
+      "kind": "move",
+      "id": "toxic",
+      "source_file": "test/sim/moves/toxic.js",
+      "test_count": 2
+    },
+    {
+      "kind": "move",
+      "id": "transform",
+      "source_file": "test/sim/moves/transform.js",
+      "test_count": 33
+    },
+    {
+      "kind": "move",
+      "id": "trick",
+      "source_file": "test/sim/moves/trick.js",
+      "test_count": 8
+    },
+    {
+      "kind": "move",
+      "id": "uproar",
+      "source_file": "test/sim/moves/uproar.js",
+      "test_count": 3
+    },
+    {
+      "kind": "move",
+      "id": "weatherball",
+      "source_file": "test/sim/moves/weatherball.js",
+      "test_count": 7
+    },
+    {
+      "kind": "move",
+      "id": "wish",
+      "source_file": "test/sim/moves/wish.js",
+      "test_count": 4
+    },
+    {
+      "kind": "move",
+      "id": "yawn",
+      "source_file": "test/sim/moves/yawn.js",
+      "test_count": 3
+    },
+    {
+      "kind": "ability",
+      "id": "arenatrap",
+      "source_file": "test/sim/abilities/arenatrap.js",
+      "test_count": 1
+    },
+    {
+      "kind": "ability",
+      "id": "battlearmor",
+      "source_file": "test/sim/abilities/battlearmor.js",
+      "test_count": 2
+    },
+    {
+      "kind": "ability",
+      "id": "clearbody",
+      "source_file": "test/sim/abilities/clearbody.js",
+      "test_count": 7
+    },
+    {
+      "kind": "ability",
+      "id": "cloudnine",
+      "source_file": "test/sim/abilities/cloudnine.js",
+      "test_count": 10
+    },
+    {
+      "kind": "ability",
+      "id": "colorchange",
+      "source_file": "test/sim/abilities/colorchange.js",
+      "test_count": 2
+    },
+    {
+      "kind": "ability",
+      "id": "damp",
+      "source_file": "test/sim/abilities/damp.js",
+      "test_count": 3
+    },
+    {
+      "kind": "ability",
+      "id": "flashfire",
+      "source_file": "test/sim/abilities/flashfire.js",
+      "test_count": 6
+    },
+    {
+      "kind": "ability",
+      "id": "immunity",
+      "source_file": "test/sim/abilities/immunity.js",
+      "test_count": 3
+    },
+    {
+      "kind": "ability",
+      "id": "intimidate",
+      "source_file": "test/sim/abilities/intimidate.js",
+      "test_count": 6
+    },
+    {
+      "kind": "ability",
+      "id": "levitate",
+      "source_file": "test/sim/abilities/levitate.js",
+      "test_count": 7
+    },
+    {
+      "kind": "ability",
+      "id": "lightningrod",
+      "source_file": "test/sim/abilities/lightningrod.js",
+      "test_count": 8
+    },
+    {
+      "kind": "ability",
+      "id": "liquidooze",
+      "source_file": "test/sim/abilities/liquidooze.js",
+      "test_count": 5
+    },
+    {
+      "kind": "ability",
+      "id": "magnetpull",
+      "source_file": "test/sim/abilities/magnetpull.js",
+      "test_count": 4
+    },
+    {
+      "kind": "ability",
+      "id": "naturalcure",
+      "source_file": "test/sim/abilities/naturalcure.js",
+      "test_count": 1
+    },
+    {
+      "kind": "ability",
+      "id": "owntempo",
+      "source_file": "test/sim/abilities/owntempo.js",
+      "test_count": 1
+    },
+    {
+      "kind": "ability",
+      "id": "pickup",
+      "source_file": "test/sim/abilities/pickup.js",
+      "test_count": 9
+    },
+    {
+      "kind": "ability",
+      "id": "pressure",
+      "source_file": "test/sim/abilities/pressure.js",
+      "test_count": 16
+    },
+    {
+      "kind": "ability",
+      "id": "rockhead",
+      "source_file": "test/sim/abilities/rockhead.js",
+      "test_count": 5
+    },
+    {
+      "kind": "ability",
+      "id": "roughskin",
+      "source_file": "test/sim/abilities/roughskin.js",
+      "test_count": 1
+    },
+    {
+      "kind": "ability",
+      "id": "serenegrace",
+      "source_file": "test/sim/abilities/serenegrace.js",
+      "test_count": 3
+    },
+    {
+      "kind": "ability",
+      "id": "shellarmor",
+      "source_file": "test/sim/abilities/shellarmor.js",
+      "test_count": 2
+    },
+    {
+      "kind": "ability",
+      "id": "shielddust",
+      "source_file": "test/sim/abilities/shielddust.js",
+      "test_count": 7
+    },
+    {
+      "kind": "ability",
+      "id": "stickyhold",
+      "source_file": "test/sim/abilities/stickyhold.js",
+      "test_count": 2
+    },
+    {
+      "kind": "ability",
+      "id": "sturdy",
+      "source_file": "test/sim/abilities/sturdy.js",
+      "test_count": 9
+    },
+    {
+      "kind": "ability",
+      "id": "suctioncups",
+      "source_file": "test/sim/abilities/suctioncups.js",
+      "test_count": 2
+    },
+    {
+      "kind": "ability",
+      "id": "synchronize",
+      "source_file": "test/sim/abilities/synchronize.js",
+      "test_count": 1
+    },
+    {
+      "kind": "ability",
+      "id": "thickfat",
+      "source_file": "test/sim/abilities/thickfat.js",
+      "test_count": 3
+    },
+    {
+      "kind": "ability",
+      "id": "trace",
+      "source_file": "test/sim/abilities/trace.js",
+      "test_count": 4
+    },
+    {
+      "kind": "ability",
+      "id": "truant",
+      "source_file": "test/sim/abilities/truant.js",
+      "test_count": 6
+    },
+    {
+      "kind": "ability",
+      "id": "wonderguard",
+      "source_file": "test/sim/abilities/wonderguard.js",
+      "test_count": 7
+    },
+    {
+      "kind": "item",
+      "id": "lansatberry",
+      "source_file": "test/sim/items/lansatberry.js",
+      "test_count": 2
+    },
+    {
+      "kind": "item",
+      "id": "leftovers",
+      "source_file": "test/sim/items/leftovers.js",
+      "test_count": 1
+    },
+    {
+      "kind": "item",
+      "id": "leppaberry",
+      "source_file": "test/sim/items/leppaberry.js",
+      "test_count": 1
+    },
+    {
+      "kind": "item",
+      "id": "lumberry",
+      "source_file": "test/sim/items/lumberry.js",
+      "test_count": 5
+    },
+    {
+      "kind": "item",
+      "id": "mail",
+      "source_file": "test/sim/items/mail.js",
+      "test_count": 4
+    },
+    {
+      "kind": "item",
+      "id": "quickclaw",
+      "source_file": "test/sim/items/quickclaw.js",
+      "test_count": 2
+    },
+    {
+      "kind": "item",
+      "id": "shellbell",
+      "source_file": "test/sim/items/shellbell.js",
+      "test_count": 2
+    },
+    {
+      "kind": "item",
+      "id": "sitrusberry",
+      "source_file": "test/sim/items/sitrusberry.js",
+      "test_count": 6
+    },
+    {
+      "kind": "item",
+      "id": "whiteherb",
+      "source_file": "test/sim/items/whiteherb.js",
+      "test_count": 5
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"light-screen-special-half",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen4/moves.ts","test_name":"Checkpoint 6: Light Screen halves ordinary special damage in singles","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,8],
+  "teams":[{"source":"alakazam-light-screen-p1.txt","normalized":[{"species":"alakazam","level":100,"gender":"M","ability":"synchronize","item":"","moves":["lightscreen"],"stats":[251,136,126,306,206,276],"status":null}]},{"source":"starmie-surf-p2.txt","normalized":[{"species":"starmie","level":100,"gender":"N","ability":"naturalcure","item":"","moves":["surf"],"stats":[261,186,206,236,206,266],"status":null}]}],
+  "source_choices":[["move 1","move 1"]],"choices":[["move 1","move 1"]],"forced_outcomes":[{"label":"move.critical","occurrence":1,"range":16,"result":7},{"label":"move.damage_roll","occurrence":1,"range":16,"result":15}],
+  "features":["choice.move","condition.side","damage.gen3","damage.screen","handler.residual","lifecycle.condition-duration","prng.labeled","side.lightscreen","state.canonical"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],"limits":{"max_boundaries":2,"max_actions":2}
+}

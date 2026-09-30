@@ -1,0 +1,6 @@
+Lanturn (M) @ Leftovers
+Ability: Illuminate
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Surf

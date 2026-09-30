@@ -1,0 +1,106 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "tri-attack-ghost-immunity",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#triattack.secondary.onHit; sim/battle-actions.ts#secondaries",
+    "test_name": "Normal immunity stops Tri Attack before damage and secondary work",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    1
+  ],
+  "teams": [
+    {
+      "source": "tri-attack-ghost-immunity-p1.txt",
+      "normalized": [
+        {
+          "species": "porygon2",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "trace",
+          "item": "",
+          "moves": [
+            "triattack"
+          ],
+          "stats": [
+            311,
+            196,
+            216,
+            246,
+            226,
+            156
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "tri-attack-ghost-immunity-p2.txt",
+      "normalized": [
+        {
+          "species": "gengar",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "levitate",
+          "item": "",
+          "moves": [
+            "haze"
+          ],
+          "stats": [
+            261,
+            166,
+            156,
+            296,
+            186,
+            256
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "effect.secondary",
+    "handler.immunity",
+    "hit.accuracy",
+    "hit.type-immunity",
+    "prng.labeled",
+    "prng.secondary",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

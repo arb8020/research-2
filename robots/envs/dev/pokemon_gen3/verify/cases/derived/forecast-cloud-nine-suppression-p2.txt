@@ -1,0 +1,11 @@
+Golduck (M)
+Ability: Cloud Nine
+Level: 100
+Hardy Nature
+- Splash
+
+Smeargle (M)
+Ability: Own Tempo
+Level: 100
+Hardy Nature
+- Splash

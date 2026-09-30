@@ -1,0 +1,126 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "truant-wake-after-acting-turn",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/abilities.ts#truant; sim/battle.ts; sim/battle-actions.ts; sim/pokemon.ts",
+    "test_name": "Pinned Truant regression: Rest on an acting phase leaves the waking phase loafing",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    741,
+    742,
+    743,
+    744
+  ],
+  "teams": [
+    {
+      "source": "truant-wake-after-acting-turn-p1.txt",
+      "normalized": [
+        {
+          "species": "slaking",
+          "level": 100,
+          "gender": "M",
+          "ability": "truant",
+          "item": "",
+          "moves": [
+            "rest",
+            "scratch"
+          ],
+          "stats": [
+            441,
+            356,
+            236,
+            226,
+            166,
+            236
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "truant-wake-after-acting-turn-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "handler.before-move",
+    "handler.residual",
+    "lifecycle.switch-persistence",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 5,
+    "max_actions": 8
+  }
+}

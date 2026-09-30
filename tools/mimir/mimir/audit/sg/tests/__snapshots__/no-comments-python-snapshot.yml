@@ -1,0 +1,32 @@
+id: no-comments-python
+snapshots:
+  '# a comment':
+    labels:
+    - source: '# a comment'
+      style: primary
+      start: 0
+      end: 11
+  '#!/usr/bin/env python':
+    labels:
+    - source: '#!/usr/bin/env python'
+      style: primary
+      start: 0
+      end: 21
+  'x = 1  # noqa':
+    labels:
+    - source: '# noqa'
+      style: primary
+      start: 7
+      end: 13
+  'x = 1  # trailing':
+    labels:
+    - source: '# trailing'
+      style: primary
+      start: 7
+      end: 17
+  'x = f()  # type: ignore':
+    labels:
+    - source: '# type: ignore'
+      style: primary
+      start: 9
+      end: 23

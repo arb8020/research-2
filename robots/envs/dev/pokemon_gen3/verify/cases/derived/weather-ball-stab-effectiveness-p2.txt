@@ -1,0 +1,6 @@
+Metagross (M)
+Ability: Clear Body
+Level: 100
+Hardy Nature
+- Sunny Day
+- Splash

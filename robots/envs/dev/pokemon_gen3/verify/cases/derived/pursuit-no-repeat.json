@@ -1,0 +1,28 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "pursuit-no-repeat",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/moves/pursuit.js:38; data/mods/gen3/moves.ts#pursuit",
+    "test_name": "Pursuit should not repeat when both sides switch on the following turn",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [441, 442, 443, 444],
+  "teams": [
+    {"source": "pursuit-no-repeat-p1.txt", "normalized": [
+      {"species": "tyranitar", "level": 100, "gender": "M", "ability": "sandstream", "item": "", "moves": ["pursuit"], "stats": [341, 304, 256, 226, 236, 158], "status": null},
+      {"species": "blissey", "level": 100, "gender": "F", "ability": "naturalcure", "item": "", "moves": ["softboiled"], "stats": [651, 56, 56, 186, 306, 146], "status": null}
+    ]},
+    {"source": "pursuit-no-switch-control-p2.txt", "normalized": [
+      {"species": "alakazam", "level": 100, "gender": "M", "ability": "synchronize", "item": "", "moves": ["calmmind"], "stats": [251, 136, 126, 306, 206, 276], "status": null},
+      {"species": "blissey", "level": 100, "gender": "F", "ability": "naturalcure", "item": "", "moves": ["softboiled"], "stats": [651, 56, 56, 186, 306, 146], "status": null}
+    ]}
+  ],
+  "source_choices": [["move 1", "move 1"], ["switch 2", "switch 2"]],
+  "choices": [["move 1", "move 1"], ["switch 2", "switch 2"]],
+  "forced_outcomes": [],
+  "features": ["choice.move", "choice.switch", "handler.switch-out", "prng.labeled", "queue.move-priority", "state.canonical"],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 3, "max_actions": 4}
+}

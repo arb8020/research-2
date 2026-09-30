@@ -51,7 +51,7 @@ def _collect_imports(filepath: str) -> list[ImportReference]:
   return imports
 
 
-def _relpath_to_module(relpath: str) -> str:
+def relpath_to_module(relpath: str) -> str:
   no_ext = relpath[:-3] if relpath.endswith(".py") else relpath
   parts = [part for part in no_ext.replace("\\", "/").split("/") if part]
   if parts and parts[-1] == "__init__":
@@ -59,11 +59,11 @@ def _relpath_to_module(relpath: str) -> str:
   return ".".join(parts)
 
 
-def _absolute_module(importing_file: str, ref: ImportReference) -> str | None:
+def absolute_module(importing_file: str, ref: ImportReference) -> str | None:
   if ref.level == 0:
     return ref.module
 
-  importing_module = _relpath_to_module(importing_file)
+  importing_module = relpath_to_module(importing_file)
   package = importing_module if importing_file.endswith("/__init__.py") else importing_module.rpartition(".")[0]
   parts = package.split(".") if package else []
   parents = ref.level - 1
@@ -75,13 +75,13 @@ def _absolute_module(importing_file: str, ref: ImportReference) -> str | None:
   return ".".join(base)
 
 
-def _resolve_reference(
+def resolve_reference(
   importing_file: str,
   ref: ImportReference,
   modules: dict[str, str],
 ) -> set[str]:
   """Resolve each imported module to its most-specific represented file."""
-  base = _absolute_module(importing_file, ref)
+  base = absolute_module(importing_file, ref)
   if base is None:
     return set()
 
@@ -149,14 +149,14 @@ def build_import_graph(root: str, exclude: list[str] | None = None) -> ImportGra
   """Build the internal file-level import graph rooted at ``root``."""
   files = list(iter_py_files(root, exclude))
   module_to_relpath = {
-    _relpath_to_module(os.path.relpath(filepath, root)): os.path.relpath(filepath, root)
+    relpath_to_module(os.path.relpath(filepath, root)): os.path.relpath(filepath, root)
     for filepath in files
   }
   edges: dict[str, set[str]] = {}
   for filepath in files:
     relpath = os.path.relpath(filepath, root)
     targets = set().union(*(
-      _resolve_reference(relpath, ref, module_to_relpath)
+      resolve_reference(relpath, ref, module_to_relpath)
       for ref in _collect_imports(filepath)
     ))
     targets.discard(relpath)

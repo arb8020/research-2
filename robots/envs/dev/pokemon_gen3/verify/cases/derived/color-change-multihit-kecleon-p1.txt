@@ -1,0 +1,7 @@
+Kecleon (M)
+Ability: Color Change
+Level: 25
+EVs: 4 HP
+Hardy Nature
+- Substitute
+- Recover

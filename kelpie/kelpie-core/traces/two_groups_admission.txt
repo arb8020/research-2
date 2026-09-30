@@ -1,0 +1,17 @@
+# full + window8 groups, block 4, 7 usable blocks. B holds 2 + 2, leaving 3. An 8-token prompt
+# needs 2 rows in each group: 4 blocks, the sum over groups, so A waits although each group
+# alone would fit in 3. A is admitted once B finishes.
+config max_batch_tokens=16 max_batch_reqs=4 block_size=4 groups=full,window8 num_blocks=8 reserve_ratio=0 order=running_first eos=99
+submit B prompt=8 max_new=2 base=2000
+submit A prompt=8 max_new=4
+step
+  expect batch B:8
+  expect waiting A
+  expect free 3
+step
+  expect batch B:1
+  expect waiting A
+expect finished B reason=finished_length
+step
+  expect batch A:8
+  expect free 3

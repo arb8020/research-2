@@ -1,0 +1,104 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "secondary-zapcannon",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts",
+    "test_name": "Generated single-effect damaging secondary: Zap Cannon",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    313,
+    197,
+    83,
+    21
+  ],
+  "teams": [
+    {
+      "source": "secondary-zapcannon-p1.txt",
+      "normalized": [
+        {
+          "species": "regice",
+          "level": 100,
+          "gender": "N",
+          "ability": "clearbody",
+          "item": "",
+          "moves": [
+            "zapcannon"
+          ],
+          "stats": [
+            301,
+            136,
+            236,
+            236,
+            436,
+            136
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "secondary-zapcannon-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "effect.secondary",
+    "hit.accuracy",
+    "prng.labeled",
+    "prng.secondary",
+    "state.canonical",
+    "status.paralysis"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "immunity",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

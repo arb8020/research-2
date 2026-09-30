@@ -1,0 +1,22 @@
+# Cancel between plan(N+1) and commit(N), with A already reserved (planned_ahead) for N+1: cancel()
+# holds A's blocks (like A2's ordinary held-slot rule) but additionally leaves N+1's reserved row
+# alone (its blocks are freed once, at commit(N), via unwind_reservation -- freeing cancel()'s
+# own held blocks AND the reservation's extra row together). commit(N) hits the cancelled branch,
+# unwinds the placeholder (pops the -1 token, rolls n_computed back by 1, frees ALL of A's blocks),
+# strikes A out of the not-yet-committed N+1 plan, and releases the slot immediately (no held slot
+# survives into N+1 -- A is simply gone by the time N+1's own commit runs).
+config max_batch_tokens=8 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99 overlap=1
+submit A prompt=4 max_new=5
+step tokens=A:7
+plan tokens=A:8
+  expect batch A:1                  # N: real decode
+plan tokens=A:9
+  expect batch A:1                  # N+1: reserved
+  expect reserved A true
+cancel A
+commit                              # commits N: cancelled branch, unwinds the reservation, releases the slot
+  expect free 7                     # every block A held (N's + the reserved N+1 row) is back
+  expect batch                      # N+1 (promoted to plan_out here) no longer names A: empty batch
+commit                              # commits N+1 (now empty): closes the pipeline
+  expect running
+  expect waiting

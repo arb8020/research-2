@@ -1,0 +1,33 @@
+# Preemption cannot target a request while it holds an outstanding, uncommitted plan entry
+# (docs/spike-overlap-ref.md O4): under overlap EVERY running request already carries one by the
+# time plan_running's victim search would run for N+1 (reserve_ahead stamped it first). So a
+# runner short of blocks during an "ahead" plan is SKIPPED (A1/A4 style: keeps its blocks, goes
+# first next step), never preempted -- both A and B are skipped this round rather than one
+# preempting the other. Once the pipeline drains back to depth 0 (both commits applied),
+# preemption resumes normally on the next plan (same block-boundary crossing that, without
+# overlap, would have preempted one of them immediately).
+config max_batch_tokens=16 max_batch_reqs=4 block_size=4 num_blocks=5 reserve_ratio=0 order=running_first eos=99 overlap=1
+submit A prompt=4 max_new=12
+submit B prompt=4 max_new=12
+step tokens=A:7,B:7
+step tokens=A:8,B:8
+step tokens=A:9,B:9
+step tokens=A:10,B:10
+  expect free 0
+plan tokens=A:11,B:11
+  expect batch A:1 B:1              # N: steady-state decode, no new block needed yet
+plan
+  expect ahead_batch                # N+1: reservation pushes both past the block boundary; no
+                                     # room and nobody preemptable -> both skipped, empty batch
+  expect running A B
+  expect waiting
+  expect free 0
+commit                              # commits N: real tokens for A and B
+  expect free 0
+commit                              # commits the (empty) N+1: closes the pipeline
+  expect running A B
+plan
+  expect batch A:1                  # fresh plan, no outstanding commit: preemption allowed again
+  expect running A
+  expect waiting B
+  expect free 1

@@ -1,0 +1,140 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "transform-ability-start-switch-reset",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#transform; sim/pokemon.ts#transformInto; sim/pokemon.ts#clearVolatile",
+    "test_name": "copied Gen 3 abilities do not run Start and switching restores the immutable base profile",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    143,
+    144,
+    145,
+    146
+  ],
+  "teams": [
+    {
+      "source": "transform-ability-start-switch-reset-p1.txt",
+      "normalized": [
+        {
+          "species": "ditto",
+          "level": 100,
+          "gender": "N",
+          "nature": "hardy",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "transform"
+          ],
+          "stats": [
+            237,
+            132,
+            132,
+            132,
+            132,
+            132
+          ],
+          "status": null
+        },
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "transform-ability-start-switch-reset-p2.txt",
+      "normalized": [
+        {
+          "species": "gyarados",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "intimidate",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            331,
+            286,
+            194,
+            156,
+            236,
+            198
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "switch 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "ability.intimidate",
+    "choice.move",
+    "choice.switch",
+    "lifecycle.boost-reset",
+    "state.canonical",
+    "state.effective-type",
+    "state.transform-profile"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

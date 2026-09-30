@@ -1,0 +1,16 @@
+# Cancel between plan and commit of an entry holding everything pending at once: extra rows,
+# write[0] updated in place in the live unit, fresh write[1..3], and a checkpoint (its history
+# row completes 8). The cancel frees all of it right away; the commit then releases the slot.
+config max_seq_len=64 max_batch_tokens=64 max_batch_reqs=4 block_size=4 groups=full,state8 num_blocks=20 max_extra=3 reserve_ratio=0 order=running_first eos=99
+expect free 18
+submit A prompt=7 max_new=16
+step
+  expect free 15
+plan
+  expect idx A g=1 start=7 read=4 write=[4,6,7,8] ckpt=9@row0
+  expect free 10
+cancel A
+  expect free 18
+commit
+  expect free 18
+  expect running

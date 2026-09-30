@@ -1,0 +1,34 @@
+# Rollback on a per_seq group with extra rows (T1): the entry writes the state after every tail
+# row into its own unit; commit keeps write[kept - 1] as live and frees the rest. write[0] is the
+# live unit itself, updated in place: all extra rows rejected (kept=1) leaves it live, no copy.
+# S = 8, 2 checkpoints, Kmax = 3.
+config max_seq_len=64 max_batch_tokens=64 max_batch_reqs=4 block_size=4 groups=full,state8:2 num_blocks=32 max_extra=3 reserve_ratio=0 order=running_first eos=99
+submit A prompt=6 max_new=32
+plan
+  expect idx A g=1 start=0 read=Z write=[4,0,0,0] ckpt=-
+commit
+  expect units A g=1 live=4 ring=[]
+  expect free 27
+# kept=2: extra row 1 valid. live := write[1]; the old live 4 and write[2], write[3] go back.
+plan kept=A:2
+  expect rows A [1@6,-@7,-@8,-@9]
+  expect idx A g=1 start=6 read=4 write=[4,6,7,8] ckpt=-
+commit
+  expect units A g=1 live=6 ring=[]
+  expect n_computed A 8
+  expect free 26
+# The boundary at 8 fell on extra row 1 last step, which is never checkpointed (section 8 item
+# 5: only history rows); seq_start is now 8, so it is skipped for good -- the coarse grain.
+# kept=1: every extra row rejected; live stays 6, written in place.
+plan kept=A:1
+  expect idx A g=1 start=8 read=6 write=[6,9,10,11] ckpt=-
+commit
+  expect units A g=1 live=6 ring=[]
+  expect n_computed A 9
+  expect free 26
+# kept=4: all valid; live := write[3].
+plan kept=A:4
+  expect idx A g=1 start=9 read=6 write=[6,13,14,15] ckpt=-
+commit
+  expect units A g=1 live=15 ring=[]
+  expect n_computed A 13

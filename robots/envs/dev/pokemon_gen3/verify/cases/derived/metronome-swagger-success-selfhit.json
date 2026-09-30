@@ -1,0 +1,21 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"metronome-swagger-success-selfhit",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen6/moves.ts; data/moves.ts; data/mods/gen3/scripts.ts","test_name":"legal Metronome delegates to Swagger and the committed Attack boost powers the later confusion self-hit","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[257,4388,11058,25960],
+  "teams":[
+    {"source":"smeargle-metronome-splash-p1.txt","normalized":[{"species":"smeargle","level":100,"gender":"M","ability":"owntempo","item":"","moves":["metronome","splash"],"stats":[251,76,106,76,126,186],"status":null}]},
+    {"source":"persian-splash-p2.txt","normalized":[{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["splash"],"stats":[271,176,156,166,166,266],"status":null}]}
+  ],
+  "source_choices":[["move 1","move 1"],["move 2","move 1"]],
+  "choices":[["move 1","move 1"],["move 2","move 1"]],
+  "forced_outcomes":[
+    {"label":"move.delegation.selection","occurrence":1,"range":336,"result":196},
+    {"label":"move.accuracy","occurrence":1,"range":100,"result":34},
+    {"label":"condition.confusion.duration","occurrence":1,"range":4,"result":1},
+    {"label":"condition.confusion.action","occurrence":1,"range":2,"result":1},
+    {"label":"move.damage_roll","occurrence":1,"range":16,"result":3}
+  ],
+  "features":["choice.move","effect.boost","move.called-entry","prng.labeled","state.canonical","volatile.confusion"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],
+  "limits":{"max_boundaries":3,"max_actions":4}
+}

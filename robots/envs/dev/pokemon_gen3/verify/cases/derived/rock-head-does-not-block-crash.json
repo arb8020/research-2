@@ -1,0 +1,110 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "rock-head-does-not-block-crash",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/abilities/rockhead.js:35; data/mods/gen3/moves.ts#jumpkick",
+    "test_name": "Rock Head does not suppress protected Jump Kick crash damage",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "rock-head-does-not-block-crash-p1.txt",
+      "normalized": [
+        {
+          "species": "sudowoodo",
+          "level": 100,
+          "gender": "M",
+          "ability": "rockhead",
+          "item": "",
+          "moves": [
+            "mimic"
+          ],
+          "stats": [
+            281,
+            236,
+            266,
+            96,
+            166,
+            96
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "rock-head-does-not-block-crash-p2.txt",
+      "normalized": [
+        {
+          "species": "hitmonlee",
+          "level": 100,
+          "gender": "M",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "jumpkick",
+            "protect"
+          ],
+          "stats": [
+            241,
+            276,
+            142,
+            106,
+            256,
+            210
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "effect.crash-damage",
+    "handler.rock-head",
+    "prng.labeled",
+    "state.canonical",
+    "volatile.protect"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

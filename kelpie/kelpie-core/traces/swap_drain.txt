@@ -1,0 +1,14 @@
+config max_batch_reqs=1
+submit A prompt=1 max_new=2
+submit W prompt=1 max_new=1
+step tokens=A:7
+swap drain=1
+plan tokens=A:8
+expect state draining
+expect waiting W
+submit X prompt=1 max_new=1 fails=Draining
+expect submit rejected draining
+commit
+expect state serving
+step tokens=W:9
+expect launch_ctx B

@@ -1,0 +1,6 @@
+.zig-cache/
+kernels/*.cubin
+xgrammar_shim/build
+xgrammar_shim/build/
+zig-out
+zig-out/

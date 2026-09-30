@@ -1,0 +1,20 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "intimidate-initial-faster",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen4/scripts.ts;data/mods/gen3/abilities.ts",
+    "test_name": "Both initial active slots exist before faster per-entrant Intimidate Start",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {"source": "intimidate-salamence-p1.txt", "normalized": [{"species": "salamence", "level": 100, "gender": "M", "ability": "intimidate", "item": "", "moves": ["protect"], "stats": [331, 306, 196, 256, 196, 236], "status": null}]},
+    {"source": "intimidate-snorlax-p2.txt", "normalized": [{"species": "snorlax", "level": 100, "gender": "M", "ability": "immunity", "item": "", "moves": ["protect"], "stats": [461, 256, 166, 166, 256, 96], "status": null}]}
+  ],
+  "source_choices": [], "choices": [], "forced_outcomes": [],
+  "features": ["ability.intimidate", "queue.speed", "state.canonical"],
+  "boundaries": ["request", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 1, "max_actions": 0}
+}

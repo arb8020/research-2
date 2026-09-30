@@ -1,0 +1,7 @@
+Smeargle (F)
+Ability: Own Tempo
+Level: 100
+EVs: 4 Spe
+Hardy Nature
+- Calm Mind
+- Sand-Attack

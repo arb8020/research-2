@@ -8,7 +8,7 @@ allowed-tools: Bash(mimir *)
 Run this command using the Bash tool (it blocks until the user submits in the browser — use a 600000ms timeout):
 
 ```
-PYTHONPATH=/Users/chiraagbalu/silares_stuff/obol/worktrees/obol-sessions/packages/sessions/src mimir annotate --last
+mimir annotate --last
 ```
 
 The command starts a local server, opens the browser, and blocks until the user submits annotations or cancels (ctrl-c).

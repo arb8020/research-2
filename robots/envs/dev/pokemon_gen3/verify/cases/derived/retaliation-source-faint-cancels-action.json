@@ -1,0 +1,129 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "retaliation-source-faint-cancels-action",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/mods/gen3/moves.ts",
+    "test_name": "Gen 3 pre-resolution source self-faint cancels the queued Counter before forced replacement",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    51,
+    52,
+    53,
+    54
+  ],
+  "teams": [
+    {
+      "source": "retaliation-source-faint-cancels-action-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 5,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "selfdestruct"
+          ],
+          "stats": [
+            22,
+            8,
+            10,
+            8,
+            11,
+            14
+          ],
+          "status": null
+        },
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "retaliation-source-faint-cancels-action-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "counter"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      null
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      null
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "damage.fixed-literal",
+    "handler.damage",
+    "handler.try",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

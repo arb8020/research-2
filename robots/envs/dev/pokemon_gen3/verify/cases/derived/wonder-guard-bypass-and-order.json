@@ -1,0 +1,152 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "wonder-guard-bypass-and-order",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen4/abilities.ts; sim/battle-actions.ts",
+    "test_name": "status bypass, Protect precedence, natural immunity, and transfer rejection",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    719,
+    31,
+    47,
+    101
+  ],
+  "teams": [
+    {
+      "source": "wonder-guard-bypass-and-order-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "growl",
+            "watergun",
+            "tackle",
+            "roleplay"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "wonder-guard-bypass-and-order-p2.txt",
+      "normalized": [
+        {
+          "species": "shedinja",
+          "level": 100,
+          "gender": "N",
+          "nature": "hardy",
+          "ability": "wonderguard",
+          "item": "",
+          "moves": [
+            "thief",
+            "protect"
+          ],
+          "stats": [
+            1,
+            216,
+            126,
+            96,
+            96,
+            116
+          ],
+          "status": null
+        },
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "nature": "hardy",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "ability.wonder-guard",
+    "handler.try-hit",
+    "hit.immunity-cause",
+    "state.canonical",
+    "prng.labeled"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "immunity",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 5,
+    "max_actions": 8
+  }
+}

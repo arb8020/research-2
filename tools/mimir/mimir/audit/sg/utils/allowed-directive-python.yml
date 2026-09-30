@@ -1,0 +1,1 @@
+{"id": "allowed-directive-python", "language": "python", "rule": {"regex": "^#\\s*(type: ignore\\[|noqa:|fmt: skip|@ts-expect-error)"}}

@@ -1,0 +1,17 @@
+{
+  "schema": "pokemon-gen3ou-random-campaign-checkpoint7-report-v1",
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "manifest_sha256": "53487446f6a6545cc792804d91dd8f8f522427845e9bd92fee49e77247272be8",
+  "totals": {"cases": 4, "decisions": 401, "boundaries": 405},
+  "oracle_sha256": "2094ca01ccf6d6886bd5ea7a84df8628ad8bde09bc357ed4c0f055f6e68abd09",
+  "native_sha256": "986d9217623c6633b3c2879c7b80770e6263286fcbb0b40f5b5151d4d305cbdc",
+  "replay": {"oracle": "stable", "native": "stable"},
+  "coverage_dimensions": [
+    "choices", "conditions", "effects", "events", "handlers",
+    "ingredients", "prng", "queue", "requests", "terminal"
+  ],
+  "coverage_targets": {"met": 10, "total": 10, "failures": []},
+  "invariants_checked_after_every_native_transition": true,
+  "failure_retention_and_causal_minimizer_contract": "verify/random-battles/test-artifact.js and test-minimize.js",
+  "reproduce": "make -C verify/random-battles test SHOWDOWN_DIR=/path/to/pinned-observer-patched-showdown SUMMARY=/tmp/checkpoint7-summary.json"
+}

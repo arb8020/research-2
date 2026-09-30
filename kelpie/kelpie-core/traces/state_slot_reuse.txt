@@ -1,0 +1,20 @@
+# A request slot is reused: B lands in A's slot (max_requests=1) and starts from ZERO, whatever
+# units A left behind. Its fresh write[0] is A's recycled checkpoint unit (the pool has 4 free
+# units, so recycling is forced) -- harmless, since write[0] is written before anything reads it.
+# The core asserts no write or checkpoint index is ever ZERO.
+config max_seq_len=32 max_batch_tokens=32 max_batch_reqs=1 max_requests=1 block_size=4 groups=full,state8 num_blocks=6 reserve_ratio=0 order=running_first eos=99
+expect free 4
+submit A prompt=8 max_new=1
+plan
+  expect idx A g=1 start=0 read=Z write=[4] ckpt=5@row7
+commit
+# Finishing frees every unit at once; the slot itself is released by the poll.
+expect free 4
+expect finished A reason=finished_length
+expect polled A [1]
+submit B prompt=4 max_new=2
+plan
+  expect idx B g=1 start=0 read=Z write=[5] ckpt=-
+commit
+  expect table B g=0 [4]
+  expect units B g=1 live=5 ring=[]

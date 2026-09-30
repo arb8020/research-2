@@ -1,0 +1,133 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "drag-entry-lifecycle-recombination",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/battle-actions.ts; sim/battle.ts; data/moves.ts; data/abilities.ts",
+    "test_name": "Drag composes with Natural Cure, Spikes entry damage, and Intimidate",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    141,
+    142,
+    143,
+    144
+  ],
+  "teams": [
+    {
+      "source": "drag-entry-lifecycle-recombination-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "spikes",
+            "roar"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "drag-entry-lifecycle-recombination-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "M",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": "psn"
+        },
+        {
+          "species": "mawile",
+          "level": 100,
+          "gender": "M",
+          "ability": "intimidate",
+          "item": "",
+          "moves": [
+            "protect"
+          ],
+          "stats": [
+            241,
+            206,
+            206,
+            146,
+            146,
+            136
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "ability.intimidate",
+    "ability.natural-cure",
+    "choice.move",
+    "condition.side",
+    "handler.entry-hazard",
+    "handler.switch-out",
+    "prng.labeled",
+    "queue.move-priority",
+    "state.canonical",
+    "status.poison"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

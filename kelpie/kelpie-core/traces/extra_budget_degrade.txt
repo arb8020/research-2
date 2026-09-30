@@ -1,0 +1,15 @@
+# Extra rows are all or nothing (section 8 item 1): a drafter's noise block is non-causal, so a
+# partial block is wrong, not smaller. A runner whose 1 + n_extra rows do not fit the token
+# budget degrades to a plain decode rather than being skipped.
+config max_seq_len=64 max_batch_tokens=6 max_batch_reqs=4 block_size=4 groups=full num_blocks=32 max_extra=3 reserve_ratio=0 order=running_first eos=99
+submit A prompt=2 max_new=8
+submit B prompt=2 base=2000 max_new=8
+step
+  expect batch A:2 B:2
+# Budget 6: A takes 1 + 3, leaving 2. B would need 4: it gets 1 + 0, not 1 + 1.
+step
+  expect batch A:1+3 B:1
+  expect event n_extra_rows=3
+set max_batch_tokens=8
+step
+  expect batch A:1+3 B:1+3

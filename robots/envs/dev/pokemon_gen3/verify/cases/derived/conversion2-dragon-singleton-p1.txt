@@ -1,0 +1,6 @@
+Smeargle (M)
+Ability: Own Tempo
+Level: 100
+EVs: 252 Spe
+Jolly Nature
+- Conversion 2

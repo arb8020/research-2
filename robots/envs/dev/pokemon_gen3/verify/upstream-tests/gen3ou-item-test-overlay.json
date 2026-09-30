@@ -1,0 +1,3360 @@
+{
+  "schema": "pokemon-gen3ou-upstream-item-test-overlay-v1",
+  "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "scope": {
+    "census": "all-test-census.json",
+    "selection": "Every unadjudicated declaration under test/sim/items at generation time.",
+    "claim_boundary": "Audit overlay only. It neither changes native support claims nor substitutes for Gen 3-specific tests of similarly named mechanics."
+  },
+  "summary": {
+    "declarations": 115,
+    "by_disposition": {
+      "different_generation_not_direct_evidence": 1,
+      "mechanic_unreachable_gen3": 114
+    },
+    "requiring_new_case": 0,
+    "unresolved": 0
+  },
+  "records": [
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 13,
+        "full_test_name": "Ability Shield > should protect the holder's ability against ability-changing moves",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should protect the holder's ability against ability-changing moves"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 25,
+        "full_test_name": "Ability Shield > should protect the holder's ability against ability-changing abilities",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:25 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should protect the holder's ability against ability-changing abilities"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 37,
+        "full_test_name": "Ability Shield > should only protect the holder",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:37 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should only protect the holder"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 50,
+        "full_test_name": "Ability Shield > should protect the holder's ability against Neutralizing Gas",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:50 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should protect the holder's ability against Neutralizing Gas"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 65,
+        "full_test_name": "Ability Shield > should protect the holder's ability against Mold Breaker",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:65 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should protect the holder's ability against Mold Breaker"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 82,
+        "full_test_name": "Ability Shield > should protect the holder's ability against Gastro Acid",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:82 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should protect the holder's ability against Gastro Acid"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 97,
+        "full_test_name": "Ability Shield > should not unsuppress the holder's ability if Ability Shield is acquired after Gastro Acid has been used",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:97 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should not unsuppress the holder's ability if Ability Shield is acquired after Gastro Acid has been used"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 111,
+        "full_test_name": "Ability Shield > should unsuppress the holder's ability if Ability Shield is acquired after Neutralizing Gas has come into effect",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:111 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should unsuppress the holder's ability if Ability Shield is acquired after Neutralizing Gas has come into effect"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 125,
+        "full_test_name": "Ability Shield > should not be suppressed by Klutz",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:125 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should not be suppressed by Klutz"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 137,
+        "full_test_name": "Ability Shield > should protect the holder's ability against Skill Swap",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:137 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should protect the holder's ability against Skill Swap"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 152,
+        "full_test_name": "Ability Shield > should protect the holder's ability against Skill Swap, even if used by the holder",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:152 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should protect the holder's ability against Skill Swap, even if used by the holder"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 168,
+        "full_test_name": "Ability Shield > should not trigger holder's Intimidate if Ability Shield is acquired after entrance, while Neutralizing Gas is in effect",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:168 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should not trigger holder's Intimidate if Ability Shield is acquired after entrance, while Neutralizing Gas is in effect"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 180,
+        "full_test_name": "Ability Shield > should not trigger holder's Trace",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:180 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should not trigger holder's Trace"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 191,
+        "full_test_name": "Ability Shield > should not trigger holder's Trace even after losing the item",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:191 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should not trigger holder's Trace even after losing the item"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 203,
+        "full_test_name": "Ability Shield > should not prevent Imposter from changing the holder's ability",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:203 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should not prevent Imposter from changing the holder's ability"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/abilityshield.js",
+        "source_line": 214,
+        "full_test_name": "Ability Shield > should not prevent forme changes from changing the holder's ability",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2 defines Ability Shield; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/abilityshield.js:214 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "ability replacement, suppression, bypass, acquisition, and item/ability event ordering",
+        "Upstream assertion: Ability Shield > should not prevent forme changes from changing the holder's ability"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/adrenalineorb.js",
+        "source_line": 13,
+        "full_test_name": "Adrenaline Orb > should activate even if an Ability stopped Intimidate",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:111 defines Adrenaline Orb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/adrenalineorb.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "Intimidate-triggered item activation, effective boosts, stat caps, Contrary, Mist, and Substitute",
+        "Upstream assertion: Adrenaline Orb > should activate even if an Ability stopped Intimidate"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/adrenalineorb.js",
+        "source_line": 23,
+        "full_test_name": "Adrenaline Orb > should activate even if Mist stopped Intimidate",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:111 defines Adrenaline Orb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/adrenalineorb.js:23 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "Intimidate-triggered item activation, effective boosts, stat caps, Contrary, Mist, and Substitute",
+        "Upstream assertion: Adrenaline Orb > should activate even if Mist stopped Intimidate"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/adrenalineorb.js",
+        "source_line": 36,
+        "full_test_name": "Adrenaline Orb > should not activate if Substitute stopped Intimidate",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:111 defines Adrenaline Orb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/adrenalineorb.js:36 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "Intimidate-triggered item activation, effective boosts, stat caps, Contrary, Mist, and Substitute",
+        "Upstream assertion: Adrenaline Orb > should not activate if Substitute stopped Intimidate"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/adrenalineorb.js",
+        "source_line": 49,
+        "full_test_name": "Adrenaline Orb > should not activate if the holder is at -6 Attack",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:111 defines Adrenaline Orb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/adrenalineorb.js:49 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "Intimidate-triggered item activation, effective boosts, stat caps, Contrary, Mist, and Substitute",
+        "Upstream assertion: Adrenaline Orb > should not activate if the holder is at -6 Attack"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/adrenalineorb.js",
+        "source_line": 63,
+        "full_test_name": "Adrenaline Orb > should activate if the holder is at -5 Attack",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:111 defines Adrenaline Orb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/adrenalineorb.js:63 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "Intimidate-triggered item activation, effective boosts, stat caps, Contrary, Mist, and Substitute",
+        "Upstream assertion: Adrenaline Orb > should activate if the holder is at -5 Attack"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/adrenalineorb.js",
+        "source_line": 80,
+        "full_test_name": "Adrenaline Orb > should not activate if the holder is at +6 Speed",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:111 defines Adrenaline Orb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/adrenalineorb.js:80 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "Intimidate-triggered item activation, effective boosts, stat caps, Contrary, Mist, and Substitute",
+        "Upstream assertion: Adrenaline Orb > should not activate if the holder is at +6 Speed"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/adrenalineorb.js",
+        "source_line": 93,
+        "full_test_name": "Adrenaline Orb > should not activate if the Contrary holder is at +6 Attack",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:111 defines Adrenaline Orb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/adrenalineorb.js:93 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "Intimidate-triggered item activation, effective boosts, stat caps, Contrary, Mist, and Substitute",
+        "Upstream assertion: Adrenaline Orb > should not activate if the Contrary holder is at +6 Attack"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/adrenalineorb.js",
+        "source_line": 108,
+        "full_test_name": "Adrenaline Orb > should not activate if the Contrary holder is at -6 Speed",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:111 defines Adrenaline Orb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/adrenalineorb.js:108 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "Intimidate-triggered item activation, effective boosts, stat caps, Contrary, Mist, and Substitute",
+        "Upstream assertion: Adrenaline Orb > should not activate if the Contrary holder is at -6 Speed"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/assaultvest.js",
+        "source_line": 13,
+        "full_test_name": "Assault Vest > should disable the use of Status moves",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:313 defines Assault Vest; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 6.",
+        "test/sim/items/assaultvest.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "legal move choice restriction and Klutz item suppression",
+        "Upstream assertion: Assault Vest > should disable the use of Status moves"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 6, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/assaultvest.js",
+        "source_line": 20,
+        "full_test_name": "Assault Vest > should not prevent the use of Status moves",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:313 defines Assault Vest; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 6.",
+        "test/sim/items/assaultvest.js:20 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "legal move choice restriction and Klutz item suppression",
+        "Upstream assertion: Assault Vest > should not prevent the use of Status moves"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 6, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/boosterenergy.js",
+        "source_line": 13,
+        "full_test_name": "Booster Energy > should not activate before Sticky Web when switching in",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:622 defines Booster Energy; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/boosterenergy.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "switch-in item activation ordering relative to entry hazards",
+        "Upstream assertion: Booster Energy > should not activate before Sticky Web when switching in"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/choiceitem.js",
+        "source_line": 13,
+        "full_test_name": "Choice Items > should restore the same Choice lock after dynamax ends",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "different_generation_not_direct_evidence",
+      "evidence": [
+        "test/sim/items/choiceitem.js:14 constructs common.gen(8), and lines 20-24 exercise Dynamax ending and restoration of its prior Choice lock.",
+        "data/items.ts:959 defines Choice Band as a Gen 3 item, so the suite name is an umbrella; this declaration is specifically a Gen 8 transition and does not adjudicate ordinary Gen 3 Choice Band locking."
+      ],
+      "mechanics_and_boundaries": [
+        "Choice-lock persistence across Dynamax suppression and restoration",
+        "legal move choice after a generation-specific battle-mode transition"
+      ],
+      "native_coverage": {
+        "status": "different_generation_assertion_not_covered",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [
+            "item-choice-band-connected-lock",
+            "item-choice-band-miss-lock",
+            "item-choice-band-status-lock",
+            "item-choice-band-switch-reset"
+          ],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The native Gen 3 contract has no Dynamax state or transition. The listed fixtures cover ordinary Gen 3 Choice Band locking, but cannot cover or be credited for this Gen 8 assertion."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/drives.js",
+        "source_line": 19,
+        "full_test_name": "Drives > drive > should not be stolen or removed if held by a Genesect",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:716 defines Drives and Genesect; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/drives.js:19 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "species-bound item removal, theft, transfer, Fling, and generated parameterized cases",
+        "Upstream assertion: Drives > drive > should not be stolen or removed if held by a Genesect"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/drives.js",
+        "source_line": 37,
+        "full_test_name": "Drives > drive > should not be removed by Fling if held by a Genesect",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:716 defines Drives and Genesect; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/drives.js:37 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "species-bound item removal, theft, transfer, Fling, and generated parameterized cases",
+        "Upstream assertion: Drives > drive > should not be removed by Fling if held by a Genesect"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/drives.js",
+        "source_line": 45,
+        "full_test_name": "Drives > drive > should not be given to a Genesect",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:716 defines Drives and Genesect; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/drives.js:45 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "species-bound item removal, theft, transfer, Fling, and generated parameterized cases",
+        "Upstream assertion: Drives > drive > should not be given to a Genesect"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/drives.js",
+        "source_line": 53,
+        "full_test_name": "Drives > drive > should be removed if not held by a Genesect",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:716 defines Drives and Genesect; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/drives.js:53 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "species-bound item removal, theft, transfer, Fling, and generated parameterized cases",
+        "Upstream assertion: Drives > drive > should be removed if not held by a Genesect"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ejectpack.js",
+        "source_line": 13,
+        "full_test_name": "Eject Pack > should switch out the holder when its stats are lowered",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1704 defines Eject Pack; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/ejectpack.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "stat-drop-triggered switching, deferred switches, queue ordering, doubles slot replacement, and item acquisition timing",
+        "Upstream assertion: Eject Pack > should switch out the holder when its stats are lowered"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ejectpack.js",
+        "source_line": 24,
+        "full_test_name": "Eject Pack > should switch out the holder after Moody's stat drop",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1704 defines Eject Pack; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/ejectpack.js:24 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "stat-drop-triggered switching, deferred switches, queue ordering, doubles slot replacement, and item acquisition timing",
+        "Upstream assertion: Eject Pack > should switch out the holder after Moody's stat drop"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ejectpack.js",
+        "source_line": 35,
+        "full_test_name": "Eject Pack > should not switch the holder out if the move was Parting Shot and the opponent could switch",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1704 defines Eject Pack; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/ejectpack.js:35 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "stat-drop-triggered switching, deferred switches, queue ordering, doubles slot replacement, and item acquisition timing",
+        "Upstream assertion: Eject Pack > should not switch the holder out if the move was Parting Shot and the opponent could switch"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ejectpack.js",
+        "source_line": 48,
+        "full_test_name": "Eject Pack > should switch out the holder if its stats are lowered during the semi-invulnerable state",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1704 defines Eject Pack; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/ejectpack.js:48 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "stat-drop-triggered switching, deferred switches, queue ordering, doubles slot replacement, and item acquisition timing",
+        "Upstream assertion: Eject Pack > should switch out the holder if its stats are lowered during the semi-invulnerable state"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ejectpack.js",
+        "source_line": 59,
+        "full_test_name": "Eject Pack > should switch out the holder if its stats are lowered after using Swallow",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1704 defines Eject Pack; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/ejectpack.js:59 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "stat-drop-triggered switching, deferred switches, queue ordering, doubles slot replacement, and item acquisition timing",
+        "Upstream assertion: Eject Pack > should switch out the holder if its stats are lowered after using Swallow"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ejectpack.js",
+        "source_line": 71,
+        "full_test_name": "Eject Pack > should not switch out the user if the user acquired the Eject Pack after the stat drop occurred",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1704 defines Eject Pack; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/ejectpack.js:71 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "stat-drop-triggered switching, deferred switches, queue ordering, doubles slot replacement, and item acquisition timing",
+        "Upstream assertion: Eject Pack > should not switch out the user if the user acquired the Eject Pack after the stat drop occurred"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ejectpack.js",
+        "source_line": 83,
+        "full_test_name": "Eject Pack > should wait until after all other end-turn effects have resolved before switching out the holder",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1704 defines Eject Pack; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/ejectpack.js:83 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "stat-drop-triggered switching, deferred switches, queue ordering, doubles slot replacement, and item acquisition timing",
+        "Upstream assertion: Eject Pack > should wait until after all other end-turn effects have resolved before switching out the holder"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ejectpack.js",
+        "source_line": 96,
+        "full_test_name": "Eject Pack > should not activate when another switching effect was triggered as part of the move",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1704 defines Eject Pack; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/ejectpack.js:96 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "stat-drop-triggered switching, deferred switches, queue ordering, doubles slot replacement, and item acquisition timing",
+        "Upstream assertion: Eject Pack > should not activate when another switching effect was triggered as part of the move"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ejectpack.js",
+        "source_line": 113,
+        "full_test_name": "Eject Pack > should only trigger the fastest Eject Pack when multiple targets with Eject Pack have stats lowered",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1704 defines Eject Pack; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/ejectpack.js:113 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "stat-drop-triggered switching, deferred switches, queue ordering, doubles slot replacement, and item acquisition timing",
+        "Upstream assertion: Eject Pack > should only trigger the fastest Eject Pack when multiple targets with Eject Pack have stats lowered"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ejectpack.js",
+        "source_line": 129,
+        "full_test_name": "Eject Pack > should not prevent entrance Abilities from resolving during simultaneous switches",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1704 defines Eject Pack; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/ejectpack.js:129 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "stat-drop-triggered switching, deferred switches, queue ordering, doubles slot replacement, and item acquisition timing",
+        "Upstream assertion: Eject Pack > should not prevent entrance Abilities from resolving during simultaneous switches"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ejectpack.js",
+        "source_line": 143,
+        "full_test_name": "Eject Pack > should not prohibit switchins if a switch has already resolved to a slot replaced by Eject Pack",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1704 defines Eject Pack; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/ejectpack.js:143 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "stat-drop-triggered switching, deferred switches, queue ordering, doubles slot replacement, and item acquisition timing",
+        "Upstream assertion: Eject Pack > should not prohibit switchins if a switch has already resolved to a slot replaced by Eject Pack"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ejectpack.js",
+        "source_line": 160,
+        "full_test_name": "Eject Pack > Should be able to switch back in if ejected",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1704 defines Eject Pack; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/ejectpack.js:160 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "stat-drop-triggered switching, deferred switches, queue ordering, doubles slot replacement, and item acquisition timing",
+        "Upstream assertion: Eject Pack > Should be able to switch back in if ejected"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/eviolite.js",
+        "source_line": 13,
+        "full_test_name": "Eviolite > should multiply the defenses of a Pokemon that can evolve by 1.5",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1863 defines Eviolite; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/eviolite.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "evolution eligibility and defense modifiers",
+        "Upstream assertion: Eviolite > should multiply the defenses of a Pokemon that can evolve by 1.5"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/eviolite.js",
+        "source_line": 25,
+        "full_test_name": "Eviolite > should not multiply the defenses of a Pokemon that cannot evolve by 1.5",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1863 defines Eviolite; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/eviolite.js:25 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "evolution eligibility and defense modifiers",
+        "Upstream assertion: Eviolite > should not multiply the defenses of a Pokemon that cannot evolve by 1.5"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/eviolite.js",
+        "source_line": 39,
+        "full_test_name": "Eviolite > should multiply the defenses of a National Dex Pokemon that can evolve by 1.5",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1863 defines Eviolite; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/eviolite.js:39 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "evolution eligibility and defense modifiers",
+        "Upstream assertion: Eviolite > should multiply the defenses of a National Dex Pokemon that can evolve by 1.5"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/flameorb.js",
+        "source_line": 13,
+        "full_test_name": "Flame Orb > should not trigger when entering battle",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2137 defines Flame Orb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/flameorb.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "residual item activation timing and burn application",
+        "Upstream assertion: Flame Orb > should not trigger when entering battle"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/flameorb.js",
+        "source_line": 27,
+        "full_test_name": "Flame Orb > should trigger after one turn",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2137 defines Flame Orb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/flameorb.js:27 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "residual item activation timing and burn application",
+        "Upstream assertion: Flame Orb > should trigger after one turn"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/focussash.js",
+        "source_line": 13,
+        "full_test_name": "Focus Sash > should be consumed and allow its user to survive an attack from full HP",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2264 defines Focus Sash; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/focussash.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "full-HP survival, item consumption, and direct versus confusion/recoil/residual damage provenance",
+        "Upstream assertion: Focus Sash > should be consumed and allow its user to survive an attack from full HP"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/focussash.js",
+        "source_line": 24,
+        "full_test_name": "Focus Sash > should be consumed and allow its user to survive a confusion damage hit from full HP",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2264 defines Focus Sash; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/focussash.js:24 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "full-HP survival, item consumption, and direct versus confusion/recoil/residual damage provenance",
+        "Upstream assertion: Focus Sash > should be consumed and allow its user to survive a confusion damage hit from full HP"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/focussash.js",
+        "source_line": 37,
+        "full_test_name": "Focus Sash > should not trigger on recoil damage",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2264 defines Focus Sash; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/focussash.js:37 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "full-HP survival, item consumption, and direct versus confusion/recoil/residual damage provenance",
+        "Upstream assertion: Focus Sash > should not trigger on recoil damage"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/focussash.js",
+        "source_line": 47,
+        "full_test_name": "Focus Sash > should not trigger on residual damage",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2264 defines Focus Sash; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/focussash.js:47 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "full-HP survival, item consumption, and direct versus confusion/recoil/residual damage provenance",
+        "Upstream assertion: Focus Sash > should not trigger on residual damage"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/griseousorb.js",
+        "source_line": 13,
+        "full_test_name": "Griseous Orb [Gen 4] > should prevent changing the holder's ability",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2675 defines Griseous Orb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/griseousorb.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "species-bound item interaction with ability-changing effects",
+        "Upstream assertion: Griseous Orb [Gen 4] > should prevent changing the holder's ability"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/heavydutyboots.js",
+        "source_line": 13,
+        "full_test_name": "Heavy Duty Boots > should prevent entry hazards from affecting the holder",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:2852 defines Heavy-Duty Boots; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/heavydutyboots.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "entry-hazard suppression during switching",
+        "Upstream assertion: Heavy Duty Boots > should prevent entry hazards from affecting the holder"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ironball.js",
+        "source_line": 13,
+        "full_test_name": "Iron Ball > should reduce halve the holder's speed",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3045 defines Iron Ball; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/ironball.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "speed modification, grounding, natural and artificial Ground immunity, Gravity interaction, and type effectiveness",
+        "Upstream assertion: Iron Ball > should reduce halve the holder's speed"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ironball.js",
+        "source_line": 21,
+        "full_test_name": "Iron Ball > should negate Ground immunities and deal neutral type effectiveness to Flying-type Pokemon",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3045 defines Iron Ball; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/ironball.js:21 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "speed modification, grounding, natural and artificial Ground immunity, Gravity interaction, and type effectiveness",
+        "Upstream assertion: Iron Ball > should negate Ground immunities and deal neutral type effectiveness to Flying-type Pokemon"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ironball.js",
+        "source_line": 38,
+        "full_test_name": "Iron Ball > should not deal neutral type effectiveness to Flying-type Pokemon in Gravity",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3045 defines Iron Ball; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/ironball.js:38 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "speed modification, grounding, natural and artificial Ground immunity, Gravity interaction, and type effectiveness",
+        "Upstream assertion: Iron Ball > should not deal neutral type effectiveness to Flying-type Pokemon in Gravity"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ironball.js",
+        "source_line": 58,
+        "full_test_name": "Iron Ball > should negate artificial Ground immunities and deal normal type effectiveness",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3045 defines Iron Ball; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/ironball.js:58 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "speed modification, grounding, natural and artificial Ground immunity, Gravity interaction, and type effectiveness",
+        "Upstream assertion: Iron Ball > should negate artificial Ground immunities and deal normal type effectiveness"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ironball.js",
+        "source_line": 73,
+        "full_test_name": "Iron Ball > should ground Pokemon that are airborne",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3045 defines Iron Ball; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/ironball.js:73 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "speed modification, grounding, natural and artificial Ground immunity, Gravity interaction, and type effectiveness",
+        "Upstream assertion: Iron Ball > should ground Pokemon that are airborne"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/jabocaberry.js",
+        "source_line": 13,
+        "full_test_name": "Jaboca Berry > should activate after a physical move",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3083 defines Jaboca Berry; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/jabocaberry.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "physical-hit retaliation, post-faint event timing, and Magic Guard",
+        "Upstream assertion: Jaboca Berry > should activate after a physical move"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/jabocaberry.js",
+        "source_line": 26,
+        "full_test_name": "Jaboca Berry > should activate even if the holder has 0 HP",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3083 defines Jaboca Berry; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/jabocaberry.js:26 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "physical-hit retaliation, post-faint event timing, and Magic Guard",
+        "Upstream assertion: Jaboca Berry > should activate even if the holder has 0 HP"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/jabocaberry.js",
+        "source_line": 37,
+        "full_test_name": "Jaboca Berry > should not activate after a physical move used by a Pokemon with Magic Guard",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3083 defines Jaboca Berry; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/jabocaberry.js:37 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "physical-hit retaliation, post-faint event timing, and Magic Guard",
+        "Upstream assertion: Jaboca Berry > should not activate after a physical move used by a Pokemon with Magic Guard"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/keeberry.js",
+        "source_line": 13,
+        "full_test_name": "Kee Berry > should activate after a multi-hit physical move",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3172 defines Kee Berry; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 6.",
+        "test/sim/items/keeberry.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "reactive berry activation during multi-hit moves",
+        "Upstream assertion: Kee Berry > should activate after a multi-hit physical move"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 6, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/lifeorb.js",
+        "source_line": 13,
+        "full_test_name": "Life Orb > should hurt the user by 1/10 of their max HP after a successful attack",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3399 defines Life Orb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/lifeorb.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "successful-attack recoil timing after switching moves",
+        "Upstream assertion: Life Orb > should hurt the user by 1/10 of their max HP after a successful attack"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/metronome.js",
+        "source_line": 13,
+        "full_test_name": "Metronome (item) > should increase the damage of moves that have been used successfully and consecutively",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3988 defines Metronome item; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/metronome.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "consecutive-use damage scaling, reset rules, Protect, charge moves, and delegated moves",
+        "Upstream assertion: Metronome (item) > should increase the damage of moves that have been used successfully and consecutively"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/metronome.js",
+        "source_line": 27,
+        "full_test_name": "Metronome (item) > should reset the multiplier after switching moves",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3988 defines Metronome item; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/metronome.js:27 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "consecutive-use damage scaling, reset rules, Protect, charge moves, and delegated moves",
+        "Upstream assertion: Metronome (item) > should reset the multiplier after switching moves"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/metronome.js",
+        "source_line": 42,
+        "full_test_name": "Metronome (item) > should reset the multiplier after hitting Protect",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3988 defines Metronome item; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/metronome.js:42 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "consecutive-use damage scaling, reset rules, Protect, charge moves, and delegated moves",
+        "Upstream assertion: Metronome (item) > should reset the multiplier after hitting Protect"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/metronome.js",
+        "source_line": 57,
+        "full_test_name": "Metronome (item) > should instantly start moves that use a charging turn at Metronome 1 boost level, then increase linearly",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3988 defines Metronome item; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/metronome.js:57 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "consecutive-use damage scaling, reset rules, Protect, charge moves, and delegated moves",
+        "Upstream assertion: Metronome (item) > should instantly start moves that use a charging turn at Metronome 1 boost level, then increase linearly"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/metronome.js",
+        "source_line": 81,
+        "full_test_name": "Metronome (item) > should not instantly start moves that skip a charging turn at Metronome 1 boost level",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3988 defines Metronome item; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/metronome.js:81 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "consecutive-use damage scaling, reset rules, Protect, charge moves, and delegated moves",
+        "Upstream assertion: Metronome (item) > should not instantly start moves that skip a charging turn at Metronome 1 boost level"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/metronome.js",
+        "source_line": 100,
+        "full_test_name": "Metronome (item) > should use called moves to determine the Metronome multiplier",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:3988 defines Metronome item; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/metronome.js:100 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "consecutive-use damage scaling, reset rules, Protect, charge moves, and delegated moves",
+        "Upstream assertion: Metronome (item) > should use called moves to determine the Metronome multiplier"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/mirrorherb.js",
+        "source_line": 11,
+        "full_test_name": "Mirror Herb > should copy Anger Point",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4145 defines Mirror Herb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/mirrorherb.js:11 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "copying effective boosts, simultaneous boosts, caps, and entrance ordering",
+        "Upstream assertion: Mirror Herb > should copy Anger Point"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/mirrorherb.js",
+        "source_line": 21,
+        "full_test_name": "Mirror Herb > should only copy the effective boost after the +6 cap",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4145 defines Mirror Herb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/mirrorherb.js:21 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "copying effective boosts, simultaneous boosts, caps, and entrance ordering",
+        "Upstream assertion: Mirror Herb > should only copy the effective boost after the +6 cap"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/mirrorherb.js",
+        "source_line": 34,
+        "full_test_name": "Mirror Herb > should copy all 'simultaneous' boosts from multiple opponents",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4145 defines Mirror Herb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/mirrorherb.js:34 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "copying effective boosts, simultaneous boosts, caps, and entrance ordering",
+        "Upstream assertion: Mirror Herb > should copy all 'simultaneous' boosts from multiple opponents"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/mirrorherb.js",
+        "source_line": 50,
+        "full_test_name": "Mirror Herb > should wait for most entrance abilities before copying all their (opposing) boosts",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4145 defines Mirror Herb; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/mirrorherb.js:50 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "copying effective boosts, simultaneous boosts, caps, and entrance ordering",
+        "Upstream assertion: Mirror Herb > should wait for most entrance abilities before copying all their (opposing) boosts"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/plates.js",
+        "source_line": 22,
+        "full_test_name": "Plates > plate > should not be stolen or removed if held by an Arceus",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1449 defines Plates and Arceus; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/plates.js:22 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "species-bound item removal, theft, transfer, Fling, and generated parameterized cases",
+        "Upstream assertion: Plates > plate > should not be stolen or removed if held by an Arceus"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/plates.js",
+        "source_line": 40,
+        "full_test_name": "Plates > plate > should not be removed by Fling if held by an Arceus",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1449 defines Plates and Arceus; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/plates.js:40 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "species-bound item removal, theft, transfer, Fling, and generated parameterized cases",
+        "Upstream assertion: Plates > plate > should not be removed by Fling if held by an Arceus"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/plates.js",
+        "source_line": 48,
+        "full_test_name": "Plates > plate > should not be given to an Arceus",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1449 defines Plates and Arceus; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/plates.js:48 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "species-bound item removal, theft, transfer, Fling, and generated parameterized cases",
+        "Upstream assertion: Plates > plate > should not be given to an Arceus"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/plates.js",
+        "source_line": 56,
+        "full_test_name": "Plates > plate > should be removed if not held by an Arceus",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1449 defines Plates and Arceus; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/plates.js:56 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "species-bound item removal, theft, transfer, Fling, and generated parameterized cases",
+        "Upstream assertion: Plates > plate > should be removed if not held by an Arceus"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/protectivepads.js",
+        "source_line": 13,
+        "full_test_name": "Protective Pads > should prevent ability-changing abilities triggered by contact from acting",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4849 defines Protective Pads; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/protectivepads.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "contact suppression across ability, item, protection, and forme-trigger event families",
+        "Upstream assertion: Protective Pads > should prevent ability-changing abilities triggered by contact from acting"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/protectivepads.js",
+        "source_line": 29,
+        "full_test_name": "Protective Pads > should prevent damaging abilities triggered by contact from acting",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4849 defines Protective Pads; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/protectivepads.js:29 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "contact suppression across ability, item, protection, and forme-trigger event families",
+        "Upstream assertion: Protective Pads > should prevent damaging abilities triggered by contact from acting"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/protectivepads.js",
+        "source_line": 41,
+        "full_test_name": "Protective Pads > should prevent stat stage-changing abilities triggered by contact from acting",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4849 defines Protective Pads; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/protectivepads.js:41 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "contact suppression across ability, item, protection, and forme-trigger event families",
+        "Upstream assertion: Protective Pads > should prevent stat stage-changing abilities triggered by contact from acting"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/protectivepads.js",
+        "source_line": 53,
+        "full_test_name": "Protective Pads > should not stop Pickpocket",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4849 defines Protective Pads; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/protectivepads.js:53 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "contact suppression across ability, item, protection, and forme-trigger event families",
+        "Upstream assertion: Protective Pads > should not stop Pickpocket"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/protectivepads.js",
+        "source_line": 64,
+        "full_test_name": "Protective Pads > should prevent item effects triggered by contact from acting",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4849 defines Protective Pads; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/protectivepads.js:64 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "contact suppression across ability, item, protection, and forme-trigger event families",
+        "Upstream assertion: Protective Pads > should prevent item effects triggered by contact from acting"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/protectivepads.js",
+        "source_line": 76,
+        "full_test_name": "Protective Pads > should not activate on the opponent's moves",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4849 defines Protective Pads; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/protectivepads.js:76 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "contact suppression across ability, item, protection, and forme-trigger event families",
+        "Upstream assertion: Protective Pads > should not activate on the opponent's moves"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/protectivepads.js",
+        "source_line": 86,
+        "full_test_name": "Protective Pads > should not start Perish Body on either Pokemon",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4849 defines Protective Pads; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/protectivepads.js:86 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "contact suppression across ability, item, protection, and forme-trigger event families",
+        "Upstream assertion: Protective Pads > should not start Perish Body on either Pokemon"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/protectivepads.js",
+        "source_line": 99,
+        "full_test_name": "Protective Pads > should block against Protecting effects with a contact side effect",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4849 defines Protective Pads; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/protectivepads.js:99 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "contact suppression across ability, item, protection, and forme-trigger event families",
+        "Upstream assertion: Protective Pads > should block against Protecting effects with a contact side effect"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/protectivepads.js",
+        "source_line": 118,
+        "full_test_name": "Protective Pads > should not protect against Gulp Missile when using a contact move",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4849 defines Protective Pads; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/protectivepads.js:118 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "contact suppression across ability, item, protection, and forme-trigger event families",
+        "Upstream assertion: Protective Pads > should not protect against Gulp Missile when using a contact move"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/punchingglove.js",
+        "source_line": 13,
+        "full_test_name": "Punching Glove > should prevent item effects triggered by contact from acting",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4933 defines Punching Glove; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/punchingglove.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "move-flag-conditioned contact suppression and contact-trigger ownership",
+        "Upstream assertion: Punching Glove > should prevent item effects triggered by contact from acting"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/punchingglove.js",
+        "source_line": 23,
+        "full_test_name": "Punching Glove > should not prevent item effects triggered by contact from acting if using non-punching contact move",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4933 defines Punching Glove; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/punchingglove.js:23 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "move-flag-conditioned contact suppression and contact-trigger ownership",
+        "Upstream assertion: Punching Glove > should not prevent item effects triggered by contact from acting if using non-punching contact move"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/punchingglove.js",
+        "source_line": 33,
+        "full_test_name": "Punching Glove > should not activate on the opponent's moves",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4933 defines Punching Glove; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/punchingglove.js:33 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "move-flag-conditioned contact suppression and contact-trigger ownership",
+        "Upstream assertion: Punching Glove > should not activate on the opponent's moves"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/punchingglove.js",
+        "source_line": 44,
+        "full_test_name": "Punching Glove > should stop Pickpocket",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4933 defines Punching Glove; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/punchingglove.js:44 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "move-flag-conditioned contact suppression and contact-trigger ownership",
+        "Upstream assertion: Punching Glove > should stop Pickpocket"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/punchingglove.js",
+        "source_line": 56,
+        "full_test_name": "Punching Glove > should block against Protecting effects with a contact side effect",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:4933 defines Punching Glove; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 9.",
+        "test/sim/items/punchingglove.js:56 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "move-flag-conditioned contact suppression and contact-trigger ownership",
+        "Upstream assertion: Punching Glove > should block against Protecting effects with a contact side effect"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 9, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/redcard.js",
+        "source_line": 13,
+        "full_test_name": "Red Card > should not trigger if the target should be KOed from Destiny Bond and also not crash the client",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5141 defines Red Card; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/redcard.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "reactive forced switching relative to fainting and Destiny Bond",
+        "Upstream assertion: Red Card > should not trigger if the target should be KOed from Destiny Bond and also not crash the client"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/redcard.js",
+        "source_line": 28,
+        "full_test_name": "Red Card > should trigger if the target is still in battle",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5141 defines Red Card; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/redcard.js:28 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "reactive forced switching relative to fainting and Destiny Bond",
+        "Upstream assertion: Red Card > should trigger if the target is still in battle"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ringtarget.js",
+        "source_line": 13,
+        "full_test_name": "Ring Target > should negate natural immunities and deal normal type effectiveness with the other type(s)",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5222 defines Ring Target; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/ringtarget.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "natural type-immunity negation versus ability and volatile immunities",
+        "Upstream assertion: Ring Target > should negate natural immunities and deal normal type effectiveness with the other type(s)"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ringtarget.js",
+        "source_line": 39,
+        "full_test_name": "Ring Target > should not affect ability-based immunities",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5222 defines Ring Target; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/ringtarget.js:39 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "natural type-immunity negation versus ability and volatile immunities",
+        "Upstream assertion: Ring Target > should not affect ability-based immunities"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/ringtarget.js",
+        "source_line": 55,
+        "full_test_name": "Ring Target > should not affect Magnet Rise",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5222 defines Ring Target; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/ringtarget.js:55 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "natural type-immunity negation versus ability and volatile immunities",
+        "Upstream assertion: Ring Target > should not affect Magnet Rise"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/rockyhelmet.js",
+        "source_line": 13,
+        "full_test_name": "Rocky Helmet > should hurt attackers by 1/6 their max HP when this Pokemon is hit by a contact move",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5290 defines Rocky Helmet; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 5.",
+        "test/sim/items/rockyhelmet.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "contact-triggered retaliation damage",
+        "Upstream assertion: Rocky Helmet > should hurt attackers by 1/6 their max HP when this Pokemon is hit by a contact move"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 5, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/roomservice.js",
+        "source_line": 13,
+        "full_test_name": "Room Service > should activate when Trick Room is set",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5305 defines Room Service; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/roomservice.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "pseudo-weather-triggered stat loss and event ordering",
+        "Upstream assertion: Room Service > should activate when Trick Room is set"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/roomservice.js",
+        "source_line": 24,
+        "full_test_name": "Room Service > should activate after entrance Abilities",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5305 defines Room Service; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/roomservice.js:24 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "pseudo-weather-triggered stat loss and event ordering",
+        "Upstream assertion: Room Service > should activate after entrance Abilities"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/roomservice.js",
+        "source_line": 36,
+        "full_test_name": "Room Service > should not trigger Defiant",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5305 defines Room Service; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 8.",
+        "test/sim/items/roomservice.js:36 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "pseudo-weather-triggered stat loss and event ordering",
+        "Upstream assertion: Room Service > should not trigger Defiant"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 8, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/safetygoggles.js",
+        "source_line": 13,
+        "full_test_name": "Safety Goggles > should be revealed if Terrain is also active",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5453 defines Safety Goggles; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 6.",
+        "test/sim/items/safetygoggles.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "powder immunity, item revelation, terrain, and accuracy ordering",
+        "Upstream assertion: Safety Goggles > should be revealed if Terrain is also active"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 6, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/safetygoggles.js",
+        "source_line": 23,
+        "full_test_name": "Safety Goggles > should be revealed if the move would have missed",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5453 defines Safety Goggles; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 6.",
+        "test/sim/items/safetygoggles.js:23 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "powder immunity, item revelation, terrain, and accuracy ordering",
+        "Upstream assertion: Safety Goggles > should be revealed if the move would have missed"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 6, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/seeds.js",
+        "source_line": 13,
+        "full_test_name": "Seeds > should activate even on a double-switch-in",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1794 defines Terrain Seeds; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/seeds.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "terrain-triggered activation, switch-in ordering, Magic Room, Primal Reversion, and Symbiosis",
+        "Upstream assertion: Seeds > should activate even on a double-switch-in"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/seeds.js",
+        "source_line": 23,
+        "full_test_name": "Seeds > should not activate when Magic Room ends",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1794 defines Terrain Seeds; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/seeds.js:23 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "terrain-triggered activation, switch-in ordering, Magic Room, Primal Reversion, and Symbiosis",
+        "Upstream assertion: Seeds > should not activate when Magic Room ends"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/seeds.js",
+        "source_line": 35,
+        "full_test_name": "Seeds > should activate on switching in after other entrance Abilities, at the same time as Primal reversion",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1794 defines Terrain Seeds; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/seeds.js:35 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "terrain-triggered activation, switch-in ordering, Magic Room, Primal Reversion, and Symbiosis",
+        "Upstream assertion: Seeds > should activate on switching in after other entrance Abilities, at the same time as Primal reversion"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/seeds.js",
+        "source_line": 53,
+        "full_test_name": "Seeds > should not cause items passed by Symbiosis to be consumed arbitrarily",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:1794 defines Terrain Seeds; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 7.",
+        "test/sim/items/seeds.js:53 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "terrain-triggered activation, switch-in ordering, Magic Room, Primal Reversion, and Symbiosis",
+        "Upstream assertion: Seeds > should not cause items passed by Symbiosis to be consumed arbitrarily"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 7, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/shedshell.js",
+        "source_line": 13,
+        "full_test_name": "Shed Shell > should allow Pokemon to escape trapping abilities",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5628 defines Shed Shell; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/shedshell.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "legal switch choices under ability, volatile, self-trap, and Sky Drop trapping",
+        "Upstream assertion: Shed Shell > should allow Pokemon to escape trapping abilities"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/shedshell.js",
+        "source_line": 24,
+        "full_test_name": "Shed Shell > should allow Pokemon to escape from most moves that would trap them",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5628 defines Shed Shell; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/shedshell.js:24 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "legal switch choices under ability, volatile, self-trap, and Sky Drop trapping",
+        "Upstream assertion: Shed Shell > should allow Pokemon to escape from most moves that would trap them"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/shedshell.js",
+        "source_line": 36,
+        "full_test_name": "Shed Shell > should not allow Pokemon to escape from Sky Drop",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:5628 defines Shed Shell; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 4.",
+        "test/sim/items/shedshell.js:36 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "legal switch choices under ability, volatile, self-trap, and Sky Drop trapping",
+        "Upstream assertion: Shed Shell > should not allow Pokemon to escape from Sky Drop"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 4, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/weaknesspolicy.js",
+        "source_line": 13,
+        "full_test_name": "Weakness Policy > should be triggered by super effective hits",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:7591 defines Weakness Policy; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 6.",
+        "test/sim/items/weaknesspolicy.js:13 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "type-effectiveness-triggered boosts, fixed damage, doubles targeting, and forced-switch ordering",
+        "Upstream assertion: Weakness Policy > should be triggered by super effective hits"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 6, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/weaknesspolicy.js",
+        "source_line": 28,
+        "full_test_name": "Weakness Policy > should respect individual type effectivenesses in doubles",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:7591 defines Weakness Policy; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 6.",
+        "test/sim/items/weaknesspolicy.js:28 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "type-effectiveness-triggered boosts, fixed damage, doubles targeting, and forced-switch ordering",
+        "Upstream assertion: Weakness Policy > should respect individual type effectivenesses in doubles"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 6, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/weaknesspolicy.js",
+        "source_line": 82,
+        "full_test_name": "Weakness Policy > should not be triggered by fixed damage moves",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:7591 defines Weakness Policy; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 6.",
+        "test/sim/items/weaknesspolicy.js:82 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "type-effectiveness-triggered boosts, fixed damage, doubles targeting, and forced-switch ordering",
+        "Upstream assertion: Weakness Policy > should not be triggered by fixed damage moves"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 6, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    },
+    {
+      "identity": {
+        "source_file": "test/sim/items/weaknesspolicy.js",
+        "source_line": 97,
+        "full_test_name": "Weakness Policy > should trigger before forced switching moves",
+        "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+      },
+      "disposition": "mechanic_unreachable_gen3",
+      "evidence": [
+        "data/items.ts:7591 defines Weakness Policy; sim/dex-items.ts:123-145 assigns item generations from explicit gen or item-number bands, resolving it to Gen 6.",
+        "test/sim/items/weaknesspolicy.js:97 asserts behavior owned by that post-Gen-3 item; the item cannot be present in a legal Gen 3 OU battle."
+      ],
+      "mechanics_and_boundaries": [
+        "type-effectiveness-triggered boosts, fixed damage, doubles targeting, and forced-switch ordering",
+        "Upstream assertion: Weakness Policy > should trigger before forced switching moves"
+      ],
+      "native_coverage": {
+        "status": "not_required_for_gen3ou",
+        "channels": {
+          "native_unit": [],
+          "differential_fixture": [],
+          "invariant": [],
+          "randomized_scenario": []
+        },
+        "evidence": "The tested owner is introduced in Gen 6, so no native or differential Gen 3 OU case is required from this declaration."
+      },
+      "required_case": null,
+      "uncertainty": null
+    }
+  ]
+}

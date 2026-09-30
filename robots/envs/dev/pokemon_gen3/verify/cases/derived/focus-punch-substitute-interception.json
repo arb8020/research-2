@@ -1,0 +1,114 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "focus-punch-substitute-interception",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen4/moves.ts; sim/battle.ts; sim/battle-actions.ts",
+    "test_name": "damage intercepted by Substitute does not dispatch target-owned Hit",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "focus-punch-substitute-interception-p1.txt",
+      "normalized": [
+        {
+          "species": "breloom",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "effectspore",
+          "item": "",
+          "moves": [
+            "substitute",
+            "focuspunch"
+          ],
+          "stats": [
+            261,
+            296,
+            196,
+            156,
+            156,
+            176
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "focus-punch-substitute-interception-p2.txt",
+      "normalized": [
+        {
+          "species": "venusaur",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "overgrow",
+          "item": "",
+          "moves": [
+            "growl",
+            "tackle"
+          ],
+          "stats": [
+            301,
+            200,
+            202,
+            236,
+            236,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.try",
+    "hit.substitute",
+    "prng.labeled",
+    "state.canonical",
+    "volatile.substitute"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

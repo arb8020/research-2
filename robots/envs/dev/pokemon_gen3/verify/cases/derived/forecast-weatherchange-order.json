@@ -1,0 +1,100 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "forecast-weatherchange-order",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/abilities.ts#forecast; data/mods/gen3/abilities.ts#forecast; sim/field.ts",
+    "test_name": "equal-speed WeatherChange traversal has one labeled active-order draw",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "forecast-weatherchange-order-p1.txt",
+      "normalized": [
+        {
+          "species": "castform",
+          "level": 100,
+          "gender": "M",
+          "ability": "forecast",
+          "item": "",
+          "moves": [
+            "sunnyday"
+          ],
+          "stats": [
+            281,
+            176,
+            176,
+            176,
+            176,
+            176
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "forecast-weatherchange-order-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            176
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "ability.forecast",
+    "choice.move",
+    "state.canonical",
+    "state.form-overlay",
+    "condition.weather"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

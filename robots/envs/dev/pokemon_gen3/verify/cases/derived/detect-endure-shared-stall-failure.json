@@ -1,0 +1,125 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "detect-endure-shared-stall-failure",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen5/conditions.ts",
+    "test_name": "Endure fails at the shared one-half stall gate after Detect",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    1
+  ],
+  "teams": [
+    {
+      "source": "detect-endure-shared-stall-failure-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "detect",
+            "endure"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null,
+          "initial_hp": 20
+        }
+      ]
+    },
+    {
+      "source": "detect-endure-shared-stall-failure-p2.txt",
+      "normalized": [
+        {
+          "species": "tyrogue",
+          "level": 100,
+          "gender": "M",
+          "ability": "guts",
+          "item": "",
+          "moves": [
+            "tackle"
+          ],
+          "stats": [
+            211,
+            106,
+            106,
+            106,
+            106,
+            106
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "stall.success",
+      "occurrence": 1,
+      "range": 2,
+      "result": 1
+    }
+  ],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "damage.endure",
+    "hit.protect",
+    "lifecycle.condition-duration",
+    "lifecycle.faint",
+    "lifecycle.terminal",
+    "prng.labeled",
+    "prng.stall",
+    "state.canonical",
+    "volatile.endure",
+    "volatile.protect"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state",
+    "terminal"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

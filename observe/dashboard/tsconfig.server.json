@@ -1,0 +1,10 @@
+{
+  // The server runs on Bun, not in a browser. Kept a separate project so Bun's
+  // global types (its own `fetch`, `Bun`) never leak into the browser build.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["bun"]
+  },
+  "include": ["server"]
+}

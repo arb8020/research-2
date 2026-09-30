@@ -42,7 +42,7 @@ MIMIR_BREADCRUMB=1 mimir breadcrumb -a scout "found it"
 
 ## Where the code lives
 
-`mimir/journal.py` holds the shared implementation (git helpers, path resolution, append, list, and the gate), parameterized by a `JournalSpec`. `mimir/breadcrumb.py` and `mimir/papercut.py` are thin wrappers over it that bind a spec and keep their existing public API; `breadcrumb.py` additionally owns the `--view` HTTP viewer. `mimir/config.py` is the one reader for `[tool.mimir]`, shared with `mimir/audit.py`.
+`mimir/journal.py` holds the shared implementation (git helpers, path resolution, append, list, and the gate), parameterized by a `JournalSpec`. `mimir/breadcrumb.py` and `mimir/papercut.py` are thin wrappers over it that bind a spec and keep their existing public API; `breadcrumb.py` additionally owns the `--view` HTTP viewer. `mimir/config.py` is the one reader for `[tool.mimir]`, shared with `mimir/audit/target.py`.
 
 To add a third journal: define a `JournalSpec` in `journal.py`, add a wrapper module, and wire a subparser in `cli.py`.
 

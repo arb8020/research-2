@@ -1,0 +1,13 @@
+Alakazam (M)
+Ability: Synchronize
+Level: 100
+EVs: 4 HP
+Hardy Nature
+- Recover
+
+Persian (M)
+Ability: Limber
+Level: 100
+EVs: 4 HP
+Hardy Nature
+- Pound

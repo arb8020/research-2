@@ -1,0 +1,7 @@
+Jynx (F)
+Ability: Oblivious
+Level: 100
+EVs: 4 HP / 252 SpA / 252 Spe
+Timid Nature
+- Perish Song
+- Rest

@@ -1,0 +1,28 @@
+# Slab carving with pages_per_slab > 1 (docs/slab-lcm-ladder.md). Two groups share one slab pool:
+# F's page is a quarter of a slab (4 per slab), R's page is a whole slab (1 per slab) -- the
+# Qwen3-Next shape, where a slab holds one sequence's recurrent state or 393 full-attention pages.
+# 4 slabs. `expect free` counts SLABS, not pages: that is what admission budgets against.
+#
+# Page ids are GROUP-LOCAL (ruling 2026-09-10): group g numbers its own pages
+# slab * pages_per_slab[g] + index + 1. So F (4 pages per slab) numbers slab 0's pages 1..4 and
+# slab 1's 5..8, while R (1 page per slab) numbers slab s's single page s+1 -- R's ids are just
+# its slab index plus one, and the same NUMBER in the two groups is different memory.
+config max_seq_len=64 max_batch_tokens=64 max_batch_reqs=4 block_size=4 groups=full/4,full/1 num_blocks=4 reserve_ratio=0 order=running_first eos=99
+submit A prompt=8 max_new=4
+# A's 8 tokens: F needs 2 rows (block 4), R needs 2 rows. F's two pages come out of ONE slab
+# (ids 1,2 of slab 0, which still has 2 pages left); R's two pages take a whole slab each
+# (slabs 1 and 2, which are R's own ids 2 and 3).
+step
+  expect batch A:8
+  expect table A g=0 [1,2]
+  expect table A g=1 [2,3]
+  expect free 1
+# A decodes to token 9: F opens row 2 (id 3, still inside slab 0 -- no new slab) while R opens
+# row 2, which costs a whole slab, the last one (slab 3, R's id 4). F grew for free; R did not.
+submit B prompt=8 max_new=4
+step
+  expect batch A:1
+  expect table A g=0 [1,2,3]
+  expect table A g=1 [2,3,4]
+  expect waiting B
+  expect free 0

@@ -1,0 +1,20 @@
+Snorlax (M)
+Ability: Immunity
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Rest
+
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Splash
+
+Horsea (M)
+Ability: Swift Swim
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Splash

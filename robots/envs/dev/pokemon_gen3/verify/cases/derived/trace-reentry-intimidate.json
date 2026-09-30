@@ -1,0 +1,27 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "trace-reentry-intimidate",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/abilities.ts;sim/pokemon.ts;sim/side.ts;sim/prng.ts",
+    "test_name": "Trace copies Intimidate on each entry without starting the copy",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {"source": "trace-reentry-p1.txt", "normalized": [
+      {"species": "magikarp", "level": 100, "gender": "M", "nature": "hardy", "ability": "swiftswim", "item": "", "moves": ["splash"], "stats": [181, 56, 146, 66, 76, 196], "status": null},
+      {"species": "porygon2", "level": 100, "gender": "N", "nature": "hardy", "ability": "trace", "item": "", "moves": ["splash"], "stats": [311, 196, 216, 246, 226, 156], "status": null}
+    ]},
+    {"source": "trace-intimidate-p2.txt", "normalized": [
+      {"species": "mawile", "level": 100, "gender": "F", "nature": "hardy", "ability": "intimidate", "item": "", "moves": ["splash"], "stats": [241, 206, 206, 146, 146, 136], "status": null}
+    ]}
+  ],
+  "source_choices": [["switch 2", "move 1"], ["switch 2", "move 1"], ["switch 2", "move 1"]],
+  "choices": [["switch 2", "move 1"], ["switch 1", "move 1"], ["switch 2", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["ability.trace", "choice.move", "choice.switch", "prng.labeled", "state.canonical"],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 4, "max_actions": 6}
+}

@@ -1,0 +1,117 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "hidden-power-mirror-coat-rejects",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/dex.ts; sim/pokemon.ts; data/mods/gen3/moves.ts",
+    "test_name": "Mirror Coat rejects Hidden Power by move identity even when its constructed category is Special",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    117,
+    118,
+    119,
+    120
+  ],
+  "teams": [
+    {
+      "source": "hidden-power-mirror-coat-rejects-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "hiddenpower"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "ivs": [
+            31,
+            31,
+            31,
+            31,
+            31,
+            31
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "hidden-power-mirror-coat-rejects-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 50,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "mirrorcoat"
+          ],
+          "stats": [
+            130,
+            40,
+            55,
+            40,
+            65,
+            95
+          ],
+          "ivs": [
+            31,
+            31,
+            31,
+            31,
+            31,
+            31
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "damage.variable-power",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

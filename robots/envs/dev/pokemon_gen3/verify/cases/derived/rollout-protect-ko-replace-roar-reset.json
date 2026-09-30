@@ -1,0 +1,262 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "rollout-protect-ko-replace-roar-reset",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#rollout,data/moves.ts#iceball; test/sim/moves/rollout.js:18,42,72,100",
+    "test_name": "Protect blocks after accuracy; Rollout persists through target replacement and resets when Roar switches its source",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    0,
+    71,
+    29,
+    7
+  ],
+  "teams": [
+    {
+      "source": "rollout-protect-ko-replace-roar-reset-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "rollout"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        },
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "rollout-protect-ko-replace-roar-reset-p2.txt",
+      "normalized": [
+        {
+          "species": "shedinja",
+          "level": 100,
+          "gender": "N",
+          "ability": "wonderguard",
+          "item": "",
+          "moves": [
+            "protect",
+            "sandattack"
+          ],
+          "stats": [
+            1,
+            216,
+            126,
+            96,
+            96,
+            116
+          ],
+          "status": null
+        },
+        {
+          "species": "steelix",
+          "level": 100,
+          "gender": "M",
+          "ability": "sturdy",
+          "item": "",
+          "moves": [
+            "roar",
+            "harden"
+          ],
+          "stats": [
+            291,
+            206,
+            436,
+            146,
+            166,
+            96
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      null,
+      "switch 2"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      null,
+      "switch 2"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 14
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 2,
+      "range": 100,
+      "result": 67
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 3,
+      "range": 100,
+      "result": 52
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 4,
+      "range": 100,
+      "result": 60
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 5,
+      "range": 100,
+      "result": 43
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 6,
+      "range": 100,
+      "result": 31
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 1,
+      "range": 16,
+      "result": 15
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 2,
+      "range": 16,
+      "result": 12
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 3,
+      "range": 16,
+      "result": 0
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 1,
+      "range": 16,
+      "result": 5
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 2,
+      "range": 16,
+      "result": 2
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 3,
+      "range": 16,
+      "result": 7
+    }
+  ],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.base-power",
+    "handler.damaging-hit",
+    "hit.accuracy",
+    "lifecycle.condition-duration",
+    "lifecycle.faint",
+    "lifecycle.forced-replacement",
+    "lifecycle.switch-persistence",
+    "prng.labeled",
+    "request.legal-choices",
+    "state.canonical",
+    "volatile.protect"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 7,
+    "max_actions": 12
+  }
+}

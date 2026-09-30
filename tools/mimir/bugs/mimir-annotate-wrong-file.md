@@ -2,8 +2,9 @@
 
 ## Reproduction
 
+From an obol checkout (scorer-unification worktree):
+
 ```bash
-cd /Users/chiraagbalu/silares_stuff/obol/worktrees/scorer-unification
 mimir annotate docs/concepts/grading.md
 ```
 

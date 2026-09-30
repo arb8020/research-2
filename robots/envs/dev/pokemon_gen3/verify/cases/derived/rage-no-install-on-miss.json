@@ -1,0 +1,33 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "rage-no-install-on-miss",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts",
+    "test_name": "Rage does not install its self volatile after its hit misses",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 5],
+  "teams": [
+    {
+      "source": "rage-lifecycle-basis-p1.txt",
+      "normalized": [
+        {"species": "smeargle", "level": 100, "gender": "M", "ability": "owntempo", "item": "", "moves": ["rage"], "stats": [251, 76, 106, 76, 126, 186], "status": null},
+        {"species": "starmie", "level": 100, "gender": "N", "ability": "naturalcure", "item": "", "moves": ["recover"], "stats": [261, 186, 206, 236, 206, 266], "status": null}
+      ]
+    },
+    {
+      "source": "rage-no-install-on-miss-p2.txt",
+      "normalized": [
+        {"species": "persian", "level": 100, "gender": "M", "ability": "limber", "item": "", "moves": ["sandattack"], "stats": [271, 176, 156, 166, 166, 266], "status": null}
+      ]
+    }
+  ],
+  "source_choices": [["move 1", "move 1"]],
+  "choices": [["move 1", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["condition.volatile", "effect.boost", "hit.accuracy", "prng.labeled", "state.canonical"],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 2, "max_actions": 2}
+}

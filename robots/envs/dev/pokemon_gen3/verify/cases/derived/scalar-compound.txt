@@ -1,0 +1,8 @@
+Smeargle (M)
+Ability: Compoundeyes
+Level: 100
+Hardy Nature
+- Supersonic
+- Raindance
+- Thunder
+- Splash

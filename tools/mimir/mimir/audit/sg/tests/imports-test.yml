@@ -1,0 +1,28 @@
+id: imports-python
+valid:
+  - "from __future__ import annotations"
+invalid:
+  - "import os"
+  - "import a.b as c"
+  - "from . import x"
+  - "from ..pkg.mod import (y, z as w)"
+  - "from q import *"
+  - "def f():\n    import lazy"
+---
+id: imports-typescript
+valid:
+  - "f('./not-an-import');"
+invalid:
+  - "import x from './a';"
+  - "import type { T } from '../b/c';"
+  - "import './side';"
+  - "export * from './reexp';"
+  - "export { q } from 'pkg/sub';"
+  - "const m = await import('./dyn');"
+  - "const r = require('./req');"
+  - "import legacy = require('./legacy');"
+---
+id: imports-tsx
+valid: []
+invalid:
+  - "import { App } from './App';"

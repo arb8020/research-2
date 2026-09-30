@@ -1,0 +1,21 @@
+# EOS lands at commit(N) while N+1 already holds A's reservation. finish() frees ALL of A's
+# blocks (N's + the reserved N+1 row: both live in the same table by now) in one call, same as an
+# ordinary finish; commit() additionally strikes A out of self.ahead (strike_from_ahead) so N+1's
+# own commit never iterates a dead request, and forces req.planned back to False (overriding the
+# "still named in self.ahead" default, since strike_from_ahead just removed it).
+config max_batch_tokens=8 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99 overlap=1
+submit A prompt=4 max_new=5
+step tokens=A:7
+plan tokens=A:99                  # N: the decode that will hit EOS
+  expect batch A:1
+plan tokens=A:9                   # N+1: reserved, assuming (wrongly) A keeps decoding
+  expect batch A:1
+  expect reserved A true
+  expect free 5
+commit                            # commits N: EOS -> finish(A); N+1's reservation is struck
+  expect finished A reason=finished_eos
+  expect free 7                   # every block A held is back, including the reserved N+1 row
+  expect batch                    # N+1 (now plan_out) no longer names A
+commit                            # commits N+1 (now empty): closes the pipeline
+  expect running
+  expect waiting

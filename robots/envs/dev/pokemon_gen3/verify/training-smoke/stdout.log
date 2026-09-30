@@ -1,0 +1,172 @@
+Downloading raylib-5.5_linux_amd64...
+Compiling ocean/pokemon/pokemon.h -> puffer...
+Built: ./puffer
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ PufferLib 5.0               🐡 GPU:   0%   VRAM:   0.4/22G    RAM:  2.4G     │
+│                                                                              │
+│ Env             pokemon    Evaluate      319ms  95%    Losses       0.444    │
+│ Params            23.2K      Model       272ms  81%    policy       0.062    │
+│ Steps              2.0K      Env          46ms  13%    value        0.191    │
+│ SPS                6.1K      Copy          1ms   0%    entropy      0.612    │
+│ Epoch                 1    Train          16ms   4%    old_kl      -0.000    │
+│ Uptime            335ms      Model        16ms   4%    kl          -0.000    │
+│ To go          2s 348ms      Misc          0ms   0%    clipfrac     0.000    │
+│                                                                              │
+│ episode_return                1.000   episode_length                6.547    │
+│ score                         1.000   perf                          1.000    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ PufferLib 5.0              🐡  GPU:   3%   VRAM:   0.4/22G    RAM:  2.4G     │
+│                                                                              │
+│ Env             pokemon    Evaluate      350ms  97%    Losses       0.411    │
+│ Params            23.2K      Model        12ms   3%    policy       0.021    │
+│ Steps             16.4K      Env         330ms  92%    value        0.196    │
+│ SPS               39.0K      Copy          5ms   1%    entropy      0.577    │
+│ Epoch                 8    Train           8ms   2%    old_kl      -0.000    │
+│ Uptime            703ms      Model         8ms   2%    kl          -0.000    │
+│ To go               0ms      Misc          0ms   0%    clipfrac     0.000    │
+│                                                                              │
+│ episode_return                0.992   episode_length                7.538    │
+│ score                         0.992   perf                          0.996    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ PufferLib 5.0             🐡   GPU:   3%   VRAM:   0.4/22G    RAM:  2.4G     │
+│                                                                              │
+│ Env             pokemon    Evaluate      350ms  97%    Losses       0.411    │
+│ Params            23.2K      Model        12ms   3%    policy       0.021    │
+│ Steps             16.4K      Env         330ms  92%    value        0.196    │
+│ SPS               39.0K      Copy          5ms   1%    entropy      0.577    │
+│ Epoch                 8    Train           8ms   2%    old_kl      -0.000    │
+│ Uptime            703ms      Model         8ms   2%    kl          -0.000    │
+│ To go               0ms      Misc          0ms   0%    clipfrac     0.000    │
+│                                                                              │
+│ episode_return                1.000   episode_length                6.103    │
+│ score                         1.000   perf                          1.000    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ PufferLib 5.0            🐡    GPU:   3%   VRAM:   0.4/22G    RAM:  2.4G     │
+│                                                                              │
+│ Env             pokemon    Evaluate      350ms  97%    Losses       0.411    │
+│ Params            23.2K      Model        12ms   3%    policy       0.021    │
+│ Steps             16.4K      Env         330ms  92%    value        0.196    │
+│ SPS               39.0K      Copy          5ms   1%    entropy      0.577    │
+│ Epoch                 8    Train           8ms   2%    old_kl      -0.000    │
+│ Uptime            703ms      Model         8ms   2%    kl          -0.000    │
+│ To go               0ms      Misc          0ms   0%    clipfrac     0.000    │
+│                                                                              │
+│ episode_return                0.996   episode_length                7.263    │
+│ score                         0.996   perf                          0.998    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ PufferLib 5.0           🐡     GPU:   3%   VRAM:   0.4/22G    RAM:  2.4G     │
+│                                                                              │
+│ Env             pokemon    Evaluate      350ms  97%    Losses       0.411    │
+│ Params            23.2K      Model        12ms   3%    policy       0.021    │
+│ Steps             16.4K      Env         330ms  92%    value        0.196    │
+│ SPS               39.0K      Copy          5ms   1%    entropy      0.577    │
+│ Epoch                 8    Train           8ms   2%    old_kl      -0.000    │
+│ Uptime            703ms      Model         8ms   2%    kl          -0.000    │
+│ To go               0ms      Misc          0ms   0%    clipfrac     0.000    │
+│                                                                              │
+│ episode_return                0.995   episode_length                7.309    │
+│ score                         0.995   perf                          0.998    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ PufferLib 5.0          🐡      GPU:   3%   VRAM:   0.4/22G    RAM:  2.4G     │
+│                                                                              │
+│ Env             pokemon    Evaluate      350ms  97%    Losses       0.411    │
+│ Params            23.2K      Model        12ms   3%    policy       0.021    │
+│ Steps             16.4K      Env         330ms  92%    value        0.196    │
+│ SPS               39.0K      Copy          5ms   1%    entropy      0.577    │
+│ Epoch                 8    Train           8ms   2%    old_kl      -0.000    │
+│ Uptime            703ms      Model         8ms   2%    kl          -0.000    │
+│ To go               0ms      Misc          0ms   0%    clipfrac     0.000    │
+│                                                                              │
+│ episode_return                0.995   episode_length                7.341    │
+│ score                         0.995   perf                          0.997    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ PufferLib 5.0         🐡       GPU:   3%   VRAM:   0.4/22G    RAM:  2.4G     │
+│                                                                              │
+│ Env             pokemon    Evaluate      350ms  97%    Losses       0.411    │
+│ Params            23.2K      Model        12ms   3%    policy       0.021    │
+│ Steps             16.4K      Env         330ms  92%    value        0.196    │
+│ SPS               39.0K      Copy          5ms   1%    entropy      0.577    │
+│ Epoch                 8    Train           8ms   2%    old_kl      -0.000    │
+│ Uptime            703ms      Model         8ms   2%    kl          -0.000    │
+│ To go               0ms      Misc          0ms   0%    clipfrac     0.000    │
+│                                                                              │
+│ episode_return                0.996   episode_length                7.347    │
+│ score                         0.996   perf                          0.998    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ PufferLib 5.0        🐡        GPU:   3%   VRAM:   0.4/22G    RAM:  2.4G     │
+│                                                                              │
+│ Env             pokemon    Evaluate      350ms  97%    Losses       0.411    │
+│ Params            23.2K      Model        12ms   3%    policy       0.021    │
+│ Steps             16.4K      Env         330ms  92%    value        0.196    │
+│ SPS               39.0K      Copy          5ms   1%    entropy      0.577    │
+│ Epoch                 8    Train           8ms   2%    old_kl      -0.000    │
+│ Uptime            703ms      Model         8ms   2%    kl          -0.000    │
+│ To go               0ms      Misc          0ms   0%    clipfrac     0.000    │
+│                                                                              │
+│ episode_return                0.995   episode_length                7.359    │
+│ score                         0.995   perf                          0.997    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ PufferLib 5.0       🐡         GPU:   3%   VRAM:   0.4/22G    RAM:  2.4G     │
+│                                                                              │
+│ Env             pokemon    Evaluate      350ms  97%    Losses       0.411    │
+│ Params            23.2K      Model        12ms   3%    policy       0.021    │
+│ Steps             16.4K      Env         330ms  92%    value        0.196    │
+│ SPS               39.0K      Copy          5ms   1%    entropy      0.577    │
+│ Epoch                 8    Train           8ms   2%    old_kl      -0.000    │
+│ Uptime            703ms      Model         8ms   2%    kl          -0.000    │
+│ To go               0ms      Misc          0ms   0%    clipfrac     0.000    │
+│                                                                              │
+│ episode_return                0.994   episode_length                7.348    │
+│ score                         0.994   perf                          0.997    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ PufferLib 5.0      🐡          GPU:   3%   VRAM:   0.4/22G    RAM:  2.4G     │
+│                                                                              │
+│ Env             pokemon    Evaluate      350ms  97%    Losses       0.411    │
+│ Params            23.2K      Model        12ms   3%    policy       0.021    │
+│ Steps             16.4K      Env         330ms  92%    value        0.196    │
+│ SPS               39.0K      Copy          5ms   1%    entropy      0.577    │
+│ Epoch                 8    Train           8ms   2%    old_kl      -0.000    │
+│ Uptime            703ms      Model         8ms   2%    kl          -0.000    │
+│ To go               0ms      Misc          0ms   0%    clipfrac     0.000    │
+│                                                                              │
+│ episode_return                0.994   episode_length                7.348    │
+│ score                         0.994   perf                          0.997    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ PufferLib 5.0               🐡 GPU:   0%   VRAM:   0.4/22G    RAM:  2.4G     │
+│                                                                              │
+│ Env             pokemon    Evaluate        0ms   0%    Losses                │
+│ Params            23.2K      Model         0ms   0%    policy                │
+│ Steps              2.0K      Env           0ms   0%    value                 │
+│ SPS                 0.0      Copy          0ms   0%    entropy               │
+│ Epoch                 0    Train           0ms   0%    old_kl                │
+│ Uptime            312ms      Model         0ms   0%    kl                    │
+│ To go               0ms      Misc          0ms   0%    clipfrac              │
+│                                                                              │
+│ episode_return                1.000   episode_length                6.103    │
+│ score                         1.000   perf                          1.000    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ PufferLib 5.0              🐡  GPU:   0%   VRAM:   0.4/22G    RAM:  2.4G     │
+│                                                                              │
+│ Env             pokemon    Evaluate        0ms   0%    Losses                │
+│ Params            23.2K      Model         0ms   0%    policy                │
+│ Steps              2.0K      Env           0ms   0%    value                 │
+│ SPS                 0.0      Copy          0ms   0%    entropy               │
+│ Epoch                 0    Train           0ms   0%    old_kl                │
+│ Uptime            314ms      Model         0ms   0%    kl                    │
+│ To go               0ms      Misc          0ms   0%    clipfrac              │
+│                                                                              │
+│ episode_return                1.000   episode_length                6.103    │
+│ score                         1.000   perf                          1.000    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+CUDA_EVAL env=pokemon score=1.000000 perf=1.000000 games=126 params=23168

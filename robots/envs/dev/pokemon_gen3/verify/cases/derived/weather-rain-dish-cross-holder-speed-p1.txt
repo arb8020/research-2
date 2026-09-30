@@ -1,0 +1,7 @@
+Ludicolo (M)
+Ability: Rain Dish
+Level: 100
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Substitute
+- Rain Dance

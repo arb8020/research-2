@@ -1,0 +1,118 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "drag-cancels-queued-move",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/battle-actions.ts; sim/battle.ts; data/moves.ts; data/abilities.ts",
+    "test_name": "A faster equal-priority Roar cancels the dragged target queued Whirlwind",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    131,
+    132,
+    133,
+    134
+  ],
+  "teams": [
+    {
+      "source": "drag-cancels-queued-move-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "roar"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "drag-cancels-queued-move-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 50,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "whirlwind"
+          ],
+          "stats": [
+            130,
+            40,
+            55,
+            40,
+            65,
+            95
+          ],
+          "status": null
+        },
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "prng.labeled",
+    "queue.move-priority",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

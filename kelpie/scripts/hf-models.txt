@@ -1,0 +1,33 @@
+# HF hub artifacts the test suites read, one `<repo> <kind>` per line (docs/audit-tests.md 4.4).
+# `scripts/hf_warm.py` warms the cache from this file.  Remote runs test with HF_HUB_OFFLINE=1, so
+# a repo missing here is a `needs hf:<repo>` skip.
+#
+# kind:  config     config.json only (synth/test_roll compares the vendored config to the hub's)
+#        tokenizer  every small file: *.json *.jinja *.py *.model *.txt *.tiktoken (tokenizer,
+#                   chat template, processor config, remote tokenizer code) -- never weights
+#        weights    tokenizer + model*.safetensors (+ index); `<repo>@layers=N` is the truncated
+#                   checkpoint kelpie_models.hf.resolve_truncated builds (range-GETs N layers)
+#
+# The hub cache keys on the id exactly as written: `gpt2` and `openai-community/gpt2` are two
+# entries, and the tests spell both (kelpie-http / test_jax_corpus say "gpt2"; gpt2.MODEL_ID is
+# the long form).  Nothing listed is gated; llama.MODEL_ID (meta-llama/Llama-3.2-1B-Instruct) is
+# gated and no test loads it (test_llama runs SmolVLM's text tower), so it is not here.
+
+# weights: kelpie_models.<m>.load + HF oracle (test_golden, test_jax_corpus, oracle/test_corpus,
+# test_gpt_oss, test_smolvlm, test_llama, kelpie-http real-core tests, examples/main.py)
+gpt2 weights
+openai-community/gpt2 weights
+Qwen/Qwen3-0.6B weights
+HuggingFaceTB/SmolVLM-256M-Instruct weights
+openai/gpt-oss-20b@layers=4 weights
+
+# tokenizer: kelpie-http chat codecs (test_render_parity.MODELS, test_parsers.TOKENIZER)
+openai/gpt-oss-20b tokenizer
+moonshotai/Kimi-K3 tokenizer
+deepseek-ai/DeepSeek-V3.2 tokenizer
+zai-org/GLM-5.2 tokenizer
+unsloth/Llama-3.1-8B-Instruct tokenizer
+
+# config: synth/test_roll.MODELS rows not already above
+Qwen/Qwen3-Next-80B-A3B-Instruct config
+deepseek-ai/DeepSeek-V4-Flash config

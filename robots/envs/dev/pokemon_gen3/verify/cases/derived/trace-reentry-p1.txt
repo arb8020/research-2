@@ -1,0 +1,11 @@
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+Hardy Nature
+- Splash
+
+Porygon2
+Ability: Trace
+Level: 100
+Hardy Nature
+- Splash

@@ -1,0 +1,19 @@
+# One request: prefill in one chunk, then decodes until max_new.
+config max_batch_tokens=8 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99
+submit A prompt=5 max_new=3
+step tokens=A:7
+  expect batch A:5
+  expect free 5
+  expect running A
+step tokens=A:8
+  expect batch A:1
+  expect free 5
+  expect polled A [7,8]
+step tokens=A:9
+  expect batch A:1
+  expect free 7
+  expect running
+expect finished A reason=finished_length
+expect polled A [9]
+step
+  expect batch

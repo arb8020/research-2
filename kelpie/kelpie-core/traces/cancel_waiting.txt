@@ -1,0 +1,12 @@
+# max_batch_reqs=1 keeps B waiting; cancelling it drops it from the queue with nothing to free and releases the slot.
+config max_batch_tokens=8 max_batch_reqs=1 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99
+submit A prompt=4 max_new=4
+submit B prompt=4 max_new=4
+step
+  expect batch A:4
+  expect waiting B
+cancel B
+  expect waiting
+  expect free 6
+step
+  expect batch A:1

@@ -1,0 +1,15 @@
+Shedinja
+Ability: Wonder Guard
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Protect
+- Sand Attack
+
+Steelix (M)
+Ability: Sturdy
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Roar
+- Harden

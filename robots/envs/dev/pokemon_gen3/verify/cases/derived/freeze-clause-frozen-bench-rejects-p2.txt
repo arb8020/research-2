@@ -1,0 +1,13 @@
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Splash
+
+Blissey (M)
+Ability: Natural Cure
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Pound

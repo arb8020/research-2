@@ -1,0 +1,148 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "uproar-forced-drag-silent-cleanup",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#uproar; data/mods/gen5/moves.ts#uproar; data/mods/gen4/moves.ts#uproar; data/mods/gen3/moves.ts#uproar",
+    "test_name": "Whirlwind drags an Uproar holder after its locked action and switch teardown removes Uproar without End",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    202,
+    31,
+    17,
+    9
+  ],
+  "teams": [
+    {
+      "source": "uproar-forced-drag-silent-cleanup-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "uproar"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        },
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "uproar-forced-drag-silent-cleanup-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "splash",
+            "whirlwind"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "condition.uproar.duration",
+      "occurrence": 1,
+      "range": 4,
+      "result": 2
+    },
+    {
+      "label": "drag.switch_candidate",
+      "occurrence": 1,
+      "range": 1,
+      "result": 0
+    }
+  ],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "condition.volatile",
+    "handler.set-status",
+    "handler.try",
+    "handler.try-hit",
+    "lifecycle.condition-duration",
+    "lifecycle.switch-persistence",
+    "prng.labeled",
+    "request.legal-choices",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

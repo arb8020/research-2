@@ -1,0 +1,13 @@
+{
+  "schema":"pokemon-native-differential-case-v1", "id":"burned-guts-black-belt",
+  "provenance":{"kind":"showdown-derived","source_file":"data/items.ts","test_name":"Checkpoint 3: Guts and Black Belt compose at their ordered modifier stages","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou", "seed":[1,2,3,4],
+  "teams":[
+    {"source":"tyrogue-l90-black-belt-mach-punch-p1.txt","normalized":[{"species":"tyrogue","level":90,"gender":"M","ability":"guts","item":"blackbelt","moves":["machpunch"],"stats":[190,95,95,95,95,95],"status":"brn"}]},
+    {"source":"marowak-earthquake-p2.txt","normalized":[{"species":"marowak","level":100,"gender":"M","ability":"rockhead","item":"","moves":["earthquake"],"stats":[261,196,256,136,196,126],"status":null}]}
+  ],
+  "source_choices":[["move 1","move 1"]], "choices":[["move 1","move 1"]], "forced_outcomes":[],
+  "features":["choice.move","damage.burn","damage.gen3","handler.black-belt","handler.guts","handler.modify-attack","hit.accuracy","lifecycle.faint","lifecycle.terminal","prng.labeled","queue.move-priority","state.canonical"],
+  "boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],
+  "limits":{"max_boundaries":2,"max_actions":2}
+}

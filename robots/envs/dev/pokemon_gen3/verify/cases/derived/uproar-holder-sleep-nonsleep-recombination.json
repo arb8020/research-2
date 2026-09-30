@@ -1,0 +1,155 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "uproar-holder-sleep-nonsleep-recombination",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#uproar; data/mods/gen5/moves.ts#uproar; data/mods/gen4/moves.ts#uproar; data/mods/gen3/moves.ts#uproar",
+    "test_name": "global Uproar status prevention composes with holder Vital Spirit and Sleep Clause while non-sleep Toxic passes",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    201,
+    31,
+    17,
+    9
+  ],
+  "teams": [
+    {
+      "source": "uproar-holder-sleep-nonsleep-recombination-p1.txt",
+      "normalized": [
+        {
+          "species": "vigoroth",
+          "level": 100,
+          "gender": "M",
+          "ability": "vitalspirit",
+          "item": "",
+          "moves": [
+            "uproar"
+          ],
+          "stats": [
+            301,
+            196,
+            196,
+            146,
+            146,
+            216
+          ],
+          "status": null
+        },
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": "slp",
+          "status_state": {
+            "kind": "sleep",
+            "time": 5,
+            "skipped_time": 0
+          }
+        }
+      ]
+    },
+    {
+      "source": "uproar-holder-sleep-nonsleep-recombination-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "spore",
+            "toxic"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "condition.uproar.duration",
+      "occurrence": 1,
+      "range": 4,
+      "result": 2
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 4,
+      "range": 100,
+      "result": 52
+    }
+  ],
+  "features": [
+    "ability.vital-spirit",
+    "choice.move",
+    "condition.volatile",
+    "handler.set-status",
+    "handler.try",
+    "handler.try-hit",
+    "lifecycle.condition-duration",
+    "prng.labeled",
+    "request.legal-choices",
+    "rule.sleep-clause",
+    "state.canonical",
+    "status.sleep",
+    "status.toxic"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

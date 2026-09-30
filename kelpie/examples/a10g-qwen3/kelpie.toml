@@ -1,0 +1,28 @@
+# Example deployment: Qwen3-0.6B on a single A10G (24GB).
+#
+# kelpie serve --config examples/a10g-qwen3/kelpie.toml
+#
+# The Dockerfile installs real Python via uv (the nvidia/cuda base image
+# ships 3.11.0rc1 which segfaults during Triton compilation).
+
+[requires]
+python = ">=3.11"
+torch = ">=2.13"
+triton = ">=3.6"
+flashinfer = ">=0.6,<0.6.18"
+cuda = ">=12.4"
+gpu_memory_gb = 16
+
+[model]
+module = "kelpie_models.models.torch.qwen3"
+checkpoint = "Qwen/Qwen3-0.6B"
+
+[kernels]
+rms_norm = "kelpie_models.kernels.vendored.cuda._triton.rms_norm"
+rope = "kelpie_models.kernels.vendored.cuda._triton.rope"
+silu_mul = "kelpie_models.kernels.vendored.cuda._triton.silu_mul"
+paged_attention = "kelpie_models.kernels.adapters.flashinfer.paged_attention"
+
+[engine]
+capture = true
+device = "cuda"

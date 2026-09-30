@@ -1,0 +1,17 @@
+format = "pokemon-showdown-oracle-v1"
+repository = "https://github.com/smogon/pokemon-showdown.git"
+revision = "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+format_id = "gen3ou"
+package_json_sha256 = "7124aad8913672f0a4264e74e2036f33fc51dad2c12e3f520e7e668cd7ed5120"
+package_lock_sha256 = "ed45c185e5287cd10aa9ddb2603f3e03f7628f6a3639d11502e52ecc516a49ef"
+node_image = "node:22.14.0-bookworm@sha256:e5ddf893cc6aeab0e5126e4edae35aa43893e2836d1d246140167ccc2616f5d7"
+trace_patch = "oracle-observer.patch"
+trace_patch_sha256 = "253eac3fc84c67b0844baf97ad959a077e2e82f97dd39f0d796da918c6301f24"
+trace_smoke_script_sha256 = "71dd17b1a236e9eab3670adcae3a216f777763d7b707e5adebb700309b0cbbf6"
+trace_smoke_sha256 = "c5d5ea71a9898e78d59e7e0788fd7bd8254c8c8cfa3c46f60b344b5aac87e896"
+feature_schema_sha256 = "93e60559089ddf750dd5b6c3e3f9de83e79d6f4530e4040b2ac1e2a075aefb85"
+supported_features_sha256 = "0f376d69379bd48983d92a8718450e151aacf15712f61256731321dc8c6da27f"
+case_schema_sha256 = "63be428c60e1973236e793c0d8b1e04d46bfb4b53bcd5deb1cae477680186626"
+seed42_battle04_case_sha256 = "0e2493737497b7575a8dcca7ed9949675fb133f43a3c5a1f0287aa09f81ceed0"
+oracle_baked_into_verifier = true
+runtime_network = false

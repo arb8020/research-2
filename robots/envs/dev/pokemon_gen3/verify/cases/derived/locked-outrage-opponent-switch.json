@@ -1,0 +1,147 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "locked-outrage-opponent-switch",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/conditions.ts; data/mods/gen4/conditions.ts; sim/pokemon.ts; sim/battle-actions.ts",
+    "test_name": "Selected move persists while the target voluntarily switches",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    701,
+    29,
+    43,
+    83
+  ],
+  "teams": [
+    {
+      "source": "locked-outrage-opponent-switch-p1.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "outrage"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "locked-outrage-opponent-switch-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "nature": "hardy",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        },
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "switch 2"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "switch 2"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "condition.lockedmove.duration",
+      "occurrence": 1,
+      "range": 2,
+      "result": 1
+    }
+  ],
+  "features": [
+    "choice.move",
+    "request.legal-choices",
+    "queue.speed",
+    "condition.volatile",
+    "lifecycle.condition-duration",
+    "state.canonical",
+    "prng.labeled"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

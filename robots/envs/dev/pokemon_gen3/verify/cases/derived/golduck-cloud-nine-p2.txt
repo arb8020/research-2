@@ -1,0 +1,6 @@
+Golduck (M)
+Ability: Cloud Nine
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Splash

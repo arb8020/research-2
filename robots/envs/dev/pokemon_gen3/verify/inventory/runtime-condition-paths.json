@@ -1,0 +1,1620 @@
+{
+  "schema": "pokemon-gen3ou-runtime-condition-paths-v2",
+  "revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "method": [
+    "Parse every pinned sim/**/*.ts file with the pinned TypeScript parser and census every condition API call.",
+    "Census non-invocation lifecycle API references, including methods stored as event-handler end callbacks.",
+    "Parse direct status/weather and condition-container writes/deletes in every pinned sim/**/*.ts file.",
+    "Separate identity-owning lifecycle mutations from nested payload writes and BattleStream debug commands.",
+    "Keep semantic lifecycle/expiry paths as a reviewed layer above the exhaustive syntactic census."
+  ],
+  "semantic_paths": [
+    {
+      "path": "sim/battle.ts",
+      "line": 306,
+      "symbol": "Battle constructor RuleTable loop",
+      "operation": "create resolved runtime-rule pseudo-weather",
+      "gen3ou": "reachable",
+      "anchor": "if (hasEventHandler) this.field.addPseudoWeather(rule);"
+    },
+    {
+      "path": "sim/battle-actions.ts",
+      "line": 1245,
+      "symbol": "BattleActions#tryMoveHit",
+      "operation": "apply declarative status",
+      "gen3ou": "reachable",
+      "anchor": "hitResult = target.trySetStatus(moveData.status"
+    },
+    {
+      "path": "sim/battle-actions.ts",
+      "line": 1254,
+      "symbol": "BattleActions#tryMoveHit",
+      "operation": "apply declarative forceStatus",
+      "gen3ou": "unreachable-no-effective-descriptor",
+      "anchor": "hitResult = target.setStatus(moveData.forceStatus"
+    },
+    {
+      "path": "sim/battle-actions.ts",
+      "line": 1258,
+      "symbol": "BattleActions#tryMoveHit",
+      "operation": "apply declarative volatile",
+      "gen3ou": "reachable",
+      "anchor": "hitResult = target.addVolatile(moveData.volatileStatus"
+    },
+    {
+      "path": "sim/battle-actions.ts",
+      "line": 1262,
+      "symbol": "BattleActions#tryMoveHit",
+      "operation": "apply declarative side condition",
+      "gen3ou": "reachable",
+      "anchor": "hitResult = target.side.addSideCondition(moveData.sideCondition"
+    },
+    {
+      "path": "sim/battle-actions.ts",
+      "line": 1266,
+      "symbol": "BattleActions#tryMoveHit",
+      "operation": "apply declarative slot condition",
+      "gen3ou": "reachable",
+      "anchor": "hitResult = target.side.addSlotCondition(target, moveData.slotCondition"
+    },
+    {
+      "path": "sim/battle-actions.ts",
+      "line": 1270,
+      "symbol": "BattleActions#tryMoveHit",
+      "operation": "apply declarative weather",
+      "gen3ou": "reachable",
+      "anchor": "hitResult = this.battle.field.setWeather(moveData.weather"
+    },
+    {
+      "path": "sim/battle-actions.ts",
+      "line": 1278,
+      "symbol": "BattleActions#tryMoveHit",
+      "operation": "apply declarative pseudo-weather",
+      "gen3ou": "unreachable-no-effective-descriptor",
+      "anchor": "hitResult = this.battle.field.addPseudoWeather(moveData.pseudoWeather"
+    },
+    {
+      "path": "sim/battle.ts",
+      "line": 516,
+      "symbol": "Battle#runEvent",
+      "operation": "decrement duration and dispatch typed end transaction",
+      "gen3ou": "reachable",
+      "anchor": "handler.state.duration--;"
+    },
+    {
+      "path": "sim/battle.ts",
+      "line": 1104,
+      "symbol": "Battle#findPokemonEventHandlers",
+      "operation": "bind status expiry to clearStatus",
+      "gen3ou": "reachable",
+      "anchor": "end: pokemon.clearStatus"
+    },
+    {
+      "path": "sim/battle.ts",
+      "line": 1113,
+      "symbol": "Battle#findPokemonEventHandlers",
+      "operation": "bind volatile expiry to removeVolatile",
+      "gen3ou": "reachable",
+      "anchor": "end: pokemon.removeVolatile"
+    },
+    {
+      "path": "sim/battle.ts",
+      "line": 1148,
+      "symbol": "Battle#findPokemonEventHandlers",
+      "operation": "bind slot expiry to removeSlotCondition",
+      "gen3ou": "reachable",
+      "anchor": "end: side.removeSlotCondition"
+    },
+    {
+      "path": "sim/battle.ts",
+      "line": 1192,
+      "symbol": "Battle#findFieldEventHandlers",
+      "operation": "bind pseudo-weather expiry to removePseudoWeather",
+      "gen3ou": "reachable",
+      "anchor": "field.removePseudoWeather"
+    },
+    {
+      "path": "sim/battle.ts",
+      "line": 1201,
+      "symbol": "Battle#findFieldEventHandlers",
+      "operation": "bind weather expiry to clearWeather",
+      "gen3ou": "reachable",
+      "anchor": "field.clearWeather"
+    },
+    {
+      "path": "sim/battle.ts",
+      "line": 1226,
+      "symbol": "Battle#findSideEventHandlers",
+      "operation": "bind side-condition expiry to removeSideCondition",
+      "gen3ou": "reachable",
+      "anchor": "side.removeSideCondition"
+    },
+    {
+      "path": "sim/pokemon.ts",
+      "line": 1247,
+      "symbol": "Pokemon#copyVolatileFrom",
+      "operation": "copy transferable volatile state and clear source",
+      "gen3ou": "reachable",
+      "anchor": "copyVolatileFrom(pokemon: Pokemon"
+    },
+    {
+      "path": "sim/pokemon.ts",
+      "line": 1509,
+      "symbol": "Pokemon#clearVolatile",
+      "operation": "bulk linked teardown and volatile removal on switch or faint",
+      "gen3ou": "reachable",
+      "anchor": "clearVolatile(includeSwitchFlags = true)"
+    },
+    {
+      "path": "sim/pokemon.ts",
+      "line": 2012,
+      "symbol": "Pokemon#addVolatile",
+      "operation": "rollback rejected volatile Start",
+      "gen3ou": "reachable-call-no-proven-rejector",
+      "anchor": "delete this.volatiles[status.id];"
+    },
+    {
+      "path": "sim/pokemon.ts",
+      "line": 2017,
+      "symbol": "Pokemon#addVolatile",
+      "operation": "create linked source volatile",
+      "gen3ou": "reachable",
+      "anchor": "source.addVolatile(linkedStatus"
+    },
+    {
+      "path": "sim/pokemon.ts",
+      "line": 2055,
+      "symbol": "Pokemon#removeLinkedVolatiles",
+      "operation": "remove final linked source volatile",
+      "gen3ou": "reachable",
+      "anchor": "linkedPoke.removeVolatile(linkedStatus);"
+    },
+    {
+      "path": "sim/side.ts",
+      "line": 421,
+      "symbol": "Side#addSideCondition",
+      "operation": "rollback rejected SideStart",
+      "gen3ou": "reachable-call-no-proven-rejector",
+      "anchor": "delete this.sideConditions[status.id];"
+    },
+    {
+      "path": "sim/side.ts",
+      "line": 474,
+      "symbol": "Side#addSlotCondition",
+      "operation": "rollback rejected slot Start",
+      "gen3ou": "reachable-call-no-proven-rejector",
+      "anchor": "delete this.slotConditions[target][status.id];"
+    },
+    {
+      "path": "sim/field.ts",
+      "line": 83,
+      "symbol": "Field#setWeather",
+      "operation": "rollback rejected FieldStart",
+      "gen3ou": "reachable-call-no-proven-rejector",
+      "anchor": "this.weather = prevWeather;"
+    },
+    {
+      "path": "sim/field.ts",
+      "line": 211,
+      "symbol": "Field#addPseudoWeather",
+      "operation": "rollback rejected pseudo-weather FieldStart",
+      "gen3ou": "reachable-call-no-proven-rejector",
+      "anchor": "delete this.pseudoWeather[status.id];"
+    },
+    {
+      "path": "sim/battle-actions.ts",
+      "line": 346,
+      "symbol": "BattleActions#runMove",
+      "operation": "clear external-move lockedmove without End dispatch",
+      "gen3ou": "reachable",
+      "anchor": "delete pokemon.volatiles['lockedmove'];"
+    },
+    {
+      "path": "data/mods/gen3/moves.ts",
+      "line": 221,
+      "symbol": "Moves.doomdesire.onTry",
+      "operation": "create futuremove slot condition",
+      "gen3ou": "reachable",
+      "anchor": "addSlotCondition(target, 'futuremove')"
+    },
+    {
+      "path": "data/moves.ts",
+      "line": 6399,
+      "symbol": "Moves.futuresight.onTry",
+      "operation": "create futuremove slot condition",
+      "gen3ou": "reachable",
+      "anchor": "addSlotCondition(target, 'futuremove')"
+    },
+    {
+      "path": "data/conditions.ts",
+      "line": 392,
+      "symbol": "Conditions.futuremove.onResidual",
+      "operation": "remove futuremove slot condition",
+      "gen3ou": "reachable",
+      "anchor": "removeSlotCondition(this.getAtSlot(this.effectState.targetSlot), 'futuremove')"
+    }
+  ],
+  "source_census": [
+    {
+      "kind": "direct-assignment",
+      "path": "sim/battle-actions.ts",
+      "line": 126,
+      "column": 27,
+      "scalar": "status",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "oldActive.status = ''",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 268,
+      "column": 4,
+      "api": "addVolatile",
+      "arguments": [
+        "move.id"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "pokemon.addVolatile(move.id)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-no-effective-descriptor",
+      "evidence": "No reachable effective Gen 3 OU descriptor enters this generic later-generation branch."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 313,
+      "column": 37,
+      "api": "removeVolatile",
+      "arguments": [
+        "move.id"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "pokemon.removeVolatile(move.id)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-no-effective-descriptor",
+      "evidence": "No reachable effective Gen 3 OU descriptor enters this generic later-generation branch."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/battle-actions.ts",
+      "line": 346,
+      "column": 50,
+      "container": "volatiles",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete pokemon.volatiles['lockedmove']",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 757,
+      "column": 10,
+      "api": "removeVolatile",
+      "arguments": [
+        "effectid"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "target.removeVolatile(effectid)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-no-effective-descriptor",
+      "evidence": "No reachable effective Gen 3 OU descriptor enters this generic later-generation branch."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 761,
+      "column": 11,
+      "api": "removeSideCondition",
+      "arguments": [
+        "effectid"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "target.side.removeSideCondition(effectid)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-no-effective-descriptor",
+      "evidence": "No reachable effective Gen 3 OU descriptor enters this generic later-generation branch."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/battle-actions.ts",
+      "line": 770,
+      "column": 32,
+      "container": "volatiles",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete target.volatiles['stall']",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is generation-gated or action-gated to a mechanic absent from Gen 3."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 1245,
+      "column": 18,
+      "api": "trySetStatus",
+      "arguments": [
+        "moveData.status",
+        "source",
+        "moveData.ability ? moveData.ability : move"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "target.trySetStatus(moveData.status, source, moveData.ability ? moveData.ability : move)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "method-reference",
+      "path": "sim/battle-actions.ts",
+      "line": 1253,
+      "column": 9,
+      "api": "forceStatus",
+      "mutation_role": "lifecycle-owning",
+      "snippet": "moveData.forceStatus",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "This is the declarative move-data field tested before the adjacent setStatus call, not a stored lifecycle method."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 1254,
+      "column": 18,
+      "api": "setStatus",
+      "arguments": [
+        "moveData.forceStatus",
+        "source",
+        "move"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "target.setStatus(moveData.forceStatus, source, move)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-no-effective-descriptor",
+      "evidence": "No reachable effective Gen 3 OU descriptor enters this generic later-generation branch."
+    },
+    {
+      "kind": "method-reference",
+      "path": "sim/battle-actions.ts",
+      "line": 1254,
+      "column": 35,
+      "api": "forceStatus",
+      "mutation_role": "lifecycle-owning",
+      "snippet": "moveData.forceStatus",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "This is the declarative status ID passed to setStatus, not a stored lifecycle method."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 1258,
+      "column": 18,
+      "api": "addVolatile",
+      "arguments": [
+        "moveData.volatileStatus",
+        "source",
+        "move"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "target.addVolatile(moveData.volatileStatus, source, move)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 1262,
+      "column": 18,
+      "api": "addSideCondition",
+      "arguments": [
+        "moveData.sideCondition",
+        "source",
+        "move"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "target.side.addSideCondition(moveData.sideCondition, source, move)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 1266,
+      "column": 18,
+      "api": "addSlotCondition",
+      "arguments": [
+        "target",
+        "moveData.slotCondition",
+        "source",
+        "move"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "target.side.addSlotCondition(target, moveData.slotCondition, source, move)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 1270,
+      "column": 18,
+      "api": "setWeather",
+      "arguments": [
+        "moveData.weather",
+        "source",
+        "move"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "this.battle.field.setWeather(moveData.weather, source, move)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 1278,
+      "column": 18,
+      "api": "addPseudoWeather",
+      "arguments": [
+        "moveData.pseudoWeather",
+        "source",
+        "move"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "this.battle.field.addPseudoWeather(moveData.pseudoWeather, source, move)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-no-effective-descriptor",
+      "evidence": "No reachable effective Gen 3 OU descriptor enters this generic later-generation branch."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 1532,
+      "column": 5,
+      "api": "addSlotCondition",
+      "arguments": [
+        "pokemon",
+        "'healreplacement'",
+        "pokemon",
+        "move"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "pokemon.side.addSlotCondition(pokemon, 'healreplacement', pokemon, move)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is generation-gated or action-gated to a mechanic absent from Gen 3."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 1546,
+      "column": 5,
+      "api": "addVolatile",
+      "arguments": [
+        "'followme'",
+        "pokemon",
+        "zPower"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "pokemon.addVolatile('followme', pokemon, zPower)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is generation-gated or action-gated to a mechanic absent from Gen 3."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-actions.ts",
+      "line": 1549,
+      "column": 5,
+      "api": "addVolatile",
+      "arguments": [
+        "'focusenergy'",
+        "pokemon",
+        "zPower"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "pokemon.addVolatile('focusenergy', pokemon, zPower)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is generation-gated or action-gated to a mechanic absent from Gen 3."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-stream.ts",
+      "line": 281,
+      "column": 4,
+      "api": "setStatus",
+      "arguments": [
+        "toID(status)"
+      ],
+      "mutation_role": "debug/test-only",
+      "snippet": "p.setStatus(toID(status))",
+      "ownership": "debug/test-only",
+      "gen3ou": "debug-command-only",
+      "evidence": "BattleStream debug commands are not reachable from legal Gen 3 OU choices or battle execution."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-stream.ts",
+      "line": 327,
+      "column": 4,
+      "api": "addVolatile",
+      "arguments": [
+        "toID(volatile)"
+      ],
+      "mutation_role": "debug/test-only",
+      "snippet": "p.addVolatile(toID(volatile))",
+      "ownership": "debug/test-only",
+      "gen3ou": "debug-command-only",
+      "evidence": "BattleStream debug commands are not reachable from legal Gen 3 OU choices or battle execution."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-stream.ts",
+      "line": 338,
+      "column": 4,
+      "api": "addSideCondition",
+      "arguments": [
+        "toID(sideCondition)",
+        "'debug'"
+      ],
+      "mutation_role": "debug/test-only",
+      "snippet": "side.addSideCondition(toID(sideCondition), 'debug')",
+      "ownership": "debug/test-only",
+      "gen3ou": "debug-command-only",
+      "evidence": "BattleStream debug commands are not reachable from legal Gen 3 OU choices or battle execution."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-stream.ts",
+      "line": 348,
+      "column": 4,
+      "api": "addPseudoWeather",
+      "arguments": [
+        "toID(pseudoWeather)",
+        "'debug'"
+      ],
+      "mutation_role": "debug/test-only",
+      "snippet": "battle.field.addPseudoWeather(toID(pseudoWeather), 'debug')",
+      "ownership": "debug/test-only",
+      "gen3ou": "debug-command-only",
+      "evidence": "BattleStream debug commands are not reachable from legal Gen 3 OU choices or battle execution."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle-stream.ts",
+      "line": 358,
+      "column": 4,
+      "api": "setWeather",
+      "arguments": [
+        "toID(weather)",
+        "'debug'"
+      ],
+      "mutation_role": "debug/test-only",
+      "snippet": "battle.field.setWeather(toID(weather), 'debug')",
+      "ownership": "debug/test-only",
+      "gen3ou": "debug-command-only",
+      "evidence": "BattleStream debug commands are not reachable from legal Gen 3 OU choices or battle execution."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle.ts",
+      "line": 306,
+      "column": 26,
+      "api": "addPseudoWeather",
+      "arguments": [
+        "rule"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "this.field.addPseudoWeather(rule)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "method-reference",
+      "path": "sim/battle.ts",
+      "line": 1104,
+      "column": 64,
+      "api": "clearStatus",
+      "mutation_role": "lifecycle-owning",
+      "snippet": "pokemon.clearStatus",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "Battle stores clearStatus as the reachable status event handler end callback."
+    },
+    {
+      "kind": "method-reference",
+      "path": "sim/battle.ts",
+      "line": 1113,
+      "column": 61,
+      "api": "removeVolatile",
+      "mutation_role": "lifecycle-owning",
+      "snippet": "pokemon.removeVolatile",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "Battle stores removeVolatile as the reachable volatile event handler end callback."
+    },
+    {
+      "kind": "method-reference",
+      "path": "sim/battle.ts",
+      "line": 1148,
+      "column": 11,
+      "api": "removeSlotCondition",
+      "mutation_role": "lifecycle-owning",
+      "snippet": "side.removeSlotCondition",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "Battle stores removeSlotCondition as the reachable slot-condition event handler end callback."
+    },
+    {
+      "kind": "method-reference",
+      "path": "sim/battle.ts",
+      "line": 1192,
+      "column": 33,
+      "api": "removePseudoWeather",
+      "mutation_role": "lifecycle-owning",
+      "snippet": "field.removePseudoWeather",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "Battle stores removePseudoWeather as the reachable pseudo-weather event handler end callback."
+    },
+    {
+      "kind": "method-reference",
+      "path": "sim/battle.ts",
+      "line": 1201,
+      "column": 32,
+      "api": "clearWeather",
+      "mutation_role": "lifecycle-owning",
+      "snippet": "field.clearWeather",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "Battle stores clearWeather as the reachable weather event handler end callback."
+    },
+    {
+      "kind": "method-reference",
+      "path": "sim/battle.ts",
+      "line": 1226,
+      "column": 33,
+      "api": "removeSideCondition",
+      "mutation_role": "lifecycle-owning",
+      "snippet": "side.removeSideCondition",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "Battle stores removeSideCondition as the reachable side-condition event handler end callback."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle.ts",
+      "line": 1635,
+      "column": 4,
+      "api": "removeVolatile",
+      "arguments": [
+        "'dynamax'"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "pokemon.removeVolatile('dynamax')",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is generation-gated or action-gated to a mechanic absent from Gen 3."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/battle.ts",
+      "line": 1644,
+      "column": 7,
+      "container": "volatiles",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete pokemon.volatiles['partialtrappinglock']",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is generation-gated or action-gated to a mechanic absent from Gen 3."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/battle.ts",
+      "line": 1650,
+      "column": 7,
+      "container": "volatiles",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete pokemon.volatiles['partiallytrapped']",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is generation-gated or action-gated to a mechanic absent from Gen 3."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/battle.ts",
+      "line": 1656,
+      "column": 7,
+      "container": "volatiles",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete pokemon.volatiles['fakepartiallytrapped']",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is generation-gated or action-gated to a mechanic absent from Gen 3."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/battle.ts",
+      "line": 1922,
+      "column": 4,
+      "container": "sideConditions",
+      "depth": 0,
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.sides[2]!.sideConditions = this.sides[0].sideConditions",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-topology",
+      "evidence": "The assignment is inside multi-battle side sharing; Gen 3 OU is singles."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/battle.ts",
+      "line": 1923,
+      "column": 4,
+      "container": "sideConditions",
+      "depth": 0,
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.sides[3]!.sideConditions = this.sides[1].sideConditions",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-topology",
+      "evidence": "The assignment is inside multi-battle side sharing; Gen 3 OU is singles."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/battle.ts",
+      "line": 2194,
+      "column": 10,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "pokemon.volatiles['bide'].damage = 0",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/battle.ts",
+      "line": 2242,
+      "column": 6,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "-=",
+      "snippet": "foe.volatiles['substitute'].hp -= damage",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle.ts",
+      "line": 2244,
+      "column": 7,
+      "api": "removeVolatile",
+      "arguments": [
+        "'substitute'"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "foe.removeVolatile('substitute')",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is explicitly generation-gated away from Gen 3."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/battle.ts",
+      "line": 2541,
+      "column": 6,
+      "scalar": "status",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "pokemon.status = 'fnt' as ID",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/battle.ts",
+      "line": 2601,
+      "column": 6,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "pokemon.volatiles['bide'].damage = 0",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle.ts",
+      "line": 2744,
+      "column": 4,
+      "api": "addVolatile",
+      "arguments": [
+        "'dynamax'"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "action.pokemon.addVolatile('dynamax')",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is generation-gated or action-gated to a mechanic absent from Gen 3."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/battle.ts",
+      "line": 2814,
+      "column": 4,
+      "scalar": "status",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "action.target.status = ''",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is generation-gated or action-gated to a mechanic absent from Gen 3."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/battle.ts",
+      "line": 2818,
+      "column": 4,
+      "api": "removeSlotCondition",
+      "arguments": [
+        "action.pokemon",
+        "'revivalblessing'"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "action.pokemon.side.removeSlotCondition(action.pokemon, 'revivalblessing')",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is generation-gated or action-gated to a mechanic absent from Gen 3."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/dex-data.ts",
+      "line": 124,
+      "column": 3,
+      "scalar": "status",
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "this.status = data.status as ID || undefined",
+      "ownership": "payload-only",
+      "gen3ou": "descriptor-construction",
+      "evidence": "BasicEffect construction copies a declarative descriptor field; it does not mutate battle condition state."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/dex-data.ts",
+      "line": 125,
+      "column": 3,
+      "scalar": "weather",
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "this.weather = data.weather as ID || undefined",
+      "ownership": "payload-only",
+      "gen3ou": "descriptor-construction",
+      "evidence": "BasicEffect construction copies a declarative descriptor field; it does not mutate battle condition state."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/field.ts",
+      "line": 28,
+      "column": 3,
+      "scalar": "weather",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.weather = ''",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "storage-initialization",
+      "evidence": "Constructor initialization creates an empty owner store, not a concrete condition identity."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/field.ts",
+      "line": 32,
+      "column": 3,
+      "container": "pseudoWeather",
+      "depth": 0,
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.pseudoWeather = {}",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "storage-initialization",
+      "evidence": "Constructor initialization creates an empty owner store, not a concrete condition identity."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/field.ts",
+      "line": 69,
+      "column": 3,
+      "scalar": "weather",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.weather = status.id",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/field.ts",
+      "line": 83,
+      "column": 4,
+      "scalar": "weather",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.weather = prevWeather",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/field.ts",
+      "line": 95,
+      "column": 3,
+      "scalar": "weather",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.weather = ''",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/field.ts",
+      "line": 200,
+      "column": 11,
+      "container": "pseudoWeather",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.pseudoWeather[status.id] = this.battle.initEffectState({ id: status.id, source, sourceSlot: source?.getSlot(), duration: status.duration, })",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/field.ts",
+      "line": 211,
+      "column": 4,
+      "container": "pseudoWeather",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete this.pseudoWeather[status.id]",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/field.ts",
+      "line": 228,
+      "column": 3,
+      "container": "pseudoWeather",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete this.pseudoWeather[status.id]",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 379,
+      "column": 3,
+      "scalar": "status",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.status = ''",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "storage-initialization",
+      "evidence": "Constructor initialization creates an empty owner store, not a concrete condition identity."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 381,
+      "column": 3,
+      "container": "volatiles",
+      "depth": 0,
+      "scalar": "volatiles",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.volatiles = {}",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "storage-initialization",
+      "evidence": "Constructor initialization creates an empty owner store, not a concrete condition identity."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 1254,
+      "column": 4,
+      "container": "volatiles",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.volatiles[i] = this.battle.initEffectState({ ...pokemon.volatiles[i], target: this })",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/pokemon.ts",
+      "line": 1256,
+      "column": 5,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "snippet": "delete pokemon.volatiles[i].linkedPokemon",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/pokemon.ts",
+      "line": 1257,
+      "column": 5,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "snippet": "delete pokemon.volatiles[i].linkedStatus",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/pokemon.ts",
+      "line": 1335,
+      "column": 44,
+      "api": "removeVolatile",
+      "arguments": [
+        "volatile"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "this.removeVolatile(volatile)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is explicitly generation-gated away from Gen 3."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/pokemon.ts",
+      "line": 1338,
+      "column": 6,
+      "api": "addVolatile",
+      "arguments": [
+        "volatile"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "this.addVolatile(volatile)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is explicitly generation-gated away from Gen 3."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 1339,
+      "column": 40,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "this.volatiles[volatile].layers = pokemon.volatiles[volatile].layers",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 1340,
+      "column": 38,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "this.volatiles[volatile].hasDragonType = pokemon.volatiles[volatile].hasDragonType",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 1533,
+      "column": 4,
+      "container": "volatiles",
+      "depth": 0,
+      "scalar": "volatiles",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.volatiles = { dynamax: this.volatiles['dynamax'] }",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "unreachable-generation-branch",
+      "evidence": "The enclosing branch is generation-gated or action-gated to a mechanic absent from Gen 3."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 1535,
+      "column": 4,
+      "container": "volatiles",
+      "depth": 0,
+      "scalar": "volatiles",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.volatiles = {}",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/pokemon.ts",
+      "line": 1671,
+      "column": 10,
+      "api": "setStatus",
+      "arguments": [
+        "this.status || status",
+        "source",
+        "sourceEffect"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "this.setStatus(this.status || status, source, sourceEffect)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/pokemon.ts",
+      "line": 1678,
+      "column": 32,
+      "api": "removeVolatile",
+      "arguments": [
+        "'nightmare'"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "this.removeVolatile('nightmare')",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/pokemon.ts",
+      "line": 1681,
+      "column": 3,
+      "api": "setStatus",
+      "arguments": [
+        "''"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "this.setStatus('')",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 1731,
+      "column": 3,
+      "scalar": "status",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.status = status.id",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 1742,
+      "column": 4,
+      "scalar": "status",
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.status = prevStatus",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/pokemon.ts",
+      "line": 1757,
+      "column": 32,
+      "api": "removeVolatile",
+      "arguments": [
+        "'nightmare'"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "this.removeVolatile('nightmare')",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/pokemon.ts",
+      "line": 1760,
+      "column": 3,
+      "api": "setStatus",
+      "arguments": [
+        "''"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "this.setStatus('')",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 1999,
+      "column": 3,
+      "container": "volatiles",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.volatiles[status.id] = this.battle.initEffectState({ id: status.id, name: status.name, target: this })",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 2001,
+      "column": 4,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "this.volatiles[status.id].source = source",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 2002,
+      "column": 4,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "this.volatiles[status.id].sourceSlot = source.getSlot()",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 2004,
+      "column": 21,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "this.volatiles[status.id].sourceEffect = sourceEffect",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 2005,
+      "column": 24,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "this.volatiles[status.id].duration = status.duration",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 2007,
+      "column": 4,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "this.volatiles[status.id].duration = status.durationCallback.call(this.battle, this, source, sourceEffect)",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/pokemon.ts",
+      "line": 2012,
+      "column": 4,
+      "container": "volatiles",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete this.volatiles[status.id]",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/pokemon.ts",
+      "line": 2017,
+      "column": 5,
+      "api": "addVolatile",
+      "arguments": [
+        "linkedStatus",
+        "this",
+        "sourceEffect"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "source.addVolatile(linkedStatus, this, sourceEffect)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 2018,
+      "column": 5,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "source.volatiles[linkedStatus.toString()].linkedPokemon = [this]",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 2019,
+      "column": 5,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "source.volatiles[linkedStatus.toString()].linkedStatus = status",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 2023,
+      "column": 4,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "this.volatiles[status.toString()].linkedPokemon = [source]",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/pokemon.ts",
+      "line": 2024,
+      "column": 4,
+      "container": "volatiles",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "this.volatiles[status.toString()].linkedStatus = linkedStatus",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/pokemon.ts",
+      "line": 2041,
+      "column": 3,
+      "container": "volatiles",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete this.volatiles[status.id]",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "api-call",
+      "path": "sim/pokemon.ts",
+      "line": 2055,
+      "column": 5,
+      "api": "removeVolatile",
+      "arguments": [
+        "linkedStatus"
+      ],
+      "mutation_role": "lifecycle-owning",
+      "snippet": "linkedPoke.removeVolatile(linkedStatus)",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/side.ts",
+      "line": 252,
+      "column": 3,
+      "container": "sideConditions",
+      "depth": 0,
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.sideConditions = {}",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "storage-initialization",
+      "evidence": "Constructor initialization creates an empty owner store, not a concrete condition identity."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/side.ts",
+      "line": 253,
+      "column": 3,
+      "container": "slotConditions",
+      "depth": 0,
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.slotConditions = []",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "storage-initialization",
+      "evidence": "Constructor initialization creates an empty owner store, not a concrete condition identity."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/side.ts",
+      "line": 255,
+      "column": 48,
+      "container": "slotConditions",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.slotConditions[i] = {}",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "storage-initialization",
+      "evidence": "Constructor initialization creates an empty owner store, not a concrete condition identity."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/side.ts",
+      "line": 409,
+      "column": 3,
+      "container": "sideConditions",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.sideConditions[status.id] = this.battle.initEffectState({ id: status.id, target: this, source, sourceSlot: source.getSlot(), duration: status.duration, })",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/side.ts",
+      "line": 417,
+      "column": 4,
+      "container": "sideConditions",
+      "depth": 2,
+      "mutation_role": "payload-only",
+      "operator": "=",
+      "snippet": "this.sideConditions[status.id].duration = status.durationCallback.call(this.battle, this.active[0], source, sourceEffect)",
+      "ownership": "payload-only",
+      "gen3ou": "not-a-lifecycle-identity",
+      "evidence": "The write/delete is below the condition-state identity slot and mutates only condition payload."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/side.ts",
+      "line": 421,
+      "column": 4,
+      "container": "sideConditions",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete this.sideConditions[status.id]",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/side.ts",
+      "line": 443,
+      "column": 3,
+      "container": "sideConditions",
+      "depth": 1,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete this.sideConditions[status.id]",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-assignment",
+      "path": "sim/side.ts",
+      "line": 461,
+      "column": 26,
+      "container": "slotConditions",
+      "depth": 2,
+      "mutation_role": "lifecycle-owning",
+      "operator": "=",
+      "snippet": "this.slotConditions[target][status.id] = this.battle.initEffectState({ id: status.id, target: this, source, sourceSlot: source.getSlot(), isSlotCondition: true, duration: status.duration, })",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/side.ts",
+      "line": 474,
+      "column": 4,
+      "container": "slotConditions",
+      "depth": 2,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete this.slotConditions[target][status.id]",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    },
+    {
+      "kind": "direct-delete",
+      "path": "sim/side.ts",
+      "line": 492,
+      "column": 3,
+      "container": "slotConditions",
+      "depth": 2,
+      "mutation_role": "lifecycle-owning",
+      "snippet": "delete this.slotConditions[target][status.id]",
+      "ownership": "lifecycle-owning",
+      "gen3ou": "reachable-generic-runtime",
+      "evidence": "The generic transaction is reachable from at least one effective legal Gen 3 OU descriptor or core transition."
+    }
+  ]
+}

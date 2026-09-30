@@ -1,0 +1,48 @@
+# A per_seq recurrent group checkpointing every S = 16 tokens, keeping 1 checkpoint. The model
+# sees three indices per request (expect idx): `read` (the state before the entry's first row),
+# `write[0]` (the state after its last history row) and `ckpt` (the state after row ckpt_row,
+# written when the history rows cross a multiple of S). The core owns which unit is which;
+# nothing is copied.
+#
+# The bug this replaces (old rule (b)): the live unit was re-opened fresh at every boundary, so
+# the model read a unit nobody had written and the state reset every S tokens. Here the live
+# unit carries across the boundary (read = live, written in place) and the checkpoint is a
+# separate unit written mid-step.
+#
+# Units: ZERO(g=1) takes group 1's first page at init (id 1) and is held forever.
+config max_seq_len=128 max_batch_tokens=128 max_batch_reqs=4 block_size=16 groups=full,state16 num_blocks=12 reserve_ratio=0 order=running_first eos=99
+expect free 10
+# Prompt 16 ends exactly on the boundary: read ZERO, write fresh 3, checkpoint 4 after row 15.
+submit A prompt=16 max_new=8
+plan
+  expect batch A:16
+  expect idx A g=1 start=0 read=Z write=[3] ckpt=4@row15
+commit
+  expect table A g=0 [2]
+  expect units A g=1 live=3 ring=[4@16]
+  expect free 7
+# Decode past the boundary: token 16 reads the live state and updates it in place. No
+# checkpoint (16 is not > seq_start 16), nothing allocated in group 1.
+plan
+  expect batch A:1
+  expect idx A g=1 start=16 read=3 write=[3] ckpt=-
+commit
+  expect table A g=0 [2,5]
+  expect units A g=1 live=3 ring=[4@16]
+  expect free 6
+step
+  expect batch A:1
+  expect units A g=1 live=3 ring=[4@16]
+  expect free 6
+# A prompt spanning three intervals in one chunk checkpoints only the largest boundary (48):
+# at most one checkpoint per step (the documented coarse grain for long chunks).
+submit B prompt=48 max_new=4
+plan
+  expect batch A:1 B:48
+  expect idx A g=1 start=18 read=3 write=[3] ckpt=-
+  expect idx B g=1 start=0 read=Z write=[9] ckpt=10@row47
+commit
+  expect table B g=0 [6,7,8]
+  expect units B g=1 live=9 ring=[10@48]
+  expect units A g=1 live=3 ring=[4@16]
+  expect free 1

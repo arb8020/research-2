@@ -1,0 +1,107 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "quick-claw-induced-speed-tie",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/items/quickclaw.js:30; data/mods/gen3/items.ts#quickclaw",
+    "test_name": "one shared Quick Claw activation places unequal natural speeds in a tie bracket",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    3
+  ],
+  "teams": [
+    {
+      "source": "quick-claw-induced-speed-tie-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "quickclaw",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "quick-claw-induced-speed-tie-p2.txt",
+      "normalized": [
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "quickclaw",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "turn.quick_claw",
+      "occurrence": 1,
+      "range": 5,
+      "result": 0
+    }
+  ],
+  "features": [
+    "choice.move",
+    "item.quick-claw",
+    "prng.labeled",
+    "queue.speed",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

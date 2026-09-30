@@ -1,0 +1,40 @@
+# The stall check: a plan that schedules nothing while work is pending and nothing is in flight
+# is reported (scheduler.Stall), not left to idle forever. Submit already rejects what can never
+# fit (kv_outgrows_pool.txt), so these reach a stall through live knobs.
+# One window8 group, block 4, 3 usable blocks: A's 16-token prompt fits in 4-token chunks
+# (kv_window_chunk_peak.txt) but not in one 16-token chunk.
+config max_batch_tokens=16 max_batch_reqs=4 block_size=4 groups=window8 num_blocks=4 reserve_ratio=0 order=running_first eos=99
+set max_batch_tokens=4
+step
+  expect stall none
+submit A prompt=16 max_new=2
+step
+  expect batch A:4
+  expect stall none
+# Budget back to 16: A's next chunk [4,16) needs rows 1..3 and there are 2 free.
+set max_batch_tokens=16
+step
+  expect batch
+  expect waiting A
+  expect event n_preempted=1
+  expect stall none            # A was its own victim this plan: the next one re-plans from scratch
+step
+  expect batch
+  expect waiting A
+  expect stall A n_work=16 need=4 free=3
+step
+  expect stall A n_work=16 need=4 free=3
+# A knob can end a stall: back to 4-token chunks, A is re-admitted.
+set max_batch_tokens=4
+step
+  expect batch A:4
+  expect stall none
+# A budget below the chunk grain (block 4) cuts a zero-token chunk: nothing ever runs.
+set max_batch_tokens=2
+step
+  expect batch
+  expect running A
+  expect stall A n_work=0 need=0 free=2
+cancel A
+step
+  expect stall none

@@ -1,0 +1,114 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "lock-on-semi-invulnerable",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts",
+    "test_name": "Lock-On bypasses Fly invulnerability and the follow-up accuracy draw",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "teams": [
+    {
+      "source": "lock-on-semi-invulnerable-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "lockon",
+            "toxic"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "lock-on-semi-invulnerable-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 50,
+          "gender": "F",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "fly"
+          ],
+          "stats": [
+            130,
+            40,
+            55,
+            40,
+            65,
+            95
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.accuracy",
+    "handler.invulnerability",
+    "hit.accuracy-bypass",
+    "hit.invulnerability-bypass",
+    "lifecycle.condition-duration",
+    "prng.labeled",
+    "state.canonical",
+    "volatile.lock-on"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

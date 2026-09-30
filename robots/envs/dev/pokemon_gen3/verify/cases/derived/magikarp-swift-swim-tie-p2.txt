@@ -1,0 +1,7 @@
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+EVs: 1 HP
+IVs: 0 Spe
+Brave Nature
+- Splash

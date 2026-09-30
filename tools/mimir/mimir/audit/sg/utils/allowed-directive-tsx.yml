@@ -1,0 +1,1 @@
+{"id": "allowed-directive-tsx", "language": "tsx", "rule": {"regex": "^//\\s*(type: ignore\\[|noqa:|fmt: skip|@ts-expect-error)"}}

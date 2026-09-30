@@ -1,0 +1,10 @@
+{
+  // Solution file. The browser build (tsconfig.app.json) and the Bun server
+  // (tsconfig.server.json) are separate projects: Bun's global types must not
+  // leak into the browser code, and vice versa.
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.server.json" }
+  ]
+}

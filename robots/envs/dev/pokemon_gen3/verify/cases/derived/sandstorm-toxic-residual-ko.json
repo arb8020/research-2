@@ -1,0 +1,9 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"sandstorm-toxic-residual-ko",
+  "provenance":{"kind":"showdown-derived","source_file":"sim/battle.ts","test_name":"Checkpoint 4: Sandstorm resolves before Toxic and residual fainting requests forced replacement","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,5],
+  "teams":[{"source":"gengar-toxic-thief-p1.txt","normalized":[{"species":"gengar","level":100,"gender":"M","ability":"levitate","item":"","moves":["toxic","thief"],"stats":[261,166,156,296,186,256],"status":null}]},{"source":"blissey-sandstorm-charmeleon-p2.txt","normalized":[{"species":"blissey","level":100,"gender":"F","ability":"naturalcure","item":"","moves":["sandstorm"],"stats":[651,56,56,186,306,146],"status":null},{"species":"charmeleon","level":100,"gender":"M","ability":"blaze","item":"","moves":["scratch"],"stats":[257,164,152,196,166,196],"status":null}]}],
+  "source_choices":[["move 1","move 1"],["move 1","move 1"],["move 1","move 1"],["move 1","move 1"],["move 1","move 1"]],"choices":[["move 1","move 1"],["move 1","move 1"],["move 1","move 1"],["move 1","move 1"],["move 1","move 1"]],
+  "forced_outcomes":[{"label":"move.accuracy","occurrence":1,"range":100,"result":32},{"label":"move.accuracy","occurrence":2,"range":100,"result":51},{"label":"move.accuracy","occurrence":3,"range":100,"result":29},{"label":"move.accuracy","occurrence":4,"range":100,"result":9},{"label":"move.accuracy","occurrence":5,"range":100,"result":60}],
+  "features":["choice.move","condition.nonvolatile-status","condition.weather","damage.residual","handler.residual","lifecycle.condition-duration","lifecycle.faint","lifecycle.forced-replacement","prng.labeled","request.legal-choices","state.canonical","status.toxic","weather.sandstorm"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],"limits":{"max_boundaries":6,"max_actions":10}
+}

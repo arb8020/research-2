@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"sandstorm-lifecycle",
+  "provenance":{"kind":"showdown-derived","source_file":"test/sim/misc/weather.js","test_name":"Checkpoint 4: move-started Sandstorm ticks four times and expires before its fifth tick","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"marowak-sandstorm-p1.txt","normalized":[{"species":"marowak","level":100,"gender":"M","ability":"rockhead","item":"","moves":["sandstorm"],"stats":[261,196,256,136,196,126],"status":null}]},{"source":"charizard-scratch-p2.txt","normalized":[{"species":"charizard","level":100,"gender":"M","ability":"blaze","item":"","moves":["scratch"],"stats":[297,204,192,254,206,236],"status":null}]}],
+  "source_choices":[["move 1","move 1"],["move 1","move 1"],["move 1","move 1"],["move 1","move 1"],["move 1","move 1"]],"choices":[["move 1","move 1"],["move 1","move 1"],["move 1","move 1"],["move 1","move 1"],["move 1","move 1"]],"forced_outcomes":[],
+  "features":["choice.move","condition.weather","damage.residual","handler.residual","lifecycle.condition-duration","state.canonical","weather.sandstorm","weather.type-immunity"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],"limits":{"max_boundaries":6,"max_actions":10}
+}

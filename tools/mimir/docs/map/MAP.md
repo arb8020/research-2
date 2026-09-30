@@ -62,7 +62,7 @@ deep-link stays fog, 008 parked; (5) local-markdown tracker confirmed;
 ## Tickets
 
 Frontier: [001](tickets/001-at-query.md) · [003](tickets/003-pinned-markers.md) ·
-[005](tickets/005-multi-target-scan.md) · [008](tickets/008-grill-erosion-demotion.md) · [spawn forces worktree+branch (obol#646)](https://github.com/silares-ai/obol/issues/646) · [Session commit trailer (obol#647)](https://github.com/silares-ai/obol/issues/647)
+[005](tickets/005-multi-target-scan.md) · [008](tickets/008-grill-erosion-demotion.md) · spawn forces worktree+branch (obol#646) · Session commit trailer (obol#647)
 
 Claimed: [009](tickets/009-ui-surface.md) (UI surface — in progress)
 

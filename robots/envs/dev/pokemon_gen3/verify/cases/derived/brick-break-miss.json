@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"brick-break-miss",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen3/moves.ts; sim/battle-actions.ts","test_name":"Accuracy miss preserves Reflect before Brick Break TryHit","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,1],
+  "teams":[{"source":"smeargle-brick-break-p1.txt","normalized":[{"species":"smeargle","level":100,"gender":"M","nature":"hardy","ability":"owntempo","item":"","moves":["brickbreak","splash"],"stats":[251,76,106,76,126,186],"status":null}]},{"source":"alakazam-flash-reflect-p2.txt","normalized":[{"species":"alakazam","level":100,"gender":"M","nature":"hardy","ability":"synchronize","item":"","moves":["flash","reflect","splash"],"stats":[251,136,126,306,206,276],"status":null}]}],
+  "source_choices":[["move 2","move 1"],["move 2","move 2"],["move 1","move 3"]],"choices":[["move 2","move 1"],["move 2","move 2"],["move 1","move 3"]],"forced_outcomes":[{"label":"move.accuracy","occurrence":1,"range":100,"result":54},{"label":"move.accuracy","occurrence":2,"range":100,"result":81}],
+  "features":["choice.move","condition.side","hit.accuracy","prng.labeled","state.canonical"],"boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":4,"max_actions":6}
+}

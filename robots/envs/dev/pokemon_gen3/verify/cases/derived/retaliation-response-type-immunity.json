@@ -1,0 +1,102 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "retaliation-response-type-immunity",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/mods/gen3/moves.ts",
+    "test_name": "Counter captures damage but its Fighting response remains type-immune",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    41,
+    42,
+    43,
+    44
+  ],
+  "teams": [
+    {
+      "source": "retaliation-response-type-immunity-p1.txt",
+      "normalized": [
+        {
+          "species": "gengar",
+          "level": 100,
+          "gender": "M",
+          "ability": "levitate",
+          "item": "",
+          "moves": [
+            "seismictoss"
+          ],
+          "stats": [
+            261,
+            166,
+            156,
+            296,
+            186,
+            256
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "retaliation-response-type-immunity-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 50,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "counter"
+          ],
+          "stats": [
+            130,
+            40,
+            55,
+            40,
+            65,
+            95
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "damage.fixed-literal",
+    "handler.damage",
+    "handler.try",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

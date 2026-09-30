@@ -1,0 +1,30 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "target-adjacent-ally-no-target",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "sim/battle.ts",
+    "test_name": "Checkpoint 6: adjacentAlly has no target in singles",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 41],
+  "teams": [
+    {"source": "vaporeon-helping-hand-p1.txt", "normalized": [{
+      "species": "vaporeon", "level": 100, "gender": "M",
+      "ability": "waterabsorb", "item": "", "moves": ["helpinghand"],
+      "stats": [401, 166, 156, 256, 226, 166], "status": null
+    }]},
+    {"source": "tyrogue-tackle-p2.txt", "normalized": [{
+      "species": "tyrogue", "level": 100, "gender": "M",
+      "ability": "guts", "item": "", "moves": ["tackle"],
+      "stats": [211, 106, 106, 106, 106, 106], "status": null
+    }]}
+  ],
+  "source_choices": [["move 1", "move 1"]],
+  "choices": [["move 1", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["choice.move", "prng.labeled", "request.legal-choices", "state.canonical", "target.adjacent-ally", "target.no-target", "target.singles-normalization"],
+  "boundaries": ["request", "choice", "queue", "state", "events", "prng"],
+  "limits": {"max_boundaries": 2, "max_actions": 2}
+}

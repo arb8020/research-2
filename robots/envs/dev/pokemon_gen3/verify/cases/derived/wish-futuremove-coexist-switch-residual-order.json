@@ -1,0 +1,151 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "wish-futuremove-coexist-switch-residual-order",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen4/moves.ts",
+    "test_name": "Wish and Future Sight coexist on one position and resolve around poison in Gen 3 residual order",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "wish-futuremove-coexist-switch-residual-order-p1.txt",
+      "normalized": [
+        {
+          "species": "vaporeon",
+          "level": 100,
+          "gender": "M",
+          "ability": "waterabsorb",
+          "item": "",
+          "moves": [
+            "haze",
+            "wish"
+          ],
+          "stats": [
+            401,
+            166,
+            156,
+            256,
+            226,
+            166
+          ],
+          "status": null
+        },
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "M",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": "psn",
+          "initial_hp": 100
+        }
+      ]
+    },
+    {
+      "source": "wish-futuremove-coexist-switch-residual-order-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "futuresight",
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "switch 2",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "switch 2",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 84
+    }
+  ],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "condition.slot",
+    "lifecycle.condition-duration",
+    "lifecycle.switch-persistence",
+    "prng.delayed-hit",
+    "prng.labeled",
+    "slot.futuremove",
+    "slot.wish",
+    "state.canonical",
+    "status.poison"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

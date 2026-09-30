@@ -1,0 +1,5 @@
+Gengar (M)
+Ability: Levitate
+Level: 100
+Hardy Nature
+- Splash

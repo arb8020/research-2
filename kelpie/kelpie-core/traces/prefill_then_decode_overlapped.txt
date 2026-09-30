@@ -1,0 +1,31 @@
+# Overlap over a chunked prefill. Before the ahead plan is built, every row of the plan in flight
+# counts as computed (reserveAhead), so N+1 plans the NEXT chunk, from committed + in flight. A
+# partial chunk emits nothing, so it reserves no placeholder. The chunk that completes the prompt
+# emits a token, so the decode behind it is reserved like any decode: N+1 plans that decode at
+# the placeholder's position while N is still in flight.
+config max_batch_tokens=4 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99 overlap=1
+submit A prompt=9 max_new=3
+plan
+  expect batch A:4                  # N: first chunk, real n_computed 0 -> 4
+plan
+  expect ahead_batch A:4            # N+1: the next chunk, 4..7 (0..3 is in flight)
+  expect ahead_rows A [1004@4,1005@5,1006@6,1007@7]
+  expect reserved A false           # a partial chunk emits nothing: no placeholder
+commit                              # commits N: n_computed 4 (counted when N+1 was built)
+  expect n_computed A 4
+  expect polled A []
+commit                              # commits N+1: n_computed 4 -> 8 (still partial: prompt is 9)
+  expect n_computed A 8
+  expect polled A []
+plan tokens=A:8
+  expect batch A:1                  # N: last chunk (1 token) completes the prompt -> still "prefill"
+plan tokens=A:9
+  expect ahead_batch A:1            # N+1: the decode of N's token, not the last chunk again
+  expect ahead_rows A [-@9]
+  expect reserved A true            # N emits, so its token's position is reserved
+commit                               # commits N: prompt now fully computed, token 8 appended
+  expect n_computed A 9
+  expect polled A [8]
+commit                               # commits N+1: now genuinely the first decode past the prompt
+  expect n_computed A 10
+  expect polled A [9]

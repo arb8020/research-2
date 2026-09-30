@@ -1,0 +1,41 @@
+{
+  "schema_version": 2,
+  "id": "seed42-battle04-forced-replacement",
+  "provenance": {
+    "kind": "differential-regression",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+    "sources": [
+      {
+        "path": "regressions/gen3ou/cases/seed42-battle04-forced-replacement.json",
+        "symbol_or_test": "battle 04 forced replacement prefix"
+      }
+    ]
+  },
+  "format": "gen3ou",
+  "teams": {
+    "kind": "verifier-showdown-export-files",
+    "values": ["balanced.txt", "balanced-alt.txt"],
+    "normalization_digest": "29373f4f39a88e95d1f2733e5ca17344672542b126708ca4d14c2c06fbe1d675"
+  },
+  "battle_seed": [46, 42, 4, 0],
+  "choices": {
+    "kind": "explicit",
+    "turns": [
+      ["switch 4", "move 4"],
+      [null, "switch 4"]
+    ]
+  },
+  "features": [
+    "choice.request-legality",
+    "phase.request-machine",
+    "lifecycle.switch-faint-terminal",
+    "projection.canonical-trace"
+  ],
+  "interactions": [],
+  "boundaries": ["request", "replacement-request"],
+  "invariants": [
+    "request choices are a pure projection of canonical state",
+    "forced replacement preserves pending continuation"
+  ],
+  "limits": {"max_decisions": 2, "max_actions": 4, "timeout_ms": 5000}
+}

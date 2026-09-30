@@ -1,0 +1,44 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "sleep-talk-called-rest-condition",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/moves/sleeptalk.js",
+    "test_name": "Sleep Talk's called move re-enters the child's ordinary Try condition",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [181, 182, 183, 184],
+  "teams": [
+    {
+      "source": "sleep-talk-called-rest-condition-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle", "level": 100, "gender": "M",
+          "ability": "owntempo", "item": "", "moves": ["sleeptalk", "rest"],
+          "stats": [251, 76, 106, 76, 126, 186], "initial_hp": 200,
+          "status": "slp", "status_state": {"kind": "sleep", "time": 3, "skipped_time": 0}
+        }
+      ]
+    },
+    {
+      "source": "sleep-talk-called-rest-condition-p2.txt",
+      "normalized": [
+        {
+          "species": "magikarp", "level": 100, "gender": "M",
+          "ability": "swiftswim", "item": "", "moves": ["splash"],
+          "stats": [181, 56, 146, 66, 76, 196], "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [["move 1", "move 1"]],
+  "choices": [["move 1", "move 1"]],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move", "handler.try", "move.called-entry", "move.slot-delegation",
+    "prng.labeled", "state.canonical", "status.sleep"
+  ],
+  "boundaries": ["choice", "events", "handlers", "prng", "queue", "request", "state"],
+  "limits": {"max_boundaries": 2, "max_actions": 2}
+}

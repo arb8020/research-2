@@ -1,0 +1,101 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "pain-split-source-max-clamp",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#painsplit; sim/battle-actions.ts; sim/pokemon.ts#sethp",
+    "test_name": "Pain Split independently clamps the lower-maximum source",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    811,
+    812,
+    813,
+    814
+  ],
+  "teams": [
+    {
+      "source": "pain-split-source-max-clamp-p1.txt",
+      "normalized": [
+        {
+          "species": "dusclops",
+          "level": 100,
+          "gender": "M",
+          "ability": "pressure",
+          "item": "",
+          "moves": [
+            "painsplit"
+          ],
+          "stats": [
+            221,
+            176,
+            296,
+            156,
+            296,
+            86
+          ],
+          "status": null,
+          "initial_hp": 221
+        }
+      ]
+    },
+    {
+      "source": "pain-split-source-max-clamp-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "M",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null,
+          "initial_hp": 600
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "hit.protect",
+    "hit.substitute",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

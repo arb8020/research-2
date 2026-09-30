@@ -1,0 +1,36 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "spite-pressure-pp-lifecycle",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/moves.ts; sim/pokemon.ts",
+    "test_name": "Spite draws before deducting and clamps the target's selected outer move PP",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [2, 2, 3, 4],
+  "teams": [
+    {
+      "source": "spite-pressure-pp-lifecycle-p1.txt",
+      "normalized": [{
+        "species": "dusclops", "level": 100, "gender": "M",
+        "ability": "pressure", "item": "", "moves": ["spite"],
+        "stats": [221, 176, 296, 156, 296, 86], "status": null
+      }]
+    },
+    {
+      "source": "spite-pressure-pp-lifecycle-p2.txt",
+      "normalized": [{
+        "species": "blissey", "level": 100, "gender": "F",
+        "ability": "naturalcure", "item": "", "moves": ["healbell"],
+        "stats": [651, 56, 56, 186, 306, 146], "status": null
+      }]
+    }
+  ],
+  "source_choices": [["move 1", "move 1"], ["move 1", "move 1"]],
+  "choices": [["move 1", "move 1"], ["move 1", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["ability.pressure", "handler.deduct-pp", "choice.move", "state.canonical", "prng.labeled"],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 3, "max_actions": 4}
+}

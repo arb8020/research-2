@@ -1,0 +1,6 @@
+Alakazam (M)
+Ability: Synchronize
+Level: 100
+Hardy Nature
+- Sandstorm
+- Morning Sun

@@ -1,0 +1,45 @@
+# One stride-4 group, block 4: a block holds 4 units = 16 tokens. Unit j opens when token 4j is
+# computed, so the table grows a row when the sequence reaches 16k + 1 tokens: row 3 at 33 tokens
+# (the 13th decode step), row 4 at 49. 15 usable blocks.
+config max_batch_tokens=32 max_batch_reqs=4 block_size=4 groups=stride4 num_blocks=16 reserve_ratio=0 order=running_first eos=99
+submit A prompt=20 max_new=40
+step
+  expect batch A:20
+  expect free 13
+  expect table A g=0 [1,2]
+step
+step
+step
+step
+step
+step
+step
+step
+step
+step
+step
+step
+  expect free 13
+step
+  expect free 12
+  expect table A g=0 [1,2,3]
+step
+step
+step
+step
+step
+step
+step
+step
+step
+step
+step
+step
+step
+step
+step
+  expect free 12
+step
+  expect free 11
+  expect table A g=0 [1,2,3,4]
+expect running A

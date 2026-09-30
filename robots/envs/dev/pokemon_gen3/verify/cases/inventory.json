@@ -1,0 +1,117 @@
+{
+  "schema": "pokemon-native-test-inventory-v1",
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "entries": [
+    {
+      "source_file": "test/sim/decisions.js",
+      "test_name": "Choices > Move requests > should allow specifying switch targets",
+      "disposition": "accepted",
+      "case": "accepted/decisions-switch-targets.json"
+    },
+    {
+      "source_file": "test/sim/choice-parser.js",
+      "test_name": "Choice parser > Team Preview requests > should accept only `team` choices",
+      "disposition": "rejected",
+      "reason": "feature-unsupported",
+      "detail": "Gen 3 OU team preview is not part of the current native request model."
+    },
+    {
+      "source_file": "test/sim/choice-parser.js",
+      "test_name": "Choice parser > Switch requests > Doubles/Triples > should accept only `switch` and `pass` choices",
+      "disposition": "rejected",
+      "reason": "topology-unsupported",
+      "detail": "Checkpoint 1 supports singles only."
+    },
+    {
+      "source_file": "test/sim/choice-parser.js",
+      "test_name": "Choice parser > Move requests > Generic > should allow mega evolving and targeting in the same move in either order",
+      "disposition": "rejected",
+      "reason": "generation-mismatch",
+      "detail": "Mega Evolution does not exist in Generation 3."
+    },
+    {
+      "source_file": "test/sim/events.js",
+      "test_name": "Battle#onEvent > should support and resolve priorities correctly",
+      "disposition": "rejected",
+      "reason": "feature-unsupported",
+      "detail": "Dynamic event handler registration belongs to Checkpoint 2; this is not an ordinary action-queue ordering case."
+    },
+    {
+      "source_file": "test/sim/misc/accuracy.js",
+      "test_name": "Accuracy > should chain modifiers in order of the Pokemon's raw speed",
+      "disposition": "rejected",
+      "reason": "feature-unsupported",
+      "detail": "Accuracy-modifying event handlers are outside the current supported feature map."
+    },
+    {
+      "source_file": "test/sim/misc/faint-order.js",
+      "test_name": "Fainting > should check for a winner after recoil",
+      "disposition": "rejected",
+      "reason": "feature-unsupported",
+      "detail": "Recoil effects are not implemented by the current ordinary-damage slice."
+    },
+    {
+      "source_file": "test/sim/items/quickclaw.js",
+      "test_name": "Quick Claw > [Gen 3] causes Speed ties with every holder when activated",
+      "disposition": "rejected",
+      "reason": "feature-unsupported",
+      "detail": "The test depends on Quick Claw item handlers, sleep, and direct mutation of the oracle's quickClawRoll field. Those semantics are outside Checkpoint 1 and the forced outcome is not a portable case input."
+    },
+    {
+      "source_file": "test/sim/abilities/levitate.js",
+      "test_name": "Levitate > should give the user an immunity to Ground-type moves",
+      "disposition": "rejected",
+      "reason": "generation-mismatch",
+      "detail": "The literal test uses the default generation and Rotom, which did not exist in Generation 3. Checkpoint 2 uses legal Gen 3 source-linked cases against the same runImmunity/isGrounded boundary."
+    },
+    {
+      "source_file": "test/sim/abilities/flashfire.js",
+      "test_name": "Flash Fire [Gen 3-4] > should activate and grant Fire-type immunity even if the user is frozen in Gen 3",
+      "disposition": "rejected",
+      "reason": "feature-unsupported",
+      "detail": "The literal test injects frozen status and exercises Gen 3's frozen Flash Fire exception. Status state and persistent Flash Fire activation are outside this checkpoint's bounded handler slice."
+    },
+    {
+      "source_file": "test/sim/misc/statuses.js",
+      "test_name": "Burn > should halve damage from most Physical attacks",
+      "disposition": "rejected",
+      "reason": "generation-mismatch",
+      "detail": "The literal test runs in the default current generation with No Guard and Prankster. Checkpoint 3 uses a legal Gen 3 derived case against the Gen 3 modifyDamage burn boundary."
+    },
+    {
+      "source_file": "test/sim/misc/statuses.js",
+      "test_name": "Burn > should inflict 1/16 of max HP at the end of the turn, rounded down",
+      "disposition": "rejected",
+      "reason": "feature-unsupported",
+      "detail": "Checkpoint 3 supplies burn as explicit initial mutable state and terminates its cases before residuals. Burn acquisition and residual damage remain outside this bounded modifier slice."
+    },
+    {
+      "source_file": "test/sim/items/choiceitem.js",
+      "test_name": "Choice Items > should restore the same Choice lock after dynamax ends",
+      "disposition": "rejected",
+      "reason": "generation-mismatch",
+      "detail": "The only generic Choice Item test is a Generation 8 Dynamax interaction. Checkpoint 3 deliberately uses Black Belt instead of partially implementing Choice Band without its lock semantics."
+    },
+    {
+      "source_file": "test/sim/misc/statuses.js",
+      "test_name": "Toxic Poison > should inflict 1/16 of max HP rounded down, times the number of active turns with the status, at the end of the turn",
+      "disposition": "rejected",
+      "reason": "generation-mismatch",
+      "detail": "The literal test runs in the default current generation. Checkpoint 4 preserves it as source evidence and uses a legal Gen 3 derived Toxic ramp case against the inherited status lifecycle."
+    },
+    {
+      "source_file": "test/sim/misc/statuses.js",
+      "test_name": "Toxic Poison > should reset the damage counter when the Pokemon switches out",
+      "disposition": "rejected",
+      "reason": "generation-mismatch",
+      "detail": "The literal test runs in the default current generation and uses Whirlwind. Checkpoint 4 uses an ordinary Gen 3 switch-out and switch-in sequence against the same Toxic SwitchIn reset boundary."
+    },
+    {
+      "source_file": "test/sim/misc/weather.js",
+      "test_name": "Weather damage calculation > should wear off on the final turn before weather effects are applied",
+      "disposition": "rejected",
+      "reason": "generation-mismatch",
+      "detail": "The literal test uses permanent ability-started Sandstorm in the default generation. Checkpoint 4 instead derives a Gen 3 move-started five-turn Sandstorm case and proves four damage ticks followed by expiry before the fifth tick."
+    }
+  ]
+}

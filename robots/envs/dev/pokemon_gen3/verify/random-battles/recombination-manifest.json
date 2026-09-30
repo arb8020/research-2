@@ -1,0 +1,12 @@
+{
+  "schema": "pokemon-gen3ou-team-recombination-manifest-v1",
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "campaign_seed": 3237998081,
+  "pool": "team-pool.json",
+  "cases": [
+    {"id":"recombine-a","team_seeds":[1101,1102],"battle_seed":[5101,5102,5103,5104],"policy_seed":7101},
+    {"id":"recombine-b","team_seeds":[1201,1202],"battle_seed":[5201,5202,5203,5204],"policy_seed":7201},
+    {"id":"recombine-c","team_seeds":[1301,1302],"battle_seed":[5301,5302,5303,5304],"policy_seed":7301},
+    {"id":"recombine-d","team_seeds":[1401,1402],"battle_seed":[5401,5402,5403,5404],"policy_seed":7401}
+  ]
+}

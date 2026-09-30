@@ -1,0 +1,109 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "focus-band-lethal-failure",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/items.ts",
+    "test_name": "failed activation permits lethal damage",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    733,
+    37,
+    53,
+    2
+  ],
+  "teams": [
+    {
+      "source": "focus-band-lethal-failure-p1.txt",
+      "normalized": [
+        {
+          "species": "metagross",
+          "level": 100,
+          "gender": "N",
+          "nature": "hardy",
+          "ability": "clearbody",
+          "item": "",
+          "moves": [
+            "explosion"
+          ],
+          "stats": [
+            301,
+            306,
+            296,
+            226,
+            216,
+            176
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "focus-band-lethal-failure-p2.txt",
+      "normalized": [
+        {
+          "species": "alakazam",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "synchronize",
+          "item": "focusband",
+          "moves": [
+            "recover"
+          ],
+          "stats": [
+            251,
+            136,
+            126,
+            306,
+            206,
+            276
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "item.focus_band",
+      "occurrence": 1,
+      "range": 10,
+      "result": 3
+    }
+  ],
+  "features": [
+    "choice.move",
+    "item.focus-band",
+    "handler.damage",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

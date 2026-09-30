@@ -1,0 +1,33 @@
+# full + window8 groups, block 4, 8 usable blocks. Prefill takes 2 + 2. In decode the full group
+# grows a row every 4 tokens and never frees; the window group frees row 0 at n_computed=11.
+# B (1 row per group, never grows before step 6) holds 2 blocks, so A sees the 6 it would see
+# alone in a 6-block pool. At n_computed=12 both of A's groups want a new row (2 blocks) and only
+# the slid-out one is free, so someone is preempted: the need is the sum over groups, and a window
+# group's frees pay for its own growth only. The victim is the youngest runner, B.
+# (A alone in a 6-block pool is rejected at submit: its worst case is 5 + 3 = 8 blocks.)
+config max_batch_tokens=16 max_batch_reqs=4 block_size=4 groups=full,window8 num_blocks=9 reserve_ratio=0 order=running_first eos=99
+submit A prompt=8 max_new=12
+step
+  expect batch A:8
+  expect free 4
+  expect table A g=0 [1,2]
+  expect table A g=1 [3,4]
+step
+  expect batch A:1
+  expect free 2
+  expect table A g=0 [1,2,5]
+  expect table A g=1 [3,4,6]
+submit B prompt=1 max_new=4 base=2000
+step
+  expect batch A:1 B:1
+  expect free 0
+step
+step
+  expect free 1
+  expect table A g=1 [0,4,6]
+step
+  expect batch A:1
+  expect running A
+  expect waiting B
+  expect free 1
+  expect event n_preempted=1

@@ -1,0 +1,106 @@
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 24px 80px;
+}
+
+/* Chrome. A single hairline under it, no card, no shadow: the bar is part of
+   the paper, not a floating object. */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 0 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+.topbar-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.topbar-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+.topbar-spacer { margin-left: auto; }
+
+/* Radius only on chrome (this select, the pills, the buttons). */
+.run-picker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 4px 8px;
+}
+
+/* The theme picker. Chrome, like the run picker, so it shares its shape. */
+.theme-picker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.theme-picker:hover { color: var(--ink); }
+
+.topbar-button {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 11px;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+.topbar-button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.status-pill {
+  font-size: 10px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  color: var(--faint);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.status-pill[data-status="live"] {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 40%, var(--line));
+}
+.status-pill[data-status="connecting"] { color: var(--blue); }
+.status-pill[data-status="error"] {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, var(--line));
+}
+
+/* The landing surface: view slots in one column, separated by hairlines. No
+   borders, no radius, no card — content is separated by rules (obol paper). */
+.surface {
+  display: flex;
+  flex-direction: column;
+}
+.view-slot {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+.view-slot:last-child { border-bottom: 0; }

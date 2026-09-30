@@ -1,0 +1,17 @@
+id: citation-python
+valid:
+  - "# a plain comment"
+invalid:
+  - "# EXTERNAL(httpx==0.28.1 httpx/_client.py:10-20): fact"
+  - "x = 1  # EXTERNAL(https://example.com @2026-09-25): fact"
+---
+id: citation-typescript
+valid:
+  - "/* EXTERNAL(react==19.1.0 index.js:1-2): block */"
+invalid:
+  - "// EXTERNAL(react==19.1.0 index.js:1-2): fact"
+---
+id: citation-tsx
+valid: []
+invalid:
+  - "// EXTERNAL(facebook/react@0123abc packages/x.js:L1-L2): fact"

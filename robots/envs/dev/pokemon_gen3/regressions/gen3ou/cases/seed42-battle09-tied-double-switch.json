@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "name": "seed42-battle09-tied-double-switch",
+  "description": "Clean tied Gengar-to-Swampert double switch including tied queue, handler, residual, and Quick Claw draws.",
+  "tags": ["switch", "speed-tie", "prng", "quick-claw"],
+  "format": "gen3ou",
+  "battle_index": 9,
+  "action_seed": 42,
+  "battle_seed": [35, 42, 9, 0],
+  "team_files": [
+    "../../../fixtures/gen3ou/balanced-alt.txt",
+    "../../../fixtures/gen3ou/balanced-alt.txt"
+  ],
+  "choices": [
+    ["switch 2", "switch 2"]
+  ],
+  "expected": {"terminal": false}
+}

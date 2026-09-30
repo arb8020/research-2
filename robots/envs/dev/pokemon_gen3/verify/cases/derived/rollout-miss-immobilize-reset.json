@@ -1,0 +1,274 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "rollout-miss-immobilize-reset",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#rollout,data/moves.ts#iceball; test/sim/moves/rollout.js:18,42,72,100",
+    "test_name": "rollout resets after a miss and independently after full paralysis",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    5,
+    71,
+    29,
+    3
+  ],
+  "teams": [
+    {
+      "source": "rollout-miss-immobilize-reset-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "rollout"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": "par"
+        }
+      ]
+    },
+    {
+      "source": "rollout-miss-immobilize-reset-p2.txt",
+      "normalized": [
+        {
+          "species": "steelix",
+          "level": 100,
+          "gender": "M",
+          "ability": "sturdy",
+          "item": "",
+          "moves": [
+            "harden"
+          ],
+          "stats": [
+            291,
+            206,
+            436,
+            146,
+            166,
+            96
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "status.paralysis.before_move",
+      "occurrence": 1,
+      "range": 4,
+      "result": 2
+    },
+    {
+      "label": "status.paralysis.before_move",
+      "occurrence": 2,
+      "range": 4,
+      "result": 1
+    },
+    {
+      "label": "status.paralysis.before_move",
+      "occurrence": 3,
+      "range": 4,
+      "result": 3
+    },
+    {
+      "label": "status.paralysis.before_move",
+      "occurrence": 4,
+      "range": 4,
+      "result": 1
+    },
+    {
+      "label": "status.paralysis.before_move",
+      "occurrence": 5,
+      "range": 4,
+      "result": 0
+    },
+    {
+      "label": "status.paralysis.before_move",
+      "occurrence": 6,
+      "range": 4,
+      "result": 2
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 3
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 2,
+      "range": 100,
+      "result": 60
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 3,
+      "range": 100,
+      "result": 38
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 4,
+      "range": 100,
+      "result": 68
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 5,
+      "range": 100,
+      "result": 4
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 1,
+      "range": 16,
+      "result": 6
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 2,
+      "range": 16,
+      "result": 15
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 3,
+      "range": 16,
+      "result": 6
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 4,
+      "range": 16,
+      "result": 11
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 5,
+      "range": 16,
+      "result": 9
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 1,
+      "range": 16,
+      "result": 5
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 2,
+      "range": 16,
+      "result": 2
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 3,
+      "range": 16,
+      "result": 15
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 4,
+      "range": 16,
+      "result": 4
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 5,
+      "range": 16,
+      "result": 11
+    }
+  ],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.base-power",
+    "handler.damaging-hit",
+    "handler.move-aborted",
+    "hit.accuracy",
+    "lifecycle.condition-duration",
+    "prng.labeled",
+    "request.legal-choices",
+    "state.canonical",
+    "status.paralysis"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 7,
+    "max_actions": 12
+  }
+}

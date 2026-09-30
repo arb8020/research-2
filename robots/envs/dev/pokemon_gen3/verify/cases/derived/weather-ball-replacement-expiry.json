@@ -1,0 +1,157 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "weather-ball-replacement-expiry",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/mods/gen3/moves.ts; sim/battle-actions.ts",
+    "test_name": "Weather Ball observes replacement weather and clear weather after expiry",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "weather-ball-replacement-expiry-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "splash",
+            "weatherball"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "weather-ball-replacement-expiry-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "M",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "raindance",
+            "sunnyday",
+            "splash"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "state.canonical",
+    "condition.weather"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 9,
+    "max_actions": 16
+  }
+}

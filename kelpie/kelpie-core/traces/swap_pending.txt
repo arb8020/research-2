@@ -1,0 +1,8 @@
+config
+swap drain=1
+swap drain=0 fails=SwapPending
+step
+expect state serving
+submit A prompt=1 max_new=1
+step tokens=A:7
+expect launch_ctx B

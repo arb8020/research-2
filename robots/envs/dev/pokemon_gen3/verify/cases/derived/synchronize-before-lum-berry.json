@@ -1,0 +1,102 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "synchronize-before-lum-berry",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/abilities/synchronize.js:13; data/abilities.ts#synchronize; data/items.ts#lumberry",
+    "test_name": "Synchronize reflection completes before either Lum Berry update consumes",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "synchronize-before-lum-berry-p1.txt",
+      "normalized": [
+        {
+          "species": "alakazam",
+          "level": 100,
+          "gender": "M",
+          "ability": "synchronize",
+          "item": "lumberry",
+          "moves": [
+            "thunderwave"
+          ],
+          "stats": [
+            251,
+            136,
+            126,
+            306,
+            206,
+            276
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "synchronize-before-lum-berry-p2.txt",
+      "normalized": [
+        {
+          "species": "umbreon",
+          "level": 100,
+          "gender": "M",
+          "ability": "synchronize",
+          "item": "lumberry",
+          "moves": [
+            "moonlight"
+          ],
+          "stats": [
+            331,
+            166,
+            256,
+            156,
+            296,
+            166
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.nonvolatile-status",
+    "handler.update",
+    "item.consumption",
+    "prng.labeled",
+    "state.canonical",
+    "status.paralysis"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

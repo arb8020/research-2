@@ -1,0 +1,110 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "leech-seed-grass-immunity",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/abilities.ts; sim/battle.ts; sim/pokemon.ts",
+    "test_name": "Leech Seed fails against a Grass target without installing a volatile",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    701,
+    193,
+    43,
+    11
+  ],
+  "teams": [
+    {
+      "source": "leech-seed-grass-immunity-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "leechseed",
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "leech-seed-grass-immunity-p2.txt",
+      "normalized": [
+        {
+          "species": "venusaur",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "overgrow",
+          "item": "",
+          "moves": [
+            "synthesis"
+          ],
+          "stats": [
+            301,
+            200,
+            202,
+            236,
+            236,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 8
+    }
+  ],
+  "features": [
+    "condition.volatile",
+    "hit.type-immunity",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "immunity",
+    "state",
+    "events",
+    "prng",
+    "terminal"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

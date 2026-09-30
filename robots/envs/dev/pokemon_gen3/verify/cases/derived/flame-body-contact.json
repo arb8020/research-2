@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"flame-body-contact",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen3/abilities.ts flamebody.onDamagingHit","test_name":"Contact damage dispatches Flame Body after the hit","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"persian-tackle-flame-body-p1.txt","normalized":[{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["tackle"],"stats":[271,176,156,166,166,266],"status":null}]},{"source":"magcargo-flame-body-splash-p2.txt","normalized":[{"species":"magcargo","level":100,"gender":"M","ability":"flamebody","item":"","moves":["splash"],"stats":[241,136,276,196,196,96],"status":null}]}],
+  "source_choices":[["move 1","move 1"]],"choices":[["move 1","move 1"]],"forced_outcomes":[],
+  "features":["ability.flamebody","handler.damaging-hit","choice.move","damage.gen3","status.burn","state.canonical","prng.labeled"],"boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":2,"max_actions":2}
+}

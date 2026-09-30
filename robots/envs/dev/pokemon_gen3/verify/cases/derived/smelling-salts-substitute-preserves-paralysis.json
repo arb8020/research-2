@@ -1,0 +1,113 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "smelling-salts-substitute-preserves-paralysis",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#smellingsalts,bellydrum; sim/battle-actions.ts#moveHit",
+    "test_name": "Substitute receives Smelling Salts damage and prevents its paralysis cure",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1711,
+    1712,
+    1713,
+    1714
+  ],
+  "teams": [
+    {
+      "source": "smelling-salts-substitute-preserves-paralysis-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "splash",
+            "smellingsalts"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "smelling-salts-substitute-preserves-paralysis-p2.txt",
+      "normalized": [
+        {
+          "species": "alakazam",
+          "level": 100,
+          "gender": "M",
+          "ability": "synchronize",
+          "item": "",
+          "moves": [
+            "substitute",
+            "recover"
+          ],
+          "stats": [
+            251,
+            136,
+            126,
+            306,
+            206,
+            276
+          ],
+          "status": "par"
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.nonvolatile-status",
+    "damage.gen3",
+    "handler.base-power",
+    "hit.accuracy",
+    "hit.substitute",
+    "state.canonical",
+    "volatile.substitute"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

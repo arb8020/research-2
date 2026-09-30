@@ -1,0 +1,19 @@
+# docs/scheduler-ambiguities.md A2. Between plan and commit, submit/poll/cancel may run. A request cancelled
+# while the plan in flight names it keeps its slot until commit: a submit in between cannot reacquire the slot
+# the plan still refers to (Full here, with a pool of one; another slot otherwise). Poll reports it cancelled meanwhile.
+config max_requests=1 max_batch_tokens=8 max_batch_reqs=4 block_size=4 num_blocks=8 reserve_ratio=0 order=running_first eos=99
+submit A prompt=4 max_new=4
+plan
+  expect batch A:4
+cancel A
+  expect running
+  expect free 7
+submit B prompt=4 max_new=2 fails=Full
+commit                          # used to panic (the reacquired slot was waiting); now releases A's slot
+  expect event n_rejected_full=1 n_running=1 n_finished=0   # n_running is read at plan time
+submit B prompt=4 max_new=2
+  expect waiting B
+step tokens=B:8
+  expect batch B:4
+  expect event n_admitted=1
+expect polled B [8]

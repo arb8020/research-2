@@ -1,0 +1,6 @@
+Persian (M)
+Ability: Limber
+Level: 100
+Hardy Nature
+- Rain Dance
+- Substitute

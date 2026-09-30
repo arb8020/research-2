@@ -1,0 +1,138 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "freeze-clause-cure-readmits",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/rulesets.ts#freezeclausemod.onSetStatus",
+    "test_name": "Natural Cure removes the only freeze before a later foe-caused freeze is admitted",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    34,
+    509,
+    521,
+    3
+  ],
+  "teams": [
+    {
+      "source": "freeze-clause-cure-readmits-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "icebeam",
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "freeze-clause-cure-readmits-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "M",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "pound"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": "frz"
+        },
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 2",
+      "switch 2"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 2",
+      "switch 2"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.secondary",
+      "occurrence": 1,
+      "range": 100,
+      "result": 7
+    }
+  ],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "condition.nonvolatile-status",
+    "effect.secondary",
+    "prng.labeled",
+    "rule.freeze-clause",
+    "state.canonical",
+    "status.freeze"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

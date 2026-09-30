@@ -1,0 +1,16 @@
+{
+  "schema":"pokemon-native-differential-case-v1",
+  "id":"yawn-existing-status-block",
+  "provenance":{"kind":"showdown-derived","source_file":"data/moves.ts","test_name":"Yawn TryHit rejects a target with an existing major status","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[
+    {"source":"yawn-torkoal.txt","normalized":[{"species":"torkoal","level":100,"gender":"M","ability":"whitesmoke","item":"","moves":["yawn","protect"],"stats":[281,206,316,206,176,76],"status":null}]},
+    {"source":"yawn-poisoned-persian.txt","normalized":[{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["splash"],"stats":[271,176,156,166,166,266],"status":"psn"}]}
+  ],
+  "source_choices":[["move 1","move 1"]],
+  "choices":[["move 1","move 1"]],
+  "forced_outcomes":[],
+  "features":["condition.nonvolatile-status","condition.volatile","state.canonical","volatile.yawn"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],
+  "limits":{"max_boundaries":2,"max_actions":2}
+}

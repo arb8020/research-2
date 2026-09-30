@@ -1,0 +1,6 @@
+# Verifier-owned migration fixture. See NATIVE_BOUNDARY_DRIVER.md.
+schema=harbor-native-boundary-v1
+id=forced-replacement-v1
+seed=46,42,4,0
+decision=6,3
+decision=-1,6

@@ -1,0 +1,102 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "critical-lucky-punch-mismatch",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/items.ts; data/abilities.ts; sim/battle-actions.ts",
+    "test_name": "critical-lucky-punch-mismatch",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    419,
+    223,
+    107,
+    53
+  ],
+  "teams": [
+    {
+      "source": "critical-lucky-punch-mismatch-p1.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "luckypunch",
+          "moves": [
+            "tackle"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "critical-lucky-punch-mismatch-p2.txt",
+      "normalized": [
+        {
+          "species": "chansey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            641,
+            46,
+            46,
+            106,
+            246,
+            136
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.critical",
+    "handler.modify-crit-ratio",
+    "prng.labeled",
+    "state.canonical",
+    "item.lucky-punch",
+    "handler.species-guard"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

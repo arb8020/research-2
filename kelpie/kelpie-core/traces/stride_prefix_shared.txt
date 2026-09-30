@@ -1,0 +1,18 @@
+# full + stride4 groups, block 4 (stride block = 16 tokens), prefix cache on. A (prompt 20 = 5 units)
+# holds full blocks 1-5 and stride blocks 6-7, publishes the 5 full ones and stride block 6 (16 tokens =
+# one grain; block 7 is partial), then finishes. B shares the prompt (same base) and is 24 long: the
+# full group matches 20 tokens, the stride group 16; the overall hit is the min floored to
+# lcm(4, 16) = 16, so B keeps hit blocks 1-4 and 6 (LRU-unlinked), works the remaining 8 tokens and
+# takes fresh blocks from the free-list head (8 onwards; 5 and 7 sit at the LRU tail).
+config max_batch_tokens=32 max_batch_reqs=4 block_size=4 groups=full,stride4 num_blocks=32 reserve_ratio=0 order=running_first eos=99 prefix_cache=1
+submit A prompt=20 max_new=1
+step
+  expect batch A:20
+  expect prefix queries=1 hits=0 tokens=0
+expect finished A reason=finished_length
+submit B prompt=24 max_new=2
+step
+  expect batch B:8
+  expect prefix queries=1 hits=1 tokens=16
+  expect table B g=0 [1,2,3,4,8,9]
+  expect table B g=1 [6,10]

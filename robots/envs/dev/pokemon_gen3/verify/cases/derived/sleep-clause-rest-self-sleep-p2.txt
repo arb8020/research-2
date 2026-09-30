@@ -1,0 +1,13 @@
+Vaporeon (M)
+Ability: Water Absorb
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Rest
+
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Splash

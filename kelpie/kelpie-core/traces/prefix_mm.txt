@@ -1,0 +1,22 @@
+# Multimodal content folded into the prefix chain (prefix.zig seed). All four prompts are the same 20 token ids;
+# B, C, D carry an image whose placeholders start at position 8 (blocks 2..4). A is text-only (mm=0: identity).
+# B (image 7) hits A's text blocks 0..1 (8 tokens) but not A's block 2+: its chain forks at the image.
+# C (image 9, same placeholder ids as B) hits only the shared text (8), never B's image blocks.
+# D (image 7 again) hits B's chain: 16 tokens (the last block is never matched).
+config max_batch_tokens=32 max_batch_reqs=4 block_size=4 num_blocks=64 prefix_cache=1
+submit A prompt=20 max_new=2
+step
+  expect batch A:20
+  expect prefix queries=1 hits=0 tokens=0
+submit B prompt=20 max_new=2 mm=7 mm_start=8
+step
+  expect batch A:1 B:12
+  expect prefix queries=1 hits=1 tokens=8
+submit C prompt=20 max_new=2 mm=9 mm_start=8
+step
+  expect batch B:1 C:12
+  expect prefix queries=1 hits=1 tokens=8
+submit D prompt=20 max_new=2 mm=7 mm_start=8
+step
+  expect batch C:1 D:4
+  expect prefix queries=1 hits=1 tokens=16

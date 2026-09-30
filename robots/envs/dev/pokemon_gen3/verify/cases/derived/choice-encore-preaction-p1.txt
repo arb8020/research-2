@@ -1,0 +1,7 @@
+Alakazam (M)
+Ability: Synchronize
+Level: 100
+EVs: 4 HP
+Hardy Nature
+- Encore
+- Recover

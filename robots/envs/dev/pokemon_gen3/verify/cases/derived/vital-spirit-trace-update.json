@@ -1,0 +1,28 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "vital-spirit-trace-update",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/abilities.ts;sim/battle-actions.ts;sim/battle.ts",
+    "test_name": "Trace copies Vital Spirit and ordinary Update cures sleep",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {"source": "porygon2-magikarp-trace-p1.txt", "normalized": [
+      {"species": "porygon2", "level": 100, "gender": "N", "nature": "hardy", "ability": "trace", "item": "", "moves": ["recover"], "stats": [311, 196, 216, 246, 226, 156], "status": null},
+      {"species": "magikarp", "level": 100, "gender": "M", "nature": "hardy", "ability": "swiftswim", "item": "", "moves": ["splash"], "stats": [181, 56, 146, 66, 76, 196], "status": null}
+    ]},
+    {"source": "smeargle-vigoroth-vital-spirit-p2.txt", "normalized": [
+      {"species": "smeargle", "level": 100, "gender": "M", "nature": "hardy", "ability": "owntempo", "item": "", "moves": ["spore"], "stats": [251, 76, 106, 76, 126, 186], "status": null},
+      {"species": "vigoroth", "level": 100, "gender": "M", "nature": "hardy", "ability": "vitalspirit", "item": "", "moves": ["scratch"], "stats": [301, 196, 196, 146, 146, 216], "status": null}
+    ]}
+  ],
+  "source_choices": [["move 1", "move 1"], ["switch 2", "switch 2"], ["switch 2", "move 1"]],
+  "choices": [["move 1", "move 1"], ["switch 2", "switch 2"], ["switch 1", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["ability.trace", "ability.vital-spirit", "condition.nonvolatile-status", "choice.switch", "handler.status-update", "state.canonical", "prng.labeled"],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 4, "max_actions": 6}
+}

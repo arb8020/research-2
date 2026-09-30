@@ -1,0 +1,14 @@
+[tool.mimir]
+src = ["kelpie-engine/kelpie_engine", "kelpie-models/kelpie_models", "kelpie-http/kelpie_http"]
+exclude = ["synth"]
+check-void-returns = true
+max-function-lines = 70
+max-args = 6
+max-nesting = 4
+max-cyclomatic = 10
+max-dir-entries = 7
+
+boundaries = [
+    { src = "kelpie-models/kelpie_models/*.py", forbid = ["triton", "flashinfer", "aiter", "torch.mps", "jax", "pallas", "nki"] },
+    { src = "kelpie-models/kelpie_models/models/torch/*.py", forbid = ["triton", "flashinfer", "aiter", "torch.mps", "jax", "pallas", "nki"] },
+]

@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"reflect-physical-baseline",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen4/moves.ts","test_name":"Checkpoint 4: matched unreflected physical-damage baseline","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"alakazam-reflect-thief-p1.txt","normalized":[{"species":"alakazam","level":100,"gender":"M","ability":"synchronize","item":"","moves":["reflect","thief"],"stats":[251,136,126,306,206,276],"status":null}]},{"source":"tyrogue-tackle-p2.txt","normalized":[{"species":"tyrogue","level":100,"gender":"M","ability":"guts","item":"","moves":["tackle"],"stats":[211,106,106,106,106,106],"status":null}]}],
+  "source_choices":[["move 2","move 1"]],"choices":[["move 2","move 1"]],"forced_outcomes":[{"label":"move.critical","occurrence":2,"range":16,"result":9},{"label":"move.damage_roll","occurrence":2,"range":16,"result":15}],
+  "features":["choice.move","damage.gen3","damage.reflect","prng.labeled","state.canonical"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],"limits":{"max_boundaries":2,"max_actions":2}
+}
