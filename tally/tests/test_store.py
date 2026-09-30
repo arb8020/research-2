@@ -45,7 +45,7 @@ class CrashOnDone(Meta):
 def test_crash_after_rename_blob_is_not_served(tmp_path: Path) -> None:
     CRASH["on"] = False
     ok = open_store(tmp_path)
-    crashy = start(Store(CrashOnDone(ok.meta.db), ok.blobs))
+    crashy = start(Store(CrashOnDone(ok.meta.db), ok.effects, ok.blobs))
     key = TWO.key(TWO, (2,), {})
     with pytest.raises(RuntimeError, match="before meta.done"):
         crashy.fetch(TWO, 2)

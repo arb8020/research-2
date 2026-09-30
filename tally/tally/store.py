@@ -9,6 +9,7 @@ from typing import Literal
 
 type Key = str  # hex sha256
 type State = Literal["pending", "done"]
+type EffectState = Literal["intent", "done", "failed"]
 
 BLOBS_DIR = "blobs"
 TMP_DIR = "tmp"
@@ -73,6 +74,58 @@ class Meta:
 
     def set_digest(self, key: Key, digest: str) -> None:
         self.db.execute("update derivations set digest = ? where key = ? and state = 'done'", (digest, key))
+
+
+@dataclass(frozen=True)
+class EffectRow:
+    key: str
+    state: EffectState
+    path: str | None   # set iff done
+    error: str | None  # JSON, set iff failed
+
+
+@dataclass(frozen=True)
+class Effects:
+    """
+    History, not cache: key -> intent | done(path) | failed(error). Never GC'd, separate from derivations.
+    intent = "about to touch the world"; a surviving intent row means we crashed mid-flight.
+    """
+    db: sqlite3.Connection
+
+    @staticmethod
+    def open(db: sqlite3.Connection) -> "Effects":
+        db.execute("create table if not exists effects (key text primary key, state text not null, path text, error text)")
+        return Effects(db)
+
+    def get(self, key: str) -> EffectRow | None:
+        row = self.db.execute("select state, path, error from effects where key = ?", (key,)).fetchone()
+        if row is None: return None
+        state, path, error = row
+        if state not in ("intent", "done", "failed"): raise StoreError(f"bad effect state {state!r} for {key}")
+        if state == "done" and not isinstance(path, str): raise StoreError(f"done effect without path: {key}")
+        if state == "failed" and not isinstance(error, str): raise StoreError(f"failed effect without error: {key}")
+        return EffectRow(key, state, path, error)
+
+    def intent(self, key: str) -> None:
+        self.db.execute("insert into effects values (?, 'intent', null, null) on conflict(key) do nothing", (key,))
+        row = self.get(key)
+        if row is None or row.state != "intent": raise StoreError(f"intent over a finished effect: {key}")
+
+    def _finish(self, key: str, state: EffectState, path: str | None, error: str | None) -> None:
+        self.db.execute(
+            "update effects set state = ?, path = ?, error = ? where key = ? and state = 'intent'", (state, path, error, key),
+        )
+        row = self.get(key)
+        if row is None or row.state != state: raise StoreError(f"{state} without intent: {key}")
+
+    def done(self, key: str, path: str) -> None:
+        self._finish(key, "done", path, None)
+
+    def failed(self, key: str, error: str) -> None:
+        self._finish(key, "failed", None, error)
+
+    def clear_intent(self, key: str) -> None:
+        self.db.execute("delete from effects where key = ? and state = 'intent'", (key,))
 
 
 def dir_digest(root: Path) -> str:

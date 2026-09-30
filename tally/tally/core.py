@@ -5,12 +5,14 @@ tally core: steps, keys, fetch. Read top to bottom.
   KeyFn        (step, args, kwargs) -> Key    user-owned: what makes two runs "the same"
   Step         fn + key + code_fp             a cached derivation
   fetch        key -> hit, or run + commit    the whole build system
-  StepCtx      fetch + load                   all a step ever holds; Store/Build stay with the build system
+  StepCtx      fetch + load + effect          all a step ever holds; Store/Build stay with the build system
+  effect       named key -> recorded, or run  durable execution: intent log + on_unknown policy
 """
 import ast
 import hashlib
 import inspect
 import json
+import re
 import shutil
 import sys
 import textwrap
@@ -22,10 +24,14 @@ from string import hexdigits
 from types import SimpleNamespace
 from typing import Any, Literal, Protocol
 
-from tally.store import Handle, Hashed, Key, LocalBlobStore, Meta, dir_digest
+from tally.store import Effects, Handle, Hashed, Key, LocalBlobStore, Meta, dir_digest
 
 SHA256_HEX_LEN = 64
 META_DB = "meta.sqlite"
+EFFECT_KEY = re.compile(r"[A-Za-z0-9_.:@=+-]+")  # user-named, readable; no "/" so it is safe inside a blob path
+EFFECT_BLOB_PREFIX = "effect."                    # derivation blobs are bare hex, so the namespaces never collide
+EFFECT_ACTIVE_PREFIX = "effect:"                  # Build.active entry for an in-flight effect
+UNKNOWN_AFTER_CRASH = "unknown after crash"
 
 
 # --- protocols -------------------------------------------------------------------------------------------------
@@ -180,7 +186,8 @@ def step(
 @dataclass(frozen=True)
 class Store:
     """Persists across builds. Owned by the build system: steps never see it."""
-    meta: Meta
+    meta: Meta        # derivations: cache, disposable
+    effects: Effects  # effects: history, never GC'd
     blobs: LocalBlobStore
 
 
@@ -196,16 +203,18 @@ class StepCtx:
     """All a step (or top-level code) ever holds. The paper's tasks get only `fetch`; load/ran are conveniences."""
     fetch: Callable[..., Handle]
     load: Callable[..., Any]
+    effect: Callable[..., Handle]
     ran: list[str]  # the Build's list, for inspection
 
 
 def open_store(root: Path) -> Store:
     root.mkdir(parents=True, exist_ok=True)
-    return Store(Meta.open(root / META_DB), LocalBlobStore(root))
+    meta = Meta.open(root / META_DB)
+    return Store(meta, Effects.open(meta.db), LocalBlobStore(root))
 
 
 def _step_ctx(store: Store, build: Build) -> StepCtx:
-    return StepCtx(fetch=partial(fetch, store, build), load=load, ran=build.ran)
+    return StepCtx(fetch=partial(fetch, store, build), load=load, effect=partial(effect, store, build), ran=build.ran)
 
 
 def start(store: Store) -> StepCtx:
@@ -271,6 +280,128 @@ def load(handle: Handle, serialize: Serializer = JSON) -> Any:
     value_path = Path(handle.path) / serialize.filename
     if not value_path.is_file(): raise FileNotFoundError(f"no {serialize.filename} in {handle.path}")
     return serialize.load(value_path.read_text())
+
+
+# --- effects: durable execution (absurd-style) -------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Ok[T]:
+    value: T
+
+
+@dataclass(frozen=True)
+class Err[E]:
+    error: E  # permanent: recorded forever; retry means a new key
+
+
+@dataclass(frozen=True)
+class Pending[R]:
+    reason: R  # transient: nothing recorded; tally never retries itself
+
+
+@dataclass(frozen=True)
+class Rerun:
+    """Unknown after crash -> run fn again with the same idem key. For when the other side dedupes, or dupes are harmless."""
+
+
+@dataclass(frozen=True)
+class Reconcile:
+    """Unknown after crash -> ask the world. lookup(key): Ok = it happened, record it; None = it didn't, run fn."""
+    lookup: Callable[[str], Ok[Any] | None]
+
+
+@dataclass(frozen=True)
+class AtMostOnce:
+    """Unknown after crash -> mark failed and raise. Neither dedupe nor lookup exists: a human decides."""
+
+
+type OnUnknown = Rerun | Reconcile | AtMostOnce
+rerun = Rerun()
+reconcile = Reconcile
+at_most_once = AtMostOnce()
+
+
+class EffectFailed(Exception):
+    def __init__(self, key: str, error: Any) -> None:
+        super().__init__(f"effect {key!r} failed: {error!r}")
+        self.key = key
+        self.error = error
+
+
+class EffectPending(Exception):
+    def __init__(self, key: str, reason: Any) -> None:
+        super().__init__(f"effect {key!r} pending: {reason!r}")
+        self.key = key
+        self.reason = reason
+
+
+def effect(store: Store, build: Build, key: str, fn: Callable[..., Any], *args: Any, on_unknown: OnUnknown, **kwargs: Any) -> Handle:
+    """
+    Run fn(step_ctx, *args, idem_key=key, out=Path, **kwargs) -> Ok | Err | Pending at most once per recorded outcome.
+    Exactly once needs the other side too: pass idem_key along so a rerun after a crash is deduped there.
+    """
+    if not EFFECT_KEY.fullmatch(key): raise ValueError(f"effect key must match {EFFECT_KEY.pattern}: {key!r}")
+    row = store.effects.get(key)
+    if row is None: return _run_effect(store, build, key, fn, args, kwargs)
+    if row.state == "done":
+        assert row.path is not None, f"done effect without path: {key}"
+        return Handle(key, row.path)
+    if row.state == "failed":
+        assert row.error is not None, f"failed effect without error: {key}"
+        raise EffectFailed(key, json.loads(row.error))
+    assert EFFECT_ACTIVE_PREFIX + key not in build.active, f"cycle: effect {key!r} called itself"
+    # intent survived a previous run: it crashed between telling the world and recording the answer
+    match on_unknown:
+        case Rerun():
+            return _run_effect(store, build, key, fn, args, kwargs)
+        case Reconcile(lookup):
+            found = lookup(key)
+            if isinstance(found, Ok): return _record_effect(store, key, store.blobs.tmp(), found.value)
+            if found is not None: raise TypeError(f"reconcile lookup for {key!r} must return Ok or None, got {found!r}")
+            return _run_effect(store, build, key, fn, args, kwargs)
+        case AtMostOnce():
+            store.effects.failed(key, json.dumps(UNKNOWN_AFTER_CRASH))
+            raise EffectFailed(key, UNKNOWN_AFTER_CRASH)
+    raise TypeError(f"on_unknown must be rerun | reconcile(lookup) | at_most_once, got {on_unknown!r}")
+
+
+def _run_effect(store: Store, build: Build, key: str, fn: Callable[..., Any], args: tuple, kwargs: dict) -> Handle:
+    store.effects.intent(key)  # before touching the world
+    active_marker = EFFECT_ACTIVE_PREFIX + key
+    build.active.add(active_marker)
+    tmp = store.blobs.tmp()
+    try:
+        outcome = fn(_step_ctx(store, build), *args, idem_key=key, out=tmp, **kwargs)
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise  # intent stays: the world state is unknown, next run's on_unknown decides
+    finally:
+        build.active.discard(active_marker)
+    build.ran.append(key)
+    match outcome:
+        case Ok(value):
+            return _record_effect(store, key, tmp, value)
+        case Err(error):
+            shutil.rmtree(tmp, ignore_errors=True)
+            store.effects.failed(key, json.dumps(error))
+            raise EffectFailed(key, error)
+        case Pending(reason):
+            shutil.rmtree(tmp, ignore_errors=True)
+            store.effects.clear_intent(key)
+            raise EffectPending(key, reason)
+    shutil.rmtree(tmp, ignore_errors=True)
+    raise TypeError(f"effect {key!r}: fn must return Ok | Err | Pending, got {type(outcome).__name__}")
+
+
+def _record_effect(store: Store, key: str, tmp: Path, value: Any) -> Handle:
+    try:
+        if value is not None: (tmp / JSON.filename).write_text(JSON.dump(value))
+        committed = store.blobs.commit(tmp, EFFECT_BLOB_PREFIX + key)
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    store.effects.done(key, committed.path)
+    return Handle(key, committed.path)
 
 
 def src(path: str | Path) -> Handle:
