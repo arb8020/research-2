@@ -7,12 +7,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from tally.types import Handle, Key
-
+type Key = str  # hex sha256
 type State = Literal["pending", "done"]
 
 BLOBS_DIR = "blobs"
 TMP_DIR = "tmp"
+
+
+@dataclass(frozen=True)
+class Handle:
+    """Pointer to a stored output."""
+    key: Key            # how it was made (recipe-keyed consumers read this)
+    digest: str | None  # what it is (bytes-keyed consumers read this); None = not hashed yet, filled lazily
+    path: str           # where the bytes live: a committed dir, or a source file
 
 
 class StoreError(Exception):

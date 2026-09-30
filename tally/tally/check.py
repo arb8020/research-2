@@ -9,9 +9,8 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from tally.ctx import Ctx, open_ctx
-from tally.step import Step
-from tally.types import Handle, Key
+from tally.core import Ctx, Step, open_ctx
+from tally.store import Handle, Key
 
 type Build = Callable[[Ctx], Handle | Sequence[Handle]]
 
