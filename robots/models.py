@@ -1,4 +1,9 @@
-"""Neural network weights and forward functions. Data in, data out."""
+"""Neural network weights and forward functions. Data in, data out.
+
+REFERENCE COPY. robots/examples/* carry their own inlined versions of what they use;
+editing this file does not change any example. Kept as the seed of a shared models layer
+(MLP/LSTM/MinGRU/GPT-2, kelpie-shaped, with kernels) once that lands. Dedupe/vendor as needed.
+"""
 
 from __future__ import annotations
 
