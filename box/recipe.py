@@ -23,6 +23,7 @@ class Recipe:
     box_timeout: int  # Provider.launch(timeout=): the most the box may live
     labels: dict[str, str] = field(default_factory=dict)
     spans: tuple[str, str] | None = None  # (volume, path with {box_id}): JSONL for --log-file
+    pull: tuple[str, str, str] | None = None  # (volume, dir with {box_id}, local dir): copied home after the job
 
 
 def plain(image: str | None, volumes: dict[str, str], cmd: str, timeout: int) -> Recipe:
