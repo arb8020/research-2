@@ -46,16 +46,16 @@ def mlp_forward(w: MLP, x: torch.Tensor) -> torch.Tensor:
     return x @ last.w.T + last.b
 
 
-def policy_act(pi: MLP, obs: torch.Tensor) -> int:
+def policy_act(policy: MLP, obs: torch.Tensor) -> int:
     with torch.no_grad():
-        logits = mlp_forward(pi, obs.unsqueeze(0))
+        logits = mlp_forward(policy, obs.unsqueeze(0))
         dist = torch.distributions.Categorical(logits=logits)
         return dist.sample().item()
 
 
-def get_value(vf: MLP, obs: torch.Tensor) -> float:
+def get_value(value_function: MLP, obs: torch.Tensor) -> float:
     with torch.no_grad():
-        return mlp_forward(vf, obs.unsqueeze(0))[:, 0].item()
+        return mlp_forward(value_function, obs.unsqueeze(0))[:, 0].item()
 
 
 @dataclass(frozen=True)
@@ -105,22 +105,22 @@ def rollout_init(env: gymnasium.Env, seed: int | None = None) -> RolloutState:
 
 def collect_step(
     env: gymnasium.Env,
-    pi: MLP,
-    vf: MLP,
+    policy: MLP,
+    value_function: MLP,
     state: RolloutState,
 ) -> tuple[RolloutState, Step, EpisodeEnd | None]:
     with torch.no_grad():
-        logits = mlp_forward(pi, state.obs.unsqueeze(0))
+        logits = mlp_forward(policy, state.obs.unsqueeze(0))
         dist = torch.distributions.Categorical(logits=logits)
         action = dist.sample()
 
-    value = get_value(vf, state.obs)
+    value = get_value(value_function, state.obs)
     next_obs, reward, terminated, truncated, _ = env.step(action.item())
     next_obs_t = _to_tensor(next_obs)
 
     # gymnasium's TimeLimit can report terminated AND truncated on the same step; termination wins.
     needs_bootstrap = bool(truncated) and not bool(terminated)
-    bootstrap_value = get_value(vf, next_obs_t) if needs_bootstrap else 0.0
+    bootstrap_value = get_value(value_function, next_obs_t) if needs_bootstrap else 0.0
 
     step = Step(
         obs=state.obs,
@@ -146,8 +146,8 @@ def collect_step(
 
 def collect(
     env: gymnasium.Env,
-    pi: MLP,
-    vf: MLP,
+    policy: MLP,
+    value_function: MLP,
     state: RolloutState,
     num_steps: int,
 ) -> tuple[RolloutState, Batch]:
@@ -155,11 +155,11 @@ def collect(
     steps: list[Step] = []
     episodes: list[EpisodeEnd] = []
     for _ in range(num_steps):
-        state, step, ended = collect_step(env, pi, vf, state)
+        state, step, ended = collect_step(env, policy, value_function, state)
         steps.append(step)
         if ended is not None:
             episodes.append(ended)
-    return state, Batch(steps=steps, episodes=episodes, last_value=get_value(vf, state.obs))
+    return state, Batch(steps=steps, episodes=episodes, last_value=get_value(value_function, state.obs))
 
 
 LossFnInputs: TypeAlias = dict[str, torch.Tensor]
@@ -192,10 +192,10 @@ def compute_loss_fn_inputs(batch: Batch, gamma: float) -> LossFnInputs:
 
 
 def reinforce_loss(
-    pi: MLP,
+    policy: MLP,
     inputs: LossFnInputs,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    logits = mlp_forward(pi, inputs["obs"])
+    logits = mlp_forward(policy, inputs["obs"])
     log_probs_all = F.log_softmax(logits, dim=-1)
     logprob = log_probs_all.gather(1, inputs["actions"].unsqueeze(1)).squeeze(1)
     entropy = -(log_probs_all.exp() * log_probs_all).sum(dim=-1)
@@ -211,10 +211,10 @@ def reinforce_loss(
 
 
 def value_loss(
-    vf: MLP,
+    value_function: MLP,
     inputs: LossFnInputs,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    values = mlp_forward(vf, inputs["obs"])[:, 0]
+    values = mlp_forward(value_function, inputs["obs"])[:, 0]
     returns = inputs["returns"]
     loss = ((values - returns) ** 2).mean()
     metrics = {
@@ -262,7 +262,7 @@ def to_floats(metrics: Metrics) -> dict[str, float]:
     return {k: v.item() for k, v in metrics.items()}
 
 
-def evaluate(env: gymnasium.Env, pi: MLP, num_episodes: int = 3) -> list[dict[str, Any]]:
+def evaluate(env: gymnasium.Env, policy: MLP, num_episodes: int = 3) -> list[dict[str, Any]]:
     """Returns application/x-trajectory+json payloads; the format is defined in observe/DESIGN.md."""
     assert num_episodes > 0
     env_id = env.spec.id if env.spec is not None else "unknown"
@@ -274,7 +274,7 @@ def evaluate(env: gymnasium.Env, pi: MLP, num_episodes: int = 3) -> list[dict[st
         rewards: list[float] = []
         done = False
         while not done:
-            action = policy_act(pi, _to_tensor(obs))
+            action = policy_act(policy, _to_tensor(obs))
             obs, reward, terminated, truncated, _ = env.step(action)
             actions.append(int(action))
             rewards.append(float(reward))
@@ -305,21 +305,21 @@ def main() -> None:
     env = gymnasium.make("CartPole-v1")
     eval_env = gymnasium.make("CartPole-v1")
     eval_env.reset(seed=args.seed + 1)  # later unseeded resets continue this RNG: runs are reproducible
-    pi = init_mlp([4, 64, 64, 2])
-    vf = init_mlp([4, 64, 64, 1])
+    policy = init_mlp([4, 64, 64, 2])
+    value_function = init_mlp([4, 64, 64, 1])
     device = torch.get_default_device()
-    pi_cfg = AdamParams(lr=args.lr)
-    vf_cfg = AdamParams(lr=args.vf_lr if args.vf_lr is not None else args.lr)
-    pi_opt, vf_opt = init_adam(pi), init_adam(vf)
+    policy_cfg = AdamParams(lr=args.lr)
+    value_function_cfg = AdamParams(lr=args.vf_lr if args.vf_lr is not None else args.lr)
+    policy_opt, value_function_opt = init_adam(policy), init_adam(value_function)
     state = rollout_init(env, seed=args.seed)
 
     for i in range(1, args.iters + 1):
-        state, batch = collect(env, pi, vf, state, num_steps=args.rollout_steps)
+        state, batch = collect(env, policy, value_function, state, num_steps=args.rollout_steps)
         inputs = compute_loss_fn_inputs(batch, gamma=args.gamma)
-        pi_opt, m_pi = train_step(reinforce_loss, pi, pi_opt, inputs, pi_cfg, step=i, device=device)
-        vf_opt, m_vf = train_step(value_loss, vf, vf_opt, inputs, vf_cfg, step=i, device=device)
+        policy_opt, policy_metrics = train_step(reinforce_loss, policy, policy_opt, inputs, policy_cfg, step=i, device=device)
+        value_function_opt, value_function_metrics = train_step(value_loss, value_function, value_function_opt, inputs, value_function_cfg, step=i, device=device)
 
-        m_log = to_floats({**m_pi, **m_vf})
+        m_log = to_floats({**policy_metrics, **value_function_metrics})
         m_log["train_episodes"] = float(len(batch.episodes))
         if batch.episodes:
             m_log["train_ep_return"] = sum(e.episode_return for e in batch.episodes) / len(batch.episodes)
@@ -328,7 +328,7 @@ def main() -> None:
 
         if i % 10 == 0:
             with span("robots.eval", attributes={"step": i}):
-                trajectories = evaluate(eval_env, pi)
+                trajectories = evaluate(eval_env, policy)
             eval_reward = sum(sum(t["rewards"]) for t in trajectories) / len(trajectories)
             eval_ep_len = sum(len(t["actions"]) for t in trajectories) / len(trajectories)
             metrics({"eval_reward": eval_reward, "eval_ep_len": eval_ep_len}, step=i)
