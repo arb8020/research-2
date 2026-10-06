@@ -3,7 +3,7 @@
 Downloads GPT-2 weights from HuggingFace, makes them trainable, fine-tunes on
 Shakespeare with our Adam implementation. Prints loss and generates samples.
 
-  PYTHONPATH=. robots/.venv/bin/python examples/gpt2_pretrain.py --iters 100
+  PYTHONPATH=. robots/.venv/bin/python robots/examples/gpt2_pretrain.py --iters 100
 """
 
 from __future__ import annotations

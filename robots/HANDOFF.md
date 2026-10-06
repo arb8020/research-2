@@ -28,7 +28,7 @@ All on `main`. Design notes in `robots/docs/notes.md`.
 - **`lm.py`** — GPT-2 frozen dataclasses + forward, `cross_entropy_loss`, `token_loader`,
   `generate`. Self-contained, no kelpie dependency.
 
-**Examples** (`examples/`):
+**Examples** (`robots/examples/`):
 - `cartpole_modelfree.py` — model-free actor-critic: collect → compute_loss_fn_inputs → two
   train_steps (policy, value). With a shared trunk (2026-09-27) the value loss swamped the policy;
   policy and value are now separate networks. Learning quality not re-measured yet.
@@ -46,10 +46,10 @@ JS-rendered pages.
 
 ```bash
 # Model-free CartPole (learns)
-PYTHONPATH=. robots/.venv/bin/python examples/cartpole_modelfree.py --name test --iters 500
+PYTHONPATH=. robots/.venv/bin/python robots/examples/cartpole_modelfree.py --name test --iters 500
 
 # GPT-2 pretrain (CPU, small)
-PYTHONPATH=. robots/.venv/bin/python examples/gpt2_pretrain.py --iters 10
+PYTHONPATH=. robots/.venv/bin/python robots/examples/gpt2_pretrain.py --iters 10
 
 # Dashboard (separate terminal)
 cd observe/dashboard && bun install && bun run build && bun run serve

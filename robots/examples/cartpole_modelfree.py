@@ -1,6 +1,6 @@
 """Model-free actor-critic on CartPole: separate policy and value networks, two train_steps. Uses the robots sdk.
 
-  PYTHONPATH=. robots/.venv/bin/python examples/cartpole_modelfree.py --name modelfree-fixed --iters 500
+  PYTHONPATH=. robots/.venv/bin/python robots/examples/cartpole_modelfree.py --name modelfree-fixed --iters 500
 """
 
 import argparse

@@ -1,6 +1,6 @@
 """Compare observe run logs (jsonl): eval_reward curves and training-metric trends.
 
-  PYTHONPATH=. robots/.venv/bin/python examples/compare_runs.py runs/a.jsonl runs/b.jsonl ...
+  PYTHONPATH=. robots/.venv/bin/python robots/examples/compare_runs.py runs/a.jsonl runs/b.jsonl ...
 
 If a file holds several run_ids (restarted runs), the last one is used. Newer
 logs carry no run_id; then a re-used run name appends, and for each (metric,
