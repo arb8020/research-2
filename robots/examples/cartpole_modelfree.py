@@ -20,7 +20,7 @@ import torch.nn.functional as F
 from observe import artifact, metrics, setup_logging, span
 from observe.git import git_info
 from robots.core import AdamParams, AdamState, adam_scalars, adam_update_, init_adam
-from robots.core import register_pytree, tensor_leaves
+from robots.core import register_pytree
 
 # ---------------------------------------------------------------------------
 # Model: one MLP type; policy (pi) and value (vf) are separate MLPs (no shared trunk)
@@ -303,7 +303,7 @@ def value_loss(
 #
 #   train_step(loss_fn, weights, opt_state, inputs, cfg, step)
 #     = forward_backward(loss_fn, weights, inputs)             -> grads, metrics
-#     + adam_update_(weights, grads, opt_state, cfg, adam_scalars(cfg, step, device_of(weights)))
+#     + adam_update_(weights, grads, opt_state, cfg, adam_scalars(cfg, step, device))
 # ---------------------------------------------------------------------------
 
 W = TypeVar("W")
@@ -333,15 +333,6 @@ def forward_backward(
     return grads, metrics
 
 
-def device_of(weights: Any) -> torch.device:
-    """The device of a weight tree (asserts all leaves agree)."""
-    leaves = tensor_leaves(weights)
-    assert len(leaves) > 0
-    device = leaves[0].device
-    assert all(x.device == device for x in leaves), "weights span multiple devices"
-    return device
-
-
 def train_step(
     loss_fn: LossFn[W, I],
     weights: W,
@@ -349,10 +340,14 @@ def train_step(
     inputs: I,
     cfg: AdamParams,
     step: int,
+    device: torch.device,
 ) -> tuple[AdamState[W], Metrics]:
-    """One update: forward_backward, then Adam in place on weights. step is 1-based."""
+    """One update: forward_backward, then Adam in place on weights.
+
+    step is 1-based. device is where weights live (Adam's per-step scalars go there).
+    """
     grads, metrics = forward_backward(loss_fn, weights, inputs)
-    scalars = adam_scalars(cfg, step, device_of(weights))
+    scalars = adam_scalars(cfg, step, device)
     new_state = adam_update_(weights, grads, opt_state, cfg, scalars)
     return new_state, metrics
 
@@ -442,6 +437,7 @@ def main() -> None:
     eval_env.reset(seed=args.seed + 1)  # later unseeded resets continue this RNG: runs are reproducible
     pi = init_mlp([4, 64, 64, 2])  # obs -> action logits
     vf = init_mlp([4, 64, 64, 1])  # obs -> V(obs)
+    device = torch.get_default_device()  # init_mlp allocates here; computed once, not per step
     pi_cfg = AdamParams(lr=args.lr)
     vf_cfg = AdamParams(lr=args.vf_lr if args.vf_lr is not None else args.lr)
     pi_opt, vf_opt = init_adam(pi), init_adam(vf)
@@ -451,8 +447,8 @@ def main() -> None:
     for i in range(1, args.iters + 1):
         state, batch = collect(env, pi, vf, state, num_steps=args.rollout_steps)
         inputs = compute_loss_fn_inputs(batch, gamma=args.gamma)  # advantages use the pre-update vf
-        pi_opt, m_pi = train_step(reinforce_loss, pi, pi_opt, inputs, pi_cfg, step=i)
-        vf_opt, m_vf = train_step(value_loss, vf, vf_opt, inputs, vf_cfg, step=i)
+        pi_opt, m_pi = train_step(reinforce_loss, pi, pi_opt, inputs, pi_cfg, step=i, device=device)
+        vf_opt, m_vf = train_step(value_loss, vf, vf_opt, inputs, vf_cfg, step=i, device=device)
 
         m_log = to_floats({**m_pi, **m_vf})
         m_log["train_episodes"] = float(len(batch.episodes))
