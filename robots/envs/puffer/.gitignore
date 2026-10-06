@@ -1,0 +1,4 @@
+# build.py outputs: compiled env dylibs and the fetched raylib 5.5 release
+_*.dylib
+.*.dylib.*
+.cache/
