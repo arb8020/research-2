@@ -1,4 +1,6 @@
-# build.py outputs: compiled env dylibs and the fetched raylib 5.5 release
+# build.py outputs: compiled env libs (.dylib on macOS, .so on Linux) and the fetched raylib 5.5 release
 _*.dylib
 .*.dylib.*
+_*.so
+.*.so.*
 .cache/

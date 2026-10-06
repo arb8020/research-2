@@ -1,8 +1,10 @@
-"""Compile shim.c + one vendored PufferLib env header into _<env>.dylib (macOS only).
+"""Compile shim.c + one vendored PufferLib env header into _<env>.dylib (macOS) or _<env>.so
+(Linux x86_64).
 
 Mirrors PufferLib build.sh's CPU flags. raylib 5.5 is fetched once into .cache/
 (the env headers include raylib.h and call IsWindowReady/IsKeyDown every step;
-nothing here renders). Env dylibs find libraylib via an @loader_path rpath.
+nothing here renders). macOS env dylibs find libraylib via an @loader_path rpath; Linux
+links libraylib.a in, as build.sh does (GLFW dlopens X11 and GL, so no display is needed).
 
     python -m robots.envs.puffer.build breakout cartpole
 """
@@ -18,8 +20,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
-RAYLIB_NAME = "raylib-5.5_macos"
+PLATFORMS = {("Darwin", "arm64"), ("Darwin", "x86_64"), ("Linux", "x86_64")}
+LINUX = platform.system() == "Linux"
+RAYLIB_NAME = "raylib-5.5_linux_amd64" if LINUX else "raylib-5.5_macos"
 RAYLIB_URL = f"https://github.com/raysan5/raylib/releases/download/5.5/{RAYLIB_NAME}.tar.gz"
+RAYLIB_LIB = "libraylib.a" if LINUX else "libraylib.dylib"
 ENVS = ("breakout", "cartpole")
 
 CFLAGS = [
@@ -39,12 +44,12 @@ CFLAGS = [
 
 
 def dylib_path(env: str) -> Path:
-    return HERE / f"_{env}.dylib"
+    return HERE / f"_{env}.{'so' if LINUX else 'dylib'}"
 
 
 def fetch_raylib() -> Path:
     root = CACHE / RAYLIB_NAME
-    if (root / "lib" / "libraylib.dylib").exists():
+    if (root / "lib" / RAYLIB_LIB).exists():
         return root
     CACHE.mkdir(exist_ok=True)
     print(f"fetching {RAYLIB_URL}", file=sys.stderr)
@@ -76,8 +81,8 @@ def is_stale(env: str) -> bool:
 
 def build(env: str) -> Path:
     assert env in ENVS, f"unknown puffer env {env!r}; vendored: {ENVS}"
-    if platform.system() != "Darwin":
-        raise NotImplementedError("puffer env build is macOS-only for now (raylib-5.5_macos)")
+    if (platform.system(), platform.machine()) not in PLATFORMS:
+        raise NotImplementedError(f"puffer env build: no raylib release wired up for {platform.system()} {platform.machine()}")
     out = dylib_path(env)
     if not is_stale(env):
         return out
@@ -91,19 +96,29 @@ def build(env: str) -> Path:
         f"-I{HERE}",
         f"-I{raylib / 'include'}",
         str(HERE / "shim.c"),
-        # Shared raylib, not libraylib.a: static linking puts a copy of GLFW's ObjC
-        # classes in every env dylib, and loading two envs makes objc warn about duplicates.
-        f"-L{raylib / 'lib'}",
-        "-lraylib",
-        f"-Wl,-rpath,@loader_path/{raylib.relative_to(HERE) / 'lib'}",
-        "-lm",
-        f"-Wl,-install_name,@rpath/{out.name}",
+        *(_linux_link(raylib) if LINUX else _macos_link(raylib, out)),
         "-o",
         str(tmp),
     ]
     subprocess.run(cmd, check=True)
     os.replace(tmp, out)  # atomic: concurrent builders never see a half-written dylib
     return out
+
+
+def _macos_link(raylib: Path, out: Path) -> list[str]:
+    # Shared raylib, not libraylib.a: static linking puts a copy of GLFW's ObjC
+    # classes in every env dylib, and loading two envs makes objc warn about duplicates.
+    return [
+        f"-L{raylib / 'lib'}",
+        "-lraylib",
+        f"-Wl,-rpath,@loader_path/{raylib.relative_to(HERE) / 'lib'}",
+        "-lm",
+        f"-Wl,-install_name,@rpath/{out.name}",
+    ]
+
+
+def _linux_link(raylib: Path) -> list[str]:
+    return [str(raylib / "lib" / RAYLIB_LIB), "-lm", "-lpthread", "-ldl"]
 
 
 if __name__ == "__main__":
