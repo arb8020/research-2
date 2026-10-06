@@ -5,12 +5,9 @@ Slow (each trains for a few seconds): set RUN_SLOW_TESTS=1 to run.
 
 from __future__ import annotations
 
-import importlib.util
 import os
-import sys
 from collections.abc import Callable
 from dataclasses import replace
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -23,23 +20,10 @@ from robots.envs.probes import (
     Probe4Policy,
     Probe5PolicyValue,
 )
+from robots.examples import breakout_ppo as ppo
 
 pytestmark = pytest.mark.skipif(os.environ.get("RUN_SLOW_TESTS") != "1", reason="slow; set RUN_SLOW_TESTS=1")
 
-
-def _load_example(name: str) -> Any:
-    # robots/examples is scripts, not a package; dataclasses need the module in sys.modules.
-    path = Path(__file__).parent.parent / "examples" / f"{name}.py"
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-ppo = _load_example("breakout_ppo")
 
 GAMMA_PROBE3 = 0.5
 SMALL = {"num_envs": 8, "num_steps": 16, "iters": 60, "lr": 1e-3}
