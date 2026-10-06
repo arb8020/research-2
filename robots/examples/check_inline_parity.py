@@ -97,7 +97,9 @@ def main() -> None:
     tmp = Path(tempfile.mkdtemp(prefix="inline-parity-"))
     orig_root = tmp / "orig"
     orig_root.mkdir()
-    archive = subprocess.run(["git", "archive", args.base, "robots", "observe", "examples"], cwd=REPO, capture_output=True, check=True)
+    paths = [x for x in ("robots", "observe", "examples")
+             if subprocess.run(["git", "cat-file", "-e", f"{args.base}:{x}"], cwd=REPO, check=False).returncode == 0]
+    archive = subprocess.run(["git", "archive", args.base, *paths], cwd=REPO, capture_output=True, check=True)
     subprocess.run(["tar", "-x", "-C", str(orig_root)], input=archive.stdout, check=True)
     print(f"original: {args.base} extracted to {orig_root}")
     print(f"new:      {REPO} (working tree)\n")
@@ -108,7 +110,10 @@ def main() -> None:
             continue
         shakespeare = find_shakespeare(tmp) if name == "gpt2_pretrain" else None
         new_script = REPO / "robots" / "examples" / f"{name}.py"
-        ev_o, out_o = run(orig_root, orig_root / orig_rel, case_args, pin, tmp / f"{name}-orig", shakespeare)
+        orig_script = orig_root / orig_rel
+        if not orig_script.exists():  # base is after the examples/ -> robots/examples/ move
+            orig_script = orig_root / "robots" / orig_rel
+        ev_o, out_o = run(orig_root, orig_script, case_args, pin, tmp / f"{name}-orig", shakespeare)
         ev_n, out_n = run(REPO, new_script, case_args, pin, tmp / f"{name}-new", shakespeare)
         kinds: dict[str, int] = {}
         for e in ev_o:

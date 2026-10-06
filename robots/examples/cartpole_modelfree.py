@@ -98,7 +98,7 @@ def get_value(vf: MLP, obs: torch.Tensor) -> float:
 #
 # Every value needed to compute training targets is recorded here, at collection
 # time, so turning a Batch into loss inputs is a pure function (no network calls):
-#     Step.bootstrap_value = V(next_obs) on a truncated step, else 0.0
+#     Outcome.bootstrap_value = V(next_obs) on a truncated step, else 0.0
 #     Batch.last_value     = V(obs the next batch acts on), for the cut at the batch end
 # ---------------------------------------------------------------------------
 
@@ -112,16 +112,23 @@ class RolloutState:
 
 
 @dataclass(frozen=True)
+class Outcome:
+    """What a step earned and how it ended: everything compute_returns reads."""
+
+    reward: float
+    terminated: bool           # real ending (pole fell): future reward = 0
+    truncated: bool            # time limit: future reward unknown -> bootstrap with V(next_obs)
+    bootstrap_value: float     # detached V(next_obs) if truncated (and not terminated), else 0.0
+
+
+@dataclass(frozen=True)
 class Step:
     """One recorded step."""
 
     obs: torch.Tensor          # (obs_dim,) obs the action was chosen from
     action: int
-    reward: float
-    terminated: bool           # real ending (pole fell): future reward = 0
-    truncated: bool            # time limit: future reward unknown -> bootstrap with V(next_obs)
     value: float               # detached V(obs), from collection time
-    bootstrap_value: float     # detached V(next_obs) if truncated (and not terminated), else 0.0
+    outcome: Outcome
 
 
 @dataclass(frozen=True)
@@ -172,11 +179,13 @@ def collect_step(
     step = Step(
         obs=state.obs,
         action=action.item(),
-        reward=float(reward),
-        terminated=bool(terminated),
-        truncated=bool(truncated),
         value=value,
-        bootstrap_value=bootstrap_value,
+        outcome=Outcome(
+            reward=float(reward),
+            terminated=bool(terminated),
+            truncated=bool(truncated),
+            bootstrap_value=bootstrap_value,
+        ),
     )
 
     ep_return = state.episode_return + float(reward)
@@ -221,23 +230,23 @@ def collect(
 LossFnInputs: TypeAlias = dict[str, torch.Tensor]
 
 
-def compute_returns(steps: list[Step], last_value: float, gamma: float) -> list[float]:
+def compute_returns(outcomes: list[Outcome], last_value: float, gamma: float) -> list[float]:
     """Discounted, bootstrapped returns, computed backwards.
 
     Where the future comes from, per step:
-        episode ended here (terminated or truncated) -> step.bootstrap_value
+        episode ended here (terminated or truncated) -> outcome.bootstrap_value
             (0.0 on termination, V(next_obs) on truncation — recorded at collection)
         otherwise -> the next step's return (last_value for the batch's final step)
     """
     assert 0.0 <= gamma <= 1.0
     returns: list[float] = []
     g = last_value
-    for step in reversed(steps):
+    for o in reversed(outcomes):
         # Invalid state: a real ending has no future to bootstrap from.
-        assert not step.terminated or step.bootstrap_value == 0.0, step
-        ended = step.terminated or step.truncated
-        future = step.bootstrap_value if ended else g
-        g = step.reward + gamma * future
+        assert not o.terminated or o.bootstrap_value == 0.0, o
+        ended = o.terminated or o.truncated
+        future = o.bootstrap_value if ended else g
+        g = o.reward + gamma * future
         returns.append(g)
     returns.reverse()
     return returns
@@ -246,7 +255,7 @@ def compute_returns(steps: list[Step], last_value: float, gamma: float) -> list[
 def compute_loss_fn_inputs(batch: Batch, gamma: float) -> LossFnInputs:
     """Batch -> LossFnInputs. Pure: no network calls, everything was recorded at collection."""
     assert len(batch.steps) > 0
-    returns = torch.tensor(compute_returns(batch.steps, batch.last_value, gamma), dtype=torch.float32)
+    returns = torch.tensor(compute_returns([s.outcome for s in batch.steps], batch.last_value, gamma), dtype=torch.float32)
     values = torch.tensor([s.value for s in batch.steps], dtype=torch.float32)
     return {
         "obs": torch.stack([s.obs for s in batch.steps]),
