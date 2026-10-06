@@ -5,7 +5,7 @@ Two training phases per iteration:
 2. Train the policy (reinforce_loss) and the separate value function
    (value_loss) on imagined rollouts; the horizon cut bootstraps with V.
 
-  PYTHONPATH=. robots/.venv/bin/python examples/cartpole_modelbased.py --iters 200
+  PYTHONPATH=. robots/.venv/bin/python robots/examples/cartpole_modelbased.py --iters 200
 """
 
 import argparse
