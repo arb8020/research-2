@@ -8,7 +8,7 @@ import gymnasium
 import torch
 
 from robots.models import init_policy, init_value, init_wm, get_value, transitions_to_inputs, wm_loss
-from robots.optim import AdamParams, init_adam
+from robots.core import AdamParams, init_adam
 from robots.rollout import collect_transitions, imagine_rollout
 from robots.train import compute_loss_fn_inputs, train_step
 

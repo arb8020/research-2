@@ -8,8 +8,8 @@ from torch._dynamo.testing import CompileCounterWithBackend
 from torch._inductor.utils import run_and_get_code
 
 from robots.models import PolicyWeights, init_policy, policy_forward
-from robots.optim import AdamParams, AdamState, adam_scalars, adam_update, adam_update_, init_adam
-from robots.tree import tensor_leaves, tree_map
+from robots.core import AdamParams, AdamState, adam_scalars, adam_update, adam_update_, init_adam
+from robots.core import tensor_leaves, tree_map
 
 
 def _detached(w: PolicyWeights) -> PolicyWeights:

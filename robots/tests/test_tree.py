@@ -7,7 +7,7 @@ import torch
 
 from robots.lm import GPT2, Layer, Linear, Norm
 from robots.models import PolicyWeights, WMWeights, init_policy, init_wm, policy_forward, wm_forward
-from robots.tree import register_pytree, tensor_leaves, trainable, tree_copy_, tree_map
+from robots.core import register_pytree, tensor_leaves, trainable, tree_copy_, tree_map
 
 
 def test_grad_over_policy_weights_returns_policy_weights():
