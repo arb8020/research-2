@@ -1,3 +1,11 @@
+// Vendored from PufferLib 5.0 ocean/cartpole/cartpole.h @ 6ffa5b1, with LOCAL PATCHES
+// (search "LOCAL PATCH"):
+//   1. No time limit: MAX_STEPS truncation removed; episodes end only on physical
+//      termination. max_steps_termination log field removed; perf normalized by
+//      PERF_SCALE (500, CartPole-v1's horizon) instead of MAX_STEPS.
+//   2. polemass_length = pole_mass * pole_length (upstream: total_mass + pole_mass).
+//   3. thetaacc denominator uses pole_mass * cos^2 / total_mass (upstream: total_mass
+//      * cos^2 / total_mass, i.e. cos^2). Both 2 and 3 now match gymnasium CartPole-v1.
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -14,7 +22,8 @@ typedef float obs_t;
 
 #define X_THRESHOLD 2.4f
 #define THETA_THRESHOLD_RADIANS (12 * 2 * M_PI / 360)
-#define MAX_STEPS 200
+// LOCAL PATCH 1: MAX_STEPS removed (no time limit).
+#define PERF_SCALE 500.0f
 #define WIDTH 600
 #define HEIGHT 200
 #define SCALE 100
@@ -25,7 +34,6 @@ struct Log {
     float episode_length;
     float x_threshold_termination;
     float pole_angle_termination;
-    float max_steps_termination;
     float n;
     float score;
 };
@@ -59,12 +67,11 @@ struct Env {
 typedef Env Cartpole;
 
 void add_log(Cartpole* env) {
-    env->log.perf += env->episode_return / MAX_STEPS;
+    env->log.perf += env->episode_return / PERF_SCALE;  // LOCAL PATCH 1
     env->log.episode_length += env->tick;
     env->log.score += env->tick;
     env->log.x_threshold_termination += (env->x < -X_THRESHOLD || env->x > X_THRESHOLD);
     env->log.pole_angle_termination += (env->theta < -THETA_THRESHOLD_RADIANS || env->theta > THETA_THRESHOLD_RADIANS);
-    env->log.max_steps_termination += (env->tick >= MAX_STEPS);
     env->log.n += 1;
 }
 
@@ -169,10 +176,10 @@ void puf_step(Cartpole* env) {
     float sintheta = sinf(env->theta);
 
     float total_mass = env->cart_mass + env->pole_mass;
-    float polemass_length = total_mass + env->pole_mass;
+    float polemass_length = env->pole_mass * env->pole_length;  // LOCAL PATCH 2
     float temp = (force + polemass_length * env->theta_dot * env->theta_dot * sintheta) / total_mass;
     float thetaacc = (env->gravity * sintheta - costheta * temp) / 
-                     (env->pole_length * (4.0f / 3.0f - total_mass * costheta * costheta / total_mass));
+                     (env->pole_length * (4.0f / 3.0f - env->pole_mass * costheta * costheta / total_mass));  // LOCAL PATCH 3
     float xacc = temp - polemass_length * thetaacc * costheta / total_mass;
 
     env->x += env->tau * env->x_dot;
@@ -184,8 +191,7 @@ void puf_step(Cartpole* env) {
     
     bool terminated = env->x < -X_THRESHOLD || env->x > X_THRESHOLD ||
                 env->theta < -THETA_THRESHOLD_RADIANS || env->theta > THETA_THRESHOLD_RADIANS;
-    bool truncated = env->tick >= MAX_STEPS;
-    bool done = terminated || truncated;
+    bool done = terminated;  // LOCAL PATCH 1: no truncation
 
     env->agents[0].rewards[0] = done ? 0.0f : 1.0f;
     env->episode_return += env->agents[0].rewards[0];
@@ -206,7 +212,6 @@ void puf_log(Log* log, Dict* out) {
     dict_set(out, "episode_length", log->episode_length);
     dict_set(out, "x_threshold_termination", log->x_threshold_termination);
     dict_set(out, "pole_angle_termination", log->pole_angle_termination);
-    dict_set(out, "max_steps_termination", log->max_steps_termination);
     dict_set(out, "n", log->n);
 }
 
