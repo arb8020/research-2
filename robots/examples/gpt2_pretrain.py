@@ -24,8 +24,15 @@ import torch.nn.functional as F
 
 from observe import metrics, setup_logging
 from observe.git import git_info
-from robots.core import AdamParams, AdamState, adam_scalars, adam_update_, init_adam
-from robots.core import register_pytree, tensor_leaves
+from robots.core import (
+    AdamParams,
+    AdamState,
+    adam_scalars,
+    adam_update_,
+    init_adam,
+    register_pytree,
+    tensor_leaves,
+)
 
 SHAKESPEARE_URL = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
 
@@ -212,7 +219,7 @@ def download_shakespeare() -> str:
         with open(cache) as f:
             return f.read()
     os.makedirs("runs", exist_ok=True)
-    print(f"Downloading tiny shakespeare...")
+    print("Downloading tiny shakespeare...")
     data, _ = urllib.request.urlretrieve(SHAKESPEARE_URL, cache)
     with open(cache) as f:
         return f.read()
@@ -272,18 +279,18 @@ def cross_entropy_loss(
 # ---------------------------------------------------------------------------
 
 W = TypeVar("W")
-I = TypeVar("I")
+Inputs = TypeVar("Inputs")
 
 # (weights, inputs) -> (scalar loss, metrics). Metrics are tensors so a LossFn
 # stays torch.func-safe (no .item()); convert with to_floats at the logging edge.
-LossFn = Callable[[W, I], tuple[torch.Tensor, dict[str, torch.Tensor]]]
+LossFn = Callable[[W, Inputs], tuple[torch.Tensor, dict[str, torch.Tensor]]]
 Metrics = dict[str, torch.Tensor]
 
 
 def forward_backward(
-    loss_fn: LossFn[W, I],
+    loss_fn: LossFn[W, Inputs],
     weights: W,
-    inputs: I,
+    inputs: Inputs,
 ) -> tuple[W, Metrics]:
     """Gradients of loss_fn w.r.t. weights, plus the loss_fn's metrics.
 
@@ -309,10 +316,10 @@ def device_of(weights: Any) -> torch.device:
 
 
 def train_step(
-    loss_fn: LossFn[W, I],
+    loss_fn: LossFn[W, Inputs],
     weights: W,
     opt_state: AdamState[W],
-    inputs: I,
+    inputs: Inputs,
     cfg: AdamParams,
     step: int,
 ) -> tuple[AdamState[W], Metrics]:
@@ -393,7 +400,6 @@ def main() -> None:
 
     # Data loader — returns tokens; cross_entropy_loss takes (tokens, config)
     raw_loader = token_loader(token_ids, seq_len=args.seq_len, batch_size=args.batch_size, device=args.device)
-
 
     # --- train ---
     print(f"\nTraining for {args.iters} steps...")

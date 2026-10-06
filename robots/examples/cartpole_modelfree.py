@@ -6,13 +6,20 @@ from dataclasses import dataclass, replace
 from typing import Any, TypeAlias, TypeVar
 
 import gymnasium
+import numpy as np
 import torch
 import torch.nn.functional as F
 
 from observe import artifact, metrics, setup_logging, span
 from observe.git import git_info
-from robots.core import AdamParams, AdamState, adam_scalars, adam_update_, init_adam
-from robots.core import register_pytree
+from robots.core import (
+    AdamParams,
+    AdamState,
+    adam_scalars,
+    adam_update_,
+    init_adam,
+    register_pytree,
+)
 
 
 @register_pytree
@@ -94,7 +101,7 @@ class Batch:
     last_value: float
 
 
-def _to_tensor(obs) -> torch.Tensor:
+def _to_tensor(obs: np.ndarray) -> torch.Tensor:
     return torch.tensor(obs, dtype=torch.float32)
 
 
@@ -226,16 +233,16 @@ def value_loss(
 
 
 W = TypeVar("W")
-I = TypeVar("I")
+Inputs = TypeVar("Inputs")
 
-LossFn = Callable[[W, I], tuple[torch.Tensor, dict[str, torch.Tensor]]]
+LossFn = Callable[[W, Inputs], tuple[torch.Tensor, dict[str, torch.Tensor]]]
 Metrics = dict[str, torch.Tensor]
 
 
 def forward_backward(
-    loss_fn: LossFn[W, I],
+    loss_fn: LossFn[W, Inputs],
     weights: W,
-    inputs: I,
+    inputs: Inputs,
 ) -> tuple[W, Metrics]:
     grad_fn = torch.func.grad_and_value(loss_fn, argnums=0, has_aux=True)
     grads, (_loss, metrics) = grad_fn(weights, inputs)
@@ -244,10 +251,10 @@ def forward_backward(
 
 
 def train_step(
-    loss_fn: LossFn[W, I],
+    loss_fn: LossFn[W, Inputs],
     weights: W,
     opt_state: AdamState[W],
-    inputs: I,
+    inputs: Inputs,
     cfg: AdamParams,
     step: int,
     device: torch.device,

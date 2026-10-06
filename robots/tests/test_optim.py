@@ -1,12 +1,15 @@
 """Pure Adam: matches torch.optim.Adam, never mutates inputs; donating variant writes in place."""
 
 
+from typing import Any
+
 import pytest
 import torch
 from torch._dynamo.testing import CompileCounterWithBackend
 
 from robots.core import (
     AdamParams,
+    AdamScalars,
     AdamState,
     adam_scalars,
     adam_update,
@@ -27,7 +30,7 @@ def _loss(w: PolicyWeights, obs: torch.Tensor) -> torch.Tensor:
     return (logits**2).mean()
 
 
-def _max_diff(a, b) -> float:
+def _max_diff(a: Any, b: Any) -> float:
     return max((x - y).abs().max().item() for x, y in zip(tensor_leaves(a), tensor_leaves(b), strict=True))
 
 
@@ -36,11 +39,11 @@ def _setup(seed: int = 0) -> tuple[PolicyWeights, torch.Tensor]:
     return _detached(init_policy(obs_dim=4, act_dim=2, hidden=16)), torch.randn(8, 4)
 
 
-def _sc(cfg: AdamParams, step: int):
+def _sc(cfg: AdamParams, step: int) -> AdamScalars:
     return adam_scalars(cfg, step, "cpu")
 
 
-def test_adam_update_matches_torch_optim():
+def test_adam_update_matches_torch_optim() -> None:
     """Same init, same loss, 20 steps: pure Adam tracks torch.optim.Adam to float tolerance."""
     w, obs = _setup()
     cfg = AdamParams(lr=1e-2)
@@ -62,7 +65,7 @@ def test_adam_update_matches_torch_optim():
     assert diff < 1e-5, f"adam_update diverged from torch.optim.Adam: max diff {diff}"
 
 
-def test_adam_update_inplace_matches_pure_and_keeps_storage():
+def test_adam_update_inplace_matches_pure_and_keeps_storage() -> None:
     w, obs = _setup()
     cfg = AdamParams(lr=1e-2)
     grad_fn = torch.func.grad(_loss)
@@ -79,7 +82,7 @@ def test_adam_update_inplace_matches_pure_and_keeps_storage():
     assert _max_diff(pure_state, inplace_state) == 0.0
 
 
-def test_adam_update_inplace_accepts_requires_grad_params():
+def test_adam_update_inplace_accepts_requires_grad_params() -> None:
     """Weights from init_policy require grad; the donating update must still work on them."""
     torch.manual_seed(0)
     w = init_policy(obs_dim=4, act_dim=2, hidden=16)
@@ -89,7 +92,7 @@ def test_adam_update_inplace_accepts_requires_grad_params():
     assert all(x.requires_grad for x in tensor_leaves(w))
 
 
-def test_adam_update_inplace_rejects_shared_m_v():
+def test_adam_update_inplace_rejects_shared_m_v() -> None:
     w, obs = _setup()
     m = init_adam(w).m
     shared = AdamState(m=m, v=m)
@@ -98,7 +101,7 @@ def test_adam_update_inplace_rejects_shared_m_v():
         adam_update_(w, torch.func.grad(_loss)(w, obs), shared, cfg, _sc(cfg, 1))
 
 
-def test_lr_schedule():
+def test_lr_schedule() -> None:
     """adam_scalars calls the schedule with the 1-based step; it overrides cfg.lr."""
     def schedule(step: int) -> float:
         return 1e-3 * step
@@ -127,9 +130,16 @@ def _require_compile_backend() -> None:
         pytest.skip(f"no working torch.compile backend: {type(e).__name__}: {e}")
 
 
-def _compiled_train_run(steps: int, cfg: AdamParams, dynamic: bool | None):
+def _compiled_train_run(
+    steps: int, cfg: AdamParams, dynamic: bool | None
+) -> tuple[PolicyWeights, PolicyWeights, CompileCounterWithBackend, bool]:
     """Eager vs compiled grad+adam_update_ for `steps` steps. Returns (eager, compiled, counter, ptrs ok)."""
-    def train_step(params, state, scalars, obs):
+    def train_step(
+        params: PolicyWeights,
+        state: AdamState[PolicyWeights],
+        scalars: AdamScalars,
+        obs: torch.Tensor,
+    ) -> tuple[AdamState[PolicyWeights], torch.Tensor]:
         grads, loss = torch.func.grad_and_value(_loss)(params, obs)
         return adam_update_(params, grads, state, cfg, scalars), loss
 
@@ -149,7 +159,7 @@ def _compiled_train_run(steps: int, cfg: AdamParams, dynamic: bool | None):
     return eager_params, comp_params, counter, same_ptrs
 
 
-def test_compiled_matches_eager_without_recompiles():
+def test_compiled_matches_eager_without_recompiles() -> None:
     """25 steps with a changing lr_schedule compile to exactly 1 graph (dynamic=False)."""
     dynamic = False
     _require_compile_backend()

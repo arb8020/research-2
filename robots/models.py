@@ -7,7 +7,6 @@ editing this file does not change any example. Kept as the seed of a shared mode
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -15,10 +14,10 @@ import torch.nn.functional as F
 
 from robots.core import register_pytree
 
-
 # ---------------------------------------------------------------------------
 # Shared init helper
 # ---------------------------------------------------------------------------
+
 
 def _linear(out_dim: int, in_dim: int) -> tuple[torch.Tensor, torch.Tensor]:
     """Xavier-uniform weight + zero bias, both with requires_grad=True."""
