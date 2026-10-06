@@ -23,94 +23,64 @@ from robots.core import AdamParams, AdamState, adam_scalars, adam_update_, init_
 from robots.core import register_pytree, tensor_leaves
 
 # ---------------------------------------------------------------------------
-# Model: policy and value networks (separate: no shared trunk)
+# Model: one MLP type; policy (pi) and value (vf) are separate MLPs (no shared trunk)
 # ---------------------------------------------------------------------------
-
-
-def _linear(out_dim: int, in_dim: int) -> tuple[torch.Tensor, torch.Tensor]:
-    """Xavier-uniform weight + zero bias, both with requires_grad=True."""
-    w = torch.empty(out_dim, in_dim, requires_grad=True)
-    torch.nn.init.xavier_uniform_(w)
-    b = torch.zeros(out_dim, requires_grad=True)
-    return w, b
 
 
 @register_pytree
 @dataclass(frozen=True)
-class PolicyWeights:
-    """2-layer MLP policy: obs -> action logits. No value head (see ValueWeights).
+class Linear:
+    """Affine layer in nn.Linear layout: x @ w.T + b.
 
     Frozen dataclass — fields can't be reassigned, but the tensors themselves
     are mutable (the optimizer updates them in place).
     """
 
-    # MLP trunk: two hidden layers
-    w1: torch.Tensor  # (hidden, obs_dim)
-    b1: torch.Tensor  # (hidden,)
-    w2: torch.Tensor  # (hidden, hidden)
-    b2: torch.Tensor  # (hidden,)
-    # Action head
-    w_action: torch.Tensor  # (act_dim, hidden)
-    b_action: torch.Tensor  # (act_dim,)
-
-
-def init_policy(obs_dim: int, act_dim: int, hidden: int = 64) -> PolicyWeights:
-    """Initialize policy weights with Xavier uniform (matching nn.Linear defaults)."""
-    w1, b1 = _linear(hidden, obs_dim)
-    w2, b2 = _linear(hidden, hidden)
-    w_action, b_action = _linear(act_dim, hidden)
-    return PolicyWeights(w1=w1, b1=b1, w2=w2, b2=b2, w_action=w_action, b_action=b_action)
-
-
-def policy_forward(w: PolicyWeights, obs: torch.Tensor) -> torch.Tensor:
-    """obs (batch, obs_dim) -> logits (batch, act_dim)."""
-    h = F.relu(obs @ w.w1.T + w.b1)  # (batch, hidden)
-    h = F.relu(h @ w.w2.T + w.b2)  # (batch, hidden)
-    return h @ w.w_action.T + w.b_action  # (batch, act_dim)
-
-
-def policy_act(w: PolicyWeights, obs: torch.Tensor) -> int:
-    """Sample one action from the policy. obs: (obs_dim,)."""
-    with torch.no_grad():
-        logits = policy_forward(w, obs.unsqueeze(0))  # (1, act_dim)
-        dist = torch.distributions.Categorical(logits=logits)
-        return dist.sample().item()
+    w: torch.Tensor  # (out, in)
+    b: torch.Tensor  # (out,)
 
 
 @register_pytree
 @dataclass(frozen=True)
-class ValueWeights:
-    """2-layer MLP state-value function: obs -> V(obs). Own trunk."""
+class MLP:
+    """Stack of Linear layers: ReLU between layers, none after the last."""
 
-    # MLP trunk: two hidden layers
-    w1: torch.Tensor  # (hidden, obs_dim)
-    b1: torch.Tensor  # (hidden,)
-    w2: torch.Tensor  # (hidden, hidden)
-    b2: torch.Tensor  # (hidden,)
-    # Value head
-    w_value: torch.Tensor  # (1, hidden)
-    b_value: torch.Tensor  # (1,)
+    layers: tuple[Linear, ...]
 
 
-def init_value(obs_dim: int, hidden: int = 64) -> ValueWeights:
-    """Initialize value weights with Xavier uniform (matching nn.Linear defaults)."""
-    w1, b1 = _linear(hidden, obs_dim)
-    w2, b2 = _linear(hidden, hidden)
-    w_value, b_value = _linear(1, hidden)
-    return ValueWeights(w1=w1, b1=b1, w2=w2, b2=b2, w_value=w_value, b_value=b_value)
+def init_linear(in_dim: int, out_dim: int) -> Linear:
+    """Xavier-uniform weight + zero bias, both with requires_grad=True."""
+    w = torch.empty(out_dim, in_dim, requires_grad=True)
+    torch.nn.init.xavier_uniform_(w)
+    b = torch.zeros(out_dim, requires_grad=True)
+    return Linear(w=w, b=b)
 
 
-def value_forward(w: ValueWeights, obs: torch.Tensor) -> torch.Tensor:
-    """obs (batch, obs_dim) -> value (batch,)."""
-    h = F.relu(obs @ w.w1.T + w.b1)  # (batch, hidden)
-    h = F.relu(h @ w.w2.T + w.b2)  # (batch, hidden)
-    return (h @ w.w_value.T + w.b_value)[:, 0]  # (batch, 1) -> (batch,)
+def init_mlp(sizes: list[int]) -> MLP:
+    """sizes = [in, hidden..., out], e.g. [4, 64, 64, 2]. Layers initialized in order."""
+    return MLP(layers=tuple(init_linear(i, o) for i, o in zip(sizes[:-1], sizes[1:], strict=True)))
 
 
-def get_value(w: ValueWeights, obs: torch.Tensor) -> float:
-    """Detached V(obs) for one obs. obs: (obs_dim,)."""
+def mlp_forward(w: MLP, x: torch.Tensor) -> torch.Tensor:
+    """x (batch, sizes[0]) -> (batch, sizes[-1])."""
+    *hidden, last = w.layers
+    for layer in hidden:
+        x = F.relu(x @ layer.w.T + layer.b)  # (batch, hidden)
+    return x @ last.w.T + last.b  # (batch, out)
+
+
+def policy_act(pi: MLP, obs: torch.Tensor) -> int:
+    """Sample one action from the policy MLP (obs -> logits). obs: (obs_dim,)."""
     with torch.no_grad():
-        return value_forward(w, obs.unsqueeze(0)).item()
+        logits = mlp_forward(pi, obs.unsqueeze(0))  # (1, act_dim)
+        dist = torch.distributions.Categorical(logits=logits)
+        return dist.sample().item()
+
+
+def get_value(vf: MLP, obs: torch.Tensor) -> float:
+    """Detached V(obs) for one obs from the value MLP (obs -> (1,)). obs: (obs_dim,)."""
+    with torch.no_grad():
+        return mlp_forward(vf, obs.unsqueeze(0))[:, 0].item()
 
 
 # ---------------------------------------------------------------------------
@@ -183,13 +153,13 @@ def rollout_init(env: gymnasium.Env, seed: int | None = None) -> RolloutState:
 
 def collect_step(
     env: gymnasium.Env,
-    pi: PolicyWeights,
-    vf: ValueWeights,
+    pi: MLP,
+    vf: MLP,
     state: RolloutState,
 ) -> tuple[RolloutState, Step, EpisodeEnd | None]:
     """Act once, step the env, record it. Resets the env if the episode ended."""
     with torch.no_grad():
-        logits = policy_forward(pi, state.obs.unsqueeze(0))  # (1, act_dim)
+        logits = mlp_forward(pi, state.obs.unsqueeze(0))  # (1, act_dim)
         dist = torch.distributions.Categorical(logits=logits)
         action = dist.sample()
 
@@ -225,8 +195,8 @@ def collect_step(
 
 def collect(
     env: gymnasium.Env,
-    pi: PolicyWeights,
-    vf: ValueWeights,
+    pi: MLP,
+    vf: MLP,
     state: RolloutState,
     num_steps: int,
 ) -> tuple[RolloutState, Batch]:
@@ -303,11 +273,11 @@ def compute_loss_fn_inputs(batch: Batch, gamma: float) -> LossFnInputs:
 # ---------------------------------------------------------------------------
 
 def reinforce_loss(
-    pi: PolicyWeights,
+    pi: MLP,
     inputs: LossFnInputs,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Policy-gradient term: mean(-log pi(a|s) * advantage). Reads obs, actions, advantages."""
-    logits = policy_forward(pi, inputs["obs"])                                      # (T, act_dim)
+    logits = mlp_forward(pi, inputs["obs"])                                         # (T, act_dim)
     log_probs_all = F.log_softmax(logits, dim=-1)                                   # (T, act_dim)
     logprob = log_probs_all.gather(1, inputs["actions"].unsqueeze(1)).squeeze(1)    # (T,)
     entropy = -(log_probs_all.exp() * log_probs_all).sum(dim=-1)                    # (T,)
@@ -323,11 +293,11 @@ def reinforce_loss(
 
 
 def value_loss(
-    vf: ValueWeights,
+    vf: MLP,
     inputs: LossFnInputs,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Value regression: mean((V(obs) - return)^2). Reads obs, returns."""
-    values = value_forward(vf, inputs["obs"])                                       # (T,)
+    values = mlp_forward(vf, inputs["obs"])[:, 0]                                   # (T,)
     returns = inputs["returns"].detach()
     loss = ((values - returns) ** 2).mean()
     metrics = {
@@ -407,7 +377,7 @@ def to_floats(metrics: Metrics) -> dict[str, float]:
 # Eval + record
 # ---------------------------------------------------------------------------
 
-def evaluate(env: gymnasium.Env, pi: PolicyWeights, num_episodes: int = 3) -> tuple[float, float]:
+def evaluate(env: gymnasium.Env, pi: MLP, num_episodes: int = 3) -> tuple[float, float]:
     """Run policy in real env, return (mean reward, mean episode length)."""
     total = 0.0
     total_len = 0
@@ -429,7 +399,7 @@ def evaluate(env: gymnasium.Env, pi: PolicyWeights, num_episodes: int = 3) -> tu
     return total / num_episodes, total_len / num_episodes
 
 
-def record_episode(env: gymnasium.Env, pi: PolicyWeights) -> dict[str, Any]:
+def record_episode(env: gymnasium.Env, pi: MLP) -> dict[str, Any]:
     """Play one greedy episode and return it as a trajectory artifact payload."""
     obs, _ = env.reset()
     observations: list[list[float]] = [[float(x) for x in obs]]
@@ -481,8 +451,8 @@ def main() -> None:
     env = gymnasium.make("CartPole-v1")
     eval_env = gymnasium.make("CartPole-v1")
     eval_env.reset(seed=args.seed + 1)  # later unseeded resets continue this RNG: runs are reproducible
-    pi = init_policy(obs_dim=4, act_dim=2)
-    vf = init_value(obs_dim=4)
+    pi = init_mlp([4, 64, 64, 2])  # obs -> action logits
+    vf = init_mlp([4, 64, 64, 1])  # obs -> V(obs)
     pi_cfg = AdamParams(lr=args.lr)
     vf_cfg = AdamParams(lr=args.vf_lr if args.vf_lr is not None else args.lr)
     pi_opt, vf_opt = init_adam(pi), init_adam(vf)
