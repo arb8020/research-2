@@ -1,7 +1,7 @@
 """Pretrain GPT-2 (124M) on tiny shakespeare. Kelpie-style weights.
 
-Self-contained: everything except Adam (robots.optim) and the pytree helpers
-(robots.tree) is defined in this file.
+Self-contained: everything except Adam (robots.core) and the pytree helpers
+(robots.core) is defined in this file.
 
 Downloads GPT-2 weights from HuggingFace, makes them trainable, fine-tunes on
 Shakespeare with our Adam implementation. Prints loss and generates samples.
@@ -24,8 +24,8 @@ import torch.nn.functional as F
 
 from observe import metrics, setup_logging
 from observe.git import git_info
-from robots.optim import AdamParams, AdamState, adam_scalars, adam_update_, init_adam
-from robots.tree import register_pytree, tensor_leaves
+from robots.core import AdamParams, AdamState, adam_scalars, adam_update_, init_adam
+from robots.core import register_pytree, tensor_leaves
 
 SHAKESPEARE_URL = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
 
@@ -289,7 +289,7 @@ def forward_backward(
 
     grads has the same dataclass type as weights (one grad tensor per weight
     tensor). Nothing is mutated: no .grad, no optimizer. Requires the weight
-    dataclass to be a registered pytree (robots.tree.register_pytree).
+    dataclass to be a registered pytree (robots.core.register_pytree).
     metrics gains a "loss" entry.
     """
     grad_fn = torch.func.grad_and_value(loss_fn, argnums=0, has_aux=True)

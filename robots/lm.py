@@ -15,7 +15,7 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
-from robots.tree import register_pytree
+from robots.core import register_pytree
 
 
 # ---------------------------------------------------------------------------

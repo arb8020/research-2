@@ -1,7 +1,7 @@
 """Model-based actor-critic on CartPole.
 
-Self-contained: everything except Adam (robots.optim) and the pytree helpers
-(robots.tree) is defined in this file.
+Self-contained: everything except Adam (robots.core) and the pytree helpers
+(robots.core) is defined in this file.
 
 Two training phases per iteration:
 1. Train the world model on real transitions (supervised, wm_loss).
@@ -24,8 +24,8 @@ import torch.nn.functional as F
 
 from observe import artifact, metrics, setup_logging, span
 from observe.git import git_info
-from robots.optim import AdamParams, AdamState, adam_scalars, adam_update_, init_adam
-from robots.tree import register_pytree, tensor_leaves
+from robots.core import AdamParams, AdamState, adam_scalars, adam_update_, init_adam
+from robots.core import register_pytree, tensor_leaves
 
 # ---------------------------------------------------------------------------
 # Model: policy and value networks (separate: no shared trunk)
@@ -478,7 +478,7 @@ def forward_backward(
 
     grads has the same dataclass type as weights (one grad tensor per weight
     tensor). Nothing is mutated: no .grad, no optimizer. Requires the weight
-    dataclass to be a registered pytree (robots.tree.register_pytree).
+    dataclass to be a registered pytree (robots.core.register_pytree).
     metrics gains a "loss" entry.
     """
     grad_fn = torch.func.grad_and_value(loss_fn, argnums=0, has_aux=True)

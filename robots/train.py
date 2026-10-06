@@ -12,8 +12,8 @@ import torch.nn.functional as F
 
 from robots.collect import Batch, Step
 from robots.models import PolicyWeights, ValueWeights, policy_act, policy_forward, value_forward
-from robots.optim import AdamParams, AdamState, adam_scalars, adam_update_, init_adam
-from robots.tree import tensor_leaves, tree_map
+from robots.core import AdamParams, AdamState, adam_scalars, adam_update_, init_adam
+from robots.core import tensor_leaves, tree_map
 
 log = logging.getLogger("robots.train")
 
@@ -46,7 +46,7 @@ def forward_backward(
 
     grads has the same dataclass type as weights (one grad tensor per weight
     tensor). Nothing is mutated: no .grad, no optimizer. Requires the weight
-    dataclass to be a registered pytree (robots.tree.register_pytree).
+    dataclass to be a registered pytree (robots.core.register_pytree).
     metrics gains a "loss" entry.
     """
     grad_fn = torch.func.grad_and_value(loss_fn, argnums=0, has_aux=True)

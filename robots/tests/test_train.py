@@ -8,7 +8,7 @@ from __future__ import annotations
 import torch
 
 from robots.models import init_policy, init_value
-from robots.optim import AdamParams, adam_scalars, adam_update_, init_adam
+from robots.core import AdamParams, adam_scalars, adam_update_, init_adam
 from robots.train import (
     LossFnInputs,
     forward_backward,
@@ -19,7 +19,7 @@ from robots.train import (
     train_loop,
     train_step,
 )
-from robots.tree import tensor_leaves, tree_map
+from robots.core import tensor_leaves, tree_map
 
 
 def _dummy_inputs(n: int = 6, seed: int = 0) -> LossFnInputs:
