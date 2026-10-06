@@ -14,17 +14,16 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 import torch.nn.functional as F
 
 from robots.core import register_pytree
 
-
 # ---------------------------------------------------------------------------
 # Weight dataclasses (same shapes as kelpie/gpt2.py)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class GPT2Config:

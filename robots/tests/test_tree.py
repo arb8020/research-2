@@ -10,7 +10,7 @@ from robots.lm import GPT2, Layer, Linear, Norm
 from robots.models import WMWeights, init_policy, init_wm, wm_forward
 
 
-def test_grad_over_wm_weights_keeps_static_int_fields():
+def test_grad_over_wm_weights_keeps_static_int_fields() -> None:
     torch.manual_seed(0)
     w = init_wm(obs_dim=4, act_dim=2, hidden=8)
 
@@ -24,7 +24,7 @@ def test_grad_over_wm_weights_keeps_static_int_fields():
     assert len(tensor_leaves(grads)) == 10
 
 
-def test_tree_map_nested_gpt2_shape():
+def test_tree_map_nested_gpt2_shape() -> None:
     def norm() -> Norm:
         return Norm(w=torch.ones(3), b=torch.zeros(3))
 
@@ -45,7 +45,7 @@ def test_tree_map_nested_gpt2_shape():
     assert torch.equal(summed.wte, 3 * torch.ones(5, 3))
 
 
-def test_tree_copy_writes_in_place_and_trainable_clones():
+def test_tree_copy_writes_in_place_and_trainable_clones() -> None:
     torch.manual_seed(0)
     dst = trainable(init_policy(obs_dim=2, act_dim=2, hidden=4))
     ptrs = [x.data_ptr() for x in tensor_leaves(dst)]
@@ -57,7 +57,7 @@ def test_tree_copy_writes_in_place_and_trainable_clones():
     assert all(x.requires_grad for x in tensor_leaves(dst))
 
 
-def test_unregistered_dataclass_is_an_error():
+def test_unregistered_dataclass_is_an_error() -> None:
     @dataclass(frozen=True)
     class Loose:
         w: torch.Tensor
@@ -66,7 +66,7 @@ def test_unregistered_dataclass_is_an_error():
         tree_map(lambda x: x, [Loose(w=torch.ones(1))])
 
 
-def test_none_vs_tensor_field_mismatch_names_the_field():
+def test_none_vs_tensor_field_mismatch_names_the_field() -> None:
     @register_pytree
     @dataclass(frozen=True)
     class MaybeBias:
@@ -79,6 +79,6 @@ def test_none_vs_tensor_field_mismatch_names_the_field():
         tree_map(lambda a, b: a + b, with_bias, without)
 
 
-def test_non_tensor_leaf_in_list_names_the_path():
+def test_non_tensor_leaf_in_list_names_the_path() -> None:
     with pytest.raises(TypeError, match=r"\[1\]: non-tensor leaf int"):
         tree_map(lambda x: x, [torch.ones(1), 3])
