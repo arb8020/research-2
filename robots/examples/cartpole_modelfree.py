@@ -358,53 +358,33 @@ def to_floats(metrics: Metrics) -> dict[str, float]:
 
 
 # ---------------------------------------------------------------------------
-# Eval + record
+# Eval
 # ---------------------------------------------------------------------------
 
-def evaluate(env: gymnasium.Env, pi: MLP, num_episodes: int = 3) -> tuple[float, float]:
-    """Run policy in real env, return (mean reward, mean episode length)."""
-    total = 0.0
-    total_len = 0
+def evaluate(env: gymnasium.Env, pi: MLP, num_episodes: int = 3) -> list[dict[str, Any]]:
+    """Play num_episodes with the (sampling) policy; return each as a trajectory payload.
+
+    Payload (application/x-trajectory+json, see observe/DESIGN.md): {"env", "obs", "actions", "rewards"}, with len(obs) == len(actions) + 1
+    (obs includes the terminal obs, so the renderer can draw the frame it ended on).
+    """
+    assert num_episodes > 0
+    env_id = env.spec.id if env.spec is not None else "unknown"
+    trajectories: list[dict[str, Any]] = []
     for _ in range(num_episodes):
         obs, _ = env.reset()
-        obs_t = torch.tensor(obs, dtype=torch.float32)
-        ep_reward = 0.0
-        ep_len = 0
+        observations: list[list[float]] = [[float(x) for x in obs]]
+        actions: list[int] = []
+        rewards: list[float] = []
         done = False
         while not done:
-            action = policy_act(pi, obs_t)
+            action = policy_act(pi, _to_tensor(obs))
             obs, reward, terminated, truncated, _ = env.step(action)
-            obs_t = torch.tensor(obs, dtype=torch.float32)
-            ep_reward += reward
-            ep_len += 1
+            actions.append(int(action))
+            rewards.append(float(reward))
+            observations.append([float(x) for x in obs])
             done = terminated or truncated
-        total += ep_reward
-        total_len += ep_len
-    return total / num_episodes, total_len / num_episodes
-
-
-def record_episode(env: gymnasium.Env, pi: MLP) -> dict[str, Any]:
-    """Play one greedy episode and return it as a trajectory artifact payload."""
-    obs, _ = env.reset()
-    observations: list[list[float]] = [[float(x) for x in obs]]
-    actions: list[int] = []
-    rewards: list[float] = []
-
-    done = False
-    while not done:
-        action = policy_act(pi, torch.tensor(obs, dtype=torch.float32))
-        obs, reward, terminated, truncated, _ = env.step(action)
-        actions.append(int(action))
-        rewards.append(float(reward))
-        observations.append([float(x) for x in obs])
-        done = terminated or truncated
-
-    return {
-        "env": env.spec.id if env.spec is not None else "unknown",
-        "obs": observations,
-        "actions": actions,
-        "rewards": rewards,
-    }
+        trajectories.append({"env": env_id, "obs": observations, "actions": actions, "rewards": rewards})
+    return trajectories
 
 
 # ---------------------------------------------------------------------------
@@ -459,10 +439,11 @@ def main() -> None:
 
         if i % 10 == 0:
             with span("robots.eval", attributes={"step": i}):
-                eval_reward, eval_ep_len = evaluate(eval_env, pi)
-                trajectory = record_episode(eval_env, pi)
+                trajectories = evaluate(eval_env, pi)
+            eval_reward = sum(sum(t["rewards"]) for t in trajectories) / len(trajectories)
+            eval_ep_len = sum(len(t["actions"]) for t in trajectories) / len(trajectories)
             metrics({"eval_reward": eval_reward, "eval_ep_len": eval_ep_len}, step=i)
-            artifact("rollout", trajectory, mime="application/x-trajectory+json", step=i)
+            artifact("rollout", trajectories[0], mime="application/x-trajectory+json", step=i)
             print(
                 f"step {i}: eval_reward={eval_reward:.1f} "
                 f"train_ep_return={m_log.get('train_ep_return', float('nan')):.1f} "
