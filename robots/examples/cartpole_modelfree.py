@@ -1,28 +1,461 @@
-"""Model-free actor-critic on CartPole: separate policy and value networks, two train_steps. Uses the robots sdk.
+"""Model-free actor-critic on CartPole: separate policy and value networks, two train_steps.
+
+Self-contained: everything except Adam (robots.optim) and the pytree helpers
+(robots.tree) is defined in this file.
 
   PYTHONPATH=. robots/.venv/bin/python robots/examples/cartpole_modelfree.py --name modelfree-fixed --iters 500
 """
 
+from __future__ import annotations
+
 import argparse
+from collections.abc import Callable
+from dataclasses import dataclass, replace
+from typing import Any, TypeAlias, TypeVar
 
 import gymnasium
 import torch
+import torch.nn.functional as F
 
 from observe import artifact, metrics, setup_logging, span
 from observe.git import git_info
-from robots.collect import collect, rollout_init
-from robots.models import init_policy, init_value
-from robots.optim import AdamParams, init_adam
-from robots.train import (
-    compute_loss_fn_inputs,
-    evaluate,
-    record_episode,
-    reinforce_loss,
-    to_floats,
-    train_step,
-    value_loss,
-)
+from robots.optim import AdamParams, AdamState, adam_scalars, adam_update_, init_adam
+from robots.tree import register_pytree, tensor_leaves
 
+# ---------------------------------------------------------------------------
+# Model: policy and value networks (separate: no shared trunk)
+# ---------------------------------------------------------------------------
+
+
+def _linear(out_dim: int, in_dim: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """Xavier-uniform weight + zero bias, both with requires_grad=True."""
+    w = torch.empty(out_dim, in_dim, requires_grad=True)
+    torch.nn.init.xavier_uniform_(w)
+    b = torch.zeros(out_dim, requires_grad=True)
+    return w, b
+
+
+@register_pytree
+@dataclass(frozen=True)
+class PolicyWeights:
+    """2-layer MLP policy: obs -> action logits. No value head (see ValueWeights).
+
+    Frozen dataclass — fields can't be reassigned, but the tensors themselves
+    are mutable (the optimizer updates them in place).
+    """
+
+    # MLP trunk: two hidden layers
+    w1: torch.Tensor  # (hidden, obs_dim)
+    b1: torch.Tensor  # (hidden,)
+    w2: torch.Tensor  # (hidden, hidden)
+    b2: torch.Tensor  # (hidden,)
+    # Action head
+    w_action: torch.Tensor  # (act_dim, hidden)
+    b_action: torch.Tensor  # (act_dim,)
+
+
+def init_policy(obs_dim: int, act_dim: int, hidden: int = 64) -> PolicyWeights:
+    """Initialize policy weights with Xavier uniform (matching nn.Linear defaults)."""
+    w1, b1 = _linear(hidden, obs_dim)
+    w2, b2 = _linear(hidden, hidden)
+    w_action, b_action = _linear(act_dim, hidden)
+    return PolicyWeights(w1=w1, b1=b1, w2=w2, b2=b2, w_action=w_action, b_action=b_action)
+
+
+def policy_forward(w: PolicyWeights, obs: torch.Tensor) -> torch.Tensor:
+    """obs (batch, obs_dim) -> logits (batch, act_dim)."""
+    h = F.relu(obs @ w.w1.T + w.b1)  # (batch, hidden)
+    h = F.relu(h @ w.w2.T + w.b2)  # (batch, hidden)
+    return h @ w.w_action.T + w.b_action  # (batch, act_dim)
+
+
+def policy_act(w: PolicyWeights, obs: torch.Tensor) -> int:
+    """Sample one action from the policy. obs: (obs_dim,)."""
+    with torch.no_grad():
+        logits = policy_forward(w, obs.unsqueeze(0))  # (1, act_dim)
+        dist = torch.distributions.Categorical(logits=logits)
+        return dist.sample().item()
+
+
+@register_pytree
+@dataclass(frozen=True)
+class ValueWeights:
+    """2-layer MLP state-value function: obs -> V(obs). Own trunk."""
+
+    # MLP trunk: two hidden layers
+    w1: torch.Tensor  # (hidden, obs_dim)
+    b1: torch.Tensor  # (hidden,)
+    w2: torch.Tensor  # (hidden, hidden)
+    b2: torch.Tensor  # (hidden,)
+    # Value head
+    w_value: torch.Tensor  # (1, hidden)
+    b_value: torch.Tensor  # (1,)
+
+
+def init_value(obs_dim: int, hidden: int = 64) -> ValueWeights:
+    """Initialize value weights with Xavier uniform (matching nn.Linear defaults)."""
+    w1, b1 = _linear(hidden, obs_dim)
+    w2, b2 = _linear(hidden, hidden)
+    w_value, b_value = _linear(1, hidden)
+    return ValueWeights(w1=w1, b1=b1, w2=w2, b2=b2, w_value=w_value, b_value=b_value)
+
+
+def value_forward(w: ValueWeights, obs: torch.Tensor) -> torch.Tensor:
+    """obs (batch, obs_dim) -> value (batch,)."""
+    h = F.relu(obs @ w.w1.T + w.b1)  # (batch, hidden)
+    h = F.relu(h @ w.w2.T + w.b2)  # (batch, hidden)
+    return (h @ w.w_value.T + w.b_value)[:, 0]  # (batch, 1) -> (batch,)
+
+
+def get_value(w: ValueWeights, obs: torch.Tensor) -> float:
+    """Detached V(obs) for one obs. obs: (obs_dim,)."""
+    with torch.no_grad():
+        return value_forward(w, obs.unsqueeze(0)).item()
+
+
+# ---------------------------------------------------------------------------
+# Collection: on-policy experience from the real env. State in, state out.
+#
+# Layers (each built from the one above it):
+#     rollout_init(env, seed)      -> RolloutState                         # reset once, at the start
+#     collect_step(env, pi, vf, state) -> (state, Step, EpisodeEnd | None)   # one env step
+#     collect(env, pi, vf, state, n)   -> (state, Batch)                     # n steps, continues episodes
+#
+# pi picks actions; vf supplies every recorded value (Step.value, bootstrap_value, last_value).
+#
+# Nothing here resets between batches: the only resets happen in rollout_init and
+# inside collect_step when an episode ends. So an episode can span many batches.
+#
+# Every value needed to compute training targets is recorded here, at collection
+# time, so turning a Batch into loss inputs is a pure function (no network calls):
+#     Step.bootstrap_value = V(next_obs) on a truncated step, else 0.0
+#     Batch.last_value     = V(last_obs), for the cut at the batch end
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class RolloutState:
+    """What must survive between batches."""
+
+    obs: torch.Tensor          # (obs_dim,) the obs the next step acts on
+    episode_return: float      # running reward total of the unfinished episode
+    episode_len: int           # steps so far in the unfinished episode
+
+
+@dataclass(frozen=True)
+class Step:
+    """One recorded step."""
+
+    obs: torch.Tensor          # (obs_dim,) obs the action was chosen from
+    action: int
+    reward: float
+    terminated: bool           # real ending (pole fell): future reward = 0
+    truncated: bool            # time limit: future reward unknown -> bootstrap with V(next_obs)
+    next_obs: torch.Tensor     # (obs_dim,) true next obs, BEFORE any reset
+    value: float               # detached V(obs), from collection time
+    bootstrap_value: float     # detached V(next_obs) if truncated (and not terminated), else 0.0
+
+
+@dataclass(frozen=True)
+class EpisodeEnd:
+    """Emitted by collect_step when an episode finishes. For logging."""
+
+    episode_return: float
+    episode_len: int
+    timed_out: bool   # ended by the time limit with the future unknown (bootstrapped).
+
+
+@dataclass(frozen=True)
+class Batch:
+    steps: list[Step]
+    episodes: list[EpisodeEnd]  # episodes that FINISHED during this batch
+    last_obs: torch.Tensor      # (obs_dim,) obs the NEXT batch will act on
+    last_value: float           # detached V(last_obs): bootstraps the cut at the batch end
+
+
+def _to_tensor(obs) -> torch.Tensor:
+    return torch.tensor(obs, dtype=torch.float32)
+
+
+def rollout_init(env: gymnasium.Env, seed: int | None = None) -> RolloutState:
+    obs, _ = env.reset(seed=seed)
+    return RolloutState(obs=_to_tensor(obs), episode_return=0.0, episode_len=0)
+
+
+def collect_step(
+    env: gymnasium.Env,
+    pi: PolicyWeights,
+    vf: ValueWeights,
+    state: RolloutState,
+) -> tuple[RolloutState, Step, EpisodeEnd | None]:
+    """Act once, step the env, record it. Resets the env if the episode ended."""
+    with torch.no_grad():
+        logits = policy_forward(pi, state.obs.unsqueeze(0))  # (1, act_dim)
+        dist = torch.distributions.Categorical(logits=logits)
+        action = dist.sample()
+
+    value = get_value(vf, state.obs)
+    next_obs, reward, terminated, truncated, _ = env.step(action.item())
+    next_obs_t = _to_tensor(next_obs)
+
+    # gymnasium can report terminated AND truncated on the time-limit step.
+    # A real ending wins: the future is known to be zero, nothing to bootstrap.
+    needs_bootstrap = bool(truncated) and not bool(terminated)
+    bootstrap_value = get_value(vf, next_obs_t) if needs_bootstrap else 0.0
+
+    step = Step(
+        obs=state.obs,
+        action=action.item(),
+        reward=float(reward),
+        terminated=bool(terminated),
+        truncated=bool(truncated),
+        next_obs=next_obs_t,
+        value=value,
+        bootstrap_value=bootstrap_value,
+    )
+
+    ep_return = state.episode_return + float(reward)
+    ep_len = state.episode_len + 1
+
+    if terminated or truncated:
+        ended = EpisodeEnd(episode_return=ep_return, episode_len=ep_len, timed_out=needs_bootstrap)
+        return rollout_init(env), step, ended
+
+    return replace(state, obs=next_obs_t, episode_return=ep_return, episode_len=ep_len), step, None
+
+
+def collect(
+    env: gymnasium.Env,
+    pi: PolicyWeights,
+    vf: ValueWeights,
+    state: RolloutState,
+    num_steps: int,
+) -> tuple[RolloutState, Batch]:
+    """num_steps of experience. Picks up exactly where `state` left off."""
+    assert num_steps > 0
+    steps: list[Step] = []
+    episodes: list[EpisodeEnd] = []
+    for _ in range(num_steps):
+        state, step, ended = collect_step(env, pi, vf, state)
+        steps.append(step)
+        if ended is not None:
+            episodes.append(ended)
+    batch = Batch(
+        steps=steps,
+        episodes=episodes,
+        last_obs=state.obs,
+        last_value=get_value(vf, state.obs),
+    )
+    return state, batch
+
+
+# ---------------------------------------------------------------------------
+# Algorithm: batch -> loss inputs (pure)
+# ---------------------------------------------------------------------------
+
+# A processed Batch (Tinker style: named tensors, losses read the keys they need).
+# compute_loss_fn_inputs produces:
+#   "obs"        (T, obs_dim) float
+#   "actions"    (T,) long
+#   "returns"    (T,) value target
+#   "advantages" (T,) returns - collected V(obs); constants, no grad
+LossFnInputs: TypeAlias = dict[str, torch.Tensor]
+
+
+def compute_returns(steps: list[Step], last_value: float, gamma: float) -> list[float]:
+    """Discounted, bootstrapped returns, computed backwards.
+
+    Where the future comes from, per step:
+        episode ended here (terminated or truncated) -> step.bootstrap_value
+            (0.0 on termination, V(next_obs) on truncation — recorded at collection)
+        otherwise -> the next step's return (last_value for the batch's final step)
+    """
+    assert 0.0 <= gamma <= 1.0
+    returns: list[float] = []
+    g = last_value
+    for step in reversed(steps):
+        # Invalid state: a real ending has no future to bootstrap from.
+        assert not step.terminated or step.bootstrap_value == 0.0, step
+        ended = step.terminated or step.truncated
+        future = step.bootstrap_value if ended else g
+        g = step.reward + gamma * future
+        returns.append(g)
+    returns.reverse()
+    return returns
+
+
+def compute_loss_fn_inputs(batch: Batch, gamma: float) -> LossFnInputs:
+    """Batch -> LossFnInputs. Pure: no network calls, everything was recorded at collection."""
+    assert len(batch.steps) > 0
+    returns = torch.tensor(compute_returns(batch.steps, batch.last_value, gamma), dtype=torch.float32)
+    values = torch.tensor([s.value for s in batch.steps], dtype=torch.float32)
+    return {
+        "obs": torch.stack([s.obs for s in batch.steps]),
+        "actions": torch.tensor([s.action for s in batch.steps], dtype=torch.long),
+        "returns": returns,
+        "advantages": returns - values,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Algorithm: losses. All (weights, inputs) -> (loss, metrics), torch.func-safe:
+# no .item(), no data-dependent Python control flow, metrics are tensors.
+# Policy and value are separate weight objects, trained by separate train_steps.
+# ---------------------------------------------------------------------------
+
+def reinforce_loss(
+    pi: PolicyWeights,
+    inputs: LossFnInputs,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Policy-gradient term: mean(-log pi(a|s) * advantage). Reads obs, actions, advantages."""
+    logits = policy_forward(pi, inputs["obs"])                                      # (T, act_dim)
+    log_probs_all = F.log_softmax(logits, dim=-1)                                   # (T, act_dim)
+    logprob = log_probs_all.gather(1, inputs["actions"].unsqueeze(1)).squeeze(1)    # (T,)
+    entropy = -(log_probs_all.exp() * log_probs_all).sum(dim=-1)                    # (T,)
+    advantages = inputs["advantages"].detach()
+    loss = -(logprob * advantages).mean()
+    metrics = {
+        "pi_loss": loss.detach(),
+        "entropy": entropy.mean().detach(),
+        "advantage_mean": advantages.mean(),
+        "advantage_std": advantages.std(correction=0),
+    }
+    return loss, metrics
+
+
+def value_loss(
+    vf: ValueWeights,
+    inputs: LossFnInputs,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Value regression: mean((V(obs) - return)^2). Reads obs, returns."""
+    values = value_forward(vf, inputs["obs"])                                       # (T,)
+    returns = inputs["returns"].detach()
+    loss = ((values - returns) ** 2).mean()
+    metrics = {
+        "value_loss": loss.detach(),
+        "value_mean": values.mean().detach(),
+        "return_mean": returns.mean(),
+    }
+    return loss, metrics
+
+
+# ---------------------------------------------------------------------------
+# Train: one generic step
+#
+#   train_step(loss_fn, weights, opt_state, inputs, cfg, step)
+#     = forward_backward(loss_fn, weights, inputs)             -> grads, metrics
+#     + adam_update_(weights, grads, opt_state, cfg, adam_scalars(cfg, step, device_of(weights)))
+# ---------------------------------------------------------------------------
+
+W = TypeVar("W")
+I = TypeVar("I")
+
+# (weights, inputs) -> (scalar loss, metrics). Metrics are tensors so a LossFn
+# stays torch.func-safe (no .item()); convert with to_floats at the logging edge.
+LossFn = Callable[[W, I], tuple[torch.Tensor, dict[str, torch.Tensor]]]
+Metrics = dict[str, torch.Tensor]
+
+
+def forward_backward(
+    loss_fn: LossFn[W, I],
+    weights: W,
+    inputs: I,
+) -> tuple[W, Metrics]:
+    """Gradients of loss_fn w.r.t. weights, plus the loss_fn's metrics.
+
+    grads has the same dataclass type as weights (one grad tensor per weight
+    tensor). Nothing is mutated: no .grad, no optimizer. Requires the weight
+    dataclass to be a registered pytree (robots.tree.register_pytree).
+    metrics gains a "loss" entry.
+    """
+    grad_fn = torch.func.grad_and_value(loss_fn, argnums=0, has_aux=True)
+    grads, (loss, metrics) = grad_fn(weights, inputs)
+    assert type(grads) is type(weights)
+    assert "loss" not in metrics
+    return grads, {**metrics, "loss": loss.detach()}
+
+
+def device_of(weights: Any) -> torch.device:
+    """The device of a weight tree (asserts all leaves agree)."""
+    leaves = tensor_leaves(weights)
+    assert len(leaves) > 0
+    device = leaves[0].device
+    assert all(x.device == device for x in leaves), "weights span multiple devices"
+    return device
+
+
+def train_step(
+    loss_fn: LossFn[W, I],
+    weights: W,
+    opt_state: AdamState[W],
+    inputs: I,
+    cfg: AdamParams,
+    step: int,
+) -> tuple[AdamState[W], Metrics]:
+    """One update: forward_backward, then Adam in place on weights. step is 1-based."""
+    grads, metrics = forward_backward(loss_fn, weights, inputs)
+    scalars = adam_scalars(cfg, step, device_of(weights))
+    new_state = adam_update_(weights, grads, opt_state, cfg, scalars)
+    return new_state, metrics
+
+
+def to_floats(metrics: Metrics) -> dict[str, float]:
+    """Logging edge: tensor metrics -> Python floats (one host sync per metric)."""
+    return {k: v.item() for k, v in metrics.items()}
+
+
+# ---------------------------------------------------------------------------
+# Eval + record
+# ---------------------------------------------------------------------------
+
+def evaluate(env: gymnasium.Env, pi: PolicyWeights, num_episodes: int = 3) -> tuple[float, float]:
+    """Run policy in real env, return (mean reward, mean episode length)."""
+    total = 0.0
+    total_len = 0
+    for _ in range(num_episodes):
+        obs, _ = env.reset()
+        obs_t = torch.tensor(obs, dtype=torch.float32)
+        ep_reward = 0.0
+        ep_len = 0
+        done = False
+        while not done:
+            action = policy_act(pi, obs_t)
+            obs, reward, terminated, truncated, _ = env.step(action)
+            obs_t = torch.tensor(obs, dtype=torch.float32)
+            ep_reward += reward
+            ep_len += 1
+            done = terminated or truncated
+        total += ep_reward
+        total_len += ep_len
+    return total / num_episodes, total_len / num_episodes
+
+
+def record_episode(env: gymnasium.Env, pi: PolicyWeights) -> dict[str, Any]:
+    """Play one greedy episode and return it as a trajectory artifact payload."""
+    obs, _ = env.reset()
+    observations: list[list[float]] = [[float(x) for x in obs]]
+    actions: list[int] = []
+    rewards: list[float] = []
+
+    done = False
+    while not done:
+        action = policy_act(pi, torch.tensor(obs, dtype=torch.float32))
+        obs, reward, terminated, truncated, _ = env.step(action)
+        actions.append(int(action))
+        rewards.append(float(reward))
+        observations.append([float(x) for x in obs])
+        done = terminated or truncated
+
+    return {
+        "env": env.spec.id if env.spec is not None else "unknown",
+        "obs": observations,
+        "actions": actions,
+        "rewards": rewards,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Model-free actor-critic on CartPole")
