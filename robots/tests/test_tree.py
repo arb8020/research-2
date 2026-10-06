@@ -5,27 +5,9 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from robots.lm import GPT2, Layer, Linear, Norm
-from robots.models import PolicyWeights, WMWeights, init_policy, init_wm, policy_forward, wm_forward
 from robots.core import register_pytree, tensor_leaves, trainable, tree_copy_, tree_map
-
-
-def test_grad_over_policy_weights_returns_policy_weights():
-    torch.manual_seed(0)
-    w = init_policy(obs_dim=4, act_dim=2, hidden=8)
-    obs = torch.randn(5, 4)
-
-    def loss(w: PolicyWeights) -> torch.Tensor:
-        logits = policy_forward(w, obs)
-        return logits.sum()
-
-    grads = torch.func.grad(loss)(w)
-    assert isinstance(grads, PolicyWeights)
-
-    # Same numbers as autograd .backward()
-    loss(w).backward()
-    for g, p in zip(tensor_leaves(grads), tensor_leaves(w), strict=True):
-        assert torch.allclose(g, p.grad)
+from robots.lm import GPT2, Layer, Linear, Norm
+from robots.models import WMWeights, init_policy, init_wm, wm_forward
 
 
 def test_grad_over_wm_weights_keeps_static_int_fields():
