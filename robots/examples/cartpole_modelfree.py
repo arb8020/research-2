@@ -99,7 +99,7 @@ def get_value(vf: MLP, obs: torch.Tensor) -> float:
 # Every value needed to compute training targets is recorded here, at collection
 # time, so turning a Batch into loss inputs is a pure function (no network calls):
 #     Step.bootstrap_value = V(next_obs) on a truncated step, else 0.0
-#     Batch.last_value     = V(last_obs), for the cut at the batch end
+#     Batch.last_value     = V(obs the next batch acts on), for the cut at the batch end
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -120,7 +120,6 @@ class Step:
     reward: float
     terminated: bool           # real ending (pole fell): future reward = 0
     truncated: bool            # time limit: future reward unknown -> bootstrap with V(next_obs)
-    next_obs: torch.Tensor     # (obs_dim,) true next obs, BEFORE any reset
     value: float               # detached V(obs), from collection time
     bootstrap_value: float     # detached V(next_obs) if truncated (and not terminated), else 0.0
 
@@ -131,15 +130,13 @@ class EpisodeEnd:
 
     episode_return: float
     episode_len: int
-    timed_out: bool   # ended by the time limit with the future unknown (bootstrapped).
 
 
 @dataclass(frozen=True)
 class Batch:
     steps: list[Step]
     episodes: list[EpisodeEnd]  # episodes that FINISHED during this batch
-    last_obs: torch.Tensor      # (obs_dim,) obs the NEXT batch will act on
-    last_value: float           # detached V(last_obs): bootstraps the cut at the batch end
+    last_value: float           # detached V(obs the NEXT batch acts on): bootstraps the cut at the batch end
 
 
 def _to_tensor(obs) -> torch.Tensor:
@@ -178,7 +175,6 @@ def collect_step(
         reward=float(reward),
         terminated=bool(terminated),
         truncated=bool(truncated),
-        next_obs=next_obs_t,
         value=value,
         bootstrap_value=bootstrap_value,
     )
@@ -187,7 +183,7 @@ def collect_step(
     ep_len = state.episode_len + 1
 
     if terminated or truncated:
-        ended = EpisodeEnd(episode_return=ep_return, episode_len=ep_len, timed_out=needs_bootstrap)
+        ended = EpisodeEnd(episode_return=ep_return, episode_len=ep_len)
         return rollout_init(env), step, ended
 
     return replace(state, obs=next_obs_t, episode_return=ep_return, episode_len=ep_len), step, None
@@ -209,13 +205,7 @@ def collect(
         steps.append(step)
         if ended is not None:
             episodes.append(ended)
-    batch = Batch(
-        steps=steps,
-        episodes=episodes,
-        last_obs=state.obs,
-        last_value=get_value(vf, state.obs),
-    )
-    return state, batch
+    return state, Batch(steps=steps, episodes=episodes, last_value=get_value(vf, state.obs))
 
 
 # ---------------------------------------------------------------------------
