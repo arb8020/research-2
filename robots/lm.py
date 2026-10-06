@@ -4,6 +4,10 @@ The weight dataclasses mirror kelpie's frozen-dataclass convention (GPT2, Layer,
 but the forward is training-shaped: full-sequence, causal mask, standard PyTorch ops, gradients
 everywhere. Kelpie's inference forward uses paged attention + custom kernels — a different
 function on the same weights.
+
+REFERENCE COPY. robots/examples/* carry their own inlined versions of what they use;
+editing this file does not change any example. Kept as the seed of a shared models layer
+(MLP/LSTM/MinGRU/GPT-2, kelpie-shaped, with kernels) once that lands. Dedupe/vendor as needed.
 """
 
 from __future__ import annotations
