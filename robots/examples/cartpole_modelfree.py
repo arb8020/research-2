@@ -271,7 +271,7 @@ def reinforce_loss(
     log_probs_all = F.log_softmax(logits, dim=-1)                                   # (T, act_dim)
     logprob = log_probs_all.gather(1, inputs["actions"].unsqueeze(1)).squeeze(1)    # (T,)
     entropy = -(log_probs_all.exp() * log_probs_all).sum(dim=-1)                    # (T,)
-    advantages = inputs["advantages"].detach()
+    advantages = inputs["advantages"]
     loss = -(logprob * advantages).mean()
     metrics = {
         "pi_loss": loss.detach(),
@@ -288,7 +288,7 @@ def value_loss(
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """Value regression: mean((V(obs) - return)^2). Reads obs, returns."""
     values = mlp_forward(vf, inputs["obs"])[:, 0]                                   # (T,)
-    returns = inputs["returns"].detach()
+    returns = inputs["returns"]
     loss = ((values - returns) ** 2).mean()
     metrics = {
         "value_loss": loss.detach(),
