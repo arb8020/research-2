@@ -5,6 +5,7 @@ calls; the provider is a flag, and nothing here names one.
     box logs <id> [-f]         the run's output from its first line (it outlives the box)
     box who                    running boxes `box run` launched, and what each runs
     box kill <id>              stop one run `box run` launched; by id, never by name
+    box gpus [--sync]          GPU names (--gpu takes these), provider ids, $/hr; --sync refreshes prices
     box gc [--yes]             old runs, scratch volumes, stale caches; deletes only with --yes
     box setup --local          kelpie: this worktree's shim (shared cache), libkelpie, uv sync --frozen
     box doctor [args]          kelpie: `kelpie doctor [args]` in this worktree's kelpie-http
@@ -27,11 +28,11 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from box import gc, recipe, runs
+from box import gc, gpus, recipe, runs
 from box.kelpie import find_kelpie, local
 from box.kelpie import gc as kelpie_gc
 from box.kelpie import recipe as kelpie_recipe
-from box.provider import Box, Job, Provider
+from box.provider import Box, Job, Offering, Provider
 from observe import setup_logging, span
 
 DEFAULT_VOLUME = "kelpie-a1"
@@ -54,7 +55,7 @@ def make_provider(name: str) -> Provider:
 
 def add_run_args(p: argparse.ArgumentParser, *, gpu: str, volume: str | None) -> None:
     """The flags `box run` shares with kelpie/scripts/modal_run.py."""
-    p.add_argument("--gpu", default=gpu, help="provider GPU id, e.g. A10G, A100-80GB, H100")
+    p.add_argument("--gpu", default=gpu, help="GPU name (`box gpus`), e.g. L4, A100-80GB, H100")
     p.add_argument("--count", type=int, default=1)
     p.add_argument(
         "--volume", default=volume,
@@ -93,7 +94,7 @@ def run(provider: Provider, spec: recipe.Recipe, run_args: argparse.Namespace, *
     setup_logging(log_file=run_args.log_file)
     cmd = command(run_args)
     with span("box.run", attributes={"gpu": run_args.gpu, "count": run_args.count, "cmd": cmd[:200]}) as s:
-        (offering,) = [o for o in provider.search(gpu_model=run_args.gpu, gpu_count=run_args.count) if o.id == run_args.gpu]
+        offering = pick_offering(provider, run_args.gpu, run_args.count)
         box = provider.launch(
             offering, image=spec.image, mounts=spec.mounts, volumes=spec.volumes,
             timeout=spec.box_timeout, labels=runs.labels(spec, cmd, datetime.now(UTC)),
@@ -117,6 +118,15 @@ def run(provider: Provider, spec: recipe.Recipe, run_args: argparse.Namespace, *
     if run_args.log_file and spec.spans:
         append_spans(provider, spec.spans, box, Path(run_args.log_file))
     return rc
+
+
+def pick_offering(provider: Provider, gpu: str, count: int) -> Offering:
+    """The one offering whose id or GPU name is `gpu` (any case); exits listing the known names."""
+    found = [o for o in provider.search(gpu_model=gpu, gpu_count=count) if gpu.lower() in (o.id.lower(), o.gpu_model.lower())]
+    if len(found) != 1:
+        known = ", ".join(sorted({o.gpu_model for o in provider.search(gpu_count=count)}))
+        raise SystemExit(f"box run: no single {provider.name} GPU named {gpu!r} ({len(found)} match); known: {known}")
+    return found[0]
 
 
 def follow(job: Job) -> int:
@@ -217,6 +227,15 @@ def cmd_gc(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gpus(args: argparse.Namespace) -> int:
+    if args.sync:
+        for note in gpus.sync():
+            print(f"box gpus: {note}")
+        print(f"box gpus: wrote {gpus.PRICES}")
+    print(gpus.table())
+    return 0
+
+
 def cmd_setup(args: argparse.Namespace) -> int:
     assert args.local, "argparse requires --local"
     kelpie = find_kelpie(Path.cwd())
@@ -257,6 +276,9 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--box-hours", type=float, default=6.0, help="note labelled runs older than this")
     s.add_argument("--cache-days", type=float, default=7.0)
     s.set_defaults(fn=cmd_gc)
+    s = sub.add_parser("gpus", help="GPU names box knows, each provider's id and $/hr")
+    s.add_argument("--sync", action="store_true", help="first rewrite the prices from the providers' live APIs")
+    s.set_defaults(fn=cmd_gpus)
     s = sub.add_parser("setup", help="kelpie --local: make this worktree's kelpie importable")
     s.add_argument("--local", action="store_true", required=True)
     s.set_defaults(fn=cmd_setup)

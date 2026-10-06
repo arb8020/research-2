@@ -18,6 +18,7 @@ from typing import IO
 
 import modal
 
+from box import gpus
 from box.provider import Box, ExecResult, LogLine, Mount, Offering, Status, VolumeEntry
 from observe import span
 
@@ -29,20 +30,6 @@ FIFO_WAIT_S = 60  # for the entrypoint to start and open its fifo (image pull is
 OFFERING_TAG = "box.offering"  # <gpu id>:<count>, so get() can rebuild the Offering
 TAIL_LIMIT = 10_000  # lines Job.logs(follow=False) returns for a running job
 LIST_LIMIT = 500  # sandboxes list() reads; far above any real number of concurrent boxes
-
-# Modal GPU types and their VRAM. No availability query API —
-# you request and it either works or errors.
-_GPU_CATALOG = [
-    ("T4", 16),
-    ("L4", 24),
-    ("A10G", 24),
-    ("L40S", 48),
-    ("A100-40GB", 40),
-    ("A100-80GB", 80),
-    ("H100", 80),
-    ("H200", 141),
-]
-
 
 def _resolve_image(image: str | None) -> modal.Image:
     """Resolve an image string to a modal.Image.
@@ -279,23 +266,23 @@ class Modal:
         gpu_model: str | None = None,
         gpu_count: int = 1,
     ) -> list[Offering]:
-        """Return available GPU types. Modal has no availability API —
-        this returns the known catalog, optionally filtered."""
+        """GPU types box knows Modal rents (box/gpus.py), priced from gpus.json. gpu_model is a
+        canonical name or a Modal id, any case; unknown gives []. Modal has no availability API:
+        you request and it either works or errors."""
         with span("box.search", attributes={"provider": "modal", "gpu_model": gpu_model, "gpu_count": gpu_count}) as s:
-            offerings = []
-            for gpu_name, vram in _GPU_CATALOG:
-                if gpu_model and gpu_model.lower() not in gpu_name.lower():
-                    continue
-                offerings.append(
-                    Offering(
-                        provider=self.name,
-                        id=gpu_name,
-                        gpu_model=gpu_name,
-                        gpu_count=gpu_count,
-                        gpu_memory_gb=vram,
-                        price_hr=None,
-                    )
+            prices = gpus.prices()["modal"]
+            offerings = [
+                Offering(
+                    provider=self.name,
+                    id=g.modal,
+                    gpu_model=g.name,
+                    gpu_count=gpu_count,
+                    gpu_memory_gb=g.vram_gb,
+                    price_hr=prices[g.name] * gpu_count if g.name in prices else None,
                 )
+                for g in gpus.GPUS
+                if g.modal and (gpu_model is None or gpu_model.lower() in (g.name.lower(), g.modal.lower()))
+            ]
             s.set_attr("n_results", len(offerings))
             return offerings
 
