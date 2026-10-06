@@ -1,7 +1,7 @@
 """Tests for Modal Sandbox adapter.
 
 Pure tests for anomalies. @live for real sandbox operations.
-Modal has no external API for search — catalog is static, not worth testing.
+search reads box/gpus.py + gpus.json (no API call).
 """
 
 from __future__ import annotations
@@ -31,15 +31,39 @@ class TestAnomalies:
         assert offerings[0].gpu_count == 4
 
     def test_vram_values(self):
-        """Regression guard: catalog VRAM matches real hardware."""
+        """Regression guard: VRAM matches real hardware."""
         provider = Modal.__new__(Modal)
         provider.name = "modal"
         offerings = provider.search(gpu_count=1)
-        vram = {o.id: o.gpu_memory_gb for o in offerings}
+        vram = {o.gpu_model: o.gpu_memory_gb for o in offerings}
         assert vram["T4"] == 16
         assert vram["A100-80GB"] == 80
         assert vram["H100"] == 80
         assert vram["H200"] == 141
+
+    def test_canonical_name_or_modal_id_any_case(self):
+        """--gpu a10g and --gpu A10 are the same offering, whose id is Modal's string."""
+        provider = Modal.__new__(Modal)
+        provider.name = "modal"
+        by_name = provider.search(gpu_model="a10g", gpu_count=2)
+        by_id = provider.search(gpu_model="A10", gpu_count=2)
+        assert by_name == by_id
+        assert [(o.id, o.gpu_model) for o in by_name] == [("A10", "A10G")]
+        assert by_name[0].price_hr is not None and by_name[0].price_hr > 0
+
+    def test_runpod_only_gpu_is_not_offered(self):
+        provider = Modal.__new__(Modal)
+        provider.name = "modal"
+        assert provider.search(gpu_model="RTX-5090") == []
+
+    def test_run_unknown_gpu_names_known(self):
+        from box.cli import pick_offering
+
+        provider = Modal.__new__(Modal)
+        provider.name = "modal"
+        with pytest.raises(SystemExit, match="RTX-5090.*known: .*H100.*RTX-PRO-6000"):
+            pick_offering(provider, "RTX-5090", 1)
+        assert pick_offering(provider, "rtx-pro-6000", 1).id == "RTX-PRO-6000"
 
 
 # -- live tests --
