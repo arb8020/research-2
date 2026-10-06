@@ -335,13 +335,12 @@ def forward_backward(
     grads has the same dataclass type as weights (one grad tensor per weight
     tensor). Nothing is mutated: no .grad, no optimizer. Requires the weight
     dataclass to be a registered pytree (robots.core.register_pytree).
-    metrics gains a "loss" entry.
+    The scalar loss itself is not returned: loss_fns report it in their metrics.
     """
     grad_fn = torch.func.grad_and_value(loss_fn, argnums=0, has_aux=True)
-    grads, (loss, metrics) = grad_fn(weights, inputs)
+    grads, (_loss, metrics) = grad_fn(weights, inputs)
     assert type(grads) is type(weights)
-    assert "loss" not in metrics
-    return grads, {**metrics, "loss": loss.detach()}
+    return grads, metrics
 
 
 def device_of(weights: Any) -> torch.device:
@@ -465,8 +464,7 @@ def main() -> None:
         pi_opt, m_pi = train_step(reinforce_loss, pi, pi_opt, inputs, pi_cfg, step=i)
         vf_opt, m_vf = train_step(value_loss, vf, vf_opt, inputs, vf_cfg, step=i)
 
-        # Each "loss" duplicates pi_loss / value_loss; drop it so the keys don't collide.
-        m_log = {k: v for k, v in to_floats({**m_pi, **m_vf}).items() if k != "loss"}
+        m_log = to_floats({**m_pi, **m_vf})
         m_log["train_episodes"] = float(len(batch.episodes))
         if batch.episodes:
             m_log["train_ep_return"] = sum(e.episode_return for e in batch.episodes) / len(batch.episodes)
