@@ -15,7 +15,9 @@ Every command takes --provider (default modal). From the repo root:
 
 `box run` builds a Recipe (box/recipe.py): with --profile kelpie (the default) the kelpie layer
 (box/kelpie) supplies the image, the tree mount, the volume at /data and a job that runs its
-setup and then the command; with --profile plain the command runs as-is in --image. Then:
+setup and then the command; with --profile robots (box/robots) the command runs from the repo
+root with robots/ and observe/, and its runs/ is copied after into runs/ of the checkout holding
+cwd; with --profile plain the command runs as-is in --image. Then:
 Provider.launch -> Box.spawn -> (foreground) Job.logs(follow) + terminate, or (--detach) print
 the id and return; the job keeps running and `box logs` reattaches.
 """
@@ -32,12 +34,13 @@ from box import gc, gpus, recipe, runs
 from box.kelpie import find_kelpie, local
 from box.kelpie import gc as kelpie_gc
 from box.kelpie import recipe as kelpie_recipe
+from box import robots
 from box.provider import Box, Job, Offering, Provider
 from observe import setup_logging, span
 
 DEFAULT_VOLUME = "kelpie-a1"
 DEFAULT_TIMEOUT_S = 3600
-PROFILES = ("kelpie", "plain")
+PROFILES = ("kelpie", "plain", "robots")
 
 
 def make_provider(name: str) -> Provider:
@@ -83,7 +86,12 @@ def make_recipe(args: argparse.Namespace, kelpie: Path | None) -> recipe.Recipe:
             raise SystemExit("box run: --model is a kelpie-profile option")
         return recipe.plain(args.image, {args.volume: "/data"} if args.volume else {}, cmd, args.timeout)
     if args.image:
-        raise SystemExit("box run: --image is a plain-profile option (kelpie builds its own)")
+        raise SystemExit(f"box run: --image is a plain-profile option ({args.profile} builds its own)")
+    if args.profile == "robots":
+        if args.model:
+            raise SystemExit("box run: --model is a kelpie-profile option")
+        local_runs = git_root(Path.cwd()) / "runs"
+        return robots.recipe(local_runs=local_runs, volume=args.volume or robots.VOLUME, timeout=args.timeout, cmd=cmd)
     tree = kelpie or find_kelpie(Path.cwd())
     volume = args.volume or DEFAULT_VOLUME
     return kelpie_recipe(tree, volume=volume, models=tuple(args.model), timeout=args.timeout, cmd=cmd)
@@ -117,6 +125,8 @@ def run(provider: Provider, spec: recipe.Recipe, run_args: argparse.Namespace, *
             s.set_attr("returncode", rc)
     if run_args.log_file and spec.spans:
         append_spans(provider, spec.spans, box, Path(run_args.log_file))
+    if spec.pull:
+        pull(provider, spec.pull, box)
     return rc
 
 
@@ -148,6 +158,30 @@ def append_spans(provider: Provider, spans: tuple[str, str], box: Box, log_file:
         return
     with log_file.open("ab") as f:
         f.write(data)
+
+
+def pull(provider: Provider, spec: tuple[str, str, str], box: Box) -> None:
+    """Every file the job left in the volume dir, copied into the local dir (overwriting)."""
+    volume, template, local = spec
+    remote = template.format(box_id=box.provider_id)
+    vol = provider.volume(volume)
+    try:
+        entries = [e for e in vol.ls(remote, recursive=True) if not e.is_dir]
+    except FileNotFoundError as exc:
+        print(f"box: nothing to pull from {volume}:{remote}: {exc}", file=sys.stderr)
+        return
+    for e in entries:
+        dest = Path(local) / Path(e.path).relative_to(remote)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(vol.read(e.path))
+        print(f"box: pulled {volume}:{e.path} -> {dest}", file=sys.stderr)
+
+
+def git_root(start: Path) -> Path:
+    done = subprocess.run(["git", "-C", str(start), "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False)
+    if done.returncode != 0:
+        raise SystemExit(f"box: {start} is not inside a git checkout: {done.stderr.strip()}")
+    return Path(done.stdout.strip())
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -258,7 +292,7 @@ def parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="subcmd", required=True)
     s = sub.add_parser("run", help="run a command on a fresh GPU box")
     add_run_args(s, gpu="A100-80GB", volume=None)
-    s.add_argument("--profile", choices=PROFILES, default="kelpie", help="kelpie: this checkout's tree + setup")
+    s.add_argument("--profile", choices=PROFILES, default="kelpie", help="kelpie: this checkout's tree + setup; robots: robots/ + observe/, runs/ pulled home")
     s.add_argument("--image", default=None, help="plain profile: Dockerfile path, OCI ref or provider image")
     s.add_argument("--detach", action="store_true", help="print the box id and return; the run continues")
     s.set_defaults(fn=cmd_run)
