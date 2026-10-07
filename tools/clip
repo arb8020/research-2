@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun";
+import { pathToFileURL } from "node:url";
 
 // --- extractors ---
 
@@ -24,15 +25,24 @@ async function defuddle(url: string): Promise<string | null> {
 
 async function browser(url: string): Promise<string | null> {
   try {
-    // Open in headless browser, wait for JS
-    await $`agent-browser open ${url}`.quiet();
+    // Open in headless browser, wait for JS. agent-browser needs a URL, so a
+    // local file path becomes file://<abs path>.
+    const target = /^[a-z][a-z0-9+.-]*:\/\//i.test(url)
+      ? url
+      : pathToFileURL(url).href;
+    await $`agent-browser open ${target}`.quiet();
     await Bun.sleep(2000);
 
-    // Get rendered HTML
-    const html =
+    // Get rendered HTML. `agent-browser eval` prints the result JSON-encoded
+    // (a string comes back as "\"<html>...\""), so decode it before use.
+    const out =
       await $`agent-browser eval '(() => document.documentElement.outerHTML)()'`
         .quiet()
         .text();
+    const html: unknown = JSON.parse(out);
+    if (typeof html !== "string") {
+      throw new Error(`agent-browser eval: expected a string, got ${typeof html}`);
+    }
     if (!html.trim()) return null;
 
     // Write to temp file, run defuddle on rendered HTML
@@ -48,7 +58,8 @@ async function browser(url: string): Promise<string | null> {
     } finally {
       await $`rm -f ${tmp}`.quiet();
     }
-  } catch {
+  } catch (e) {
+    console.error(`browser: ${e instanceof Error ? e.message : e}`);
     return null;
   }
 }
