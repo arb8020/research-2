@@ -15,7 +15,7 @@ The spec run and the teacher-forced build each run in their own process (`kernel
 once per process): hidden `--phase spec` / `--phase teacher` children, results as JSON
 (scripts/_fresh.py). The teacher child grades exactly the tokens the spec child emitted.
 
-    uv run --frozen --project box box run \\
+    uv run --frozen --project kelpie/kelpie-http kelpie remote \\
         --gpu A100-80GB --volume kelpie-a1 --timeout 2400 -- \\
         'HF_HUB_OFFLINE=1 python -m scripts.check_spec_teacher_forced --corpus math --max-new 256'
 """

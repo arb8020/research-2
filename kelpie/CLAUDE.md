@@ -1,19 +1,21 @@
-Run `kelpie doctor` first (`uv run --frozen kelpie doctor` in kelpie-http; `box doctor` from
-anywhere in the checkout runs the same thing). In a fresh worktree, `box setup --local` first.
+Run `kelpie doctor` first (`uv run --frozen kelpie doctor` in kelpie-http, or
+`uv run --frozen --project kelpie/kelpie-http kelpie doctor` from the repo root). In a fresh
+worktree, `kelpie setup-local` first.
 
-`box` is the repo's GPU CLI (box/cli.py; from the repo root: `uv run --frozen --project box box`,
-alias it): sugar over the box SDK, `--provider modal` by default, kelpie's setup as its default
-profile (box/kelpie/):
+kelpie's dev tooling is `kelpie` subcommands (kelpie_http/dev/); remote runs use the box SDK
+(box/sdk.py) on Modal, with kelpie's image, setup and volume (/data) all owned here:
 
-    box setup --local                        # fresh worktree: xgrammar shim, libkelpie, uv sync --frozen
-    box run --gpu H100 [--model ID] [--volume kelpie-a1] -- 'python -m scripts.<proof>'
-    box run --detach ... -- <cmd>            # prints an id and returns; use this, not tmux
-    box logs <id> -f | box who | box kill <id> | box gc [--yes]
+    kelpie setup-local                       # fresh worktree: xgrammar shim, libkelpie, uv sync --frozen
+    kelpie remote --gpu H100 [--model ID] [--volume kelpie-a1] [--timeout S] -- 'python -m scripts.<proof>'
+    kelpie remote --detach ... -- <cmd>      # prints an id and returns; use this, not tmux
+    kelpie gc [--yes]                        # stale build keys / run logs on kelpie-* volumes, local shims
 
-kelpie/scripts/modal_run.py is deprecated (a thin wrapper over box run; old flags still work).
+Then `box logs <id> -f | box who | box kill <id>` (`box` = `uv run --frozen --project box box`
+from the repo root) follow, list and stop runs.
 
 ## Testing
 
 scripts/test = zig tests + ruff + imports only; the Python test suite is parked until the
-seams are re-cut.
+seams are re-cut. kelpie_http/dev's pure tests run in box's environment, from the repo root:
+`PYTHONPATH=kelpie/kelpie-http uv run --frozen --project box --extra dev python -m pytest kelpie/kelpie-http/kelpie_http/dev -q`.
 Never run model tests on the laptop.

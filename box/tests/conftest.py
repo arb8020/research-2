@@ -16,3 +16,4 @@ def pytest_collection_modifyitems(config, items):
 
 def pytest_addoption(parser):
     parser.addoption("--live", action="store_true", help="run live API tests")
+    parser.addoption("--provider", default="local", help="the provider test_sdk runs on: local, modal, runpod")

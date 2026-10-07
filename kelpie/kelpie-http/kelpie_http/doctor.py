@@ -36,7 +36,7 @@ from kelpie_models.kernels.op import REGISTRY, Op
 
 MIN_FREE_GIB = 10.0
 GIB = 1 << 30
-# Modal GPU ids (`box run --gpu`) -> CUDA compute capability, so `--device cuda:A100`
+# GPU names (`kelpie remote --gpu`) -> CUDA compute capability, so `--device cuda:A100`
 # (or `cuda:A100-80GB`) asks what that arch binds without the GPU present.
 GPU_ARCHES: dict[str, tuple[int, int]] = {
     "T4": (7, 5),
@@ -46,9 +46,10 @@ GPU_ARCHES: dict[str, tuple[int, int]] = {
     "H100": (9, 0),
 }
 DEFAULT_VOLUME = "kelpie-a1"
-# box/providers/modal.py creates every sandbox under `modal.App.lookup("box")`.
+# box/modal_provider.py (the box SDK's Modal provider, which `kelpie remote` uses) creates every sandbox
+# under `modal.App.lookup("box")`.
 MODAL_SANDBOX_APP = "box"
-# box/kelpie/setup.py Layout: HF_HOME is <volume>/hf, so the hub cache is hf/hub on the volume.
+# kelpie_http/dev/setup.py Layout: HF_HOME is <volume>/hf, so the hub cache is hf/hub on the volume.
 VOLUME_HF_HUB = "hf/hub"
 SUBPROCESS_TIMEOUT_S = 30
 # A pane in the repo running one of these is someone's prompt or editor, not a leftover run.
@@ -311,7 +312,7 @@ def weights_on_volume(volume: str, model: str) -> Check:
     shard its names count. Snapshot links appear only once a file finished downloading, so a
     listed shard is whole; a run cut between files leaves shards missing."""
     snapshots_dir = f"{VOLUME_HF_HUB}/models--{model.replace('/', '--')}/snapshots"
-    fix = f"uv run --frozen --project box box run --gpu T4 --volume {volume} --model {model} -- true"
+    fix = f"kelpie remote --gpu T4 --volume {volume} --model {model} -- true"
     snapshots = modal_json(["volume", "ls", volume, snapshots_dir], ("Filename",))
     if isinstance(snapshots, str):
         return Check(f"weights {model}", Status.FAIL, f"not on {volume}: {snapshots}", fix)
@@ -355,8 +356,8 @@ def running_sandboxes() -> Check:
         return Check("modal sandboxes", Status.PASS, f"none running under app {MODAL_SANDBOX_APP}")
     listed = ", ".join(f"{c['Container ID']} since {c['Start Time']}" for c in boxes)
     fix = (
-        "`box who` says what each runs; if it is yours and done: `box kill <id>`, or for an "
-        "untagged one (an old modal_run): `modal container stop <id>`  (doctor never stops it)"
+        "`box who` says what each runs; if it is yours and done: `box kill <id>`, or for one "
+        "box does not list (untagged): `modal container stop <id>`  (doctor never stops it)"
     )
     detail = f"{len(boxes)} running under app {MODAL_SANDBOX_APP} (any tree): {listed}"
     return Check("modal sandboxes", Status.WARN, detail, fix)

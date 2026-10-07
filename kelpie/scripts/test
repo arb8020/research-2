@@ -78,6 +78,20 @@ def modules_of(pkg: str, module: str) -> list[str]:
     return out
 
 
+# kelpie's dev tooling runs in box's environment (box SDK, modal, observe; no kelpie deps), so
+# it is imported there: kelpie_http/dev/__init__.py.
+BOX_ENV_PREFIX = "kelpie_http.dev"
+BOX_ENV = ["uv", "run", "--frozen", "--project", str(ROOT.parent / "box"), "--extra", "dev"]
+
+
+def import_argv(name: str) -> tuple[list[str], dict[str, str] | None]:
+    if name == BOX_ENV_PREFIX or name.startswith(BOX_ENV_PREFIX + "."):
+        env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+        env["PYTHONPATH"] = str(ROOT / "kelpie-http")
+        return [*BOX_ENV, "python", "-c", f"import {name}"], env
+    return ["uv", "run", "--frozen", "python", "-c", f"import {name}"], None
+
+
 def import_smoke() -> int:
     """Import EVERY module of every package, one process each -- an unimportable module is a
     broken module, whether or not anything imports it today."""
@@ -86,12 +100,8 @@ def import_smoke() -> int:
         names = modules_of(pkg, module)
         print(f"$ import {len(names)} modules  (in {pkg})")
         for name in names:
-            rc = subprocess.run(
-                ["uv", "run", "--frozen", "python", "-c", f"import {name}"],
-                cwd=ROOT / pkg,
-                capture_output=True,
-                text=True,
-            ).returncode
+            argv, env = import_argv(name)
+            rc = subprocess.run(argv, cwd=ROOT / pkg, env=env, capture_output=True, text=True).returncode
             if rc != 0:
                 print(f"  FAIL import {name}")
                 worst = worst or rc

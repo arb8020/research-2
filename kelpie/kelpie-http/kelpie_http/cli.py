@@ -1,9 +1,12 @@
 """`kelpie <subcommand> ...`: the one dispatch table. Each entry is `module:function`, imported
 only when named, so `kelpie doctor` does not pay for serve's imports. A subcommand's function
-takes its own argv; adding one (`bench`, `remote`) is adding a row.
+takes its own argv; adding one (`bench`) is adding a row.
 
     kelpie serve --model gpt2 --device mps     # also: kelpie --model gpt2 (serve is the default)
     kelpie doctor [--device cuda:A100] [--remote --model openai/gpt-oss-20b]
+    kelpie setup-local                         # fresh worktree (kelpie_http/dev: dev tooling)
+    kelpie remote --gpu A100-80GB [--model ID] [--detach] -- 'python -m scripts.<proof>'
+    kelpie gc [--yes]
 """
 
 from __future__ import annotations
@@ -17,11 +20,17 @@ SUBCOMMANDS = {
     "cache": "kelpie_http.sdk.serve:cache_main",
     "check": "kelpie_http.sdk.serve:check_main",
     "doctor": "kelpie_http.doctor:main",
+    "setup-local": "kelpie_http.dev.local:main",
+    "remote": "kelpie_http.dev:remote",
+    "gc": "kelpie_http.dev:gc",
 }
 HELP = ("-h", "--help")
 USAGE = """usage: kelpie [SUBCOMMAND] ...   (no subcommand: serve)
     kelpie serve --model gpt2 --device mps
     kelpie doctor [--device cuda:A100] [--remote --model openai/gpt-oss-20b]
+    kelpie setup-local
+    kelpie remote --gpu A100-80GB [--volume kelpie-a1] [--model ID] [--timeout S] [--detach] -- 'cmd'
+    kelpie gc [--yes]
     kelpie <subcommand> -h
 """
 

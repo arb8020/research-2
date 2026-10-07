@@ -1,7 +1,7 @@
 [project]
 name = "box"
 version = "0.1.0"
-description = "Get a GPU, get a box. `box run` puts a command from this repo's kelpie tree on a Modal GPU."
+description = "Rent a GPU machine, run jobs on it, bring results back, never leave it billing."
 requires-python = ">=3.11"
 dependencies = ["modal>=1.5", "requests", "research"]
 

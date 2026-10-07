@@ -28,7 +28,7 @@ Two verbs, one corpus (prove_dflash's raw + math prompts):
     only tokenizes, grades and prints; BUILD vs SERVE is decided here once, before any child,
     so every build of one run is in the same mode (as when they shared a process).
 
-    uv run --frozen --project box box run \\
+    uv run --frozen --project kelpie/kelpie-http kelpie remote \\
         --gpu A100-80GB --volume kelpie-a1 --timeout 2400 -- \\
         'HF_HUB_OFFLINE=1 python -m scripts.prove_moe compare --baseline /data/moe/baseline.json \\
             --kernels moe=triton_kernels --cache /data/kernel-cache/gpt-oss-20b-a100-triton_kernels'

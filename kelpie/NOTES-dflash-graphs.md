@@ -123,7 +123,7 @@ token), so a step's speedup is about accept x (K=0 step / DFlash step).
 ## Reproduce
 
     cd ~/research-2/worktrees/dflash-graphs
-    M='PYTHONPATH=. uv run --no-project --with modal --with requests python kelpie/scripts/modal_run.py --volume kelpie-a1 --model openai/gpt-oss-20b --model z-lab/gpt-oss-20b-DFlash --gpu H100 --'
+    M='uv run --frozen --project kelpie/kelpie-http kelpie remote --volume kelpie-a1 --model openai/gpt-oss-20b --model z-lab/gpt-oss-20b-DFlash --gpu H100 --'
     $M 'HF_HUB_OFFLINE=1 python -m scripts.prove_dflash --corpus math --max-new 256 --loop native --capture --base spec'
     $M 'HF_HUB_OFFLINE=1 python -m scripts.check_spec_teacher_forced --loop native --corpus math --max-new 256 --capture'
     $M 'HF_HUB_OFFLINE=1 python -m scripts.prove_dflash --loop native --corpus math --max-new 256 --batched --require-preemption --num-slabs 160 --max-batch-tokens 37 --capture'

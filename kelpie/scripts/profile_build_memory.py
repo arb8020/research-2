@@ -11,7 +11,7 @@
             largest: 2 x 512 rows, sinks, window 0 and 128), traced line by line: each line's
             transient peak and the bytes it leaves live.
 
-    PYTHONPATH=. uv run --no-project --with modal --with requests python kelpie/scripts/modal_run.py \\
+    uv run --frozen --project kelpie/kelpie-http kelpie remote \\
         --gpu A100-80GB --volume kelpie-a1 --model openai/gpt-oss-20b -- \\
         'HF_HUB_OFFLINE=1 python -m scripts.profile_build_memory build && \\
          python -m scripts.profile_build_memory op'
