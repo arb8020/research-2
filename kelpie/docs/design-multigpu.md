@@ -499,7 +499,7 @@ Each dpa rank owns its own requests and KV pool, and the experts are shared.
 The Modal prefix, run from `~/research-2`:
 
 ```
-MR="PYTHONPATH=. uv run --no-project --with modal --with requests python kelpie/scripts/modal_run.py"
+MR="uv run --frozen --project kelpie/kelpie-http kelpie remote"
 ```
 
 The tree is mounted at `/workspace/kelpie`, so commands are relative to kelpie.

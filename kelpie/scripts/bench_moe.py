@@ -14,7 +14,7 @@ shapes (hidden 2880, intermediate 2880, 32 experts, top-4) unless a case says ot
   time      median of CUDA-event-timed graph replays at decode buckets, eager at the prefill
             shape; microseconds.
 
-    uv run --frozen --project box box run \\
+    uv run --frozen --project kelpie/kelpie-http kelpie remote \\
         --gpu A100-80GB --volume kelpie-a1 -- \\
         'python -m scripts.bench_moe --impls reference,triton_kernels --out /data/moe/bench-a100.json'
 """

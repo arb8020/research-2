@@ -271,7 +271,7 @@ advances only over target-computed rows -> a published D block is always real ct
 NOTES-spec-decode.md:55-60.
 
 ## 6. Vertical slice (ordered commits, proof in each message)
-MR = `PYTHONPATH=. uv run --no-project --with modal --with requests python kelpie/scripts/modal_run.py`
+MR = `uv run --frozen --project kelpie/kelpie-http kelpie remote`
 1. Core: per_seq state indices at K=0 (StateTable/Pending, allocState, keepRows(1), ZERO, (id,pos)
    ring, delete per_seq slotFor). Fixes today's checkpoint-crossing bug (traces/per_seq_state_
    checkpoint.txt: model writes live unit 3, published ckpt unit 2 never written). Proof:

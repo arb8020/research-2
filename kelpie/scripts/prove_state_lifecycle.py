@@ -24,7 +24,7 @@ Each K builds in its own process (`kernels.bind` runs once per process): a hidde
 child runs one K and hands its counts back as JSON (scripts/_fresh.py).
 
 No model runs on the laptop (kelpie/CLAUDE.md): run it on a CPU sandbox,
-    uv run --frozen --project box box run \\
+    uv run --frozen --project kelpie/kelpie-http kelpie remote \\
         --gpu A10G --volume kelpie-a1 -- 'python -m scripts.prove_state_lifecycle --device cpu'
 """
 

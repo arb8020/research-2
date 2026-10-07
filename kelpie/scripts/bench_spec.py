@@ -24,7 +24,7 @@ CUDA events between them; the whole-step graph is timed the same way, and "outsi
 device copies and the D2H of (tokens, n), host and copy time together. Replaying a step on the same plan is idempotent (the same
 values to the same KV slots), so the plan is then committed once as usual.
 
-    PYTHONPATH=. uv run --no-project --with modal --with requests python kelpie/scripts/modal_run.py \\
+    uv run --frozen --project kelpie/kelpie-http kelpie remote \\
         --volume kelpie-a1 --gpu H100 --model openai/gpt-oss-20b --model z-lab/gpt-oss-20b-DFlash \\
         -- 'HF_HUB_OFFLINE=1 python -m scripts.bench_spec --profile'
 """

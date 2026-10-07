@@ -21,7 +21,7 @@ eval = [
 ]
 # Kernel backends (kelpie_models/kernels/backends.py names these extras in its install hint).
 # Linux-only: both are CUDA (FlashInfer's pinned cache wheels: x86_64 only). The Modal image
-# installs both (box/kelpie/__init__.py, the image `box run` uses).
+# installs both (kelpie_http/dev/remote.py, the image `kelpie remote` uses).
 # OpenAI's MoE kernels from the triton repo at tag v3.7.1 (pinned by commit in [tool.uv.sources]);
 # PyPI's `triton-kernels` is an unrelated project. Must match the locked triton (3.7.1).
 triton-kernels = [

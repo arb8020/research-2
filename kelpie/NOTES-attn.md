@@ -152,7 +152,7 @@ corpus, not the math corpus: same model, different prompts and lengths.)
 ## Reproduce
 
     cd ~/research-2/worktrees/attn
-    M='PYTHONPATH=. uv run --no-project --with modal --with requests python kelpie/scripts/modal_run.py --volume kelpie-a1 --model openai/gpt-oss-20b --model z-lab/gpt-oss-20b-DFlash'
+    M='uv run --frozen --project kelpie/kelpie-http kelpie remote --volume kelpie-a1 --model openai/gpt-oss-20b --model z-lab/gpt-oss-20b-DFlash'
     $M --gpu A100-80GB -- 'HF_HUB_OFFLINE=1 python -m scripts.profile_build_memory op'
     $M --gpu A100-80GB -- 'HF_HUB_OFFLINE=1 python -m scripts.profile_build_memory build [--bare] [--attention reference]'
     $M --gpu H100 -- 'python -m scripts.bench_attention --out /data/attn/bench-h100.json --provenance <sha>'

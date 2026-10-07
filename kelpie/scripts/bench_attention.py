@@ -25,7 +25,7 @@ tokens), each with the window of both layer kinds (0 and 128):
   time      median us per call: graph replay for decode / decode_extra, eager for prefill.
   memory    peak allocated above the inputs, per impl, at the largest prefill.
 
-    PYTHONPATH=. uv run --no-project --with modal --with requests python kelpie/scripts/modal_run.py \\
+    uv run --frozen --project kelpie/kelpie-http kelpie remote \\
         --gpu A100-80GB --volume kelpie-a1 -- \\
         'python -m scripts.bench_attention --out /data/attn/bench-a100.json --provenance <sha>'
 """
