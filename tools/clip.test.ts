@@ -59,3 +59,29 @@ test.failing("nanda: TL;DR list survives (known bug: dropped silently)", async (
   expect(tldr).toContain("Learn the minimum viable basics, then do research.");
   expect(tldr).toContain("Breadth over depth");
 });
+
+// Jacob Steinhardt, "Research as a Stochastic Decision Process"
+// (cs.stanford.edu/~jsteinhardt/ResearchasaStochasticDecisionProcess.html),
+// curl'd as-is. The page is a bare HTML fragment (no <html>/<body>, opens with
+// a long comment), so defuddle extracts nothing and clip falls back to the
+// headless browser. Needs agent-browser installed.
+const STEINHARDT = "steinhardt-fragment.html";
+
+// Regression: `agent-browser eval` prints its result JSON-encoded, and the
+// fallback used to write that string to disk undecoded, so the clip came out
+// full of literal `\n`, `\"` and raw <sup> tags.
+test("steinhardt: browser fallback decodes eval output", async () => {
+  const md = await clip(STEINHARDT);
+  expect(md).toContain("reduce uncertainty at the fastest possible rate");
+  expect(md).not.toContain("\\n");
+  expect(md).not.toContain("<sup");
+  expect(md).toContain("[^1]:");
+}, 60_000);
+
+// KNOWN BUG: every equation on this page is an <img>, and defuddle drops them
+// all without a trace, leaving sentences like "we can compute  for the two
+// tasks:". clip exits 0.
+test.failing("steinhardt: equation images survive (known bug: dropped silently)", async () => {
+  const md = await clip(STEINHARDT);
+  expect(md).toContain("Research-as7.png");
+}, 60_000);
