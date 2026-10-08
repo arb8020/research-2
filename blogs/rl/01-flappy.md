@@ -25,12 +25,13 @@ let's look at a very simple environment below, roughly a simplified flappy bird 
 
 ```c cell=flappy
 #include <stdlib.h>
+#include <assert.h>
 #include "raylib.h"
 typedef float obs_t;
 #include "pufferenv.h"
 // pufferenv.h gives every env this, one per player:
 // typedef struct Agent {
-//     obs_t* observations;
+//     obs_t* observations; // we chose this is going to be float at line 3
 //     float* actions;
 //     float* rewards;
 //     float* terminals;
@@ -83,31 +84,48 @@ void puf_reset(Env* env) {
     spawn_pipe(env);
 }
 
+void add_log(Env* env) {
+    FlappyEnv* flappy_env = &env->flappy_env;
+    env->log.perf += flappy_env->episode_return / flappy_env->tick;
+    env->log.score += flappy_env->episode_return;
+    env->log.episode_return += flappy_env->episode_return;
+    env->log.episode_length += flappy_env->tick;
+    env->log.n += 1;
+}
+
 void puf_step(Env* env) {
-    // write stub here
-    // read action written by policy
+    
+    Agent* agent = &env->agents[0];
+    FlappyEnv* flappy_env = &env->flappy_env;
+   
+    // increment env by a tick
+    flappy_env->tick += 1; 
+    
+    // set env action to the chosen action
+    float action = agent->actions[0];
+    assert(agent->actions[0] >= TOP); 
+    assert(agent->actions[0] <= BOTTOM);
+    assert(action == truncf(action));
+    flappy_env->bird_row = (int)action; 
 
-    // ok in python it would probably look smth like
-    // idk what agent namespace has in it or the nvim shortcut to check lol
-    agent = env.agents[0].action // kinda cursed that everything travels through Env? or maybe not idk
-    flappyenv.tick += 1 // dep if its a dataclass replace situation
+    // assign reward
+    float survived_pipe = flappy_env->bird_row != flappy_env ->pipe_row;
+    float* reward = &agent->rewards[0];
+    *reward = survived_pipe;
+    flappy_env->episode_return += *reward;
     
-    flappyenv.bird_row = agent.action[-1] // last action from the agent
-    agent.reward = 1 if flappyenv.bird_row != flappyenv.pipe_row else 0
-    agent.ended = 1 if flappyenv.tick >= flappyenv.max_episode_len
-    flappyenv.episode_return += agent.reward
-
-    if not agent.ended:
-      env_step
-      break
+    // check if end
+    float* is_terminal = &agent->terminals[0];
+    *is_terminal = flappy_env->tick >= flappy_env->episode_length;
     
-    // log stuff
-    // reset environment
-      
+    // if not ended, spawn pipe and early return
+    if(!*is_terminal) {
+        spawn_pipe(env);
+        return;
+    }
+    add_log(env);
+    puf_reset(env);
     
-    // reward
-    // step environment state
-    // end episode
 }
 
 void puf_render(Env* env) {
@@ -174,6 +192,7 @@ void puf_init(Env* env, Dict* kwargs) {
 
 ```c solution=flappy
 #include <stdlib.h>
+#include <assert.h>
 #include "raylib.h"
 typedef float obs_t;
 #include "pufferenv.h"
@@ -232,6 +251,15 @@ void puf_reset(Env* env) {
     spawn_pipe(env);
 }
 
+void add_log(Env* env) {
+    FlappyEnv* flappy_env = &env->flappy_env;
+    env->log.perf += flappy_env->episode_return / flappy_env->tick;
+    env->log.score += flappy_env->episode_return;
+    env->log.episode_return += flappy_env->episode_return;
+    env->log.episode_length += flappy_env->tick;
+    env->log.n += 1;
+}
+
 void puf_step(Env* env) {
     Agent* agent = &env->agents[0];
     FlappyEnv* flappy_env = &env->flappy_env;
@@ -244,11 +272,7 @@ void puf_step(Env* env) {
         spawn_pipe(env);
         return;
     }
-    env->log.perf += flappy_env->episode_return / flappy_env->tick;
-    env->log.score += flappy_env->episode_return;
-    env->log.episode_return += flappy_env->episode_return;
-    env->log.episode_length += flappy_env->tick;
-    env->log.n++;
+    add_log(env);
     puf_reset(env);
 }
 
@@ -348,6 +372,29 @@ for _ in range(64):
     total += rewards.mean().item()
 assert total / 64 == 1.0, f"always dodging the observed pipe should score 1.0 per step, got {total / 64:.3f}"
 
+episodes = 2
+env.log()
+obs, reward_sum = env.reset(), 0.0
+for _ in range(episodes * episode_length):
+    obs, rewards, _ = env.step(torch.randint(0, 2, (n,), generator=gen))
+    reward_sum += rewards.sum().item()
+log = env.log()
+expected_return = reward_sum / (n * episodes)
+assert log["n"] == n * episodes, (
+    f"log n is {log['n']:.0f} after {episodes} episodes in each of {n} envs; expected {n * episodes} "
+    "(is add_log called once when an episode ends?)"
+)
+assert log["episode_length"] == episode_length, (
+    f"log episode_length is {log['episode_length']:.2f}, expected {episode_length}"
+)
+assert abs(log["episode_return"] - expected_return) < 1e-3, (
+    f"log episode_return is {log['episode_return']:.3f}, but rewards averaged {expected_return:.3f} per episode "
+    "(does episode_return add up each step's reward?)"
+)
+assert abs(log["perf"] - expected_return / episode_length) < 1e-3, (
+    f"log perf is {log['perf']:.3f}, expected {expected_return / episode_length:.3f} (return / episode length)"
+)
+
 steps = 2000
 env.reset()
 start = time.perf_counter()
@@ -376,6 +423,7 @@ class Flappy:
         lib.vec_reset.argtypes = [ptr, ctypes.c_uint]
         lib.vec_step.argtypes = [ptr]
         lib.vec_close.argtypes = [ptr]
+        lib.vec_log.argtypes = [ptr, ctypes.c_char_p, ctypes.c_int]
         self.n, self.seed, self.lib = n, seed, lib
         self.obs = np.zeros((n, OBS_DIM), np.float32)
         self.actions = np.zeros(n, np.float32)
@@ -401,6 +449,13 @@ class Flappy:
             torch.from_numpy(self.rewards.copy()),
             torch.from_numpy(self.terminals.astype(bool)),
         )
+
+    def log(self) -> dict[str, float]:
+        buf = ctypes.create_string_buffer(4096)
+        size = self.lib.vec_log(self.handle, buf, len(buf))
+        assert size >= 0, "vec_log buffer too small"
+        lines = buf.raw[:size].decode().splitlines()
+        return {key: float(value) for key, value in (line.split("=") for line in lines)}
 ```
 
 <!-- write prose here: can something autonomous play this? -->
