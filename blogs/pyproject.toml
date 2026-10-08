@@ -1,0 +1,12 @@
+[project]
+name = "blogs"
+version = "0.1.0"
+description = "Interactive explainers: prose, reader cells, hidden solutions and checks in one file per chapter."
+requires-python = ">=3.11"
+dependencies = [
+    "torch",
+    "numpy",
+]
+
+[tool.uv]
+package = false
