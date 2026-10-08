@@ -31,9 +31,8 @@ typedef float obs_t;
 #define OBS_SIZE 2
 #define NUM_ATNS 1
 #define FLAPPY_FRAMES 60
-
-const int TOP = 0;
-const int BOTTOM = 1;
+#define TOP 0
+#define BOTTOM 1
 
 struct Log {
     float perf;
@@ -54,87 +53,80 @@ struct Env {
     float episode_return;
     unsigned int rng;
 };
-typedef Env Flappy;
 
-void add_log(Flappy* env) {
-    env->log.perf += env->episode_return / env->tick;
-    env->log.score += env->episode_return;
-    env->log.episode_return += env->episode_return;
-    env->log.episode_length += env->tick;
-    env->log.n++;
-}
-
-static void next_pipe(Flappy* env) {
+void next_pipe(Env* env) {
     obs_t* obs = env->agents[0].observations;
     env->pipe_row = rand_r(&env->rng) % 2;
     obs[TOP] = env->pipe_row == TOP;
     obs[BOTTOM] = env->pipe_row == BOTTOM;
 }
 
-void puf_reset(Flappy* env) {
+void puf_reset(Env* env) {
     env->tick = 0;
     env->episode_return = 0;
     env->bird_row = TOP;
     next_pipe(env);
 }
 
-static void flappy_human_controls(Flappy* env) {
-    if (!IsWindowReady()) {
-        return;
-    }
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
-        env->agents[0].actions[0] = TOP;
-    }
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
-        env->agents[0].actions[0] = BOTTOM;
-    }
-}
-
-void puf_step(Flappy* env) {
+void puf_step(Env* env) {
+    Agent* agent = &env->agents[0];
     env->tick += 1;
-    env->bird_row = (int)env->agents[0].actions[0];
-    env->agents[0].terminals[0] = 0;
-    env->agents[0].rewards[0] = env->bird_row != env->pipe_row;
-    env->episode_return += env->agents[0].rewards[0];
-
-    if (env->tick >= env->episode_length) {
-        env->agents[0].terminals[0] = 1;
-        add_log(env);
-        puf_reset(env);
+    env->bird_row = agent->actions[0];
+    agent->rewards[0] = env->bird_row != env->pipe_row;
+    agent->terminals[0] = env->tick >= env->episode_length;
+    env->episode_return += agent->rewards[0];
+    if (!agent->terminals[0]) {
+        next_pipe(env);
         return;
     }
-    next_pipe(env);
+    env->log.perf += env->episode_return / env->tick;
+    env->log.score += env->episode_return;
+    env->log.episode_return += env->episode_return;
+    env->log.episode_length += env->tick;
+    env->log.n++;
+    puf_reset(env);
 }
 
-void puf_render(Flappy* env) {
+void puf_render(Env* env) {
     int w = 480;
     int h = 240;
     int bird_x = 120;
+    Color cyan = {0, 187, 187, 255};
+    Color flash = env->agents[0].rewards[0] > 0
+        ? (Color){255, 203, 0, 255}
+        : (Color){230, 41, 55, 255};
     if (!IsWindowReady()) {
         InitWindow(w, h, "PufferLib Flappy");
         SetTargetFPS(60);
     }
-    Color bird_color = env->agents[0].rewards[0] > 0 ? (Color){255, 203, 0, 255} : (Color){230, 41, 55, 255};
     for (int f = 0; f < FLAPPY_FRAMES; f++) {
         if (IsKeyDown(KEY_ESCAPE)) {
             exit(0);
         }
-        flappy_human_controls(env);
-        int pipe_x = w - ((w - bird_x) * f) / FLAPPY_FRAMES;
-        int next_row = (int)env->agents[0].actions[0];
-        Color bird = (env->tick > 0 && f < FLAPPY_FRAMES / 4) ? bird_color : (Color){0, 187, 187, 255};
+        if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
+            env->agents[0].actions[0] = TOP;
+        }
+        if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
+            env->agents[0].actions[0] = BOTTOM;
+        }
+        int pipe_x = w - (w - bird_x) * f / FLAPPY_FRAMES;
+        int next_row = env->agents[0].actions[0];
+        int flashing = env->tick > 0 && f < FLAPPY_FRAMES / 4;
         BeginDrawing();
         ClearBackground((Color){6, 24, 24, 255});
-        DrawRectangle(pipe_x, env->pipe_row * h / 2, 40, h / 2, (Color){0, 187, 0, 255});
-        DrawCircle(bird_x, env->bird_row * h / 2 + h / 4, 18, bird);
-        DrawCircleLines(bird_x, next_row * h / 2 + h / 4, 18, (Color){0, 187, 187, 255});
-        DrawText(TextFormat("%d / %d", (int)env->episode_return, env->tick), 10, 10, 20, RAYWHITE);
+        DrawRectangle(pipe_x, env->pipe_row * h / 2, 40, h / 2,
+            (Color){0, 187, 0, 255});
+        DrawCircle(bird_x, env->bird_row * h / 2 + h / 4, 18,
+            flashing ? flash : cyan);
+        DrawCircleLines(bird_x, next_row * h / 2 + h / 4, 18, cyan);
+        DrawText(TextFormat("%d / %d", (int)env->episode_return, env->tick),
+            10, 10, 20, RAYWHITE);
         EndDrawing();
         puf_web_vsync();
     }
 }
 
-void puf_close(Flappy* env) {
+void puf_close(Env* env) {
     if (IsWindowReady()) {
         CloseWindow();
     }
