@@ -1,0 +1,10 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>html, body { margin: 0; overflow: hidden; background: #061818; } canvas { display: block; outline: none; }</style>
+<canvas id="c" tabindex="0"></canvas>
+<script type="module">
+  const create = (await import(new URLSearchParams(location.search).get("js"))).default;
+  const canvas = document.getElementById("c");
+  await create({ canvas });
+  canvas.focus();
+</script>
