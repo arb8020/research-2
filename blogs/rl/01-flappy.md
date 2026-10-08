@@ -42,47 +42,52 @@ struct Log {
     float n;
 };
 
+typedef struct {
+    int pipe_row;
+    int bird_row;
+    int tick;
+    int episode_length;
+    float episode_return;
+} FlappyEnv;
+
 struct Env {
     Log log;
     Agent agents[1];
     int num_agents;
-    int episode_length;
-    int tick;
-    int pipe_row;
-    int bird_row;
-    float episode_return;
     unsigned int rng;
+    FlappyEnv flappy;
 };
 
 void next_pipe(Env* env) {
     obs_t* obs = env->agents[0].observations;
-    env->pipe_row = rand_r(&env->rng) % 2;
-    obs[TOP] = env->pipe_row == TOP;
-    obs[BOTTOM] = env->pipe_row == BOTTOM;
+    env->flappy.pipe_row = rand_r(&env->rng) % 2;
+    obs[TOP] = env->flappy.pipe_row == TOP;
+    obs[BOTTOM] = env->flappy.pipe_row == BOTTOM;
 }
 
 void puf_reset(Env* env) {
-    env->tick = 0;
-    env->episode_return = 0;
-    env->bird_row = TOP;
+    env->flappy.tick = 0;
+    env->flappy.episode_return = 0;
+    env->flappy.bird_row = TOP;
     next_pipe(env);
 }
 
 void puf_step(Env* env) {
     Agent* agent = &env->agents[0];
-    env->tick += 1;
-    env->bird_row = agent->actions[0];
-    agent->rewards[0] = env->bird_row != env->pipe_row;
-    agent->terminals[0] = env->tick >= env->episode_length;
-    env->episode_return += agent->rewards[0];
+    FlappyEnv* flappy = &env->flappy;
+    flappy->tick += 1;
+    flappy->bird_row = agent->actions[0];
+    agent->rewards[0] = flappy->bird_row != flappy->pipe_row;
+    agent->terminals[0] = flappy->tick >= flappy->episode_length;
+    flappy->episode_return += agent->rewards[0];
     if (!agent->terminals[0]) {
         next_pipe(env);
         return;
     }
-    env->log.perf += env->episode_return / env->tick;
-    env->log.score += env->episode_return;
-    env->log.episode_return += env->episode_return;
-    env->log.episode_length += env->tick;
+    env->log.perf += flappy->episode_return / flappy->tick;
+    env->log.score += flappy->episode_return;
+    env->log.episode_return += flappy->episode_return;
+    env->log.episode_length += flappy->tick;
     env->log.n++;
     puf_reset(env);
 }
@@ -91,6 +96,7 @@ void puf_render(Env* env) {
     int w = 480;
     int h = 240;
     int bird_x = 120;
+    FlappyEnv* flappy = &env->flappy;
     Color cyan = {0, 187, 187, 255};
     Color flash = env->agents[0].rewards[0] > 0
         ? (Color){255, 203, 0, 255}
@@ -111,15 +117,15 @@ void puf_render(Env* env) {
         }
         int pipe_x = w - (w - bird_x) * f / FLAPPY_FRAMES;
         int next_row = env->agents[0].actions[0];
-        int flashing = env->tick > 0 && f < FLAPPY_FRAMES / 4;
+        int flashing = flappy->tick > 0 && f < FLAPPY_FRAMES / 4;
         BeginDrawing();
         ClearBackground((Color){6, 24, 24, 255});
-        DrawRectangle(pipe_x, env->pipe_row * h / 2, 40, h / 2,
+        DrawRectangle(pipe_x, flappy->pipe_row * h / 2, 40, h / 2,
             (Color){0, 187, 0, 255});
-        DrawCircle(bird_x, env->bird_row * h / 2 + h / 4, 18,
+        DrawCircle(bird_x, flappy->bird_row * h / 2 + h / 4, 18,
             flashing ? flash : cyan);
         DrawCircleLines(bird_x, next_row * h / 2 + h / 4, 18, cyan);
-        DrawText(TextFormat("%d / %d", (int)env->episode_return, env->tick),
+        DrawText(TextFormat("%d / %d", (int)flappy->episode_return, flappy->tick),
             10, 10, 20, RAYWHITE);
         EndDrawing();
         puf_web_vsync();
@@ -142,7 +148,7 @@ void puf_log(Log* log, Dict* out) {
 
 void puf_init(Env* env, Dict* kwargs) {
     env->num_agents = 1;
-    env->episode_length = dict_get(kwargs, "episode_length");
+    env->flappy.episode_length = dict_get(kwargs, "episode_length");
     env->agents[0].action_mask = NULL;
     env->agents[0].policy = 0;
 }
