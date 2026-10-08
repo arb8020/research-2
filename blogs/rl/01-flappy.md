@@ -21,7 +21,124 @@ let's look at a very simple environment below, roughly a simplified flappy bird 
 
 <flappy-play></flappy-play>
 
-```c env=flappy readonly
+```c cell=flappy
+#include <stdlib.h>
+#include "raylib.h"
+typedef float obs_t;
+#include "pufferenv.h"
+
+#define ACT_SIZES {2}
+#define OBS_SIZE 2
+#define NUM_ATNS 1
+#define FLAPPY_FRAMES 60
+#define TOP 0
+#define BOTTOM 1
+
+struct Log {
+    float perf;
+    float score;
+    float episode_return;
+    float episode_length;
+    float n;
+};
+
+typedef struct {
+    int pipe_row;
+    int bird_row;
+    int tick;
+    int episode_length;
+    float episode_return;
+} FlappyEnv;
+
+struct Env {
+    Log log;
+    Agent agents[1];
+    int num_agents;
+    unsigned int rng;
+    FlappyEnv flappy;
+};
+
+void next_pipe(Env* env) {
+    obs_t* obs = env->agents[0].observations;
+    env->flappy.pipe_row = rand_r(&env->rng) % 2;
+    obs[TOP] = env->flappy.pipe_row == TOP;
+    obs[BOTTOM] = env->flappy.pipe_row == BOTTOM;
+}
+
+void puf_reset(Env* env) {
+    env->flappy.tick = 0;
+    env->flappy.episode_return = 0;
+    env->flappy.bird_row = TOP;
+    next_pipe(env);
+}
+
+void puf_step(Env* env) {
+    // write stub here
+}
+
+void puf_render(Env* env) {
+    int w = 480;
+    int h = 240;
+    int bird_x = 120;
+    FlappyEnv* flappy = &env->flappy;
+    Color cyan = {0, 187, 187, 255};
+    Color flash = env->agents[0].rewards[0] > 0
+        ? (Color){255, 203, 0, 255}
+        : (Color){230, 41, 55, 255};
+    if (!IsWindowReady()) {
+        InitWindow(w, h, "PufferLib Flappy");
+        SetTargetFPS(60);
+    }
+    for (int f = 0; f < FLAPPY_FRAMES; f++) {
+        if (IsKeyDown(KEY_ESCAPE)) {
+            exit(0);
+        }
+        if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
+            env->agents[0].actions[0] = TOP;
+        }
+        if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
+            env->agents[0].actions[0] = BOTTOM;
+        }
+        int pipe_x = w - (w - bird_x) * f / FLAPPY_FRAMES;
+        int next_row = env->agents[0].actions[0];
+        int flashing = flappy->tick > 0 && f < FLAPPY_FRAMES / 4;
+        BeginDrawing();
+        ClearBackground((Color){6, 24, 24, 255});
+        DrawRectangle(pipe_x, flappy->pipe_row * h / 2, 40, h / 2,
+            (Color){0, 187, 0, 255});
+        DrawCircle(bird_x, flappy->bird_row * h / 2 + h / 4, 18,
+            flashing ? flash : cyan);
+        DrawCircleLines(bird_x, next_row * h / 2 + h / 4, 18, cyan);
+        DrawText(TextFormat("%d / %d", (int)flappy->episode_return, flappy->tick),
+            10, 10, 20, RAYWHITE);
+        EndDrawing();
+        puf_web_vsync();
+    }
+}
+
+void puf_close(Env* env) {
+    if (IsWindowReady()) {
+        CloseWindow();
+    }
+}
+
+void puf_log(Log* log, Dict* out) {
+    dict_set(out, "perf", log->perf);
+    dict_set(out, "score", log->score);
+    dict_set(out, "episode_return", log->episode_return);
+    dict_set(out, "episode_length", log->episode_length);
+    dict_set(out, "n", log->n);
+}
+
+void puf_init(Env* env, Dict* kwargs) {
+    env->num_agents = 1;
+    env->flappy.episode_length = dict_get(kwargs, "episode_length");
+    env->agents[0].action_mask = NULL;
+    env->agents[0].policy = 0;
+}
+```
+
+```c solution=flappy
 #include <stdlib.h>
 #include "raylib.h"
 typedef float obs_t;
@@ -152,6 +269,49 @@ void puf_init(Env* env, Dict* kwargs) {
     env->agents[0].action_mask = NULL;
     env->agents[0].policy = 0;
 }
+```
+
+```python check=flappy
+import time
+
+n, episode_length = 4096, 32
+env = Flappy(n=n, seed=0, episode_length=episode_length)
+obs = env.reset()
+assert obs.shape == (n, 2), f"obs should have shape ({n}, 2), got {tuple(obs.shape)}"
+assert (obs.sum(1) == 1).all() and ((obs == 0) | (obs == 1)).all(), (
+    "after reset, each obs must be one-hot: [1, 0] pipe on top or [0, 1] pipe on bottom"
+)
+
+gen = torch.Generator().manual_seed(0)
+for t in range(1, 3 * episode_length + 1):
+    pipe_row = obs[:, 1].long()
+    actions = torch.randint(0, 2, (n,), generator=gen)
+    obs, rewards, terminals = env.step(actions)
+    expected = (actions != pipe_row).float()
+    wrong = (rewards != expected).sum().item()
+    assert wrong == 0, (
+        f"step {t}: {wrong} envs got the wrong reward; it should be 1 when the bird's row "
+        "differs from the pipe row in the obs it acted on, else 0"
+    )
+    assert (obs.sum(1) == 1).all() and ((obs == 0) | (obs == 1)).all(), f"step {t}: obs is not one-hot"
+    if t % episode_length == 0:
+        assert terminals.all(), f"step {t}: every episode should end after {episode_length} steps"
+    else:
+        assert not terminals.any(), f"step {t}: an episode ended early (episode_length is {episode_length})"
+
+obs, total = env.reset(), 0.0
+for _ in range(64):
+    obs, rewards, _ = env.step(obs[:, 0].long())
+    total += rewards.mean().item()
+assert total / 64 == 1.0, f"always dodging the observed pipe should score 1.0 per step, got {total / 64:.3f}"
+
+steps = 2000
+env.reset()
+start = time.perf_counter()
+for _ in range(steps):
+    env.lib.vec_step(env.handle)
+sps = n * steps / (time.perf_counter() - start)
+assert sps > 50e6, f"{sps / 1e6:.0f}M env steps/s; budget is 50M"
 ```
 
 ```python given
