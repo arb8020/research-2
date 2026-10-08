@@ -107,40 +107,19 @@ void assert_invariants(FlappyEnv* flappy_env) {
 }
 
 void puf_step(Env* env) {
-    
-    Agent* agent = &env->agents[0];
-    FlappyEnv* flappy_env = &env->flappy_env;
-    assert_invariants(flappy_env);
-   
+    // check the state and the action you were given
+
     // increment env by a tick
-    flappy_env->tick += 1; 
-    
+
     // set env action to the chosen action
-    float action = agent->actions[0];
-    assert(agent->actions[0] >= TOP); 
-    assert(agent->actions[0] <= BOTTOM);
-    assert(action == truncf(action));
-    flappy_env->bird_row = action; // float -> int implicitly
 
     // assign reward
-    float survived_pipe = flappy_env->bird_row != flappy_env ->pipe_row;
-    float* reward = &agent->rewards[0];
-    *reward = survived_pipe;
-    flappy_env->episode_return += *reward;
-    
+
     // check if end
-    float* is_terminal = &agent->terminals[0];
-    *is_terminal = flappy_env->tick >= flappy_env->episode_length;
-    
+
     // if not ended, spawn pipe and early return
-    if(!*is_terminal) {
-        spawn_pipe(env);
-        assert_invariants(flappy_env);
-        return;
-    }
-    add_log(env);
-    puf_reset(env);
-    assert_invariants(flappy_env);
+
+    // episode over: log it, reset, check the state you hand back
 }
 
 void puf_render(Env* env) {
@@ -213,7 +192,7 @@ typedef float obs_t;
 #include "pufferenv.h"
 // pufferenv.h gives every env this, one per player:
 // typedef struct Agent {
-//     obs_t* observations;
+//     obs_t* observations; // we chose this is going to be float at line 3
 //     float* actions;
 //     float* rewards;
 //     float* terminals;
@@ -252,7 +231,7 @@ struct Env {
     FlappyEnv flappy_env;
 };
 
-void spawn_pipe(Env* env) {
+void spawn_pipe(Env* env) { // would name this like env_step or smth
     obs_t* obs = env->agents[0].observations;
     env->flappy_env.pipe_row = rand_r(&env->rng) % 2;
     obs[TOP] = env->flappy_env.pipe_row == TOP;
@@ -260,7 +239,7 @@ void spawn_pipe(Env* env) {
 }
 
 void puf_reset(Env* env) {
-    env->flappy_env.tick = 0;
+    env->flappy_env.tick = 0; // still dont like that its just flappy would like flappy_env or smth
     env->flappy_env.episode_return = 0;
     env->flappy_env.bird_row = TOP;
     spawn_pipe(env);
@@ -275,21 +254,53 @@ void add_log(Env* env) {
     env->log.n += 1;
 }
 
+// true between any two calls to puf_step (each step pays 0 or 1)
+void assert_invariants(FlappyEnv* flappy_env) {
+    assert(flappy_env->pipe_row >= TOP);
+    assert(flappy_env->pipe_row <= BOTTOM);
+    assert(flappy_env->bird_row >= TOP);
+    assert(flappy_env->bird_row <= BOTTOM);
+    assert(flappy_env->episode_length > 0);
+    assert(flappy_env->tick >= 0);
+    assert(flappy_env->tick < flappy_env->episode_length);
+    assert(flappy_env->episode_return >= 0);
+    assert(flappy_env->episode_return <= flappy_env->tick);
+}
+
 void puf_step(Env* env) {
     Agent* agent = &env->agents[0];
     FlappyEnv* flappy_env = &env->flappy_env;
+    float action = agent->actions[0];
+    assert_invariants(flappy_env);
+    assert(action >= TOP);
+    assert(action <= BOTTOM);
+    assert(action == truncf(action));
+
+    // increment env by a tick
     flappy_env->tick += 1;
-    // float -> int happens implicitly (puffer: no redundant casts)
-    flappy_env->bird_row = agent->actions[0];
-    agent->rewards[0] = flappy_env->bird_row != flappy_env->pipe_row;
-    agent->terminals[0] = flappy_env->tick >= flappy_env->episode_length;
-    flappy_env->episode_return += agent->rewards[0];
-    if (!agent->terminals[0]) {
+
+    // set env action to the chosen action (float -> int implicitly)
+    flappy_env->bird_row = action;
+
+    // assign reward
+    float survived_pipe = flappy_env->bird_row != flappy_env->pipe_row;
+    float* reward = &agent->rewards[0];
+    *reward = survived_pipe;
+    flappy_env->episode_return += *reward;
+
+    // check if end
+    float* is_terminal = &agent->terminals[0];
+    *is_terminal = flappy_env->tick >= flappy_env->episode_length;
+
+    // if not ended, spawn pipe and early return
+    if (!*is_terminal) {
         spawn_pipe(env);
+        assert_invariants(flappy_env);
         return;
     }
     add_log(env);
     puf_reset(env);
+    assert_invariants(flappy_env);
 }
 
 void puf_render(Env* env) {
