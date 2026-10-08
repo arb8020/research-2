@@ -93,10 +93,24 @@ void add_log(Env* env) {
     env->log.n += 1;
 }
 
+// true between any two calls to puf_step (each step pays 0 or 1)
+void assert_invariants(FlappyEnv* flappy_env) {
+    assert(flappy_env->pipe_row >= TOP);
+    assert(flappy_env->pipe_row <= BOTTOM);
+    assert(flappy_env->bird_row >= TOP);
+    assert(flappy_env->bird_row <= BOTTOM);
+    assert(flappy_env->episode_length > 0);
+    assert(flappy_env->tick >= 0);
+    assert(flappy_env->tick < flappy_env->episode_length);
+    assert(flappy_env->episode_return >= 0);
+    assert(flappy_env->episode_return <= flappy_env->tick);
+}
+
 void puf_step(Env* env) {
     
     Agent* agent = &env->agents[0];
     FlappyEnv* flappy_env = &env->flappy_env;
+    assert_invariants(flappy_env);
    
     // increment env by a tick
     flappy_env->tick += 1; 
@@ -106,7 +120,7 @@ void puf_step(Env* env) {
     assert(agent->actions[0] >= TOP); 
     assert(agent->actions[0] <= BOTTOM);
     assert(action == truncf(action));
-    flappy_env->bird_row = (int)action; 
+    flappy_env->bird_row = action; // float -> int implicitly
 
     // assign reward
     float survived_pipe = flappy_env->bird_row != flappy_env ->pipe_row;
@@ -121,11 +135,12 @@ void puf_step(Env* env) {
     // if not ended, spawn pipe and early return
     if(!*is_terminal) {
         spawn_pipe(env);
+        assert_invariants(flappy_env);
         return;
     }
     add_log(env);
     puf_reset(env);
-    
+    assert_invariants(flappy_env);
 }
 
 void puf_render(Env* env) {
@@ -264,6 +279,7 @@ void puf_step(Env* env) {
     Agent* agent = &env->agents[0];
     FlappyEnv* flappy_env = &env->flappy_env;
     flappy_env->tick += 1;
+    // float -> int happens implicitly (puffer: no redundant casts)
     flappy_env->bird_row = agent->actions[0];
     agent->rewards[0] = flappy_env->bird_row != flappy_env->pipe_row;
     agent->terminals[0] = flappy_env->tick >= flappy_env->episode_length;

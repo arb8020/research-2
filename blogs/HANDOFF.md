@@ -44,16 +44,23 @@ rm -rf .session && uv run --with playwright verify_page.py   # headless proof, s
 - **Standalone.** blogs vendors its own PufferLib (`vendor/pufferlib`: pufferenv.h, ini.h, puf_web_vsync.js @ 6ffa5b1) and `shim.c` (a copy of robots'), and fetches its own raylib. Nothing reads `robots/`. If the two shims diverge enough to hurt, extract then.
 - **Format and assistant.** Markdown was chosen over marimo (marimo fought the gating model and needed CSS hacks; its static build was 27 MB). pi-durable is the candidate inline assistant, deferred.
 
-- **Asserts and logging (2026-10-08).**
-  - Readers write asserts. Checks don't enforce them, for now. Asserts stay on in every build (no `-DNDEBUG`), as upstream `build.sh` does.
-  - Measured cost: 3 action asserts make flappy ~20% slower (median 314M vs 390M steps/s, noisy laptop runs). Both are far above the 50M budget. The author may revisit what and when to assert after rereading tiger style and TigerBeetle.
-  - `add_log(Env*)` is a ready-made helper in the stub and the solution. The reader calls it at episode end and keeps `episode_return += reward` themselves. `given` `Flappy.log()` wraps `vec_log`, and `check=flappy` verifies `n`, `episode_length`, `episode_return` and `perf`.
+- **Asserts (2026-10-08).**
+  - Readers write plain `assert`s, unenforced by checks. They are a testing tool: on in the check build, stripped with `-DNDEBUG` in the prod build (speed budget, training, play widget). This is the `cstyle_cpp.md` model. Upstream PufferLib and TigerBeetle keep cheap asserts on in prod; the prose should say we differ. It replaces the earlier "asserts on in every build" and "stage a `VERIFY` tier later" plans. A second tier only comes back if a later chapter wants cheap always-on asserts.
+  - Teach the rule that asserts must only look, never change anything: `assert(a = b)` would behave differently in the two builds.
+  - The flappy stub has `assert_invariants(FlappyEnv*)`, called at `puf_step` entry and before both returns: rows in {TOP, BOTTOM}, `0 <= tick < episode_length`, `0 <= episode_return <= tick`, `episode_length > 0`. Derived with the author via matklad's "What is an Invariant?". Mutants: `>` for `>=` and an over-counted reward fire at the broken rule. A `puf_reset` setting `tick = 1` slips past (a valid but wrong state), since only a reset postcondition would catch it; the author hasn't decided on one.
+  - Measured (asserts on, noisy laptop): none ~390M, 3 action asserts ~314M, plus invariants ~201M steps/s. Budget 50M. Irrelevant once prod uses `-DNDEBUG`.
+  - Research: `notes/research/asserts-tigerbeetle-matklad.md` (TigerBeetle's `constants.verify` tier, its 5% prod / 5x test cost policy, what to assert in hot loops).
+- **Casts follow puffer.** No redundant casts. Float -> int stays implicit, with a comment saying so. Casts that change meaning (e.g. `(float)` for float division) stay.
+- **Logging.** `add_log(Env*)` is a ready-made helper in the stub and the solution. The reader calls it at episode end and keeps `episode_return += reward` themselves. `given` `Flappy.log()` wraps `vec_log`, and `check=flappy` verifies `n`, `episode_length`, `episode_return` and `perf`.
 - **Notes.** `notes/research/` holds the distilled research reports (inspiration + infra) and `notes/design-discussion.md` the why behind decisions, both recovered from session a9f505dc. The inspiration sections lack the author's own reasons and need their pass.
 
 ## Parked (2026-10-08)
-- Compiler flags spike: a sanitized check build (`-fsanitize=address,undefined`, as upstream's debug build) separate from the `-O2` speed build. Also `-Wextra`/`-Werror` on the reader cell only (`-isystem` for vendor headers), `-Wfloat-conversion`/`-Wconversion` noise, and why `-Wparentheses` didn't fire on `assert(a = b)`. Today `check.py` matches upstream flags exactly.
-- Puffer style vs tiger/Zig style for the blog's C. `SKILL_ISSUES.md` (PufferLib 5.0 @ 6ffa5b1; fresh clone in `/tmp/pufferlib-sparse`) says avoid redundant casts and inline single-use functions. Tiger wants explicit casts and dense asserts. `add_log` and `(int)action` currently follow tiger/teaching style.
-- A tick invariant assert (`tick <= episode_length`), offered and skipped.
+- **Build split, not yet implemented.**
+  - Check build: `-O2` + asserts + `-fsanitize=address,undefined`, as upstream's debug build.
+  - Prod build: `-O2 -DNDEBUG`, for the speed and memory budgets, training, and `build_web.py`.
+  - Today `check.py` runs correctness and speed in one build with asserts on.
+  - Also: `-Wextra`/`-Werror` on the reader cell only (`-isystem` for vendor headers), and why `-Wparentheses` didn't fire on `assert(a = b)`. `-Wfloat-conversion` is out, since it contradicts puffer casts.
+- **Reference cleanup (author).** Make `solution=flappy` the author's `puf_step` (cleaned up), then put the stub back to a todo. Decide on the `reward`/`is_terminal` pointer aliases, and whether `puf_reset` gets a postcondition.
 
 ## Open questions
 - **Page builder.**
