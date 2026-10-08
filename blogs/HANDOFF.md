@@ -3,7 +3,7 @@
 Branch `blogs/flappy`, worktree `worktrees/blogs-flappy`. The page-builder spike is merged in.
 
 ## Next session
-1. **`puf_step` is done (2026-10-08).** The author translated the draft line by line and the stub now passes `check.py ... flappy --stub`. Concepts it took, in order: `->` vs `.`, `typedef float obs_t` (puffer's header leaves the obs type as a blank the env fills in), `*` in types vs expressions, `&`, copy vs pointer (copying is fine for reads, writes need the pointer), `*p = v`, a `(int)` cast, `assert` + `#include <assert.h>`, `=` vs `==`, `>` vs `>=`, `add_log` placement. Open: should the reference become the author's version? The stub `cell=flappy` currently holds a full passing `puf_step` and must go back to a todo before publishing.
+1. **`puf_step` is done (2026-10-08).** The author translated the draft line by line and the stub now passes `check.py ... flappy --stub`. Concepts it took, in order: `->` vs `.`, `typedef float obs_t` (puffer's header leaves the obs type as a blank the env fills in), `*` in types vs expressions, `&`, copy vs pointer (copying is fine for reads, writes need the pointer), `*p = v`, a `(int)` cast, `assert` + `#include <assert.h>`, `=` vs `==`, `>` vs `>=`, `add_log` placement. Open: should the reference become the author's version? The reference is now the author's version, and the stub is back to a todo.
 2. **Hint ladder.** Hints are derived from annotated solutions and shown beside the editor, never replacing it. Markers go only in `solution=` blocks:
    - a whole-line `// hint_i text` is an outline comment revealed at level i;
    - a trailing `// hint_i` on a code line reveals that line at level i;
@@ -60,7 +60,7 @@ rm -rf .session && uv run --with playwright verify_page.py   # headless proof, s
   - Prod build: `-O2 -DNDEBUG`, for the speed and memory budgets, training, and `build_web.py`.
   - Today `check.py` runs correctness and speed in one build with asserts on.
   - Also: `-Wextra`/`-Werror` on the reader cell only (`-isystem` for vendor headers), and why `-Wparentheses` didn't fire on `assert(a = b)`. `-Wfloat-conversion` is out, since it contradicts puffer casts.
-- **Reference cleanup (author).** Make `solution=flappy` the author's `puf_step` (cleaned up), then put the stub back to a todo. Decide on the `reward`/`is_terminal` pointer aliases, and whether `puf_reset` gets a postcondition.
+- **Reference done (2026-10-08).** `solution=flappy` is the author's `puf_step` (entry checks at the top, tidied), and the stub's `puf_step` is back to the author's outline comments (the first and last comments are Claude's). Open: whether the reader writes `assert_invariants` themselves (now ready-made, like `add_log`), the `reward`/`is_terminal` aliases, a `puf_reset` postcondition, and the author's notes-to-self comments, which must go before publishing.
 
 ## Open questions
 - **Page builder.**
