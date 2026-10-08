@@ -3,7 +3,7 @@
 Branch `blogs/flappy`, worktree `worktrees/blogs-flappy`. The page-builder spike is merged in.
 
 ## Next session
-1. **`puf_step` as the C lesson** (pointers, `&`, `->` vs `.`, arrays as out-parameters). The author's Python-style draft sits in the `cell=flappy` stub; it doesn't compile yet. Translate it line by line, then run `uv run check.py rl/01-flappy.md flappy --stub`. The reference `solution=flappy` passes.
+1. **`puf_step` is done (2026-10-08).** The author translated the draft line by line and the stub now passes `check.py ... flappy --stub`. Concepts it took, in order: `->` vs `.`, `typedef float obs_t` (puffer's header leaves the obs type as a blank the env fills in), `*` in types vs expressions, `&`, copy vs pointer (copying is fine for reads, writes need the pointer), `*p = v`, a `(int)` cast, `assert` + `#include <assert.h>`, `=` vs `==`, `>` vs `>=`, `add_log` placement. Open: should the reference become the author's version? The stub `cell=flappy` currently holds a full passing `puf_step` and must go back to a todo before publishing.
 2. **Hint ladder.** Hints are derived from annotated solutions and shown beside the editor, never replacing it. Markers go only in `solution=` blocks:
    - a whole-line `// hint_i text` is an outline comment revealed at level i;
    - a trailing `// hint_i` on a code line reveals that line at level i;
@@ -43,6 +43,17 @@ rm -rf .session && uv run --with playwright verify_page.py   # headless proof, s
   - Native vs wasm is compared on *behaviour*, not bits, because `rand_r` differs across libcs and upstream PufferLib accepts that.
 - **Standalone.** blogs vendors its own PufferLib (`vendor/pufferlib`: pufferenv.h, ini.h, puf_web_vsync.js @ 6ffa5b1) and `shim.c` (a copy of robots'), and fetches its own raylib. Nothing reads `robots/`. If the two shims diverge enough to hurt, extract then.
 - **Format and assistant.** Markdown was chosen over marimo (marimo fought the gating model and needed CSS hacks; its static build was 27 MB). pi-durable is the candidate inline assistant, deferred.
+
+- **Asserts and logging (2026-10-08).**
+  - Readers write asserts. Checks don't enforce them, for now. Asserts stay on in every build (no `-DNDEBUG`), as upstream `build.sh` does.
+  - Measured cost: 3 action asserts make flappy ~20% slower (median 314M vs 390M steps/s, noisy laptop runs). Both are far above the 50M budget. The author may revisit what and when to assert after rereading tiger style and TigerBeetle.
+  - `add_log(Env*)` is a ready-made helper in the stub and the solution. The reader calls it at episode end and keeps `episode_return += reward` themselves. `given` `Flappy.log()` wraps `vec_log`, and `check=flappy` verifies `n`, `episode_length`, `episode_return` and `perf`.
+- **Notes.** `notes/research/` holds the distilled research reports (inspiration + infra) and `notes/design-discussion.md` the why behind decisions, both recovered from session a9f505dc. The inspiration sections lack the author's own reasons and need their pass.
+
+## Parked (2026-10-08)
+- Compiler flags spike: a sanitized check build (`-fsanitize=address,undefined`, as upstream's debug build) separate from the `-O2` speed build. Also `-Wextra`/`-Werror` on the reader cell only (`-isystem` for vendor headers), `-Wfloat-conversion`/`-Wconversion` noise, and why `-Wparentheses` didn't fire on `assert(a = b)`. Today `check.py` matches upstream flags exactly.
+- Puffer style vs tiger/Zig style for the blog's C. `SKILL_ISSUES.md` (PufferLib 5.0 @ 6ffa5b1; fresh clone in `/tmp/pufferlib-sparse`) says avoid redundant casts and inline single-use functions. Tiger wants explicit casts and dense asserts. `add_log` and `(int)action` currently follow tiger/teaching style.
+- A tick invariant assert (`tick <= episode_length`), offered and skipped.
 
 ## Open questions
 - **Page builder.**
