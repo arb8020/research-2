@@ -1,4 +1,4 @@
-"""Build a chapter's browser pieces: each env=X -> dist/<chapter>/X.js + X.wasm + X.html.
+"""Build a chapter's browser pieces: each C solution=X -> dist/<chapter>/X.js + X.wasm + X.html.
 
     uv run build_web.py rl/01-flappy.md          # then: python3 -m http.server -d dist
     uv run build_web.py rl/01-flappy.md --diff   # also: native vs wasm env behave the same
@@ -23,7 +23,7 @@ from pathlib import Path
 from urllib.request import urlopen
 
 import numpy as np
-from check import Block, compile_envs, parse
+from check import Block, compile_c, parse
 
 HERE = Path(__file__).parent
 RAYLIB = HERE / "vendor" / "raylib-5.5_webassembly"
@@ -176,7 +176,7 @@ def main() -> None:
     args = ap.parse_args()
 
     blocks = parse(args.chapter.read_text())
-    envs = [b for b in blocks if b.role == "env"]
+    envs = [b for b in blocks if b.lang == "c" and b.role == "solution"]
 
     ensure_raylib()
     out = HERE / "dist" / args.chapter.with_suffix("").name
@@ -187,9 +187,10 @@ def main() -> None:
             build_play(env, out, tmp)
             print(f"built {out / env.name}.html")
         if args.diff:
-            so = compile_envs(blocks, tmp)
             for env in envs:
-                diff(env, so[env.name], tmp)
+                so, errors = compile_c(env, tmp)
+                assert not errors, errors
+                diff(env, so, tmp)
 
 
 if __name__ == "__main__":

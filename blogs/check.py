@@ -6,11 +6,13 @@
 
 A chapter is one Markdown file. Fenced blocks carry their role in the info string:
 
-    ```c env=flappy          PufferLib env header, compiled with robots' puffer shim; path in ENV_SO["flappy"]
     ```python given          shared code every cell sees (wrappers, helpers)
     ```python cell=X         what the reader starts with
     ```python solution=X     hidden reference
     ```python check=X        plain asserts; passing = no exception
+
+A c cell/solution is a whole PufferLib env header. Instead of executing it, the runner compiles
+it with robots' puffer shim and puts the library path in ENV_SO[X] for the Python that follows.
 
 Checking cell X executes, in one namespace: given blocks, the solutions of every
 cell before X, then X (solution, or stub with --stub), then X's check.
@@ -31,7 +33,7 @@ from pathlib import Path
 from types import ModuleType
 
 FENCE = re.compile(r"^```(\w+)[ \t]+([^\n]*)\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
-ROLES = ("env", "given", "cell", "solution", "check")
+ROLES = ("given", "cell", "solution", "check")
 PUFFER = Path(__file__).resolve().parent.parent / "robots" / "envs" / "puffer"
 
 
@@ -68,26 +70,24 @@ def puffer_build() -> ModuleType:
     return module
 
 
-def compile_envs(blocks: list[Block], out: Path) -> dict[str, str]:
-    paths = {}
+def compile_c(block: Block, out: Path) -> tuple[str, str]:
+    """PufferLib env header -> shared library via robots' shim. Returns (path, "") or ("", errors)."""
     build = puffer_build()
-    for b in blocks:
-        if b.role != "env":
-            continue
-        assert b.lang == "c", f"line {b.line}: env blocks are PufferLib C headers, got {b.lang}"
-        header, so = out / f"{b.name}.h", out / f"_{b.name}.so"
-        header.write_text(b.source)
-        raylib = build.fetch_raylib()
-        link = build._linux_link(raylib) if build.LINUX else [*build._macos_link(raylib, so), f"-Wl,-rpath,{raylib / 'lib'}"]
-        cmd = [
-            "clang", *build.CFLAGS, f'-DENV_HEADER="{header}"', f"-I{PUFFER}", f"-I{raylib / 'include'}",
-            str(PUFFER / "shim.c"), "-o", str(so), *link,
-        ]  # fmt: skip
-        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        if proc.returncode != 0:
-            sys.exit(f"env {b.name} failed to compile:\n{proc.stderr}")
-        paths[b.name] = str(so)
-    return paths
+    header, so = out / f"{block.name}.h", out / f"_{block.name}_{block.role}.so"
+    header.write_text(f'#line 1 "{block.role}={block.name}"\n' + block.source)
+    raylib = build.fetch_raylib()
+    if build.LINUX:
+        link = build._linux_link(raylib)
+    else:
+        link = [*build._macos_link(raylib, so), f"-Wl,-rpath,{raylib / 'lib'}"]
+    cmd = [
+        "clang", *build.CFLAGS, f'-DENV_HEADER="{header}"', f"-I{PUFFER}", f"-I{raylib / 'include'}",
+        str(PUFFER / "shim.c"), "-o", str(so), *link,
+    ]  # fmt: skip
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        return "", proc.stderr
+    return str(so), ""
 
 
 def cell_order(blocks: list[Block]) -> list[str]:
@@ -105,8 +105,8 @@ def find(blocks: list[Block], role: str, name: str) -> Block:
     return found[0]
 
 
-def run_cell(blocks: list[Block], order: list[str], env_so: dict[str, str], target: str, stub: bool) -> bool:
-    ns: dict = {"__name__": f"chapter.{target}", "ENV_SO": env_so}
+def run_cell(blocks: list[Block], order: list[str], out: Path, target: str, stub: bool) -> bool:
+    ns: dict = {"__name__": f"chapter.{target}", "ENV_SO": {}}
     steps = [b for b in blocks if b.role == "given"]
     steps += [find(blocks, "solution", name) for name in order[: order.index(target)]]
     steps.append(find(blocks, "cell" if stub else "solution", target))
@@ -114,6 +114,13 @@ def run_cell(blocks: list[Block], order: list[str], env_so: dict[str, str], targ
 
     start = time.perf_counter()
     for b in steps:
+        if b.lang == "c":
+            path, errors = compile_c(b, out)
+            if errors:
+                print(f"{target:<12} FAIL: {b.role}={b.name} does not compile:\n{errors}")
+                return False
+            ns["ENV_SO"][b.name] = path
+            continue
         try:
             exec(compile(b.source, f"<{b.role}={b.name or 'given'} line {b.line}>", "exec"), ns)
         except Exception as e:  # noqa: BLE001 - any failure in reader-facing code is a FAIL, reported verbatim
@@ -140,8 +147,7 @@ def main() -> None:
         assert t in order, f"no cell={t}; cells are {order}"
 
     with tempfile.TemporaryDirectory() as tmp:
-        env_so = compile_envs(blocks, Path(tmp))
-        results = [run_cell(blocks, order, env_so, t, args.stub) for t in targets]
+        results = [run_cell(blocks, order, Path(tmp), t, args.stub) for t in targets]
     sys.exit(0 if all(results) else 1)
 
 
