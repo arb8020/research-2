@@ -23,12 +23,11 @@ from pathlib import Path
 from urllib.request import urlopen
 
 import numpy as np
-from check import Block, compile_c, parse
+from check import PUFFER, Block, compile_c, parse
 
 HERE = Path(__file__).parent
 RAYLIB = HERE / "vendor" / "raylib-5.5_webassembly"
 RAYLIB_URL = "https://github.com/raysan5/raylib/releases/download/5.5/raylib-5.5_webassembly.zip"
-PUFFER = HERE.parent / "robots" / "envs" / "puffer"
 KWARGS = "episode_length=32"
 
 PLAY_HTML = """<!doctype html>
@@ -114,7 +113,7 @@ def diff(env: Block, so_path: str, tmp: Path, seed: int = 7, n: int = 1024, step
     header, js = tmp / f"{env.name}_diff.h", tmp / f"{env.name}_env.mjs"
     header.write_text(env.source)
     emcc([
-        "-O2", str(PUFFER / "shim.c"), "-o", str(js), f'-DENV_HEADER="{header}"', f"-I{PUFFER}",
+        "-O2", str(HERE / "shim.c"), "-o", str(js), f'-DENV_HEADER="{header}"', f"-I{PUFFER}",
         "-I", str(RAYLIB / "include"), str(RAYLIB / "lib" / "libraylib.a"), "-DPLATFORM_WEB", "-DPRECISION_FLOAT",
         "--js-library", str(PUFFER / "puf_web_vsync.js"), "-sUSE_GLFW=3",
         "-sMODULARIZE=1", "-sEXPORT_ES6=1", "-sENVIRONMENT=node", "-sALLOW_MEMORY_GROWTH=1",

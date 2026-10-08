@@ -12,7 +12,7 @@ A chapter is one Markdown file. Fenced blocks carry their role in the info strin
     ```python check=X        plain asserts; passing = no exception
 
 A c cell/solution is a whole PufferLib env header. Instead of executing it, the runner compiles
-it with robots' puffer shim and puts the library path in ENV_SO[X] for the Python that follows.
+it with shim.c against vendor/pufferlib and puts the library path in ENV_SO[X] for the Python that follows.
 
 Checking cell X executes, in one namespace: given blocks, the solutions of every
 cell before X, then X (solution, or stub with --stub), then X's check.
@@ -21,20 +21,29 @@ cell before X, then X (solution, or stub with --stub), then X's check.
 from __future__ import annotations
 
 import argparse
-import importlib.util
+import platform
 import re
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import traceback
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from types import ModuleType
 
 FENCE = re.compile(r"^```(\w+)[ \t]+([^\n]*)\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
 ROLES = ("given", "cell", "solution", "check")
-PUFFER = Path(__file__).resolve().parent.parent / "robots" / "envs" / "puffer"
+HERE = Path(__file__).resolve().parent
+PUFFER = HERE / "vendor" / "pufferlib"
+LINUX = platform.system() == "Linux"
+RAYLIB = HERE / "vendor" / ("raylib-5.5_linux_amd64" if LINUX else "raylib-5.5_macos")
+CFLAGS = [
+    "-O2", "-shared", "-fPIC", "-Wall", "-Wno-narrowing", "-Wno-unreachable-code", "-Wno-unused-function",
+    "-Werror=incompatible-pointer-types", "-Werror=return-type",
+    "-Wno-incompatible-pointer-types-discards-qualifiers", "-DPLATFORM_DESKTOP", "-DPRECISION_FLOAT",
+]  # fmt: skip
 
 
 @dataclass
@@ -62,27 +71,32 @@ def parse(text: str) -> list[Block]:
     return blocks
 
 
-def puffer_build() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("puffer_build", PUFFER / "build.py")
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def fetch_raylib() -> None:
+    if RAYLIB.exists():
+        return
+    url = f"https://github.com/raysan5/raylib/releases/download/5.5/{RAYLIB.name}.tar.gz"
+    print(f"fetching {url}", file=sys.stderr)
+    with tempfile.TemporaryDirectory(dir=RAYLIB.parent) as tmp:
+        archive = Path(tmp) / "raylib.tar.gz"
+        urllib.request.urlretrieve(url, archive)
+        with tarfile.open(archive) as tar:
+            tar.extractall(tmp, filter="data")
+        (Path(tmp) / RAYLIB.name).rename(RAYLIB)
 
 
 def compile_c(block: Block, out: Path) -> tuple[str, str]:
-    """PufferLib env header -> shared library via robots' shim. Returns (path, "") or ("", errors)."""
-    build = puffer_build()
+    """PufferLib env header -> shared library via shim.c. Returns (path, "") or ("", errors)."""
+    fetch_raylib()
     header, so = out / f"{block.name}.h", out / f"_{block.name}_{block.role}.so"
     header.write_text(f'#line 1 "{block.role}={block.name}"\n' + block.source)
-    raylib = build.fetch_raylib()
-    if build.LINUX:
-        link = build._linux_link(raylib)
+    lib = RAYLIB / "lib"
+    if LINUX:
+        link = [str(lib / "libraylib.a"), "-lm", "-lpthread", "-ldl"]
     else:
-        link = [*build._macos_link(raylib, so), f"-Wl,-rpath,{raylib / 'lib'}"]
+        link = [f"-L{lib}", "-lraylib", f"-Wl,-rpath,{lib}", "-lm"]
     cmd = [
-        "clang", *build.CFLAGS, f'-DENV_HEADER="{header}"', f"-I{PUFFER}", f"-I{raylib / 'include'}",
-        str(PUFFER / "shim.c"), "-o", str(so), *link,
+        "clang", *CFLAGS, f'-DENV_HEADER="{header}"', f"-I{PUFFER}", f"-I{RAYLIB / 'include'}",
+        str(HERE / "shim.c"), "-o", str(so), *link,
     ]  # fmt: skip
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if proc.returncode != 0:
