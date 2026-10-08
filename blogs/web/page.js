@@ -55,12 +55,11 @@ class CodeCell extends HTMLElement {
         <span class="cell-status"></span><button class="vim-toggle" aria-pressed="${vimOn}">vim</button><button class="run">Run</button></div>
       <div class="cell-editor"></div>
       <pre class="cell-out" hidden></pre>`;
-    this.editable = new Compartment();
     this.view = new EditorView({
       parent: this.querySelector(".cell-editor"),
       state: EditorState.create({ doc: this.stub, extensions: [
         vimMode.of(vimOn ? vim() : []), basicSetup, syntax(this.getAttribute("data-lang")),
-        look(`${this.name} code (${this.getAttribute("data-lang")})`), this.editable.of(EditorView.editable.of(true)),
+        look(`${this.name} code (${this.getAttribute("data-lang")})`),
       ] }),
     });
     this.view.scrollDOM.tabIndex = 0;
@@ -77,7 +76,6 @@ class CodeCell extends HTMLElement {
     const locked = prev !== undefined && !(prev in state.passed);
     this.classList.toggle("locked", locked);
     this.querySelector(".run").disabled = locked;
-    this.view.dispatch({ effects: this.editable.reconfigure(EditorView.editable.of(!locked)) });
     if (!this.restored && this.name in state.passed) {
       this.restored = true;
       this.view.dispatch({ changes: { from: 0, to: this.view.state.doc.length, insert: state.passed[this.name] } });
