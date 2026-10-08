@@ -50,7 +50,6 @@ code-cell { display: block; margin: 1.6em -16px; border: 1px solid var(--rule); 
 .tok-invalid { color: var(--fail); }
 .vim-toggle { font: inherit; padding: 3px 8px; border: 1px solid var(--rule); border-radius: 4px; background: none; color: var(--muted); cursor: pointer; }
 .vim-toggle[aria-pressed="true"] { color: var(--fg); background: var(--active); border-color: var(--muted); }
-code-cell.locked .cell-editor { opacity: 0.45; filter: grayscale(1); }
 .cell-out { margin: 0; padding: 10px 12px; font-size: 12.5px; line-height: 1.45; max-height: 320px; overflow: auto;
             white-space: pre-wrap; border-top: 1px solid var(--rule); border-left: 3px solid var(--muted); background: none; }
 .cell-out.pass { border-left-color: var(--pass); } .cell-out.fail { border-left-color: var(--fail); }
