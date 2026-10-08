@@ -1,0 +1,209 @@
+SPIKE: page builder + local session for the blogs/ series
+==========================================================
+Branch blogs/page-builder (worktree worktrees/blogs-page-builder), off blogs/flappy at 16f93446.
+Chapter used: rl/01-flappy.md as of that commit (the user's live edits in blogs-flappy are not here).
+
+
+How to run it
+-------------
+  cd blogs
+  uv run build_page.py rl/01-flappy.md               # -> dist/01-flappy/{index.html,page.js,page.css,play.html,flappy.js,flappy.wasm}
+  uv run session.py rl/01-flappy.md --timeout 20     # tmux pane 1, :8787
+  python3 -m http.server 8010 -d dist                # tmux pane 2 (8000 was taken on this machine)
+  open http://localhost:8010/01-flappy/
+  rm -rf .session && uv run --with playwright verify_page.py   # headless drive -> screenshots/page-builder/
+
+  Needs: vendor/raylib-5.5_webassembly (copied from the blogs-flappy worktree; build_web
+  downloads it otherwise), emcc and clang on PATH. Fresh reader = rm -rf .session.
+
+
+What works (all driven in headless Chromium by verify_page.py)
+--------------------------------------------------------------
+  Page renders: prose, 6 editors (C for flappy, Python for the rest), given code collapsed,
+    9 todo notes, play widget.                     screenshots/page-builder/0-page.png
+  Play widget, reference env, before any Run.      0-play-reference.png
+  C cell with its stub fails, assert text shown.   1-flappy-stub-fails.png (+ -full)
+  C cell passes with the solution pasted in.       2-flappy-passes.png, 2-flappy-passes-output.png
+  Policy cell unlocks; its stub fails with
+    NotImplementedError + traceback.               3-policy-unlocked-stub-fails.png
+  Policy passes with a policy I wrote in
+    verify_page.py (the chapter's solution=policy
+    is still raise NotImplementedError); sample
+    then unlocks.                                  3-policy-passes.png
+  Stretch: play widget swaps to a wasm built
+    from the reader's passing C. Arrow keys work.  4-play-your-env.png (score "4 / 6")
+  Segfault in reader C -> clean FAIL "SIGSEGV".    5-flappy-segfault.png
+  Infinite loop in reader C -> FAIL after timeout ("killed after 20s").
+  A failing flappy edit does not propagate: policy still PASSes against the last passing flappy.
+  Reload: editors refill with the last passing source, gating comes back from GET /state,
+    play widget comes back as the reader's env.
+  Leak check: build asserts no solution=/check= source appears in index.html; verify
+    re-checks the served page.
+
+  Timings on this mac (from the verify log):
+    flappy Run, stub (fail)      ~1.1 s round trip
+    flappy Run, solution (pass)  ~1.6 s round trip: check 0.9 s, emcc 1.1 s in parallel, 0.2 s extra wait
+    policy Run                   ~1.1 s (torch import dominates)
+  Stretch latency: emcc of the reader's env takes ~1.1 s. It starts as soon as Run is
+  clicked, in parallel with the check, so the PASS arrives ~0.2 s later than it otherwise
+  would. The widget then reloads its iframe (well under a second, locally).
+
+
+Control flow
+------------
+build:
+  build_page.main(chapter)
+    check.parse(text)                              blocks: cell / solution / check / given
+    MarkdownIt(commonmark, html=True).render
+      fence rule
+        cell=X      -> <code-cell name=X lang=..><pre>stub</pre>
+        given       -> <details class=given><code-view lang=..><pre>src</pre>
+        solution/check -> ""                       (dropped)
+        anything else -> normal code block
+      html_block rule
+        <!-- note --> alone in a block -> <aside class=todo>note</aside>
+    regex: <X-play></X-play> (X a C cell) -> <env-play cell=X>
+    assert rendered cells == check.cell_order      (markdown-it and check.py agree)
+    assert no solution/check source in the body
+    web/page.html with TITLE, SESSION, BODY -> index.html; copy page.js, page.css, play.html
+    build_web.build_play(solution=flappy) -> flappy.js/.wasm   (reference env for the widget)
+
+page load:
+  page.js
+    <code-cell>: CodeMirror (cpp/python), gate() -> locked until previous cell has passed
+    <code-view>: read-only CodeMirror
+    <env-play>: iframe play.html?js=./flappy.js
+    refresh(): GET /state -> {passed, wasm}
+      code-cell.gate(): unlock, refill editor with last passing source (once)
+      env-play: if wasm[cell] -> iframe play.html?js=<session>/wasm/<hash>/flappy.js
+
+Run:
+  CodeCell.run
+    POST /run {cell, source}, stream body into the output pane
+  session.run(cell, source, emit)
+    parse(chapter) again                           (author edits are picked up live)
+    upstream = cells before X; any not in state.passed -> "locked: .." FAIL
+    job = given + check=X + upstream as solution=<their latest passing source> + X as cell=<posted source>
+  ~ if X is C: POOL.submit(build_wasm)             emcc in parallel with the check
+    subprocess: python -u session.py --worker job.json, Timer(timeout, kill)
+      worker -> check.run_cell(job, stub=True)     unchanged check.py: compile C, exec Python, run check
+    stream each stdout line to the page
+    rc == SIGKILL -> "killed after Ns"; rc < 0 -> "crashed: SIGSEGV"
+    on PASS: state.passed[X] = source; state.wasm[X] = wasm url; write .session/<chapter>/state.json
+    emit PASS / FAIL as the last line
+  CodeCell.run (cont.)
+    last line == PASS -> refresh() -> gate() all cells, env-play swaps iframe
+
+
+Code we own (wc -l)
+-------------------
+  build_page.py      93
+  session.py        164
+  web/page.js       113
+  web/page.css       38
+  web/page.html      26
+  web/play.html      10
+  verify_page.py    124   (test harness only)
+  total 444 without verify. check.py and build_web.py unchanged. New dep: markdown-it-py
+  (added to blogs/pyproject.toml). CodeMirror 6 from esm.sh via import map, as in the
+  earlier spike. playwright only via uv run --with.
+
+
+Decisions I made
+----------------
+  given code: shown, collapsed, read-only, highlighted, where it sits in the chapter, with
+    the summary "given code: runs before every cell". Why: the reader calls into it
+    (Flappy(n, seed), env.reset/step, ENV_SO) to write train, so hiding it would leave the
+    API undocumented; and it is not secret. Collapsed so it doesn't break the prose.
+  Placeholders: an HTML comment that is a whole Markdown block becomes a dashed, muted
+    monospace "todo: ..." box. They show on the published page too; there is no
+    draft/publish switch yet.
+  Play tag: <X-play></X-play> is generic over C cells (renamed to <env-play cell=X>), so a
+    second env needs no runtime change. It mounts the wasm inside an iframe (play.html).
+    Iframe because the emscripten module loops forever (ASYNCIFY) and can't be torn down;
+    swapping to the reader's build = changing the iframe src, which kills the old one.
+    Cost: the reader has to click into the iframe before arrow keys work.
+  The widget plays the reference env (built from solution=flappy) until the reader's env
+    passes. The reference wasm is therefore on the published page; C source is not, but
+    the logic is recoverable from the wasm. Fine for a public repo, but it's a product call.
+  Reader code runs as role "cell" (stub=True path of run_cell), so compile errors read
+    "cell=flappy:52:5: error". Upstream latest-passing sources run as role "solution"
+    because that's what run_cell reads for upstream cells.
+  Restore on reload: editors refill with the reader's last *passing* source. Unpassed edits
+    are lost on reload (no localStorage drafts).
+  Gating in the page only looks at the previous cell; the session checks all upstream cells.
+  The session re-parses the chapter on every Run, so the author can edit checks without
+    restarting it.
+
+
+Fake vs real
+------------
+  Real: check.py's run_cell (unchanged), the real C compile through robots' puffer shim,
+    real torch, real emcc build of the reader's env, real streaming over chunked HTTP,
+    real process isolation for crashes and hangs.
+  Fake / stand-in: one reader, no identity or auth, state is one JSON file next to the
+    code, the session runs on the author's machine with the author's toolchain, no
+    sandboxing beyond a subprocess (reader code can read and write the whole filesystem),
+    no CPU/memory limits except the wall-clock timeout, CORS "*".
+
+
+Moving to Modal + Durable Object
+--------------------------------
+  - DO = one per reader per chapter: holds state.passed (sources) and wasm urls; that is
+    exactly state.json today. GET /state and POST /run become DO routes; the DO forwards
+    /run to Modal and pipes the stream back.
+  - Modal sandbox runs the worker: same job JSON (given + check + upstream sources + posted
+    source) and check.run_cell. Image needs clang, the puffer shim + native raylib, torch,
+    and emcc + raylib-wasm for the widget rebuild. The chapter source (with solutions and
+    checks) must be in the image or sent by the DO, never by the page.
+  - Wasm artifacts go to R2 (or the DO serves them) instead of .session/wasm; the page
+    already loads them by URL from the session origin, so only the URL changes.
+  - Timeout becomes a sandbox timeout; add memory/CPU limits; network off for reader code.
+  - Cold start will dominate: today a Run is ~1 s because the venv is warm and raylib is
+    cached. A warm sandbox per active reader, or a pool, will matter.
+  - Identity: cookie or header -> DO id. CORS limited to the Pages origin.
+  - Concurrency: the DO serializes writes, which fixes the state.json race below.
+
+
+Judgement calls (not in the plan)
+---------------------------------
+  - emcc starts in parallel with the check for every C Run, including ones that will fail;
+    failed builds leave orphan dirs under .session/wasm/ (4 dirs after one verify run).
+  - Session re-parses the chapter per Run (live author edits) rather than at startup.
+  - The play widget is an iframe; it needs a click for focus.
+  - The page shows the reader "checking policy with your latest passing flappy" as the
+    first output line, to make the latest-passing rule visible.
+  - Python solutions in the chapter are still NotImplementedError, so verify_page.py
+    carries its own policy implementation to show a Python PASS. It is not committed to
+    the chapter.
+  - Static server on :8010 because something else on this machine holds :8000.
+
+Uncertainties
+-------------
+  - Tracebacks for Python errors include check.py's frame with an absolute server path and
+    chapter line numbers ("<check=policy line 387>"), from run_cell's traceback.print_exc.
+    This leaks paths and is noisy; trimming it means changing check.py, which I left alone.
+  - If an upstream cell's latest passing source errors at exec time (it passed before, so
+    unlikely), the message reads "ERROR in solution=policy", which says "solution" to the reader.
+  - When an upstream cell passes again with different code, downstream cells that passed
+    against the old version keep their "passed" state. Is that what we want, or should
+    they be re-checked or marked stale?
+  - Raylib's text draws as boxes ("□ / □") for the first frames of the widget (screenshots
+    0 and 2), then renders normally ("4 / 6" in screenshot 4). Probably the default font
+    texture isn't ready yet in headless; not checked in a real browser.
+  - esm.sh resolves CodeMirror at view time (unpinned @6 minors); vendoring later.
+  - The leak check only catches a whole solution/check block appearing verbatim.
+
+Papercuts
+---------
+  - First page run: <flappy-play></flappy-play> isn't a CommonMark HTML block (custom tag
+    with open+close on one line), so markdown-it wrapped it in <p> and my html_block rule
+    never saw it. Switched to a regex on the rendered body.
+  - Port 8000 was already in use by another python http.server; the first verify got that
+    server's 404.
+  - `int *p = 0; *p = 1;` did not segfault: clang optimized the UB away and the check just
+    failed on rewards. The test uses `volatile int *p`.
+  - The vendor/raylib-5.5_webassembly dir is gitignored, so a new worktree needs it copied
+    or downloaded again; native raylib was also fetched on the first check run.
+  - Background bash is blocked; servers ran in tmux sessions pb-session and pb-static and
+    were killed at the end.
