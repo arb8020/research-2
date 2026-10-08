@@ -1,10 +1,10 @@
-"""Build a chapter's browser pieces: each env=X + render=X pair -> dist/<chapter>/X.js + X.wasm.
+"""Build a chapter's browser pieces: each env=X -> dist/<chapter>/X.js + X.wasm + X.html.
 
     uv run build_web.py rl/01-flappy.md          # then: python3 -m http.server -d dist
-    uv run build_web.py rl/01-flappy.md --diff   # also: native vs wasm env, same seeds + actions
+    uv run build_web.py rl/01-flappy.md --diff   # also: native vs wasm env, same seed + actions
 
-The module is built with MODULARIZE, so a page can mount it on any canvas:
-    import create from "./flappy.js"; create({canvas: document.querySelector("canvas")})
+web/play.c drives the env (puf_render, then puf_step, forever); puf_render yields each frame
+through puffer's puf_web_vsync (ASYNCIFY). Built with MODULARIZE so a page mounts it on any canvas.
 """
 
 from __future__ import annotations
@@ -24,12 +24,14 @@ from check import Block, compile_envs, parse
 HERE = Path(__file__).parent
 RAYLIB = HERE / "vendor" / "raylib-5.5_webassembly"
 RAYLIB_URL = "https://github.com/raysan5/raylib/releases/download/5.5/raylib-5.5_webassembly.zip"
+PUFFER = HERE.parent / "robots" / "envs" / "puffer"
+KWARGS = "episode_length=32"
 
 PLAY_HTML = """<!doctype html>
 <meta charset="utf-8">
 <title>{name}</title>
 <style>body {{ font: 16px system-ui; margin: 2rem; }} canvas {{ display: block; border: 1px solid #ccc; }}</style>
-<p>{name}: up/down (or k/j)</p>
+<p>{name}: up/down (or w/s) picks your row for the next pipe</p>
 <canvas id="c" tabindex="0"></canvas>
 <script type="module">
   import create from "./{name}.js";
@@ -41,18 +43,20 @@ PLAY_HTML = """<!doctype html>
 
 DIFF_JS = """
 const create = (await import(process.argv[2])).default;
-const { seed, n, actions } = JSON.parse(process.argv[3]);
+const { seed, n, kwargs, actions } = JSON.parse(process.argv[3]);
 const M = await create();
-const obs = M._malloc(n * 2 * 4), act = M._malloc(n * 4), rew = M._malloc(n * 4), done = M._malloc(n);
-const env = M._flappy_create(n, BigInt(seed), obs, act, rew, done);
-M._flappy_reset(env);
-const out = { obs: [Array.from(M.HEAPF32.subarray(obs / 4, obs / 4 + n * 2))], rewards: [], dones: [] };
+const f32 = (k) => M._malloc(k * 4);
+const obs = f32(n * 2), act = f32(n), rew = f32(n), term = f32(n);
+const env = M._vec_create(n, M.stringToNewUTF8(kwargs), seed, obs, act, rew, term);
+M._vec_reset(env, seed);
+const view = (p, k) => Array.from(M.HEAPF32.subarray(p / 4, p / 4 + k));
+const out = { obs: [view(obs, n * 2)], rewards: [], terminals: [] };
 for (const a of actions) {
-  M.HEAP32.set(a, act / 4);
-  M._flappy_step(env);
-  out.obs.push(Array.from(M.HEAPF32.subarray(obs / 4, obs / 4 + n * 2)));
-  out.rewards.push(Array.from(M.HEAPF32.subarray(rew / 4, rew / 4 + n)));
-  out.dones.push(Array.from(M.HEAPU8.subarray(done, done + n)));
+  M.HEAPF32.set(a, act / 4);
+  M._vec_step(env);
+  out.obs.push(view(obs, n * 2));
+  out.rewards.push(view(rew, n));
+  out.terminals.push(view(term, n));
 }
 console.log(JSON.stringify(out));
 """
@@ -72,54 +76,60 @@ def emcc(args: list[str]) -> None:
         sys.exit(f"emcc failed:\n{proc.stderr}")
 
 
-def build_play(env: Block, render: Block, out: Path, tmp: Path) -> None:
-    src = tmp / f"{env.name}_play.cpp"
-    src.write_text(env.source + "\n" + render.source)
+def build_play(env: Block, out: Path, tmp: Path) -> None:
+    header = tmp / f"{env.name}.h"
+    header.write_text(env.source)
     emcc([
-        "-O2", "-std=c++20", str(src), "-o", str(out / f"{env.name}.js"),
-        "-I", str(RAYLIB / "include"), str(RAYLIB / "lib" / "libraylib.a"),
-        "-sUSE_GLFW=3", "-sMODULARIZE=1", "-sEXPORT_ES6=1", "-sENVIRONMENT=web",
-        "-sALLOW_MEMORY_GROWTH=1", "-DPLATFORM_WEB",
+        "-O2", str(HERE / "web" / "play.c"), "-o", str(out / f"{env.name}.js"),
+        f'-DENV_HEADER="{header}"', f"-I{PUFFER}", "-I", str(RAYLIB / "include"), str(RAYLIB / "lib" / "libraylib.a"),
+        "--js-library", str(PUFFER / "puf_web_vsync.js"),
+        "-sUSE_GLFW=3", "-sASYNCIFY", "-sMODULARIZE=1", "-sEXPORT_ES6=1", "-sENVIRONMENT=web",
+        "-sALLOW_MEMORY_GROWTH=1", "-DPLATFORM_WEB", "-DPRECISION_FLOAT",
     ])  # fmt: skip
     (out / f"{env.name}.html").write_text(PLAY_HTML.format(name=env.name))
 
 
 def diff(env: Block, so_path: str, tmp: Path, seed: int = 7, n: int = 64, steps: int = 200) -> None:
-    """Same seed and actions through the native .so and an env-only wasm build; outputs must match exactly."""
+    """Same seed and actions through the native shim and a wasm build of the same shim; outputs must match."""
+    import ctypes
+
     import numpy as np
 
-    src, js = tmp / f"{env.name}_env.cpp", tmp / f"{env.name}_env.mjs"
-    src.write_text(env.source)
+    header, js = tmp / f"{env.name}_diff.h", tmp / f"{env.name}_env.mjs"
+    header.write_text(env.source)
     emcc([
-        "-O2", "-std=c++20", str(src), "-o", str(js), "-sMODULARIZE=1", "-sEXPORT_ES6=1",
-        "-sENVIRONMENT=node", "-sWASM_BIGINT=1",
-        "-sEXPORTED_FUNCTIONS=_malloc,_flappy_create,_flappy_reset,_flappy_step",
-        "-sEXPORTED_RUNTIME_METHODS=HEAPF32,HEAP32,HEAPU8",
+        "-O2", str(PUFFER / "shim.c"), "-o", str(js), f'-DENV_HEADER="{header}"', f"-I{PUFFER}",
+        "-I", str(RAYLIB / "include"), str(RAYLIB / "lib" / "libraylib.a"), "-DPLATFORM_WEB", "-DPRECISION_FLOAT",
+        "--js-library", str(PUFFER / "puf_web_vsync.js"), "-sUSE_GLFW=3",
+        "-sMODULARIZE=1", "-sEXPORT_ES6=1", "-sENVIRONMENT=node", "-sALLOW_MEMORY_GROWTH=1",
+        "-sEXPORTED_FUNCTIONS=_malloc,_vec_create,_vec_reset,_vec_step",
+        "-sEXPORTED_RUNTIME_METHODS=HEAPF32,stringToNewUTF8",
     ])  # fmt: skip
     rng = np.random.default_rng(0)
-    actions = rng.integers(0, 2, (steps, n)).astype(np.int32)
+    actions = rng.integers(0, 2, (steps, n)).astype(np.float32)
     runner = tmp / "diff.mjs"
     runner.write_text(DIFF_JS)
-    arg = json.dumps({"seed": seed, "n": n, "actions": actions.tolist()})
-    proc = subprocess.run(["node", str(runner), str(js), arg], capture_output=True, text=True, check=True)
+    arg = json.dumps({"seed": seed, "n": n, "kwargs": KWARGS, "actions": actions.tolist()})
+    proc = subprocess.run(["node", str(runner), str(js), arg], capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        sys.exit(f"wasm diff runner failed:\n{proc.stderr}")
     wasm = json.loads(proc.stdout)
-
-    import ctypes
 
     lib = ctypes.CDLL(so_path)
     ptr = ctypes.c_void_p
-    lib.flappy_create.argtypes = [ctypes.c_int32, ctypes.c_uint64, ptr, ptr, ptr, ptr]
-    lib.flappy_create.restype = ptr
-    obs, act = np.zeros(n * 2, np.float32), np.zeros(n, np.int32)
-    rew, done = np.zeros(n, np.float32), np.zeros(n, np.uint8)
-    h = lib.flappy_create(n, seed, obs.ctypes.data, act.ctypes.data, rew.ctypes.data, done.ctypes.data)
-    lib.flappy_reset.argtypes = lib.flappy_step.argtypes = [ptr]
-    lib.flappy_reset(h)
+    lib.vec_create.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint, ptr, ptr, ptr, ptr]
+    lib.vec_create.restype = ptr
+    lib.vec_reset.argtypes = [ptr, ctypes.c_uint]
+    lib.vec_step.argtypes = [ptr]
+    obs, act = np.zeros(n * 2, np.float32), np.zeros(n, np.float32)
+    rew, term = np.zeros(n, np.float32), np.zeros(n, np.float32)
+    h = lib.vec_create(n, KWARGS.encode(), seed, obs.ctypes.data, act.ctypes.data, rew.ctypes.data, term.ctypes.data)
+    lib.vec_reset(h, seed)
     assert obs.tolist() == wasm["obs"][0], "native and wasm disagree on the first obs after reset"
     for t in range(steps):
         act[:] = actions[t]
-        lib.flappy_step(h)
-        for name, native in (("obs", obs), ("rewards", rew), ("dones", done)):
+        lib.vec_step(h)
+        for name, native in (("obs", obs), ("rewards", rew), ("terminals", term)):
             got = wasm[name][t + 1 if name == "obs" else t]
             assert native.tolist() == got, f"native and wasm disagree on {name} at step {t}"
     print(f"diff {env.name}: native == wasm on {steps} steps x {n} envs (seed {seed})")
@@ -132,23 +142,20 @@ def main() -> None:
     args = ap.parse_args()
 
     blocks = parse(args.chapter.read_text())
-    envs = {b.name: b for b in blocks if b.role == "env"}
-    renders = {b.name: b for b in blocks if b.role == "render"}
-    for name in renders:
-        assert name in envs, f"render={name} has no env={name}"
+    envs = [b for b in blocks if b.role == "env"]
 
     ensure_raylib()
     out = HERE / "dist" / args.chapter.with_suffix("").name
     out.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as t:
         tmp = Path(t)
-        for name, render in renders.items():
-            build_play(envs[name], render, out, tmp)
-            print(f"built {out / name}.html")
+        for env in envs:
+            build_play(env, out, tmp)
+            print(f"built {out / env.name}.html")
         if args.diff:
             so = compile_envs(blocks, tmp)
-            for name, env in envs.items():
-                diff(env, so[name], tmp)
+            for env in envs:
+                diff(env, so[env.name], tmp)
 
 
 if __name__ == "__main__":

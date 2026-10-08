@@ -30,7 +30,7 @@ typedef float obs_t;
 #define ACT_SIZES {2}
 #define OBS_SIZE 2
 #define NUM_ATNS 1
-#define FLAPPY_FRAMES 12
+#define FLAPPY_FRAMES 60
 
 const int TOP = 0;
 const int BOTTOM = 1;
@@ -79,14 +79,13 @@ void puf_reset(Flappy* env) {
 }
 
 static void flappy_human_controls(Flappy* env) {
-    if (!IsWindowReady() || !IsKeyDown(KEY_LEFT_SHIFT)) {
+    if (!IsWindowReady()) {
         return;
     }
-    env->agents[0].actions[0] = env->bird_row;
-    if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)) {
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
         env->agents[0].actions[0] = TOP;
     }
-    if (IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S)) {
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
         env->agents[0].actions[0] = BOTTOM;
     }
 }
@@ -110,20 +109,26 @@ void puf_step(Flappy* env) {
 void puf_render(Flappy* env) {
     int w = 480;
     int h = 240;
+    int bird_x = 120;
     if (!IsWindowReady()) {
         InitWindow(w, h, "PufferLib Flappy");
         SetTargetFPS(60);
     }
+    Color bird_color = env->agents[0].rewards[0] > 0 ? (Color){255, 203, 0, 255} : (Color){230, 41, 55, 255};
     for (int f = 0; f < FLAPPY_FRAMES; f++) {
         if (IsKeyDown(KEY_ESCAPE)) {
             exit(0);
         }
         flappy_human_controls(env);
-        int pipe_x = w - (w * f) / FLAPPY_FRAMES;
+        int pipe_x = w - ((w - bird_x) * f) / FLAPPY_FRAMES;
+        int next_row = (int)env->agents[0].actions[0];
+        Color bird = (env->tick > 0 && f < FLAPPY_FRAMES / 4) ? bird_color : (Color){0, 187, 187, 255};
         BeginDrawing();
         ClearBackground((Color){6, 24, 24, 255});
         DrawRectangle(pipe_x, env->pipe_row * h / 2, 40, h / 2, (Color){0, 187, 0, 255});
-        DrawCircle(120, env->bird_row * h / 2 + h / 4, 18, (Color){0, 187, 187, 255});
+        DrawCircle(bird_x, env->bird_row * h / 2 + h / 4, 18, bird);
+        DrawCircleLines(bird_x, next_row * h / 2 + h / 4, 18, (Color){0, 187, 187, 255});
+        DrawText(TextFormat("%d / %d", (int)env->episode_return, env->tick), 10, 10, 20, RAYWHITE);
         EndDrawing();
         puf_web_vsync();
     }
