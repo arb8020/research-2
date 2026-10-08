@@ -15,6 +15,7 @@ Branch `blogs/flappy`, worktree `worktrees/blogs-flappy`. The page-builder spike
 ```
 cd worktrees/blogs-flappy/blogs
 uv run check.py rl/01-flappy.md [cell] [--stub]     # checks vs hidden solutions (or the stubs)
+uv run check.py rl/01-flappy.md flappy --build prod  # check=flappy without asserts/sanitizers
 uv run build_web.py rl/01-flappy.md --diff          # wasm play widget + native~wasm behaviour check
 uv run build_page.py rl/01-flappy.md                # dist/01-flappy/index.html
 uv run session.py rl/01-flappy.md --timeout 20      # local session stand-in, :8787
@@ -55,11 +56,17 @@ rm -rf .session && uv run --with playwright verify_page.py   # headless proof, s
 - **Notes.** `notes/research/` holds the distilled research reports (inspiration + infra) and `notes/design-discussion.md` the why behind decisions, both recovered from session a9f505dc. The inspiration sections lack the author's own reasons and need their pass.
 
 ## Parked (2026-10-08)
-- **Build split, not yet implemented.**
-  - Check build: `-O2` + asserts + `-fsanitize=address,undefined`, as upstream's debug build.
-  - Prod build: `-O2 -DNDEBUG`, for the speed and memory budgets, training, and `build_web.py`.
-  - Today `check.py` runs correctness and speed in one build with asserts on.
-  - Also: `-Wextra`/`-Werror` on the reader cell only (`-isystem` for vendor headers), and why `-Wparentheses` didn't fire on `assert(a = b)`. `-Wfloat-conversion` is out, since it contradicts puffer casts.
+- **Build split (2026-10-08, branch `blogs/build-split`).** `check.py` compiles each C block two ways (`BUILDS`):
+  - check: `-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined,bounds,pointer-overflow -fno-sanitize-recover=all`, asserts on, `-Wall -Wextra -Werror -Wno-unused-parameter` plus upstream's `CLANG_WARN`. Vendor dirs (pufferlib, raylib) are `-isystem`, so only the reader's header and `shim.c` can fail the build. `-O1` rather than upstream's `-O0`: ASan's recommended level, closer to prod codegen, same reports.
+  - prod: `-O2 -DNDEBUG` + upstream's `CLANG_WARN`, no `-Werror` (stripping asserts can leave a variable unused). `build_web.py` (emcc play widget and `--diff`) uses it too.
+  - Which build a block sees: `check=X` of a C cell X runs against X's check build; a new hidden role `budget=X` runs against prod builds; every other cell and every upstream C cell gets prod. `check=flappy`'s speed loop moved into `budget=flappy`. `check=train` keeps its time/memory asserts, since a Python cell's check already runs on prod in a clean process.
+  - Each phase runs in its own Python subprocess (`run_phase`/`worker`). The check phase of a C cell preloads the ASan runtime (`sanitizer_env`: `DYLD_INSERT_LIBRARIES` on macOS, `LD_PRELOAD` + `-shared-libasan` on Linux; `dlopen`ing an ASan .so without it aborts with "interceptors not working"). The budget phase is a clean process because preloaded ASan intercepts `memset`, which slowed even the prod .so by ~30% (346M to 242M steps/s).
+  - Crash, sanitizer report (exit 86), abort (failed assert) and timeout messages moved from `session.py` into `check.run_phase`. `session.py` now calls `run_cell` directly.
+  - `uv run check.py rl/01-flappy.md flappy --build prod` runs `check=flappy` without asserts/sanitizers, to see what they catch.
+  - `assert(a = b)` gave no `-Wparentheses` on macOS because the SDK's `assert(e)` expands to `!(e)`, and the parentheses silence it. glibc's expands to `if (e)` and warns (checked in an Ubuntu container, with both clang and gcc). `include/assert.h` (check build, macOS only) redefines `assert` the glibc way, so the warning (an error under `-Werror`) fires on both. No flag catches other side effects (`assert(x++)`); that is clang-tidy's `bugprone-assert-side-effect`, which isn't installed.
+  - Measured (laptop): check build ~80M steps/s, prod ~300M.
+  - `verify_page.py`'s segfault and infinite-loop cases had been no-ops since the stub lost `// write stub here` (the paste was the plain stub). They now inject at a stub comment and assert it exists; the segfault now shows as an ASan SEGV report.
+  - Untested: the full check.py path on Linux/Modal (x86_64, needs clang's shared ASan runtime installed). The mechanism itself (`-shared-libasan` + `LD_PRELOAD` + ctypes + numpy catching a heap overflow) was run in an arm64 Ubuntu 24.04 container with clang 18.
 - **Reference done (2026-10-08).** `solution=flappy` is the author's `puf_step` (entry checks at the top, tidied), and the stub's `puf_step` is back to the author's outline comments (the first and last comments are Claude's). Open: whether the reader writes `assert_invariants` themselves (now ready-made, like `add_log`), the `reward`/`is_terminal` aliases, a `puf_reset` postcondition, and the author's notes-to-self comments, which must go before publishing.
 
 ## Open questions

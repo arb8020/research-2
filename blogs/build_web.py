@@ -3,7 +3,8 @@
     uv run build_web.py rl/01-flappy.md          # then: python3 -m http.server -d dist
     uv run build_web.py rl/01-flappy.md --diff   # also: native vs wasm env behave the same
 
---diff is behavioural, not bit-exact (see diff()).
+--diff is behavioural, not bit-exact (see diff()). Everything here is the prod build (-DNDEBUG), as in
+check.py's BUILDS["prod"].
 
 web/play.c drives the env (puf_render, then puf_step, forever); puf_render yields each frame
 through puffer's puf_web_vsync (ASYNCIFY). Built with MODULARIZE so a page mounts it on any canvas.
@@ -84,7 +85,7 @@ def build_play(env: Block, out: Path, tmp: Path) -> None:
     header = tmp / f"{env.name}.h"
     header.write_text(env.source)
     emcc([
-        "-O2", str(HERE / "web" / "play.c"), "-o", str(out / f"{env.name}.js"),
+        "-O2", "-DNDEBUG", str(HERE / "web" / "play.c"), "-o", str(out / f"{env.name}.js"),
         f'-DENV_HEADER="{header}"', f"-I{PUFFER}", "-I", str(RAYLIB / "include"), str(RAYLIB / "lib" / "libraylib.a"),
         "--js-library", str(PUFFER / "puf_web_vsync.js"),
         "-sUSE_GLFW=3", "-sASYNCIFY", "-sMODULARIZE=1", "-sEXPORT_ES6=1", "-sENVIRONMENT=web",
@@ -113,7 +114,7 @@ def diff(env: Block, so_path: str, tmp: Path, seed: int = 7, n: int = 1024, step
     header, js = tmp / f"{env.name}_diff.h", tmp / f"{env.name}_env.mjs"
     header.write_text(env.source)
     emcc([
-        "-O2", str(HERE / "shim.c"), "-o", str(js), f'-DENV_HEADER="{header}"', f"-I{PUFFER}",
+        "-O2", "-DNDEBUG", str(HERE / "shim.c"), "-o", str(js), f'-DENV_HEADER="{header}"', f"-I{PUFFER}",
         "-I", str(RAYLIB / "include"), str(RAYLIB / "lib" / "libraylib.a"), "-DPLATFORM_WEB", "-DPRECISION_FLOAT",
         "--js-library", str(PUFFER / "puf_web_vsync.js"), "-sUSE_GLFW=3",
         "-sMODULARIZE=1", "-sEXPORT_ES6=1", "-sENVIRONMENT=node", "-sALLOW_MEMORY_GROWTH=1",
@@ -187,7 +188,7 @@ def main() -> None:
             print(f"built {out / env.name}.html")
         if args.diff:
             for env in envs:
-                so, errors = compile_c(env, tmp)
+                so, errors = compile_c(env, tmp, "prod")
                 assert not errors, errors
                 diff(env, so, tmp)
 

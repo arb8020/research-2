@@ -366,8 +366,6 @@ void puf_init(Env* env, Dict* kwargs) {
 ```
 
 ```python check=flappy
-import time
-
 n, episode_length = 4096, 32
 env = Flappy(n=n, seed=0, episode_length=episode_length)
 obs = env.reset()
@@ -422,7 +420,13 @@ assert abs(log["perf"] - expected_return / episode_length) < 1e-3, (
     f"log perf is {log['perf']:.3f}, expected {expected_return / episode_length:.3f} (return / episode length)"
 )
 
-steps = 2000
+```
+
+```python budget=flappy
+import time
+
+n, steps = 4096, 2000
+env = Flappy(n=n, seed=0, episode_length=32)
 env.reset()
 start = time.perf_counter()
 for _ in range(steps):
