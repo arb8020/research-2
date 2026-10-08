@@ -107,7 +107,10 @@ void assert_invariants(FlappyEnv* flappy_env) {
 }
 
 void puf_step(Env* env) {
-    // check the state and the action you were given
+    assert_invariants(&env->flappy_env);
+    assert(env->agents[0].actions[0] >= TOP);
+    assert(env->agents[0].actions[0] <= BOTTOM);
+    assert(env->agents[0].actions[0] == truncf(env->agents[0].actions[0]));
 
     // increment env by a tick
 
@@ -119,7 +122,7 @@ void puf_step(Env* env) {
 
     // if not ended, spawn pipe and early return
 
-    // episode over: log it, reset, check the state you hand back
+    // episode over: log it and reset
 }
 
 void puf_render(Env* env) {
