@@ -10,7 +10,6 @@ Branch `blogs/flappy`, worktree `worktrees/blogs-flappy`. The page-builder spike
    - other code shows as `...`;
    - the last level is the full solution;
    - Python uses `# hint_i`.
-3. **Shared puffer code**: see the open question below.
 
 ## Run it
 ```
@@ -42,10 +41,10 @@ rm -rf .session && uv run --with playwright verify_page.py   # headless proof, s
   - The env is compiled to wasm (emcc + raylib + puffer's `puf_web_vsync.js`, ASYNCIFY) for play and watch.
   - Human play latches keys at 1 step/s (`FLAPPY_FRAMES 60`).
   - Native vs wasm is compared on *behaviour*, not bits, because `rand_r` differs across libcs and upstream PufferLib accepts that.
+- **Standalone.** blogs vendors its own PufferLib (`vendor/pufferlib`: pufferenv.h, ini.h, puf_web_vsync.js @ 6ffa5b1) and `shim.c` (a copy of robots'), and fetches its own raylib. Nothing reads `robots/`. If the two shims diverge enough to hurt, extract then.
 - **Format and assistant.** Markdown was chosen over marimo (marimo fought the gating model and needed CSS hacks; its static build was 27 MB). pi-durable is the candidate inline assistant, deferred.
 
 ## Open questions
-- **Puffer files.** `blogs` reaches into `robots/envs/puffer/` (shim.c, pufferenv.h, ini.h, build.py, puf_web_vsync.js). Options: a shared top-level `puffer/`, copy into blogs, or keep as is. Moving it touches robots imports and `robots/box_recipe.py`, which uploads robots/.
 - **Page builder.**
   - (5) A reload restores only the last *passing* source, so unpassed edits are lost.
   - (6) When an upstream cell re-passes with different code, should downstream cells be marked stale?
