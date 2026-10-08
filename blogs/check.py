@@ -7,6 +7,7 @@
 A chapter is one Markdown file. Fenced blocks carry their role in the info string:
 
     ```cpp env=flappy        compiled to a shared library; path in ENV_SO["flappy"]
+    ```cpp render=flappy     browser only: drawing + play loop, built with env=flappy by build_web.py
     ```python given          shared code every cell sees (wrappers, helpers)
     ```python cell=X         what the reader starts with
     ```python solution=X     hidden reference
@@ -29,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 FENCE = re.compile(r"^```(\w+)[ \t]+([^\n]*)\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
-ROLES = ("env", "given", "cell", "solution", "check")
+ROLES = ("env", "render", "given", "cell", "solution", "check")
 
 
 @dataclass
