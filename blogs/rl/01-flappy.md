@@ -21,186 +21,133 @@ let's look at a very simple environment below, roughly a simplified flappy bird 
 
 <flappy-play></flappy-play>
 
-```cpp env=flappy readonly
-#include <cstdint>
-#include <cstdlib>
-
-typedef int32_t s32;
-typedef uint64_t u64;
-typedef uint8_t u8;
-typedef float f32;
-
-constexpr s32 EPISODE_LEN = 32;
-constexpr s32 OBS_DIM = 2;
-
-struct Bird {
-    s32 pipe_row;
-    s32 bird_row;
-    s32 t;
-};
-
-struct Flappy {
-    s32 n;
-    u64 rng;
-    Bird *birds;
-    f32 *obs;
-    s32 *actions;
-    f32 *rewards;
-    u8 *dones;
-};
-
-static u64 rng_next(u64 *s) {
-    *s ^= *s << 13;
-    *s ^= *s >> 7;
-    *s ^= *s << 17;
-    return *s;
-}
-
-static void draw_pipe(Flappy *env, s32 i) {
-    Bird *b = &env->birds[i];
-    b->pipe_row = (s32)(rng_next(&env->rng) & 1);
-    env->obs[i * OBS_DIM + 0] = b->pipe_row == 0 ? 1.0f : 0.0f;
-    env->obs[i * OBS_DIM + 1] = b->pipe_row == 1 ? 1.0f : 0.0f;
-}
-
-extern "C" Flappy *flappy_create(s32 n, u64 seed, f32 *obs, s32 *actions, f32 *rewards, u8 *dones) {
-    if (n <= 0 || !obs || !actions || !rewards || !dones) return nullptr;
-    Flappy *env = (Flappy *)calloc(1, sizeof(Flappy));
-    Bird *birds = (Bird *)calloc((size_t)n, sizeof(Bird));
-    if (!env || !birds) {
-        free(env);
-        free(birds);
-        return nullptr;
-    }
-    env->n = n;
-    env->rng = seed * 0x9E3779B97F4A7C15ull + 1;
-    env->birds = birds;
-    env->obs = obs;
-    env->actions = actions;
-    env->rewards = rewards;
-    env->dones = dones;
-    return env;
-}
-
-extern "C" void flappy_reset(Flappy *env) {
-    for (s32 i = 0; i < env->n; i++) {
-        env->birds[i].bird_row = 0;
-        env->birds[i].t = 0;
-        env->rewards[i] = 0.0f;
-        env->dones[i] = 0;
-        draw_pipe(env, i);
-    }
-}
-
-extern "C" void flappy_step(Flappy *env) {
-    for (s32 i = 0; i < env->n; i++) {
-        Bird *b = &env->birds[i];
-        b->bird_row = env->actions[i] == 0 ? 0 : 1;
-        env->rewards[i] = b->bird_row != b->pipe_row ? 1.0f : 0.0f;
-        b->t += 1;
-        env->dones[i] = b->t >= EPISODE_LEN;
-        if (env->dones[i]) b->t = 0;
-        draw_pipe(env, i);
-    }
-}
-
-extern "C" void flappy_free(Flappy *env) {
-    if (!env) return;
-    free(env->birds);
-    free(env);
-}
-```
-
-```cpp render=flappy
-#include <emscripten/emscripten.h>
+```c env=flappy readonly
+#include <stdlib.h>
 #include "raylib.h"
+typedef float obs_t;
+#include "pufferenv.h"
 
-constexpr s32 W = 480;
-constexpr s32 H = 240;
-constexpr s32 ROW_H = H / 2;
-constexpr s32 BIRD_X = 120;
-constexpr s32 PIPE_W = 40;
-constexpr f32 PIPE_WAIT_X = 330.0f;
-constexpr f32 PIPE_SPEED = 700.0f;
+#define ACT_SIZES {2}
+#define OBS_SIZE 2
+#define NUM_ATNS 1
+#define FLAPPY_FRAMES 12
 
-enum Phase : u8 { WAITING, SLIDING };
+const int TOP = 0;
+const int BOTTOM = 1;
 
-struct Game {
-    Flappy *env;
-    f32 obs[OBS_DIM];
-    s32 action;
-    f32 reward;
-    u8 done;
-    Phase phase;
-    s32 bird_row;
-    s32 sliding_pipe_row;
-    f32 pipe_x;
-    s32 score;
-    s32 steps;
-    s32 last_score;
-    s32 last_steps;
+struct Log {
+    float perf;
+    float score;
+    float episode_return;
+    float episode_length;
+    float n;
 };
 
-static Game game;
+struct Env {
+    Log log;
+    Agent agents[1];
+    int num_agents;
+    int episode_length;
+    int tick;
+    int pipe_row;
+    int bird_row;
+    float episode_return;
+    unsigned int rng;
+};
+typedef Env Flappy;
 
-static s32 observed_pipe_row(Game *g) {
-    return g->obs[0] == 1.0f ? 0 : 1;
+void add_log(Flappy* env) {
+    env->log.perf += env->episode_return / env->tick;
+    env->log.score += env->episode_return;
+    env->log.episode_return += env->episode_return;
+    env->log.episode_length += env->tick;
+    env->log.n++;
 }
 
-static void take_action(Game *g, s32 row) {
-    g->bird_row = row;
-    g->sliding_pipe_row = observed_pipe_row(g);
-    g->action = row;
-    flappy_step(g->env);
-    g->score += (s32)g->reward;
-    g->steps += 1;
-    g->phase = SLIDING;
+static void next_pipe(Flappy* env) {
+    obs_t* obs = env->agents[0].observations;
+    env->pipe_row = rand_r(&env->rng) % 2;
+    obs[TOP] = env->pipe_row == TOP;
+    obs[BOTTOM] = env->pipe_row == BOTTOM;
 }
 
-static void tick(void) {
-    Game *g = &game;
-    if (g->phase == WAITING) {
-        if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_K)) take_action(g, 0);
-        else if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_J)) take_action(g, 1);
-    } else {
-        g->pipe_x -= PIPE_SPEED * GetFrameTime();
-        if (g->pipe_x < -PIPE_W) {
-            if (g->done) {
-                g->last_score = g->score;
-                g->last_steps = g->steps;
-                g->score = 0;
-                g->steps = 0;
-            }
-            g->pipe_x = PIPE_WAIT_X;
-            g->phase = WAITING;
-        }
+void puf_reset(Flappy* env) {
+    env->tick = 0;
+    env->episode_return = 0;
+    env->bird_row = TOP;
+    next_pipe(env);
+}
+
+static void flappy_human_controls(Flappy* env) {
+    if (!IsWindowReady() || !IsKeyDown(KEY_LEFT_SHIFT)) {
+        return;
     }
-
-    s32 pipe_row = g->phase == SLIDING ? g->sliding_pipe_row : observed_pipe_row(g);
-    bool passed_bird = g->phase == SLIDING && g->pipe_x < BIRD_X;
-    Color bird = !passed_bird ? ORANGE : (g->reward == 0.0f ? RED : GOLD);
-
-    BeginDrawing();
-    ClearBackground(RAYWHITE);
-    DrawLine(0, ROW_H, W, ROW_H, LIGHTGRAY);
-    DrawRectangle((s32)g->pipe_x, pipe_row * ROW_H, PIPE_W, ROW_H, DARKGREEN);
-    DrawCircle(BIRD_X, g->bird_row * ROW_H + ROW_H / 2, 18.0f, bird);
-    DrawText(TextFormat("%d / %d", g->score, g->steps), 10, 10, 20, DARKGRAY);
-    if (g->last_steps > 0) DrawText(TextFormat("last episode %d / %d", g->last_score, g->last_steps), 10, H - 26, 16, GRAY);
-    if (g->phase == WAITING) DrawText("up or down?", W - 130, 10, 20, GRAY);
-    EndDrawing();
+    env->agents[0].actions[0] = env->bird_row;
+    if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)) {
+        env->agents[0].actions[0] = TOP;
+    }
+    if (IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S)) {
+        env->agents[0].actions[0] = BOTTOM;
+    }
 }
 
-int main(void) {
-    InitWindow(W, H, "flappy");
-    u64 seed = (u64)(emscripten_random() * 2147483647.0);
-    game.env = flappy_create(1, seed, game.obs, &game.action, &game.reward, &game.done);
-    if (!game.env) return 1;
-    flappy_reset(game.env);
-    game.pipe_x = PIPE_WAIT_X;
-    game.phase = WAITING;
-    emscripten_set_main_loop(tick, 0, 1);
-    return 0;
+void puf_step(Flappy* env) {
+    env->tick += 1;
+    env->bird_row = (int)env->agents[0].actions[0];
+    env->agents[0].terminals[0] = 0;
+    env->agents[0].rewards[0] = env->bird_row != env->pipe_row;
+    env->episode_return += env->agents[0].rewards[0];
+
+    if (env->tick >= env->episode_length) {
+        env->agents[0].terminals[0] = 1;
+        add_log(env);
+        puf_reset(env);
+        return;
+    }
+    next_pipe(env);
+}
+
+void puf_render(Flappy* env) {
+    int w = 480;
+    int h = 240;
+    if (!IsWindowReady()) {
+        InitWindow(w, h, "PufferLib Flappy");
+        SetTargetFPS(60);
+    }
+    for (int f = 0; f < FLAPPY_FRAMES; f++) {
+        if (IsKeyDown(KEY_ESCAPE)) {
+            exit(0);
+        }
+        flappy_human_controls(env);
+        int pipe_x = w - (w * f) / FLAPPY_FRAMES;
+        BeginDrawing();
+        ClearBackground((Color){6, 24, 24, 255});
+        DrawRectangle(pipe_x, env->pipe_row * h / 2, 40, h / 2, (Color){0, 187, 0, 255});
+        DrawCircle(120, env->bird_row * h / 2 + h / 4, 18, (Color){0, 187, 187, 255});
+        EndDrawing();
+        puf_web_vsync();
+    }
+}
+
+void puf_close(Flappy* env) {
+    if (IsWindowReady()) {
+        CloseWindow();
+    }
+}
+
+void puf_log(Log* log, Dict* out) {
+    dict_set(out, "perf", log->perf);
+    dict_set(out, "score", log->score);
+    dict_set(out, "episode_return", log->episode_return);
+    dict_set(out, "episode_length", log->episode_length);
+    dict_set(out, "n", log->n);
+}
+
+void puf_init(Env* env, Dict* kwargs) {
+    env->num_agents = 1;
+    env->episode_length = dict_get(kwargs, "episode_length");
+    env->agents[0].action_mask = NULL;
+    env->agents[0].policy = 0;
 }
 ```
 
@@ -215,38 +162,38 @@ OBS_DIM, N_ACTIONS = 2, 2
 
 
 class Flappy:
-
-    def __init__(self, n: int, seed: int) -> None:
+    def __init__(self, n: int, seed: int, episode_length: int = 32) -> None:
         lib = ctypes.CDLL(ENV_SO["flappy"])
         ptr = ctypes.c_void_p
-        lib.flappy_create.argtypes = [ctypes.c_int32, ctypes.c_uint64, ptr, ptr, ptr, ptr]
-        lib.flappy_create.restype = ptr
-        for fn in (lib.flappy_reset, lib.flappy_step, lib.flappy_free):
-            fn.argtypes = [ptr]
-            fn.restype = None
-        self.n, self.lib = n, lib
+        lib.vec_create.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint, ptr, ptr, ptr, ptr]
+        lib.vec_create.restype = ptr
+        lib.vec_reset.argtypes = [ptr, ctypes.c_uint]
+        lib.vec_step.argtypes = [ptr]
+        lib.vec_close.argtypes = [ptr]
+        self.n, self.seed, self.lib = n, seed, lib
         self.obs = np.zeros((n, OBS_DIM), np.float32)
-        self.actions = np.zeros(n, np.int32)
+        self.actions = np.zeros(n, np.float32)
         self.rewards = np.zeros(n, np.float32)
-        self.dones = np.zeros(n, np.uint8)
-        self.handle = lib.flappy_create(
-            n, seed, self.obs.ctypes.data, self.actions.ctypes.data, self.rewards.ctypes.data, self.dones.ctypes.data
+        self.terminals = np.zeros(n, np.float32)
+        kwargs = f"episode_length={episode_length}".encode()
+        self.handle = lib.vec_create(
+            n, kwargs, seed, self.obs.ctypes.data, self.actions.ctypes.data, self.rewards.ctypes.data, self.terminals.ctypes.data
         )
-        assert self.handle, "flappy_create returned null"
-        weakref.finalize(self, lib.flappy_free, self.handle)
+        assert self.handle, "vec_create returned null"
+        weakref.finalize(self, lib.vec_close, self.handle)
 
     def reset(self) -> torch.Tensor:
-        self.lib.flappy_reset(self.handle)
+        self.lib.vec_reset(self.handle, self.seed)
         return torch.from_numpy(self.obs.copy())
 
     def step(self, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         assert actions.shape == (self.n,), f"actions must have shape ({self.n},), got {tuple(actions.shape)}"
         self.actions[:] = actions.numpy()
-        self.lib.flappy_step(self.handle)
+        self.lib.vec_step(self.handle)
         return (
             torch.from_numpy(self.obs.copy()),
             torch.from_numpy(self.rewards.copy()),
-            torch.from_numpy(self.dones.astype(bool)),
+            torch.from_numpy(self.terminals.astype(bool)),
         )
 ```
 

@@ -6,8 +6,7 @@
 
 A chapter is one Markdown file. Fenced blocks carry their role in the info string:
 
-    ```cpp env=flappy        compiled to a shared library; path in ENV_SO["flappy"]
-    ```cpp render=flappy     browser only: drawing + play loop, built with env=flappy by build_web.py
+    ```c env=flappy          PufferLib env header, compiled with robots' puffer shim; path in ENV_SO["flappy"]
     ```python given          shared code every cell sees (wrappers, helpers)
     ```python cell=X         what the reader starts with
     ```python solution=X     hidden reference
@@ -20,6 +19,7 @@ cell before X, then X (solution, or stub with --stub), then X's check.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import re
 import subprocess
 import sys
@@ -28,9 +28,11 @@ import time
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 FENCE = re.compile(r"^```(\w+)[ \t]+([^\n]*)\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
-ROLES = ("env", "render", "given", "cell", "solution", "check")
+ROLES = ("env", "given", "cell", "solution", "check")
+PUFFER = Path(__file__).resolve().parent.parent / "robots" / "envs" / "puffer"
 
 
 @dataclass
@@ -58,15 +60,29 @@ def parse(text: str) -> list[Block]:
     return blocks
 
 
+def puffer_build() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("puffer_build", PUFFER / "build.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def compile_envs(blocks: list[Block], out: Path) -> dict[str, str]:
     paths = {}
+    build = puffer_build()
     for b in blocks:
         if b.role != "env":
             continue
-        assert b.lang == "cpp", f"line {b.line}: env blocks must be cpp, got {b.lang}"
-        src, so = out / f"{b.name}.cpp", out / f"{b.name}.so"
-        src.write_text(b.source)
-        cmd = ["g++", "-O2", "-shared", "-fPIC", "-std=c++20", "-o", str(so), str(src)]
+        assert b.lang == "c", f"line {b.line}: env blocks are PufferLib C headers, got {b.lang}"
+        header, so = out / f"{b.name}.h", out / f"_{b.name}.so"
+        header.write_text(b.source)
+        raylib = build.fetch_raylib()
+        link = build._linux_link(raylib) if build.LINUX else [*build._macos_link(raylib, so), f"-Wl,-rpath,{raylib / 'lib'}"]
+        cmd = [
+            "clang", *build.CFLAGS, f'-DENV_HEADER="{header}"', f"-I{PUFFER}", f"-I{raylib / 'include'}",
+            str(PUFFER / "shim.c"), "-o", str(so), *link,
+        ]  # fmt: skip
         proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if proc.returncode != 0:
             sys.exit(f"env {b.name} failed to compile:\n{proc.stderr}")
