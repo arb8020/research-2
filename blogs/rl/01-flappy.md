@@ -21,11 +21,22 @@ let's look at a very simple environment below, roughly a simplified flappy bird 
 
 <flappy-play></flappy-play>
 
+<!-- write prose here: the trainer hands your env these arrays, one Agent per player -->
+
 ```c cell=flappy
 #include <stdlib.h>
 #include "raylib.h"
 typedef float obs_t;
 #include "pufferenv.h"
+// pufferenv.h gives every env this, one per player:
+// typedef struct Agent {
+//     obs_t* observations;
+//     float* actions;
+//     float* rewards;
+//     float* terminals;
+//     unsigned char* action_mask;
+//     int policy;
+// } Agent;
 
 #define ACT_SIZES {2}
 #define OBS_SIZE 2
@@ -55,32 +66,55 @@ struct Env {
     Agent agents[1];
     int num_agents;
     unsigned int rng;
-    FlappyEnv flappy;
+    FlappyEnv flappy_env;
 };
 
-void next_pipe(Env* env) {
+void spawn_pipe(Env* env) { // would name this like env_step or smth
     obs_t* obs = env->agents[0].observations;
-    env->flappy.pipe_row = rand_r(&env->rng) % 2;
-    obs[TOP] = env->flappy.pipe_row == TOP;
-    obs[BOTTOM] = env->flappy.pipe_row == BOTTOM;
+    env->flappy_env.pipe_row = rand_r(&env->rng) % 2;
+    obs[TOP] = env->flappy_env.pipe_row == TOP;
+    obs[BOTTOM] = env->flappy_env.pipe_row == BOTTOM;
 }
 
 void puf_reset(Env* env) {
-    env->flappy.tick = 0;
-    env->flappy.episode_return = 0;
-    env->flappy.bird_row = TOP;
-    next_pipe(env);
+    env->flappy_env.tick = 0; // still dont like that its just flappy would like flappy_env or smth
+    env->flappy_env.episode_return = 0;
+    env->flappy_env.bird_row = TOP;
+    spawn_pipe(env);
 }
 
 void puf_step(Env* env) {
     // write stub here
+    // read action written by policy
+
+    // ok in python it would probably look smth like
+    // idk what agent namespace has in it or the nvim shortcut to check lol
+    agent = env.agents[0].action // kinda cursed that everything travels through Env? or maybe not idk
+    flappyenv.tick += 1 // dep if its a dataclass replace situation
+    
+    flappyenv.bird_row = agent.action[-1] // last action from the agent
+    agent.reward = 1 if flappyenv.bird_row != flappyenv.pipe_row else 0
+    agent.ended = 1 if flappyenv.tick >= flappyenv.max_episode_len
+    flappyenv.episode_return += agent.reward
+
+    if not agent.ended:
+      env_step
+      break
+    
+    // log stuff
+    // reset environment
+      
+    
+    // reward
+    // step environment state
+    // end episode
 }
 
 void puf_render(Env* env) {
     int w = 480;
     int h = 240;
     int bird_x = 120;
-    FlappyEnv* flappy = &env->flappy;
+    FlappyEnv* flappy_env = &env->flappy_env;
     Color cyan = {0, 187, 187, 255};
     Color flash = env->agents[0].rewards[0] > 0
         ? (Color){255, 203, 0, 255}
@@ -101,15 +135,15 @@ void puf_render(Env* env) {
         }
         int pipe_x = w - (w - bird_x) * f / FLAPPY_FRAMES;
         int next_row = env->agents[0].actions[0];
-        int flashing = flappy->tick > 0 && f < FLAPPY_FRAMES / 4;
+        int flashing = flappy_env->tick > 0 && f < FLAPPY_FRAMES / 4;
         BeginDrawing();
         ClearBackground((Color){6, 24, 24, 255});
-        DrawRectangle(pipe_x, flappy->pipe_row * h / 2, 40, h / 2,
+        DrawRectangle(pipe_x, flappy_env->pipe_row * h / 2, 40, h / 2,
             (Color){0, 187, 0, 255});
-        DrawCircle(bird_x, flappy->bird_row * h / 2 + h / 4, 18,
+        DrawCircle(bird_x, flappy_env->bird_row * h / 2 + h / 4, 18,
             flashing ? flash : cyan);
         DrawCircleLines(bird_x, next_row * h / 2 + h / 4, 18, cyan);
-        DrawText(TextFormat("%d / %d", (int)flappy->episode_return, flappy->tick),
+        DrawText(TextFormat("%d / %d", (int)flappy_env->episode_return, flappy_env->tick),
             10, 10, 20, RAYWHITE);
         EndDrawing();
         puf_web_vsync();
@@ -132,7 +166,7 @@ void puf_log(Log* log, Dict* out) {
 
 void puf_init(Env* env, Dict* kwargs) {
     env->num_agents = 1;
-    env->flappy.episode_length = dict_get(kwargs, "episode_length");
+    env->flappy_env.episode_length = dict_get(kwargs, "episode_length");
     env->agents[0].action_mask = NULL;
     env->agents[0].policy = 0;
 }
@@ -143,6 +177,15 @@ void puf_init(Env* env, Dict* kwargs) {
 #include "raylib.h"
 typedef float obs_t;
 #include "pufferenv.h"
+// pufferenv.h gives every env this, one per player:
+// typedef struct Agent {
+//     obs_t* observations;
+//     float* actions;
+//     float* rewards;
+//     float* terminals;
+//     unsigned char* action_mask;
+//     int policy;
+// } Agent;
 
 #define ACT_SIZES {2}
 #define OBS_SIZE 2
@@ -172,39 +215,39 @@ struct Env {
     Agent agents[1];
     int num_agents;
     unsigned int rng;
-    FlappyEnv flappy;
+    FlappyEnv flappy_env;
 };
 
-void next_pipe(Env* env) {
+void spawn_pipe(Env* env) {
     obs_t* obs = env->agents[0].observations;
-    env->flappy.pipe_row = rand_r(&env->rng) % 2;
-    obs[TOP] = env->flappy.pipe_row == TOP;
-    obs[BOTTOM] = env->flappy.pipe_row == BOTTOM;
+    env->flappy_env.pipe_row = rand_r(&env->rng) % 2;
+    obs[TOP] = env->flappy_env.pipe_row == TOP;
+    obs[BOTTOM] = env->flappy_env.pipe_row == BOTTOM;
 }
 
 void puf_reset(Env* env) {
-    env->flappy.tick = 0;
-    env->flappy.episode_return = 0;
-    env->flappy.bird_row = TOP;
-    next_pipe(env);
+    env->flappy_env.tick = 0;
+    env->flappy_env.episode_return = 0;
+    env->flappy_env.bird_row = TOP;
+    spawn_pipe(env);
 }
 
 void puf_step(Env* env) {
     Agent* agent = &env->agents[0];
-    FlappyEnv* flappy = &env->flappy;
-    flappy->tick += 1;
-    flappy->bird_row = agent->actions[0];
-    agent->rewards[0] = flappy->bird_row != flappy->pipe_row;
-    agent->terminals[0] = flappy->tick >= flappy->episode_length;
-    flappy->episode_return += agent->rewards[0];
+    FlappyEnv* flappy_env = &env->flappy_env;
+    flappy_env->tick += 1;
+    flappy_env->bird_row = agent->actions[0];
+    agent->rewards[0] = flappy_env->bird_row != flappy_env->pipe_row;
+    agent->terminals[0] = flappy_env->tick >= flappy_env->episode_length;
+    flappy_env->episode_return += agent->rewards[0];
     if (!agent->terminals[0]) {
-        next_pipe(env);
+        spawn_pipe(env);
         return;
     }
-    env->log.perf += flappy->episode_return / flappy->tick;
-    env->log.score += flappy->episode_return;
-    env->log.episode_return += flappy->episode_return;
-    env->log.episode_length += flappy->tick;
+    env->log.perf += flappy_env->episode_return / flappy_env->tick;
+    env->log.score += flappy_env->episode_return;
+    env->log.episode_return += flappy_env->episode_return;
+    env->log.episode_length += flappy_env->tick;
     env->log.n++;
     puf_reset(env);
 }
@@ -213,7 +256,7 @@ void puf_render(Env* env) {
     int w = 480;
     int h = 240;
     int bird_x = 120;
-    FlappyEnv* flappy = &env->flappy;
+    FlappyEnv* flappy_env = &env->flappy_env;
     Color cyan = {0, 187, 187, 255};
     Color flash = env->agents[0].rewards[0] > 0
         ? (Color){255, 203, 0, 255}
@@ -234,15 +277,15 @@ void puf_render(Env* env) {
         }
         int pipe_x = w - (w - bird_x) * f / FLAPPY_FRAMES;
         int next_row = env->agents[0].actions[0];
-        int flashing = flappy->tick > 0 && f < FLAPPY_FRAMES / 4;
+        int flashing = flappy_env->tick > 0 && f < FLAPPY_FRAMES / 4;
         BeginDrawing();
         ClearBackground((Color){6, 24, 24, 255});
-        DrawRectangle(pipe_x, flappy->pipe_row * h / 2, 40, h / 2,
+        DrawRectangle(pipe_x, flappy_env->pipe_row * h / 2, 40, h / 2,
             (Color){0, 187, 0, 255});
-        DrawCircle(bird_x, flappy->bird_row * h / 2 + h / 4, 18,
+        DrawCircle(bird_x, flappy_env->bird_row * h / 2 + h / 4, 18,
             flashing ? flash : cyan);
         DrawCircleLines(bird_x, next_row * h / 2 + h / 4, 18, cyan);
-        DrawText(TextFormat("%d / %d", (int)flappy->episode_return, flappy->tick),
+        DrawText(TextFormat("%d / %d", (int)flappy_env->episode_return, flappy_env->tick),
             10, 10, 20, RAYWHITE);
         EndDrawing();
         puf_web_vsync();
@@ -265,7 +308,7 @@ void puf_log(Log* log, Dict* out) {
 
 void puf_init(Env* env, Dict* kwargs) {
     env->num_agents = 1;
-    env->flappy.episode_length = dict_get(kwargs, "episode_length");
+    env->flappy_env.episode_length = dict_get(kwargs, "episode_length");
     env->agents[0].action_mask = NULL;
     env->agents[0].policy = 0;
 }
