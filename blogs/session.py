@@ -6,9 +6,10 @@
     GET  /state                {"passed": {cell: latest passing source}, "wasm": {cell: "/wasm/<hash>/<cell>.js"}}
     GET  /wasm/<hash>/<file>   play widget built from a reader's passing C cell
 
-Running cell X: a fresh subprocess runs check.run_cell with the given blocks, the reader's latest
-passing source for every cell before X, the posted source as X, then X's check. A crash or a hang
-in reader code kills only that subprocess. Only a PASS updates .session/<chapter>/state.json.
+Running cell X: check.run_cell with the given blocks, the reader's latest passing source for every
+cell before X, the posted source as X, then X's check (and budget). run_cell runs each in a fresh
+subprocess, so a crash or a hang in reader code kills only that subprocess. Only a PASS updates
+.session/<chapter>/state.json.
 """
 
 from __future__ import annotations
@@ -16,14 +17,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import signal
-import subprocess
-import sys
 import tempfile
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -33,13 +29,6 @@ from check import Block, cell_order, find, parse, run_cell
 HERE = Path(__file__).parent
 TYPES = {".js": "text/javascript", ".wasm": "application/wasm", ".html": "text/html"}
 POOL = ThreadPoolExecutor(2)
-
-
-def worker(job_path: str) -> None:
-    job = json.loads(Path(job_path).read_text())
-    with tempfile.TemporaryDirectory() as tmp:
-        ok = run_cell([Block(**b) for b in job["blocks"]], job["order"], Path(tmp), job["target"], stub=True)
-    sys.exit(0 if ok else 1)
 
 
 def build_wasm(env: Block, store: Path) -> tuple[str, float]:
@@ -53,8 +42,6 @@ def build_wasm(env: Block, store: Path) -> tuple[str, float]:
 
 
 def main() -> None:
-    if sys.argv[1] == "--worker":
-        worker(sys.argv[2])
     ap = argparse.ArgumentParser()
     ap.add_argument("chapter", type=Path)
     ap.add_argument("--port", type=int, default=8787)
@@ -77,33 +64,17 @@ def main() -> None:
             return False
         stub = find(blocks, "cell", cell)
         target = Block(stub.lang, "cell", cell, source, stub.line)
-        job = [b for b in blocks if b.role == "given" or (b.role == "check" and b.name == cell)]
+        job = [b for b in blocks if b.role == "given" or (b.role in ("check", "budget") and b.name == cell)]
         job += [Block(find(blocks, "cell", n).lang, "solution", n, state["passed"][n], 0) for n in upstream]
         job.append(target)
         emit(f"checking {cell} with your latest passing {', '.join(upstream)}\n" if upstream else f"checking {cell}\n")
 
         wasm = POOL.submit(build_wasm, target, store) if target.lang == "c" else None
         store.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile("w", suffix=".json", dir=store, delete=False) as f:
-            json.dump({"blocks": [asdict(b) for b in job], "order": order, "target": cell}, f)
         start = time.perf_counter()
-        proc = subprocess.Popen(
-            [sys.executable, "-u", __file__, "--worker", f.name],
-            cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-        )  # fmt: skip
-        timer = threading.Timer(args.timeout, proc.kill)
-        timer.start()
-        for line in proc.stdout:
-            emit(line)
-        timer.cancel()
-        rc = proc.wait()
-        Path(f.name).unlink()
-        if rc == -signal.SIGKILL:
-            emit(f"killed after {args.timeout:.0f}s: an infinite loop, or just too slow?\n")
-        elif rc < 0:
-            emit(f"your code crashed the process: {signal.Signals(-rc).name}\n")
-        if rc != 0:
-            return False
+        with tempfile.TemporaryDirectory() as tmp:
+            if not run_cell(job, order, Path(tmp), cell, stub=True, emit=emit, timeout=args.timeout):
+                return False
 
         state = load()
         state["passed"][cell] = source

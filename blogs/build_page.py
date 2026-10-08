@@ -5,7 +5,7 @@
 
 cell=X     -> <code-cell> editor prefilled with the stub, Run button, output pane
 given      -> collapsed, read-only code (the reader calls into it, so they can read it)
-solution=X, check=X -> not in the page; the session runs checks
+solution=X, check=X, budget=X -> not in the page; the session runs them
 <!-- ... --> on its own line -> a muted "todo" note
 <X-play></X-play>, X a C cell -> <env-play cell=X>, the wasm play widget (reference env until X passes)
 """
@@ -20,7 +20,7 @@ import tempfile
 from pathlib import Path
 
 import build_web
-from check import ROLES, cell_order, parse
+from check import HIDDEN, ROLES, cell_order, parse
 from markdown_it import MarkdownIt
 
 HERE = Path(__file__).parent
@@ -50,7 +50,7 @@ def main() -> None:
         if role == "given":
             return (f'<details class="given"><summary>given code: runs before every cell</summary>'
                     f'<code-view lang="{lang}"><pre>{src}</pre></code-view></details>\n')
-        if role in ("solution", "check"):
+        if role in HIDDEN:
             return ""
         return plain_fence(tokens, idx, opts, env)
 
@@ -69,7 +69,7 @@ def main() -> None:
     rendered = re.findall(r'<code-cell name="(\w+)"', body)
     assert rendered == cell_order(blocks), f"markdown-it found cells {rendered}, check.py found {cell_order(blocks)}"
     for b in blocks:
-        if b.role in ("solution", "check"):
+        if b.role in HIDDEN:
             assert html.escape(b.source) not in body, f"{b.role}={b.name} (line {b.line}) leaked into the page"
 
     title = re.search(r"^# (.+)$", text, re.MULTILINE)
