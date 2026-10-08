@@ -7,13 +7,13 @@ Needs the page served (python3 -m http.server 8010 -d dist). Exits 1 if any viol
 
 import sys
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Browser, sync_playwright
 
 AXE = "https://cdn.jsdelivr.net/npm/axe-core@4.10.2/axe.min.js"
 URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8010/01-flappy/"
 
 
-def audit(browser, scheme: str) -> list[dict]:
+def audit(browser: Browser, scheme: str) -> list[dict]:
     page = browser.new_page(viewport={"width": 1000, "height": 800}, color_scheme=scheme)
     page.goto(URL)
     page.locator(".cm-editor").first.wait_for()
