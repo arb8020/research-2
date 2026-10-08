@@ -3,13 +3,10 @@
 Branch `blogs/flappy`, worktree `worktrees/blogs-flappy`. The page-builder spike is merged in.
 
 ## Next session
-1. **`puf_step` is done (2026-10-08).** The author translated the draft line by line and the stub now passes `check.py ... flappy --stub`. Concepts it took, in order: `->` vs `.`, `typedef float obs_t` (puffer's header leaves the obs type as a blank the env fills in), `*` in types vs expressions, `&`, copy vs pointer (copying is fine for reads, writes need the pointer), `*p = v`, a `(int)` cast, `assert` + `#include <assert.h>`, `=` vs `==`, `>` vs `>=`, `add_log` placement. Open: should the reference become the author's version? The reference is now the author's version, and the stub is back to a todo.
-2. **Hint ladder.** Hints are derived from annotated solutions and shown beside the editor, never replacing it. Markers go only in `solution=` blocks:
-   - a whole-line `// hint_i text` is an outline comment revealed at level i;
-   - a trailing `// hint_i` on a code line reveals that line at level i;
-   - other code shows as `...`;
-   - the last level is the full solution;
-   - Python uses `# hint_i`.
+1. **`cell=policy`.** The prose slots just before it are "can something autonomous play this?" and "a policy network, obs in, action probabilities out". Deriving the policy gradient comes later, before `cell=loss`. Order: policy → sample → logprob → loss → train, each with a check already written (validated against a throwaway reference). Stubs and solutions are the author's to write; `check=policy` pins the API: `init_policy(obs_dim, n_actions, hidden, seed) -> dict[str, Tensor]` and `policy_probs(params, obs) -> (N, n_actions)`. Same mode as `puf_step`: the author drives, Claude asks questions one line at a time and doesn't hand over answers.
+2. **Build split** is on branch `blogs/build-split` (worktree `worktrees/blogs-build-split`), done by a background agent started 2026-10-08. Check its commit and report (mutant table, judgement calls) before merging into `blogs/flappy`. If the agent died with the session, its branch shows how far it got.
+3. **`puf_step` is done.** The reference is the author's version, the stub is a todo with pre-filled entry checks, and the concepts it took are in git history (e112f513..0d43ff80).
+4. **Hint ladder:** probably dropped for flappy (see Decisions). Confirm with the author.
 
 ## Run it
 ```
