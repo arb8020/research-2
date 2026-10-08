@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "torch",
     "numpy",
+    "markdown-it-py>=4.2.0",
 ]
 
 [tool.uv]
