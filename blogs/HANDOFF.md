@@ -17,6 +17,7 @@ uv run build_page.py rl/01-flappy.md                # dist/01-flappy/index.html
 uv run session.py rl/01-flappy.md --timeout 20      # local session stand-in, :8787
 python3 -m http.server 8010 -d dist                 # open localhost:8010/01-flappy/
 rm -rf .session && uv run --with playwright verify_page.py   # headless proof, screenshots/page-builder/
+uv run --with playwright a11y.py                    # axe accessibility lint, light + dark (page must be served)
 ```
 `play.py` is a throwaway terminal player.
 

@@ -46,10 +46,10 @@ def main() -> None:
         role, name = next(((k, v) for k, _, v in (i.partition("=") for i in info) if k in ROLES), ("", ""))
         src = html.escape(tokens[idx].content)
         if role == "cell":
-            return f'<code-cell name="{name}" lang="{lang}"><pre>{src}</pre></code-cell>\n'
+            return f'<code-cell name="{name}" data-lang="{lang}"><pre>{src}</pre></code-cell>\n'
         if role == "given":
             return (f'<details class="given"><summary>given code: runs before every cell</summary>'
-                    f'<code-view lang="{lang}"><pre>{src}</pre></code-view></details>\n')
+                    f'<code-view data-lang="{lang}"><pre>{src}</pre></code-view></details>\n')
         if role in ("solution", "check"):
             return ""
         return plain_fence(tokens, idx, opts, env)
@@ -57,7 +57,7 @@ def main() -> None:
     def html_block(tokens, idx, opts, env):
         content = tokens[idx].content
         if note := re.fullmatch(r"\s*<!--\s*(.*?)\s*-->\s*", content, re.DOTALL):
-            return f'<aside class="todo">{html.escape(note[1])}</aside>\n'
+            return f'<div class="todo" role="note">{html.escape(note[1])}</div>\n'
         return content
 
     rules["fence"] = fence

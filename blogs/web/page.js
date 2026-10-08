@@ -2,11 +2,33 @@ import { EditorView, basicSetup } from "codemirror";
 import { EditorState, Compartment } from "@codemirror/state";
 import { cpp } from "@codemirror/lang-cpp";
 import { python } from "@codemirror/lang-python";
+import { syntaxHighlighting } from "@codemirror/language";
+import { classHighlighter } from "@lezer/highlight";
+import { vim } from "@replit/codemirror-vim";
 
 const SESSION = new URLSearchParams(location.search).get("session") || document.querySelector('meta[name="session-url"]').content;
 let state = { passed: {}, wasm: {} };
 
 const syntax = (lang) => (lang === "c" ? cpp() : python());
+
+// Token colours come from page.css (.tok-* classes), so light/dark follow the page's CSS variables.
+const look = (label) => [
+  syntaxHighlighting(classHighlighter),
+  EditorView.contentAttributes.of({ "aria-label": label }),
+];
+
+// One vim switch for every editor on the page, remembered per reader.
+const vimMode = new Compartment();
+const vimKey = "blogs.vim";
+let vimOn = false;
+try { vimOn = localStorage.getItem(vimKey) === "1"; } catch {}
+const editors = [];
+function setVim(on) {
+  vimOn = on;
+  try { localStorage.setItem(vimKey, on ? "1" : "0"); } catch {}
+  for (const view of editors) view.dispatch({ effects: vimMode.reconfigure(on ? vim() : []) });
+  for (const b of document.querySelectorAll(".vim-toggle")) b.setAttribute("aria-pressed", String(on));
+}
 
 async function refresh() {
   state = await (await fetch(`${SESSION}/state`)).json();
@@ -17,7 +39,9 @@ class CodeView extends HTMLElement {
   connectedCallback() {
     const doc = this.querySelector("pre").textContent;
     this.innerHTML = "";
-    new EditorView({ parent: this, state: EditorState.create({ doc, extensions: [basicSetup, syntax(this.getAttribute("lang")), EditorState.readOnly.of(true)] }) });
+    const lang = this.getAttribute("data-lang");
+    const view = new EditorView({ parent: this, state: EditorState.create({ doc, extensions: [basicSetup, syntax(lang), look(`given code (${lang})`), EditorState.readOnly.of(true)] }) });
+    view.scrollDOM.tabIndex = 0;
   }
 }
 customElements.define("code-view", CodeView);
@@ -27,15 +51,21 @@ class CodeCell extends HTMLElement {
     this.name = this.getAttribute("name");
     this.stub = this.querySelector("pre").textContent;
     this.innerHTML = `
-      <div class="cell-head"><span>${this.name} · ${this.getAttribute("lang")}</span>
-        <span class="cell-status"></span><button class="run">Run</button></div>
+      <div class="cell-head"><span>${this.name} · ${this.getAttribute("data-lang")}</span>
+        <span class="cell-status"></span><button class="vim-toggle" aria-pressed="${vimOn}">vim</button><button class="run">Run</button></div>
       <div class="cell-editor"></div>
       <pre class="cell-out" hidden></pre>`;
     this.editable = new Compartment();
     this.view = new EditorView({
       parent: this.querySelector(".cell-editor"),
-      state: EditorState.create({ doc: this.stub, extensions: [basicSetup, syntax(this.getAttribute("lang")), this.editable.of(EditorView.editable.of(true))] }),
+      state: EditorState.create({ doc: this.stub, extensions: [
+        vimMode.of(vimOn ? vim() : []), basicSetup, syntax(this.getAttribute("data-lang")),
+        look(`${this.name} code (${this.getAttribute("data-lang")})`), this.editable.of(EditorView.editable.of(true)),
+      ] }),
     });
+    this.view.scrollDOM.tabIndex = 0;
+    editors.push(this.view);
+    this.querySelector(".vim-toggle").onclick = () => setVim(!vimOn);
     this.querySelector(".run").onclick = () => this.run();
     document.addEventListener("session-state", () => this.gate());
     this.gate();

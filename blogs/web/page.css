@@ -1,10 +1,16 @@
 :root {
   --bg: #fdfcf8; --fg: #1d1d1b; --muted: #6b6a64; --rule: #dedbd0; --code-bg: #f4f2ea;
   --pass: #2f7d4a; --fail: #b3261e;
+  --gutter: #63625c; --active: #eae7dc; --select: #d8e2f0; --caret: #1d1d1b;
+  --tok-keyword: #7a2e8c; --tok-string: #8a3a10; --tok-comment: #5d655b; --tok-number: #1f5c99;
+  --tok-type: #0b6a4a; --tok-meta: #7a4f12; --tok-def: #1d4f91; --tok-prop: #3b3b37;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #18181a; --fg: #e8e6df; --muted: #9a988f; --rule: #34342f; --code-bg: #222224;
-          --pass: #6cc28a; --fail: #f08a80; }
+          --pass: #6cc28a; --fail: #f08a80;
+          --gutter: #9a988f; --active: #2c2c2f; --select: #3a4a63; --caret: #e8e6df;
+          --tok-keyword: #d7a6f2; --tok-string: #eaa77c; --tok-comment: #a2aaa0; --tok-number: #8fc6ff;
+          --tok-type: #7fd8ae; --tok-meta: #dcbc84; --tok-def: #a4c4ff; --tok-prop: #d4d2ca; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.65 Charter, "Iowan Old Style", Georgia, serif; }
@@ -25,6 +31,25 @@ code-cell { display: block; margin: 1.6em -16px; border: 1px solid var(--rule); 
 .run:disabled { opacity: 0.4; cursor: not-allowed; }
 .cm-editor { font-size: 13px; background: var(--code-bg); max-height: 520px; }
 .cm-scroller { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.cm-editor .cm-content { caret-color: var(--caret); }
+.cm-editor .cm-cursor, .cm-editor .cm-fat-cursor { border-left-color: var(--caret); }
+.cm-editor .cm-gutters { background: var(--code-bg); color: var(--gutter); border-right: 1px solid var(--rule); }
+.cm-editor .cm-activeLine, .cm-editor .cm-activeLineGutter { background: var(--active); }
+.cm-editor .cm-selectionBackground, .cm-editor.cm-focused .cm-selectionBackground,
+.cm-editor .cm-content ::selection { background: var(--select) !important; }
+.cm-editor .cm-matchingBracket { background: var(--select); outline: none; }
+.cm-editor .cm-panels { background: var(--code-bg); color: var(--fg); }
+.tok-keyword, .tok-bool, .tok-atom { color: var(--tok-keyword); }
+.tok-string, .tok-literal { color: var(--tok-string); }
+.tok-comment { color: var(--tok-comment); font-style: italic; }
+.tok-number { color: var(--tok-number); }
+.tok-typeName, .tok-className, .tok-namespace { color: var(--tok-type); }
+.tok-meta, .tok-macroName { color: var(--tok-meta); }
+.tok-definition, .tok-variableName.tok-definition { color: var(--tok-def); }
+.tok-propertyName { color: var(--tok-prop); }
+.tok-invalid { color: var(--fail); }
+.vim-toggle { font: inherit; padding: 3px 8px; border: 1px solid var(--rule); border-radius: 4px; background: none; color: var(--muted); cursor: pointer; }
+.vim-toggle[aria-pressed="true"] { color: var(--fg); background: var(--active); border-color: var(--muted); }
 code-cell.locked .cell-editor { opacity: 0.45; filter: grayscale(1); }
 .cell-out { margin: 0; padding: 10px 12px; font-size: 12.5px; line-height: 1.45; max-height: 320px; overflow: auto;
             white-space: pre-wrap; border-top: 1px solid var(--rule); border-left: 3px solid var(--muted); background: none; }
