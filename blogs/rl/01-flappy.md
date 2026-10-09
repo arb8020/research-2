@@ -2,6 +2,9 @@
 
 reinforcement learning can do a lot of cool things: 
 [list/embed some cool things]
+https://www.youtube.com/watch?v=0LuGPF1z5GY
+
+
 chess
 autogo
 robots
@@ -11,7 +14,11 @@ but what exactly is reinforcement learning?
 
 reinforcement learning is about teaching `agents` to behave in `environments` by giving them `rewards`. its pretty similar to learning by trial and error, or like pavlov's conditioning experiments. 
 
+[make an excalidraw to put here]
+
 in particular, here we're going to study reinforcement learning using neural networks. neural networks are basically functions that are constructed of many smaller functions whose parameters are fit on on lots of data. it turns out these are very good at the general task of approximating a function f(x) when given a lot of data. 
+
+[embed something here that helps the reader believe in neural networks ]
 
 deep reinforcement learning, in particular, is about trying to do reinforcement learning with deep learning methods. since we are pretty convinced that deep learning is really good at its job, we'd like to have neural networks that learn to take actions that maximize reward in their situations. we'll call this a `policy`, basically the brain of an agent
 
