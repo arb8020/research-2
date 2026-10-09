@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# libkelpie.so from the synced zig sources: zig build is incremental (its caches are in the snapshot),
+# so after the setup this is seconds unless kelpie-core changed. Run from kelpie/.
+set -euo pipefail
+OPT=/opt/kelpie
+cd kelpie-core
+# -Dcpu=baseline: the snapshot boots on whatever host Modal picks next (as dev/setup.py says)
+ZIG_GLOBAL_CACHE_DIR="$OPT/zig-cache" "$OPT/zig/0.14.1/zig" build lib -Dcpu=baseline
+ls -l zig-out/lib/libkelpie.so
