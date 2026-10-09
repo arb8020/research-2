@@ -96,8 +96,12 @@ class Pumped:
             if not open_readers:
                 self.rc = self._wait()
                 self._finished = True
-        finally:  # however iteration ends (a caller that stops early too): the command is killed, the readers joined
-            self.close()
+        except GeneratorExit:
+            raise  # a caller that stopped iterating, e.g. next(iter(stream)): the command goes on until close()
+        except BaseException:
+            self.close()  # an error ends it: the command is killed, the readers joined
+            raise
+        self.close()  # it ended: the readers are joined
 
     def _on_quiet(self, last: float) -> None:
         """No chunk for a while: past a bound, end it (TimeoutError)."""
