@@ -92,6 +92,28 @@ Colab (`.../infra/colab-architecture.md`):
 - spike-modal REPORT.md never written; its numbers live only in blogs HANDOFF and `.evidence/`.
 - Modal tokens have no sandbox-only scope: a pasted reader token can do anything in that workspace (`vmux-modal-auth.md`).
 
+## Next session: the reader path (kickoff, 2026-10-09)
+
+**Target (the author's words):** open the page -> a top-right header **Connect** (Colab-style) -> connect your own Modal -> cells run against the connected GPU; `nvidia-smi` works.
+- Sign-in = **paste a Modal token** for now (Modal OAuth isn't public; ask Modal later). Panel: paste token (link to where to make one) -> Connect -> header shows "connected · T4".
+- Process: step 1 (questions) -> program design -> build in worktrees via subagents -> a runnable proof.
+
+**Build on (main's box/):** `Machine`/`Provider` protocols, `launch()` boot-wait + terminate-on-timeout, lease heartbeat, `attach()`, `Job.wait/kill/logs`, `put/get`, `run_job`; `supervisor.py` in full; `modal_provider.py` create/get/list, `_live` timeouts, `modal_gpu`, `resolve_image`; `gpus.py`; `tests/test_sdk.py` (13 behaviour tests over local + Modal via `tests/providers.py`: extend, don't rewrite).
+
+**Change:**
+- `Modal.__init__` takes no credentials (`modal_provider.py:44-56`): add `token=`, build `modal.Client.from_credentials`, pass the client to `App.lookup`, `Sandbox.create`, `from_id`. `cli.make_provider` (`cli.py:27`) reads `~/.modal.toml` itself and passes it in. (`RunPod.from_env` later.)
+- `Session.id` is the sandbox id (`sdk.py:122`): give sessions their own id (label/tag, looked up by `get`).
+- `launch()` stamps `box.user` from getpass/hostname: for the relay, caller-supplied labels.
+- Pin region for the relay (`modal_provider.py:28` TODO); `box.deadline` stamped before boot (`sdk.py:90` TODO).
+
+**New:** `expose(port) -> Endpoint` (no `encrypted_ports`/connect token today); `Session.status()` + session-level `wait()`; supervisor status + logs to durable storage (`supervisor.py:40` TODO: nothing writes `ended.json` if the supervisor dies).
+
+**Cells:** go through a kernel behind `expose(port)` (Jupyter server, as in branch `blogs/modal-spike`: `blogs/spike-modal/runtime.py`, `relay.py`, `relay_modal.py`, evidence `.evidence/modal-spike/`), not `Session.run` (its log polling is 2-3 execs per 0.5 s). `nvidia-smi` as the first proof can go through `Session.run`. Also see branch `worktree-agent-a29bfb70351ac7455` (`blogs/spike-gpu-session`: T4, connect token, reattach by name, its REPORT.txt "what box would need").
+
+**Settle first:** does an open websocket keep a Modal sandbox alive past `idle_timeout`? (modal-spike: yes via `encrypted_ports`; gpu-session: no via connect token.)
+
+**Old box branches (diffed 2026-10-09):** `box/session` fully merged. `box/recipes`, `box/runpod-5090`, `box/modal-layers` are superseded by b089bd0f; nothing for the reader path. Keep only two ideas: recipes' stage-out question (artifact store vs TTL) folds into (b); runpod-5090's `allowedCudaVersions` + cu128 image if RunPod 5090 runs come back (main's default image has no CUDA filter).
+
 ## Decided with the author (2026-10-09)
 
 - **One SDK, two clients.** The box Python SDK is the only way to get a session. The CLI is sugar over it (you on the laptop); the blogs relay calls the same SDK on behalf of a reader in the browser.
