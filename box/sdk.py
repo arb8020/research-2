@@ -573,25 +573,14 @@ class Job:
         """logs(follow=True): supervisor.py's tail mode on the machine sends both files from the cursor
         as they grow, in one streamed command, and exits once the job is done. A stream that drops
         (no frame for FOLLOW_QUIET_S, or an error) reconnects from the last chunk's end, at most
-        FOLLOW_TRIES times in a row; one that reached TAIL_MAX_S reconnects at once."""
+        FOLLOW_TRIES times in a row with no frame between; one that reached TAIL_MAX_S reconnects at once."""
         tries = 0
         while stop is None or not stop.is_set():
             tail = TailReader(cursor)
-            cmd = f"exec python3 {shlex.quote(self.session._path('supervisor.py'))} tail {shlex.quote(self.dir)} {cursor[0]} {cursor[1]}"
-            errors = b""
             try:
-                # timeout_s: the tail ends itself by TAIL_MAX_S; this bounds one that does not (a hung call)
-                with self.session.machine.stream(cmd, timeout_s=TAIL_MAX_S + 60, quiet_s=FOLLOW_QUIET_S) as stream:
-                    for name, data in stream:
-                        if name == "stderr":
-                            errors = (errors + data)[-TAIL_ERR_BYTES:]
-                            continue
-                        tries = 0  # a frame came: this connection works
-                        for chunk in tail.feed(data):
-                            cursor = chunk.end
-                            yield chunk
-                        if stop is not None and stop.is_set():
-                            return
+                for chunk in self._tail(tail, stop):
+                    cursor = chunk.end
+                    yield chunk
             except Gone:
                 if self.session.record is None:
                     raise
@@ -601,19 +590,31 @@ class Job:
             except TailError:
                 raise
             except Exception as e:  # a dropped stream: Modal's and ssh's errors differ, so any; bounded by FOLLOW_TRIES
-                tries += 1
+                tries = 1 if tail.frames else tries + 1
                 if tries > FOLLOW_TRIES:
                     raise
                 print(f"box: {self.session.id}: following {self.id} dropped ({e!r}); reconnecting from {cursor}", file=sys.stderr)
-                if stop is None:
-                    time.sleep(FOLLOW_BACKOFF_S * tries)
-                else:
-                    stop.wait(FOLLOW_BACKOFF_S * tries)
+                (stop or threading.Event()).wait(FOLLOW_BACKOFF_S * tries)
                 continue
             if tail.end in ("done", "ended"):
                 return
-            if tail.end != "max":  # it exited by itself without saying why: a failure, not a drop
-                raise TailError(f"{self.id}: the log tail exited {stream.rc} without an end: {errors.decode(errors='replace').strip()!r}")
+            if tail.end is None and not (stop and stop.is_set()):  # it exited without saying why: a failure, not a drop
+                raise TailError(f"{self.id}: the log tail exited {tail.rc} without an end: {tail.errors.decode(errors='replace').strip()!r}")
+
+    def _tail(self, tail: TailReader, stop: threading.Event | None) -> Iterator[LogChunk]:
+        """One streamed tail (supervisor.py tail) from tail.cursor: its chunks as they come. After it,
+        tail says how it ended (end, rc, errors). Stops at the first frame after stop is set."""
+        cmd = f"exec python3 {shlex.quote(self.session._path('supervisor.py'))} tail {shlex.quote(self.dir)} {tail.cursor[0]} {tail.cursor[1]}"
+        # timeout_s: the tail ends itself by TAIL_MAX_S; this bounds one that does not (a hung call)
+        with self.session.machine.stream(cmd, timeout_s=TAIL_MAX_S + 60, quiet_s=FOLLOW_QUIET_S) as stream:
+            for name, data in stream:
+                if name == "stderr":
+                    tail.errors = (tail.errors + data)[-TAIL_ERR_BYTES:]
+                    continue
+                yield from tail.feed(data)
+                if stop is not None and stop.is_set():
+                    return
+        tail.rc = stream.rc
 
     def read(self, after: LogCursor, *, watch: bool = False) -> JobRead:
         """One look at the job in one exec: its status, then its output past after (so a "done"
@@ -681,13 +682,16 @@ class TailError(RuntimeError):
 
 
 class TailReader:
-    """Job.logs(follow=True)'s side of supervisor.tail: its frames in, LogChunks out, each with the
+    """Job.logs(follow=True)'s side of one supervisor.tail: its frames in, LogChunks out, each with the
     cursor just past it. A UTF-8 character cut by a frame waits for the rest (the cursor stays before
     it), unless the job is done: then the output is whole and is decoded as it is."""
 
     def __init__(self, after: LogCursor) -> None:
         self.cursor = list(after)
         self.end: str | None = None  # done | ended | max, once the tail said it
+        self.frames = 0  # frames read (beats too): any, and the connection worked
+        self.rc: int | None = None  # the tail's exit code, once it exited
+        self.errors = b""  # the end of its own stderr: why it failed, if it did
         self._held = dict.fromkeys(STREAMS, b"")  # the start of a character cut by the last frame
         self._buf = b""  # bytes of frames not parsed yet: at most a frame and a header
 
@@ -701,6 +705,7 @@ class TailReader:
                     raise TailError(f"log tail sent no frame header: {self._buf[:64]!r}")
                 break
             word, _, arg = header.decode(errors="replace").partition(" ")
+            self.frames += 1
             if word in STREAMS:
                 n = int(arg)
                 if not 0 < n <= TAIL_FRAME_BYTES:

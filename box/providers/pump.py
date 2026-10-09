@@ -140,10 +140,8 @@ class Pumped:
             return
         except BaseException as e:  # noqa: BLE001 (handed to the caller, raised from its iteration)
             item = e
-        try:
+        with contextlib.suppress(Closed):
             self._put(item)
-        except Closed:
-            pass
 
     def _emit(self, name: str, data: bytes) -> None:
         self._put((name, data))
