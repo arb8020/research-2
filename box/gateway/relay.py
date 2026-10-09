@@ -584,21 +584,26 @@ class Stream:
                 return rec.status
             self.ping()
 
-    def replay_record(self, cfg: Config, s: sdk.Session, token: ModalToken) -> None:
-        """A session whose machine is gone: its recorded Jupyter log, then its (ended) status."""
+    def replay_record(self, cfg: Config, s: sdk.Session, token: ModalToken, offsets: tuple[int, int]) -> None:
+        """A session whose machine is gone: its recorded Jupyter log past offsets (bytes of stdout,
+        stderr this stream already sent), then its (ended) status."""
         assert s.record is not None, "relay sessions are always recorded"
         record = sdk.read_record(s.record, s.id)
+        seen = dict(zip(("stdout", "stderr"), offsets, strict=True))
+        read = {"stdout": 0, "stderr": 0}
         for job_id in record.jobs():
             for n, stream, chunk in record.logs(job_id):
-                for line in chunk.splitlines():
-                    self.send(f"r{n}", {"t": time.time(), "kind": "log", "source": "machine", "stream": stream, "text": line})
+                for line in chunk.splitlines(keepends=True):
+                    read[stream] += len(line.encode())
+                    if read[stream] > seen[stream]:
+                        self.send(f"r{n}", {"t": time.time(), "kind": "log", "source": "machine", "stream": stream, "text": line.rstrip("\n")})
         self.send("r-end", {"t": time.time(), "kind": "status", "status": machine_status(cfg, s, token, ready=False)})
 
     def follow_machine(self, cfg: Config, s: sdk.Session, token: ModalToken, offsets: tuple[int, int], last: dict[str, Any] | None) -> None:
         """The machine's word until it ends: Jupyter's log, and its status when it changes. Bounded
         by the session's deadline (plus the provider's backstop), like Session.wait()."""
         if isinstance(s.machine, sdk.Lost):
-            self.replay_record(cfg, s, token)
+            self.replay_record(cfg, s, token, offsets)
             return
         job = the_kernel_job(s)
         ready = last is not None and last["state"] == "running"
