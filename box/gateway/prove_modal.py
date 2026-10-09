@@ -116,13 +116,14 @@ def hold(kernel: dict, sid: str, tok: ModalToken, hold_s: float) -> dict:
     from box import sdk
     from box.providers.modal import Modal
 
-    s = sdk.attach(Modal(token=tok, region="us"), sid)
-    url = kernel_client.api(kernel, f"/api/kernels/{kernel_client.kernel_id(kernel)}/channels").replace("http", "ws", 1)
-    with kernel_client.connect(url, open_timeout=60):
-        time.sleep(hold_s)
-        held = s.status()
-    closed = time.monotonic()
-    ended = s.wait(timeout_s=hold_s + 600)
+    with Modal(token=tok, region="us") as modal:
+        s = sdk.attach(modal, sid)
+        url = kernel_client.api(kernel, f"/api/kernels/{kernel_client.kernel_id(kernel)}/channels").replace("http", "ws", 1)
+        with kernel_client.connect(url, open_timeout=60):
+            time.sleep(hold_s)
+            held = s.status()
+        closed = time.monotonic()
+        ended = s.wait(timeout_s=hold_s + 600)
     return {"held_s": hold_s, "status_while_held": type(held).__name__, "ended": ended.reason, "close_to_end_s": round(time.monotonic() - closed, 1)}
 
 
