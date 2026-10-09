@@ -412,9 +412,9 @@ class Session:
                 raise TimeoutError(f"{self.machine.id}: supervisor not up after {timeout_s:.0f} s")
             time.sleep(POLL_S)
 
-    def _up(self) -> bool:  # MUST KILL: accepts an empty ROOT/up as a supervisor from before up held the session id; drop the back-compat branch
+    def _up(self) -> bool:
         rc, out, _ = self.machine.exec(f"cat {self._path('up')}")
-        return rc == 0 and out.strip() in ("", self.id)
+        return rc == 0 and out.strip() == self.id
 
     def extend(self, until: float) -> Lease:
         return self._change_lease("extend", until)

@@ -205,7 +205,7 @@ def supervise_briefly(root: Path, monkeypatch: pytest.MonkeyPatch, before_finish
     now = time.time()
     supervisor.supervise_main([
         "--root", str(root), "--created-at", repr(now), "--lease-until", repr(now + 1), "--ceiling", repr(now + 60),
-        "--host", "test", "--pid", "1", "--record", "record", "--on-shutdown", f"touch {root}/shut-down",
+        "--host", "test", "--pid", "1", "--session-id", "s-000000000000", "--record", "record", "--on-shutdown", f"touch {root}/shut-down",
     ])  # fmt: skip
 
 
