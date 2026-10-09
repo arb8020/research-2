@@ -28,6 +28,7 @@ import requests
 
 from box import gpus
 from box.sdk import LABEL_BY, LABEL_SESSION, Endpoint, Gone
+from box.store import Mount
 
 # TODO(handoff): seen live: a pod whose client died before attaching deleted itself at its boot
 # timeout (UP_TIMEOUT_S). Not yet seen live on the current sdk: the normal path, where the
@@ -128,11 +129,13 @@ class RunPod:
             raise RuntimeError(f"runpod: {method} {path} -> {r.status_code}: {r.text[:500]}")
         return r.json() if r.content else None
 
-    def launch(
+    def launch(  # noqa: PLR0913 (keyword-only: what a machine is made with)
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
-        labels: dict[str, str], timeout_s: int, ports: list[int],
+        labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
     ) -> RunPodMachine:  # fmt: skip
         """Returns once ssh answers (the supervisor may still be starting)."""
+        if mounts:  # a pod could mount an S3-compatible store (R2): not built yet
+            raise NotImplementedError(f"runpod provider: no store mounts yet (got {[m.store.uri for m in mounts]})")
         body: dict = {
             "name": f"box-{labels[LABEL_SESSION]}", "image": image or IMAGE, "cloud": self.cloud,
             "disk": DISK_GB, "ports": ["22/tcp", *(f"{p}/http" for p in ports)], "entrypoint": ["bash", "-c", BOOT, "boot", *entrypoint],

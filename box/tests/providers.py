@@ -4,9 +4,13 @@ multiplies every timing in the tests, since a cloud exec takes ~0.5 s and a loca
 
 from __future__ import annotations
 
+import contextlib
+import os
+import signal
 from pathlib import Path
 
-from box.sdk import Machine, Provider
+from box.sdk import Gone, Machine, Provider
+from box.store import DirStore, Store
 
 IMAGE = "python:3.13-slim"  # any image with bash + python3 is a box image
 SCALE = {"local": 1.0, "modal": 10.0, "runpod": 30.0}  # runpod: ~30 s boot comes out of box.deadline
@@ -32,6 +36,31 @@ def _make(name: str, base: Path) -> Provider:
 
         return RunPod.from_env()
     raise ValueError(f"unknown provider {name!r}")
+
+
+def make_store(name: str, base: Path, provider: Provider) -> Store:
+    """Where a test session records itself: a store its provider can mount."""
+    if name == "local":
+        return DirStore(base)
+    if name == "modal":
+        from box.modal_provider import ModalVolumeStore
+
+        return ModalVolumeStore(RECORD_VOLUME, client=provider.client)
+    raise ValueError(f"no store for provider {name!r}")
+
+
+RECORD_VOLUME = "box-sessions"  # a v2 Volume in the tester's own Modal workspace
+
+
+def kill_supervisor(machine: Machine) -> None:
+    """SIGKILL the machine's supervisor: no ended.json, no final flush. A local machine's
+    supervisor is the pid it launched; elsewhere it is the machine's PID 1."""
+    pid_file = getattr(machine, "dir", None)
+    if pid_file is not None:
+        os.kill(int((pid_file / "pid").read_text()), signal.SIGKILL)
+    else:
+        with contextlib.suppress(Gone):  # the exec may die with it
+            machine.exec("kill -9 1")
 
 
 class Tested:
