@@ -153,6 +153,7 @@ class Backend(Protocol):
     def assignments(self) -> list[Assignment]: ...
     def unassign(self, endpoint: str) -> None: ...
     def runtime(self, assignment: Assignment) -> Runtime: ...
+    def root(self, endpoint: str) -> str: ...
     def close(self) -> None: ...
 
 
@@ -160,14 +161,12 @@ class Colab:
     name = "colab"
 
     def __init__(
-        self, backend: Backend, *, allow_free: bool = False, max_runtime_s: int = MAX_RUNTIME_S,
-        root: str = ROOT, log: TextIO = sys.stderr,
+        self, backend: Backend, *, allow_free: bool = False, max_runtime_s: int = MAX_RUNTIME_S, log: TextIO = sys.stderr,
     ) -> None:  # fmt: skip
         assert max_runtime_s > BACKSTOP_MARGIN_S, max_runtime_s
         self.backend = backend
         self.allow_free = allow_free
         self.max_runtime_s = max_runtime_s
-        self.root = root
         self.log = log
         self.closed = False
         # a kernel websocket runs a non-daemon thread (jupyter_kernel_client) that holds the process open at exit
@@ -223,7 +222,7 @@ class Colab:
             raise LookupError(f"colab provider: no runtime {machine_id} on this account")
         machine = self._ours(found[0])
         if machine is None:
-            raise LookupError(f"colab provider: {machine_id} was not launched by box (no {self.root_of(machine_id)}/{META})")
+            raise LookupError(f"colab provider: {machine_id} was not launched by box (no {self.backend.root(machine_id)}/{META})")
         return machine
 
     def list(self, labels: dict[str, str] | None = None) -> list[ColabMachine]:
@@ -242,7 +241,7 @@ class Colab:
     def _ours(self, a: Assignment) -> ColabMachine | None:
         runtime = self.backend.runtime(a)
         try:
-            meta = parse_meta(runtime.get_file(f"{self.root_of(a.endpoint)}/{META}"))
+            meta = parse_meta(runtime.get_file(f"{self.backend.root(a.endpoint)}/{META}"))
         except FileNotFoundError:
             return None
         finally:
@@ -250,9 +249,6 @@ class Colab:
         if meta["labels"].get(LABEL_BY) != "box":
             return None
         return self._track(ColabMachine(self, a, meta["labels"], exec_kernel=meta["exec_kernel"]))
-
-    def root_of(self, machine_id: str) -> str:  # MUST KILL: root is a template with "{machine}" only so the test fake can host many runtimes on one computer; let the fake give each machine its root
-        return self.root.replace("{machine}", machine_id)
 
     def _track(self, machine: ColabMachine) -> ColabMachine:
         assert not self.closed, "colab provider: closed"
@@ -291,7 +287,7 @@ class ColabMachine:
         self.colab = colab
         self.id = assignment.endpoint
         self.labels = labels
-        self.root = colab.root_of(self.id)
+        self.root = colab.backend.root(self.id)
         self.work = self.root.rsplit("/", 1)[0] + "/work"
         self._assignment = assignment
         self._exec_kernel = exec_kernel
@@ -636,6 +632,9 @@ class CliBackend:
 
     def runtime(self, assignment: Assignment) -> CliRuntime:
         return CliRuntime(assignment.url, assignment.token)
+
+    def root(self, endpoint: str) -> str:
+        return ROOT
 
     def close(self) -> None:
         self.http.close()

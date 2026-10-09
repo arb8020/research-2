@@ -7,8 +7,8 @@ TBE_RUNTIME_ADDR pointing at a small HTTP server (one per runtime, like Colab's 
 whose POST /unassign ends the runtime: every process the runtime started is killed, as when Colab
 takes the VM back. Each assignments() mints a fresh proxy token (as `colab` relies on its
 list_assignments doing); every token works until token_ttl_s after it was minted. Files are this
-computer's, so the provider's root is a temp dir, and every runtime sees the same files except a
-foreign one (assign_foreign: a notebook of yours), which has none of box's.
+computer's, so each runtime's root (Backend.root) is a directory of its own under its vm, and every
+runtime sees the same files except a foreign one (assign_foreign: a notebook of yours), which has none of box's.
 
     config.json  {"compute_units": float, "token_ttl_s": float, "tbe": bool}   (FakeBackend.configure)
 """
@@ -90,6 +90,9 @@ class FakeBackend:
 
     def runtime(self, assignment: Assignment) -> FakeRuntime:
         return FakeRuntime(self.base / "vms" / assignment.endpoint, assignment.token)
+
+    def root(self, endpoint: str) -> str:
+        return str(self.vm(endpoint) / "content" / "box")
 
     def close(self) -> None:
         pass  # no connections: the account is files

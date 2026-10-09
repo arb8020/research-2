@@ -60,7 +60,7 @@ def _make(name: str, base: Path) -> Provider:
         from box.providers.colab import Colab
         from box.tests.fake_colab import FakeBackend
 
-        return Colab(FakeBackend(base / "account"), root=str(base / "content" / "{machine}" / "box"))
+        return Colab(FakeBackend(base / "account"))
     raise ValueError(f"unknown provider {name!r}")
 
 
