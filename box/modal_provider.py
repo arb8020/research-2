@@ -11,11 +11,13 @@ Credentials are an argument, never looked up here: every Modal call goes through
 from the token the caller passes (the CLI reads ~/.modal.toml with ModalToken.from_config).
 
     Modal(token=ModalToken.from_config(), volumes={"/data": "kelpie-a1"})  # volumes: {mount path: name}, created if missing
+    ModalVolumeStore("box-sessions", client=modal_provider.client)       # a Store (box/store.py): launch(record=)
 """
 
 from __future__ import annotations
 
 import contextlib
+import io
 import threading
 import time
 import tomllib
@@ -30,6 +32,7 @@ import modal
 
 from box import gpus
 from box.sdk import LABEL_BY, Endpoint, Gone
+from box.store import Mount
 
 APP = "box"
 # TODO(handoff): T below is a TypeVar (ruff UP047); left for the generics/TypeVar decision.
@@ -91,15 +94,19 @@ class Modal:
             self._app = modal.App.lookup(APP, client=self.client, create_if_missing=True)
         return self._app
 
-    def launch(
+    def launch(  # noqa: PLR0913 (keyword-only: what a machine is made with)
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
-        labels: dict[str, str], timeout_s: int, ports: list[int],
+        labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
     ) -> ModalMachine:  # fmt: skip
+        """mounts: ModalVolumeStores only, each a sub_path of its Volume (created on start if missing)."""
+        if foreign := [m.store.uri for m in mounts if not isinstance(m.store, ModalVolumeStore)]:
+            raise ValueError(f"modal provider: mounts only a ModalVolumeStore (got {foreign})")
+        stores = {f"{ROOT}/{m.path}": m.store.volume.with_mount_options(sub_path=f"/{m.prefix}") for m in mounts}
         sandbox = modal.Sandbox.create(
             *entrypoint, app=self.app, image=resolve_image(image), gpu=modal_gpu(gpu), region=self.region,
             env={**env, "BOX_ROOT": ROOT}, tags=labels, timeout=min(timeout_s, MAX_TIMEOUT_S), client=self.client,
             encrypted_ports=ports,
-            volumes={path: modal.Volume.from_name(v, create_if_missing=True, client=self.client) for path, v in self.volumes.items()},
+            volumes={**{path: modal.Volume.from_name(v, create_if_missing=True, client=self.client) for path, v in self.volumes.items()}, **stores},
         )  # fmt: skip
         return ModalMachine(sandbox, labels, booting=True)
 
@@ -118,6 +125,36 @@ class Modal:
         tags = {**(labels or {}), LABEL_BY: "box"}
         found = modal.Sandbox.list(app_id=self.app.app_id, tags=tags, client=self.client)
         return [ModalMachine(s, s.get_tags()) for s in found]
+
+
+class ModalVolumeStore:
+    """A Modal Volume (v2: concurrent writers, per-file commits) as a Store. Readers see what has
+    been committed. Seen live (2026-10-09, CPU sandboxes in "us", a sub_path mount): a sandbox's
+    `sync <mount>` commits (~70 ms); unsynced writes commit by themselves within ~5 s, and also land
+    when the sandbox is terminate()d, its entrypoint exits, or its PID 1 is SIGKILLed.
+    The Volume is in the client's workspace: whoever holds that token can read every session in it."""
+
+    sync_writes = True
+
+    def __init__(self, name: str, *, client: modal.Client) -> None:
+        self.name = name
+        self.uri = f"modal-volume://{name}"
+        self.volume = modal.Volume.from_name(name, version=2, create_if_missing=True, client=client)
+
+    def get(self, key: str) -> bytes:
+        return b"".join(self.volume.read_file(key))  # FileNotFoundError if absent
+
+    def list(self, prefix: str) -> list[str]:
+        try:
+            entries = self.volume.listdir(prefix, recursive=True)
+        except modal.exception.NotFoundError:
+            return []
+        files = [e.path.lstrip("/") for e in entries if e.type == modal.volume.FileEntryType.FILE]
+        return sorted(f for f in files if not f.endswith(".tmp"))
+
+    def put(self, key: str, data: bytes) -> None:
+        with self.volume.batch_upload(force=True) as batch:
+            batch.put_file(io.BytesIO(data), key)
 
 
 class ModalMachine:

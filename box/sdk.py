@@ -17,6 +17,11 @@
         s.run("jupyter server --port 8888 ...")
         s.expose(8888)                       # Endpoint(url="https://...", headers={})
 
+    s = box.launch(provider, deadline_s=3600, record=store)   # the supervisor records into store (box/store.py)
+    box.attach(provider, s.id, record=store).wait()           # works after the machine is gone too
+    r = box.read_record(store, s.id)         # Record: no machine, no provider needed
+    for n, stream, text in r.logs(job_id, after=0): ...
+
 A provider only rents raw machines (Machine: exec, write, read, terminate). Everything else is
 here, built from those four calls and the supervisor (box/supervisor.py), which every machine
 runs as its entrypoint and which talks to this file only through files under machine.root.
@@ -28,17 +33,20 @@ import base64
 import contextlib
 import io
 import json
+import re
 import secrets
 import shlex
 import sys
 import tarfile
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Literal, Protocol, get_args
+from typing import Literal, Protocol, TypeVar, get_args
+
+from box.store import Mount, Store
 
 SUPERVISOR = Path(__file__).with_name("supervisor.py")
 LABEL_BY = "box.by"
@@ -46,6 +54,9 @@ LABEL_SESSION = "box.session"  # the session's own id: a session is not its mach
 LABEL_DEADLINE = "box.deadline"  # unix time the session ends by
 RESERVED = (LABEL_BY, LABEL_SESSION, LABEL_DEADLINE)  # launch stamps these; a caller's labels are the rest
 POLL_S = 0.5
+RECORD_PATH = "record"  # where a session's record is mounted on its machine, under the supervisor's root
+SESSION_ID = re.compile(r"s-[0-9a-f]{12}")
+T = TypeVar("T")
 
 
 class Gone(Exception):
@@ -70,10 +81,10 @@ class Machine(Protocol):
 class Provider(Protocol):
     name: str
 
-    def launch(
+    def launch(  # noqa: PLR0913 (keyword-only: what a machine is made with)
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
-        labels: dict[str, str], timeout_s: int, ports: list[int],
-    ) -> Machine: ...  # fmt: skip
+        labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
+    ) -> Machine: ...  # fmt: skip  # mounts: ValueError for a store this provider cannot mount
     def get(self, machine_id: str) -> Machine: ...  # LookupError if box did not launch it
     def list(self, labels: dict[str, str] | None = None) -> list[Machine]: ...  # live machines labelled LABEL_BY and all of labels
 
@@ -131,7 +142,7 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     provider: Provider, *, deadline_s: int, gpu: str | None = None, image: str | None = None,
     env: dict[str, str] | None = None, labels: dict[str, str] | None = None,
     lease_ttl_s: float = 60.0, idle_timeout_s: float = 0.0, boot_timeout_s: float = 900.0,
-    ports: tuple[int, ...] = (),
+    ports: tuple[int, ...] = (), record: Store | None = None,
 ) -> Session:  # fmt: skip
     """Rent a machine whose supervisor ends it by deadline_s (or sooner: lease lost, idle, stop).
     Returns once the supervisor is up; a machine that is not up in boot_timeout_s (image pull,
@@ -140,13 +151,17 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     not the machine's: attach() finds a session by it. labels are the caller's (who launched it,
     for what, e.g. box.user, box.cmd); box stamps only RESERVED. ports: what Session.expose may
     open later (Modal and RunPod route a port only if the machine was created with it). Idle: no
-    job running and no connection to any of ports, for idle_timeout_s (0: never idle)."""
+    job running and no connection to any of ports, for idle_timeout_s (0: never idle).
+    record: the supervisor records status, jobs, and output into it, under record_prefix(id), so
+    status() and wait() still answer after the machine is gone, and read_record() reads it."""
     if clash := sorted(set(labels or {}) & set(RESERVED)):
         raise ValueError(f"labels {clash} are box's own (launch stamps them)")
     args = [
         "--deadline-s", str(deadline_s), "--lease-ttl-s", str(lease_ttl_s), "--idle-timeout-s", str(idle_timeout_s),
         "--ports", ",".join(map(str, ports)),
+        *(["--record", RECORD_PATH, *(["--record-sync"] if record.sync_writes else [])] if record else []),
     ]  # fmt: skip
+    session_id = f"s-{secrets.token_hex(6)}"
     boot = "import base64,os; exec(base64.b64decode(os.environ['BOX_SUPERVISOR']))"
     entrypoint = ["bash", "-c", f'exec python3 -c {shlex.quote(boot)} --root "$BOX_ROOT" {shlex.join(args)}']
     # TODO(handoff): LABEL_DEADLINE is stamped before the machine boots, but the supervisor's clock
@@ -159,34 +174,55 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     machine = provider.launch(
         gpu=gpu, image=image, entrypoint=entrypoint,
         env={**(env or {}), "BOX_SUPERVISOR": base64.b64encode(SUPERVISOR.read_bytes()).decode()},
-        labels={**(labels or {}), LABEL_BY: "box", LABEL_SESSION: f"s-{secrets.token_hex(6)}",
+        labels={**(labels or {}), LABEL_BY: "box", LABEL_SESSION: session_id,
                 LABEL_DEADLINE: str(int(time.time() + deadline_s))},
         timeout_s=deadline_s + 600,  # the provider's own backstop, past the supervisor's deadline
-        ports=list(ports),
+        ports=list(ports), mounts=[Mount(record, record_prefix(session_id), RECORD_PATH)] if record else [],
     )  # fmt: skip
-    session = Session(machine)
-    give_up = time.monotonic() + boot_timeout_s
-    while not session._exists("lease"):  # the supervisor's first act
-        if time.monotonic() > give_up:
-            machine.terminate()
-            raise TimeoutError(f"{machine.id}: supervisor not up after {boot_timeout_s:.0f} s; terminated")
-        time.sleep(POLL_S)
+    session = Session(machine, record=record)
+    try:  # nothing else ends a machine whose supervisor is not up: every failure here terminates it
+        if record:
+            launched = {"machine_id": machine.id, "provider": provider.name, "labels": machine.labels, "at": time.time()}
+            record.put(f"{record_prefix(session_id)}/launch.json", json.dumps(launched).encode())
+        give_up = time.monotonic() + boot_timeout_s
+        while not session._exists("lease"):  # the supervisor's first act
+            if time.monotonic() > give_up:
+                raise TimeoutError(f"{machine.id}: supervisor not up after {boot_timeout_s:.0f} s; terminated")
+            time.sleep(POLL_S)
+    except BaseException:
+        machine.terminate()
+        raise
     session.hold(lease_ttl_s / 4)
     return session
 
 
-def attach(provider: Provider, session_id: str) -> Session:
-    """A session launched elsewhere (another process, a detached run), while its machine lives.
-    Does not hold its lease. LookupError if no live machine carries that session id."""
+def attach(provider: Provider, session_id: str, record: Store | None = None) -> Session:
+    """A session launched elsewhere (another process, a detached run). Does not hold its lease.
+    Without record: while its machine lives; LookupError if no live machine carries that id. With
+    the store it was launched with: also after its machine is gone (status() and wait() answer from
+    the record, every machine call raises Gone; read the output with read_record)."""
     found = provider.list({LABEL_SESSION: session_id})
-    if len(found) != 1:
+    if len(found) > 1:
         raise LookupError(f"{provider.name} provider: {len(found)} live machines for session {session_id}")
-    return Session(found[0])
+    if found:
+        return Session(found[0], record=record)
+    if record is None:
+        raise LookupError(f"{provider.name} provider: no live machine for session {session_id}")
+    recorded = read_record(record, session_id)  # LookupError if it was never recorded there
+    return Session(Lost(recorded.machine_id, recorded.labels), record=record)
+
+
+def record_prefix(session_id: str) -> str:
+    """Where a session's record lives in its store."""
+    if not SESSION_ID.fullmatch(session_id):
+        raise ValueError(f"not a session id: {session_id!r}")
+    return f"sessions/{session_id}"
 
 
 @dataclass
 class Session:
     machine: Machine
+    record: Store | None = None  # where its supervisor records it (launch's record), if anywhere
     _holding: threading.Event | None = field(default=None, repr=False)
     _running: Running | None = field(default=None, repr=False)  # session.json: fixed once written
     _ended: Ended | None = field(default=None, repr=False)  # terminal: once known, it stays
@@ -239,21 +275,20 @@ class Session:
         return self.machine.expose(port)
 
     def status(self) -> Status:
-        """Booting, Running, or Ended (and why), from the supervisor's files. Ended is final: once
-        this Session has seen it, it answers without asking the machine."""
-        if self._ended is None:
-            self._ended = self._read_ended()
+        """Booting, Running, or Ended (and why), from the supervisor's files; once the machine is
+        gone, from its record (see Record.status). Ended is final: once this Session has seen it,
+        it answers without asking the machine."""
         if self._ended is not None:
             return self._ended
-        if self._running is None:
-            try:
+        try:
+            self._ended = self._read_ended()
+            if self._ended is None and self._running is None:
                 self._running = parse_running(self.machine.read(self._path("session.json")))
-            except FileNotFoundError:
-                return Booting()
-            except Gone:
-                self._ended = Ended("machine_lost")
-                return self._ended
-        return self._running
+        except FileNotFoundError:
+            return Booting()
+        except Gone:
+            return self._status_when_gone()
+        return self._ended or self._running
 
     def wait(self, timeout_s: float | None = None) -> Ended:
         """Block until the session ends; returns why. While waiting it keeps the machine lingering
@@ -309,14 +344,19 @@ class Session:
         return [Job(self, name) for name in sorted(out.split()) if not name.endswith(".tmp")]
 
     def _read_ended(self) -> Ended | None:
-        """ended.json's reason; None while the session lasts; machine_lost if the machine is gone.
-        Seam: once the supervisor also records status to durable storage, Gone reads that record."""
+        """ended.json's reason; None while the session lasts. Gone once the machine is."""
         try:
             return parse_ended(self.machine.read(self._path("ended.json")))
         except FileNotFoundError:
             return None
-        except Gone:
-            return Ended("machine_lost")
+
+    def _status_when_gone(self) -> Status:
+        """No record: machine_lost. Else the record's word, which can still be Running for up to its
+        heartbeat's TTL (the record of the end may still be landing); wait() waits that out."""
+        status = Ended("machine_lost") if self.record is None else read_record(self.record, self.id).status(machine_gone=True, now=time.time())
+        if isinstance(status, Ended):
+            self._ended = status
+        return status
 
     def _watch(self) -> None:
         """Tell the supervisor someone is reading, so the machine lingers for us after it ends."""
@@ -409,6 +449,129 @@ def run_job(
         for remote, local in get:
             s.get(remote, local)
     return ending
+
+
+@dataclass(frozen=True)
+class Lost:
+    """The machine of a session found only in its record (attach): gone, so every call is Gone."""
+
+    id: str
+    labels: dict[str, str]
+    root: str = ""  # nothing is under it
+
+    def exec(self, cmd: str) -> tuple[int, str, str]:
+        raise Gone(f"{self.id}: gone (known from its record)")
+
+    def write(self, path: str, data: bytes) -> None:
+        raise Gone(f"{self.id}: gone (known from its record)")
+
+    def read(self, path: str) -> bytes:
+        raise Gone(f"{self.id}: gone (known from its record)")
+
+    def expose(self, port: int) -> Endpoint:
+        raise Gone(f"{self.id}: gone (known from its record)")
+
+    def terminate(self) -> None:
+        """Already gone: nothing to do."""
+
+
+@dataclass(frozen=True)
+class Heartbeat:
+    """The recorder's last word: at (unix time, the machine's clock); stale past ttl_s."""
+
+    at: float
+    ttl_s: float
+
+
+@dataclass(frozen=True)
+class Record:
+    """What a session's supervisor recorded into a store (launch's record), readable without its
+    machine or its provider. The session-level files are read once, by read_record; jobs and logs
+    are read when asked. Layout: box/supervisor.py's docstring, plus launch.json from launch."""
+
+    store: Store
+    machine_id: str
+    labels: dict[str, str]  # the machine's, as launch gave them (LABEL_SESSION included)
+    running: Running | None  # None: the supervisor never came up
+    ended: Ended | None  # None: no end recorded (yet)
+    heartbeat: Heartbeat | None
+
+    @property
+    def session_id(self) -> str:
+        return self.labels[LABEL_SESSION]
+
+    def status(self, *, machine_gone: bool, now: float) -> Status:
+        """The recorded end if there is one. Else, while the machine lives, Running (or Booting).
+        Once the provider says it is gone: still Running while the heartbeat is fresh (a store
+        can land the record's last writes after the machine ends, as a Modal Volume commits on
+        its own), then machine_lost: it died without a word, or its word never reached the store."""
+        if self.ended is not None:
+            return self.ended
+        landing = self.heartbeat is not None and now - self.heartbeat.at < self.heartbeat.ttl_s
+        if machine_gone and not landing:
+            return Ended("machine_lost")
+        return self.running or Booting()
+
+    def jobs(self) -> list[str]:
+        """Every job id recorded, oldest first."""
+        prefix = f"{record_prefix(self.session_id)}/jobs/"
+        return sorted({key[len(prefix) :].split("/", 1)[0] for key in self.store.list(prefix)})
+
+    def job_status(self, job_id: str) -> dict | None:
+        """The job's status.json as last recorded (with all its output, once "done"); None if
+        none was (it never started, or started after the last flush)."""
+        try:
+            return json.loads(self.store.get(f"{record_prefix(self.session_id)}/jobs/{job_id}/status.json"))
+        except FileNotFoundError:
+            return None
+
+    def logs(self, job_id: str, after: int = 0) -> Iterator[tuple[int, str, str]]:
+        """(chunk number, stream, text) for each recorded chunk of the job's output numbered past
+        `after`, in order: pass the last number seen to read on. Output that is not UTF-8 is
+        decoded with replacement characters."""
+        prefix = f"{record_prefix(self.session_id)}/jobs/{job_id}/"
+        chunks = sorted(parse_chunk(key[len(prefix) :]) + (key,) for key in self.store.list(prefix) if CHUNK.fullmatch(key[len(prefix) :]))
+        for n, stream, key in chunks:
+            if n > after:
+                yield n, stream, self.store.get(key).decode(errors="replace")
+
+
+CHUNK = re.compile(r"(stdout|stderr)\.(\d+)")  # a chunk's name in the record (box/supervisor.py)
+
+
+def parse_chunk(name: str) -> tuple[int, str]:
+    stream, n = CHUNK.fullmatch(name).groups()
+    return int(n), stream
+
+
+def read_record(store: Store, session_id: str) -> Record:
+    """The session's record in store. LookupError if launch never recorded it there."""
+    prefix = record_prefix(session_id)
+    try:
+        launched = json.loads(store.get(f"{prefix}/launch.json"))
+    except FileNotFoundError as e:
+        raise LookupError(f"{store.uri}: no record of session {session_id}") from e
+    if launched["labels"].get(LABEL_SESSION) != session_id:
+        raise ValueError(f"{store.uri}: {prefix}/launch.json is for session {launched['labels'].get(LABEL_SESSION)!r}")
+    return Record(
+        store=store, machine_id=str(launched["machine_id"]), labels=dict(launched["labels"]),
+        running=_parse_if_present(store, f"{prefix}/session.json", parse_running),
+        ended=_parse_if_present(store, f"{prefix}/ended.json", parse_ended),
+        heartbeat=_parse_if_present(store, f"{prefix}/heartbeat.json", parse_heartbeat),
+    )  # fmt: skip
+
+
+def _parse_if_present(store: Store, key: str, parse: Callable[[bytes], T]) -> T | None:  # noqa: UP047 (requires-python 3.11: no PEP 695)
+    try:
+        raw = store.get(key)
+    except FileNotFoundError:
+        return None
+    return parse(raw)
+
+
+def parse_heartbeat(raw: bytes) -> Heartbeat:
+    d = json.loads(raw)
+    return Heartbeat(at=float(d["at"]), ttl_s=float(d["ttl_s"]))
 
 
 def parse_running(raw: bytes) -> Running:
