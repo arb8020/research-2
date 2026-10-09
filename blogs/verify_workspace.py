@@ -515,11 +515,16 @@ def line_of(text: str, needle: str) -> int:
 
 
 def scrolled_to_region(page: Page, cell: str) -> None:
-    """The cell's first visible line is just above its region's start marker (the view was fitted to its region)."""
+    """The view was fitted to its region: the region's start marker is the first visible line (or just below it), or,
+    when the file ends too soon for that (a cell is at least MIN_LINES tall), the view is scrolled to the end and the
+    marker is on screen."""
     page.wait_for_function("""(n) => { const v = document.querySelector(`ws-cell[name=${n}]`).view; const d = v.state.doc;
         let start = 0; for (let i = 1; i <= d.lines; i++) if (d.line(i).text.trim() === `# region: ${n}`) { start = i; break; }
-        const top = d.lineAt(v.lineBlockAtHeight(v.scrollDOM.scrollTop + 1).from).number;
-        return start > 0 && top >= start - 1 && top <= start; }""", arg=cell, timeout=5_000)  # fmt: skip
+        const s = v.scrollDOM, top = d.lineAt(v.lineBlockAtHeight(s.scrollTop + 1).from).number;
+        const atEnd = s.scrollTop + s.clientHeight >= s.scrollHeight - 2;
+        const bottom = d.lineAt(v.lineBlockAtHeight(s.scrollTop + s.clientHeight - 2).from).number;
+        return start > 0 && ((top >= start - 1 && top <= start) || (atEnd && top <= start && start <= bottom)); }""",
+                          arg=cell, timeout=5_000)  # fmt: skip
 
 
 def head(box: Box) -> str:

@@ -130,6 +130,14 @@ class WorkspaceCell extends HTMLElement {
     });
     if (kernelState() === "idle" || kernelState() === "busy") this.ensureLoaded();
     this.fit();
+    // Offscreen, CodeMirror only estimates line heights (and wrapped lines are taller than estimated), so the region
+    // scrolled to at mount drifts once the cell is measured. Fit again the first time the cell comes into view.
+    const seen = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      seen.disconnect();
+      this.fit();
+    });
+    seen.observe(this);
     this.gate();
   }
 
@@ -187,11 +195,15 @@ class WorkspaceCell extends HTMLElement {
           const last = span === undefined ? Math.min(UNREGIONED_LINES, doc.lines) : Math.min(span.last + 1, doc.lines);
           const top = v.lineBlockAt(doc.line(first).from).top;
           const bottom = v.lineBlockAt(doc.line(last).from).bottom;
-          return { top: span === undefined ? 0 : top, height: Math.min(Math.max(bottom - top, MIN_LINES * v.defaultLineHeight), MAX_LINES * v.defaultLineHeight) };
+          const at = span === undefined ? 0 : doc.line(first).from;
+          return { at, height: Math.min(Math.max(bottom - top, MIN_LINES * v.defaultLineHeight), MAX_LINES * v.defaultLineHeight) };
         },
-        write: ({ top, height }) => {
+        write: ({ at, height }) => {
           editor.style.setProperty("--cell-h", `${String(Math.ceil(height + 10))}px`); // + the content's padding
-          v.requestMeasure({ read: () => null, write: () => { v.scrollDOM.scrollTop = this.expanded ? 0 : top; } });
+          // Scroll by position, not pixels: CodeMirror resolves it at its next measure, with the real (wrapped)
+          // line heights, so the region stays at the top once estimated heights are replaced by measured ones.
+          // (dispatched after this measure pass: an update can't start inside one)
+          requestAnimationFrame(() => { v.dispatch({ effects: View.scrollIntoView(this.expanded ? 0 : at, { y: "start" }) }); });
         },
       });
     });
