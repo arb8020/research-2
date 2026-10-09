@@ -190,3 +190,40 @@ def test_following_a_machine_that_dies_ends_from_the_record(launch: Callable, pr
     assert list(follow) == []  # the stream says Gone; the record has nothing past the cursor; the follow ends
     assert s.status() == Ended("machine_lost")
     s.machine.terminate()
+
+
+def supervise_briefly(root: Path, monkeypatch: pytest.MonkeyPatch, before_finish: Callable[[Path], None]) -> None:
+    from box import supervisor
+
+    finish = supervisor.Recorder.finish
+
+    def finishing(recorder: supervisor.Recorder, ended: dict) -> None:
+        before_finish(recorder.dest)
+        finish(recorder, ended)
+
+    monkeypatch.setattr(supervisor.Recorder, "finish", finishing)
+    now = time.time()
+    supervisor.supervise_main([
+        "--root", str(root), "--created-at", repr(now), "--lease-until", repr(now + 1), "--ceiling", repr(now + 60),
+        "--host", "test", "--pid", "1", "--record", "record", "--on-shutdown", f"touch {root}/shut-down",
+    ])  # fmt: skip
+
+
+def test_a_store_failure_at_the_end_is_reported_and_the_session_still_ends(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    supervise_briefly(tmp_path / "root", monkeypatch, lambda dest: dest.chmod(0o500))
+    assert json.loads((tmp_path / "root" / "ended.json").read_text())["reason"] == "lease"
+    assert (tmp_path / "root" / "shut-down").exists()
+    assert "recording into" in capsys.readouterr().err
+    (tmp_path / "root" / "record").chmod(0o700)
+
+
+def test_a_recorder_bug_at_the_end_surfaces_after_the_session_still_ends(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from box import supervisor
+
+    def bug(dest: Path) -> None:
+        monkeypatch.setattr(supervisor.Recorder, "flush", lambda self, final: {}["not a store failure"])
+
+    with pytest.raises(KeyError, match="not a store failure"):
+        supervise_briefly(tmp_path / "root", monkeypatch, bug)
+    assert json.loads((tmp_path / "root" / "ended.json").read_text())["reason"] == "lease"
+    assert (tmp_path / "root" / "shut-down").exists()

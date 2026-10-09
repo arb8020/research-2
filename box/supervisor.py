@@ -81,16 +81,18 @@ def supervise_main(argv: list[str]) -> None:
         (root / "activity").touch()
         (root / "up").write_text(a.session_id)
         reason = supervise(root, a.idle_timeout_s, a.ports)
-        ended = {"reason": reason, "at": time.time()}
-        if recorder:
-            recorder.finish(ended)
     finally:
         if recorder:
             recorder.close()
-    put(root / "ended.json", json.dumps(ended).encode())
-    linger(root)
-    if a.on_shutdown:
-        subprocess.run(["bash", "-c", a.on_shutdown], check=False)
+    ended = {"reason": reason, "at": time.time()}
+    try:
+        if recorder:
+            recorder.finish(ended)
+    finally:
+        put(root / "ended.json", json.dumps(ended).encode())
+        linger(root)
+        if a.on_shutdown:
+            subprocess.run(["bash", "-c", a.on_shutdown], check=False)
 
 
 def lease_main(argv: list[str]) -> None:
@@ -337,7 +339,10 @@ def recorded_spec(raw: bytes) -> bytes:
     return json.dumps({**spec, "env": sorted(spec.get("env", {}))}).encode()
 
 
-class Recorder:  # MUST KILL: fail-open rests on two blind `except Exception` in run() and finish() (was noqa BLE001); catch the store's failures (OSError, CalledProcessError) only
+STORE_FAILURES = (OSError, subprocess.CalledProcessError)
+
+
+class Recorder:
     def __init__(self, root: Path, dest: Path, *, sync: bool) -> None:
         self.root = root
         self.dest = dest
@@ -365,7 +370,7 @@ class Recorder:  # MUST KILL: fail-open rests on two blind `except Exception` in
             self.flush(final=True)
             put(self.dest / "ended.json", json.dumps(ended).encode())
             self.commit()
-        except Exception as e:
+        except STORE_FAILURES as e:
             print(f"box supervisor: recording into {self.dest} failed at the end: {e!r}", file=sys.stderr, flush=True)
 
     def run(self) -> None:
@@ -375,7 +380,7 @@ class Recorder:  # MUST KILL: fail-open rests on two blind `except Exception` in
                 continue
             try:
                 self.flush(final=False)
-            except Exception as e:
+            except STORE_FAILURES as e:
                 print(f"box supervisor: recording into {self.dest} stopped: {e!r}", file=sys.stderr, flush=True)
                 return
             last = time.monotonic()
