@@ -369,6 +369,7 @@ arch notes:
 - checks run as a background subprocess, so the kernel stays usable
 - speed targets: cell checks under ~2-3 s (rebuild the changed file only, ccache, pure-function checks vs traces); chapter checks under ~30-60 s on CPU (debug + ASan for cell checks; release build only for perf checks); model weights cached on the Volume
 - editor: CodeMirror (already integrated, light, good vim); revisit Monaco only if the editor becomes a full IDE pane
+- from the spike (`spike/workspace-cells`): file I/O via Jupyter's Contents API (works cross-origin, ~15 ms on Modal); kernel image gains `git clang make ccache g++ libc6-dev`; check builds use g++ and `-fno-sanitize-recover=all`; background checks run in their own process group with output routed to the starting cell (or a second kernel for checks: undecided); bundle written temp + rename, previous kept, verified before restore; measured end to end ~190 ms per cell check on Modal CPU
 - deferred: local backend (`session.py` vs `connect_dev.py`; they're separate code paths today)
 
 ## open questions
