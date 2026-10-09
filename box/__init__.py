@@ -16,14 +16,18 @@ from box.sdk import (
     LogChunk,
     LogCursor,
     Machine,
+    NameTaken,
     Provider,
     Queued,
     Record,
     Running,
     Session,
     Status,
+    Stream,
+    Synced,
     attach,
     create,
+    find_or_create,
     launch,
     read_record,
     run_job,
@@ -32,6 +36,6 @@ from box.store import DirStore, Mount, Store
 
 __all__ = [
     "Booting", "DirStore", "Done", "Ended", "Endpoint", "Ending", "Gone", "Hooking", "Job", "JobRunning", "JobStatus",
-    "Lease", "LeaseChange", "LogChunk", "LogCursor", "Machine", "Mount", "Provider", "Queued", "Record", "Running", "Session", "Status", "Store",
-    "attach", "create", "launch", "read_record", "run_job",
+    "Lease", "LeaseChange", "LogChunk", "LogCursor", "Machine", "Mount", "NameTaken", "Provider", "Queued", "Record", "Running", "Session",
+    "Status", "Store", "Stream", "Synced", "attach", "create", "find_or_create", "launch", "read_record", "run_job",
 ]  # fmt: skip

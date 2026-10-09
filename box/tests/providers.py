@@ -21,9 +21,18 @@ SCALE = {"local": 1.0, "modal": 10.0, "runpod": 30.0, "colab-fake": 3.0}  # runp
 CANNOT = {
     "colab-fake": {
         "ports": "Colab's terms forbid web services and proxies: no ports, no expose",
+        "undeclared-ports": "Colab's terms forbid web services and proxies: no ports, no expose",
         "record": "Colab has no volumes: a Colab session has no durable record",
+        "pty": "a Colab kernel cell is not a terminal: no stdin to type into",
+        "shell": "Colab's terminal is in its UI only",
+        "unique-names": "Colab runtimes have no names: box's name check is best-effort there",
+    },
+    "runpod": {
+        "undeclared-ports": "RunPod has no gated route for a port not declared at create",
+        "unique-names": "RunPod has no unique pod names: box's name check is best-effort there",
     },
 }
+DEV_IMAGE = "python:3.13"  # Session.sync also needs git on the machine; the non-slim image has it
 PURPOSE = {"box.purpose": os.environ.get("BOX_TEST_PURPOSE", "reader-path-dev")}  # every test machine carries it, so a sweep finds strays
 MAX_BACKSTOP_S = 900  # a test machine whose supervisor fails is still gone (and unbilled) after 15 min
 

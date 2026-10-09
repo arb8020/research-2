@@ -30,7 +30,7 @@ import requests
 
 from box import gpus
 from box.providers.pump import JOIN_S, Pumped, kill_pid_file, pipe_reader, with_pid_file
-from box.sdk import LABEL_BY, LABEL_SESSION, Endpoint, Gone
+from box.sdk import LABEL_BY, LABEL_NAME, LABEL_SESSION, Endpoint, Gone, NameTaken
 from box.store import Mount
 
 # TODO(handoff): seen live: a pod whose client died before attaching deleted itself at its boot
@@ -38,6 +38,7 @@ from box.store import Mount
 # supervisor ends after a job and BOX_ON_SHUTDOWN deletes the pod; and the full test suite.
 API = "https://api.runpod.io/v2"
 ROOT = "/box"
+WORK = "/work"  # synced code (Session.sync)
 IMAGE = "runpod/base:1.4.0-ubuntu2404"  # bash, python3, sshd, curl; 0.7 GB
 CPU = {"id": "cpu3c", "vcpuCount": 2}  # $0.06/hr
 DISK_GB = 20
@@ -143,6 +144,10 @@ class RunPod:
         """Returns once ssh answers (the supervisor may still be starting)."""
         if mounts:  # a pod could mount an S3-compatible store (R2): not built yet
             raise NotImplementedError(f"runpod provider: no store mounts yet (got {[m.store.uri for m in mounts]})")
+        # Best-effort: RunPod has no unique names (a pod's name is not checked) and no conditional
+        # create, so two launches racing can both pass this check; attach(name=) then sees two.
+        if LABEL_NAME in labels and self.list({LABEL_NAME: labels[LABEL_NAME]}):
+            raise NameTaken(f"runpod provider: a live pod is named {labels[LABEL_NAME]!r}")
         body: dict = {
             "name": f"box-{labels[LABEL_SESSION]}", "image": image or IMAGE, "cloud": self.cloud,
             "disk": DISK_GB, "ports": ["22/tcp", *(f"{p}/http" for p in ports)], "entrypoint": ["bash", "-c", BOOT, "boot", *entrypoint],
@@ -203,6 +208,7 @@ class RunPodMachine:
         self.id: str = pod["id"]
         self.labels: dict[str, str] = _labels(pod)
         self.root = ROOT
+        self.work = WORK
         self._direct = (pod.get("ssh") or {}).get("direct")
         self._pod_dc: str | None = pod.get("dataCenterId")
         self._http_ports = [int(p.split("/")[0]) for p in pod.get("ports") or [] if p.endswith("/http")]
@@ -250,16 +256,19 @@ class RunPodMachine:
         done = self._ssh(cmd)
         return done.returncode, done.stdout.decode(errors="replace"), done.stderr.decode(errors="replace")
 
-    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None) -> Pumped:
+    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Pumped:
         """cmd over its own ssh session (the pod's multiplexed connection), read as it arrives. ssh's
         own failure (exit 255) is Gone if the pod is gone, else a dropped connection (ConnectionError).
         Killing ssh closes the channel, which reaches the command only when it next writes, so close()
-        also kills it by the pid it noted. Not seen live yet."""
+        also kills it by the pid it noted. pty=True: `ssh -tt` (a remote pty even though this side's
+        stdin is a pipe), so the terminal's output (stderr merged) is ssh's stdout, ssh's own errors
+        its stderr, and send() writes ssh's stdin (b"\x03" reaches the remote pty as Ctrl-C). Not
+        seen live yet, pty or not."""
         if (d := self._direct) is None:
             d = self._direct = self._pod()["ssh"]["direct"]
         pid_file = f"/tmp/box-stream-{secrets.token_hex(6)}.pid"
-        argv = ["ssh", *SSH_OPTS, "-p", str(d["port"]), f"{d['username']}@{d['host']}", with_pid_file(cmd, pid_file)]
-        proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        argv = ["ssh", *SSH_OPTS, *(["-tt"] if pty else []), "-p", str(d["port"]), f"{d['username']}@{d['host']}", with_pid_file(cmd, pid_file)]
+        proc = subprocess.Popen(argv, stdin=subprocess.PIPE if pty else subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         def kill() -> None:
             proc.kill()
@@ -274,10 +283,23 @@ class RunPodMachine:
                 raise ConnectionError(f"runpod: {self.id}: ssh dropped under a stream of `{cmd[:80]}`")
             return rc
 
+        def write(data: bytes) -> None:
+            assert proc.stdin is not None
+            # A pipe ssh drains as it sends: a write blocks only while the connection is stuck, and
+            # ServerAlive (45 s) drops a dead one, which ends ssh and the block (BrokenPipeError).
+            proc.stdin.write(data)
+            proc.stdin.flush()
+
         return Pumped(
             [pipe_reader("stdout", proc.stdout), pipe_reader("stderr", proc.stderr)], kill=kill, wait=wait,
-            timeout_s=timeout_s, quiet_s=quiet_s, label=self.id,
+            timeout_s=timeout_s, quiet_s=quiet_s, label=self.id, send=write if pty else None,
         )  # fmt: skip
+
+    def shell_argv(self, cmd: str) -> list[str]:
+        """ssh -t to the pod: this terminal becomes the remote pty. Not seen live yet."""
+        if (d := self._direct) is None:
+            d = self._direct = self._pod()["ssh"]["direct"]
+        return ["ssh", *SSH_OPTS, "-t", "-p", str(d["port"]), f"{d['username']}@{d['host']}", cmd]
 
     def write(self, path: str, data: bytes) -> None:
         p = shlex.quote(path)
@@ -306,9 +328,10 @@ class RunPodMachine:
 
     def expose(self, port: int) -> Endpoint:
         """RunPod's HTTP proxy for a port declared at launch (as <port>/http). Not seen live yet:
-        the service must listen on 0.0.0.0, and the proxy (Cloudflare) cuts requests at ~100 s."""
+        the service must listen on 0.0.0.0, and the proxy (Cloudflare) cuts requests at ~100 s.
+        RunPod has no gated route for an undeclared port (an ssh -L forward could be one: not built)."""
         if port not in self._http_ports:
-            raise ValueError(f"runpod: port {port} was not declared at launch (ports={self._http_ports})")
+            raise ValueError(f"runpod: port {port} was not declared at launch (ports={self._http_ports}); RunPod has no route for an undeclared one")
         return Endpoint(f"https://{self.id}-{port}.proxy.runpod.net")
 
 
