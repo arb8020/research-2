@@ -1,56 +1,3 @@
-"""The Colab provider: a machine is a Colab runtime (a VM assigned to your Google account) whose
-Jupyter kernels run the supervisor and box's commands. For your own account, with compute units.
-
-How it talks to Colab: it imports the official CLI's Python modules (google-colab-cli 0.7.4,
-`colab_cli`), not the `colab` command, because `colab exec` runs Python in the kernel and exits 0
-whatever the code did (commands/execution.py:258-262), while box needs bash's exit code and
-separate stdout/stderr. Those modules are the CLI's internals, not a published API: pinned (the
-`colab` extra in pyproject.toml).
-
-    account   colab_cli.client.Client: assign / list_assignments / unassign / ccu-info (client.py)
-    runtime   one VM's Jupyter server behind Colab's proxy, reached with a short-lived proxy token:
-              kernels over websocket (colab_cli.runtime.ColabRuntime), files over /api/contents
-
-What a machine is here:
-- exec(cmd): a cell in box's exec kernel runs `bash -c cmd` in a subprocess and prints rc, stdout and
-  stderr (base64, after MARK); the same thing a notebook's `!cmd` does. No ssh, no terminal, no port.
-- stream(cmd): a cell in a kernel of its own (a kernel runs one cell at a time, and exec must not wait
-  behind a follow) runs bash with pipes and prints each chunk as it arrives, as a base64 frame; the
-  kernel publishes each print on iopub, which the websocket pushes to us. Push, not a poll. close()
-  interrupts the kernel (SIGINT -> KeyboardInterrupt in the cell, whose `finally` kills the
-  command's process group), then the stream shuts its kernel down.
-- the supervisor: a second kernel's cell starts BOOT (supervisor + backstop) and waits on it, so
-  that kernel is busy for the whole session (Colab keeps a runtime by "kernel activity",
-  colab_cli/README.md:22). When the supervisor exits, BOOT unassigns the VM from inside with the
-  same call as google.colab.runtime.unassign(): POST http://$TBE_RUNTIME_ADDR/unassign
-  (colabtools google/colab/runtime.py), so a session ends itself as on Modal and RunPod.
-- gone(): the account no longer lists the runtime as assigned. Unassigned is what Colab bills by
-  (compute units per assigned runtime-hour) and what it does when it takes the VM back.
-- labels: Colab runtimes carry none; box writes ROOT/colab.json on the VM ({labels, exec_kernel})
-  and list()/get() read it back. An assignment without it (your own notebooks) is not box's.
-- the proxy token expires (~1 h, tokenExpiresInSeconds, client.py:121-130); list_assignments hands
-  out a fresh one, as `colab` itself does (common.py:96-104); the kernel connection is reopened.
-
-Refused (each before anything is rented, with an error that says why):
-- image: Colab runs its own image.
-- ports / expose: Colab's terms forbid web services and proxies; the only ways in are kernels and files.
-- stream(pty=True) and shell_argv: a kernel cell cannot be a terminal. A running cell takes no input
-  but an input_request it makes itself (input()), so there is no stdin to type Ctrl-C into, and a
-  pty made inside the cell would have nothing on this side to drive it; Colab's own terminal is in
-  its UI only, and reaching one from outside would be the remote control its terms restrict.
-- mounts, so record=: Colab has no volumes. A Colab session has no durable record: once its runtime
-  is gone, so is everything it wrote (status, logs, ended.json); get results out before it ends.
-- more than one accelerator (`:N`); a GPU Colab does not rent (gpus.py `colab` ids). gpu=None is a CPU runtime.
-- a ceiling whose backstop (ceiling + BACKSTOP_MARGIN_S) would come after Colab's max runtime (12 h;
-  24 h on Pro+: BOX_COLAB_MAX_HOURS=24). Refused, never clamped: the lease is a guarantee.
-- a zero compute-unit balance, unless allow_free (BOX_COLAB_ALLOW_FREE=1): Colab's free tier forbids
-  remote control and bypassing the notebook UI, which is what box does; paid balances lift that.
-
-Unknown until the live smoke (box/tests/smoke_colab.py) runs: does a busy kernel keep an unwatched
-runtime alive? Does TBE_RUNTIME_ADDR exist on CLI-assigned runtimes? Is /api/contents rooted at `/`?
-Does a kernel websocket outlive its proxy token? Is Colab's A100 40 GB, and is G4 an RTX PRO 6000?
-"""
-
 from __future__ import annotations
 
 import base64
@@ -76,25 +23,23 @@ from box.sdk import BACKSTOP_MARGIN_S, LABEL_BY, LABEL_NAME, Endpoint, Gone, Nam
 from box.store import Mount
 
 T = TypeVar("T")
-COLAB_CLI_VERSION = "0.7.4"  # the colab_cli internals below were read at this version
-ROOT = "/content/box"  # /content: Colab's working dir, visible in its file browser
-META = "colab.json"  # under the root: {labels, exec_kernel}
-MAX_RUNTIME_S = 12 * 3600  # Colab ends a runtime after 12 h (24 h on Pro+); the FAQ, not an API
-REFRESH_MARGIN_S = 300  # refresh the proxy token this long before it expires (colab: 5 min)
-EXEC_TIMEOUT_S = 600  # one exec's bash; the kernel kills it past this
-KERNEL_SLACK_S = 30  # the client waits this much longer than the bash it runs
-SUBMIT_ACK_S = 60  # a submitted cell must be seen running within this
-STOP_GRACE_S = 3.0  # a stream's cell, once interrupted, gets this long to kill its command and go idle (inside pump.JOIN_S)
-CONTENTS_TIMEOUT_S = 300  # one /api/contents request
-INLINE_MAX = 512 * 1024  # an exec result bigger than this comes back as a file, not on iopub
-MARK = "\x1ebox-exec\x1e"  # precedes every result or frame a box cell prints on its stdout
-STREAM_NAMES = {"o": "stdout", "e": "stderr"}  # a stream cell's frame kinds; also "r<rc>" (exited) and "t" (its own timeout)
-GPU_ACCELERATORS = ("T4", "L4", "G4", "A100", "H100")  # colab_cli.client.Accelerator (client.py:62-70)
+COLAB_CLI_VERSION = "0.7.4"
+ROOT = "/content/box"
+META = "colab.json"
+MAX_RUNTIME_S = 12 * 3600  # Colab ends a runtime after 12 h (24 h on Pro+), per its FAQ
+REFRESH_MARGIN_S = 300
+EXEC_TIMEOUT_S = 600
+KERNEL_SLACK_S = 30
+SUBMIT_ACK_S = 60
+STOP_GRACE_S = 3.0
+CONTENTS_TIMEOUT_S = 300
+INLINE_MAX = 512 * 1024
+MARK = "\x1ebox-exec\x1e"
+STREAM_NAMES = {"o": "stdout", "e": "stderr"}
+GPU_ACCELERATORS = ("T4", "L4", "G4", "A100", "H100")
 TPU_ACCELERATORS = ("V5E1", "V6E1")
 CPU = "NONE"
 
-# The exec kernel's cell. Prints MARK + {"rc", "out", "err"} (base64), or {"file"} when that is too
-# big for iopub, or {"timeout"}; the client reads it back (parse_exec).
 EXEC_CELL = """
 import base64 as _b, json as _j, subprocess as _s, tempfile as _t
 try:
@@ -109,10 +54,6 @@ if len(_o) > {inline_max}:
 print({mark!r} + _o, flush=True)
 """
 
-# A stream's cell, in a kernel of its own. One line per frame: MARK + kind + payload. The command's
-# bytes are base64 (iopub carries text). Its own process group, so one killpg ends all of it; the
-# `finally` does that on an interrupt (close) or past its own timeout (a client that vanished: the
-# cell then ends by itself, and its kernel idles until the runtime ends).
 STREAM_CELL = """
 import base64 as _b, os as _os, select as _sel, signal as _sig, subprocess as _s, sys as _sys, time as _t
 _p = _s.Popen(["bash", "-c", _b.b64decode({cmd!r}).decode()], stdin=_s.DEVNULL, stdout=_s.PIPE, stderr=_s.PIPE, start_new_session=True)
@@ -140,7 +81,6 @@ finally:
 print({mark!r} + _end, flush=True)
 """
 
-# The supervisor kernel's cell: starts BOOT in its own session and waits, so the kernel stays busy.
 BOOT_CELL = """
 import base64 as _b, json as _j, os as _os, subprocess as _s
 _spec = _j.loads(_b.b64decode({spec!r}))
@@ -151,9 +91,6 @@ with open(_spec["root"] + "/boot.log", "ab") as _log:
 _p.wait()
 """
 
-# Runs as `bash -c BOOT boot <supervisor argv...>`. Whatever ends the supervisor (its own end, a
-# crash), the VM is unassigned after it; the backstop does it at BOX_COLAB_BACKSTOP_AT (unix time,
-# the launching computer's clock, as the supervisor's ceiling is) regardless.
 BOOT = r"""
 ( sleep "$(( BOX_COLAB_BACKSTOP_AT - $(date +%s) ))"; echo "$(date) backstop" >> "$BOX_ROOT/shutdown.log"; bash -c "$BOX_COLAB_UNASSIGN" ) &
 "$@"
@@ -161,7 +98,7 @@ echo "$(date) supervisor exited $?" >> "$BOX_ROOT/shutdown.log"
 bash -c "$BOX_COLAB_UNASSIGN"
 """
 
-# google.colab.runtime.unassign() without its frontend call: the runtime's own management service.
+# what google.colab.runtime.unassign() does, minus its frontend call
 UNASSIGN = r"""python3 - <<'PY' >> "$BOX_ROOT/shutdown.log" 2>&1
 import os, time, urllib.request as u
 req = u.Request("http://" + os.environ["TBE_RUNTIME_ADDR"] + "/unassign", data=b"", method="POST")
@@ -175,22 +112,20 @@ PY"""
 
 
 class KernelGone(Exception):
-    """The kernel id no longer exists on the runtime (died, restarted, culled)."""
+    pass
 
 
 class Unreachable(Exception):
-    """The runtime did not answer as a Jupyter server would (proxy error, VM going away)."""
+    pass
 
 
 @dataclass(frozen=True)
 class Assignment:
-    """One runtime assigned to the account, as the account API reports it."""
-
-    endpoint: str  # Colab's id for it; box's machine id
-    accelerator: str  # colab_cli Accelerator value: NONE, T4, ..., V6E1
-    url: str  # its Jupyter server, behind Colab's proxy
-    token: str  # the proxy token
-    expires_at: float  # time.time() at which the token stops working
+    endpoint: str
+    accelerator: str
+    url: str
+    token: str
+    expires_at: float
 
 
 @dataclass(frozen=True)
@@ -201,26 +136,18 @@ class Balance:
 
 
 class Runtime(Protocol):
-    """One assigned VM's Jupyter server, for one proxy token. Not shared between threads, except
-    interrupt(), which a stream's close() calls while its reader is in run()."""
-
     def start_kernel(self) -> str: ...
-    # The cell's nbformat outputs (stream, error) as the kernel publishes them; ends when it goes idle.
-    # TimeoutError past timeout_s; KernelGone; Unreachable. stop set: the cell was interrupted, so it
-    # gets STOP_GRACE_S more to go idle, and then the iteration just ends.
     def run(self, kernel_id: str, code: str, timeout_s: float, stop: threading.Event | None = None) -> Iterator[dict[str, Any]]: ...
-    def submit(self, kernel_id: str, code: str) -> None: ...  # returns once the kernel runs it
-    def interrupt(self, kernel_id: str) -> None: ...  # SIGINT to the kernel: KeyboardInterrupt in its cell
+    def submit(self, kernel_id: str, code: str) -> None: ...
+    def interrupt(self, kernel_id: str) -> None: ...
     def shutdown_kernel(self, kernel_id: str) -> None: ...
-    def get_file(self, path: str) -> bytes: ...  # FileNotFoundError
-    def put_file(self, path: str, data: bytes) -> None: ...  # the parent must exist
+    def get_file(self, path: str) -> bytes: ...
+    def put_file(self, path: str, data: bytes) -> None: ...
     def delete_file(self, path: str) -> None: ...
-    def close(self) -> None: ...  # its connections and their threads; the kernels go on
+    def close(self) -> None: ...
 
 
 class Backend(Protocol):
-    """The Colab account: what `colab new/sessions/stop/usage` call."""
-
     def balance(self) -> Balance: ...
     def assign(self, accelerator: str) -> Assignment: ...
     def assignments(self) -> list[Assignment]: ...
@@ -240,39 +167,29 @@ class Colab:
         self.backend = backend
         self.allow_free = allow_free
         self.max_runtime_s = max_runtime_s
-        # The supervisor's directory on each VM. "{machine}" in it is the runtime's id: the fake account
-        # (tests/fake_colab.py) runs every runtime on one computer, so each needs a directory of its own.
         self.root = root
         self.log = log
         self.closed = False
-        # Every machine this Colab handed out, so close() reaches their connections: a kernel websocket
-        # runs a non-daemon thread (jupyter_kernel_client wsclient.py:593), which would hold the
-        # process open at exit. Keyed by object identity (machines compare by runtime id).
-        self._machines: dict[int, ColabMachine] = {}
+        # a kernel websocket runs a non-daemon thread (jupyter_kernel_client) that holds the process open at exit
+        self._machines: dict[int, ColabMachine] = {}  # MUST KILL: keyed by id() because ColabMachine.__eq__/__hash__ compare runtime ids; hold machines in a list, or drop the custom equality
 
     @classmethod
     def from_env(cls) -> Colab:
-        """Credentials from the `colab` CLI's login (BOX_COLAB_AUTH: oauth2, its default, or adc);
-        BOX_COLAB_ALLOW_FREE=1 and BOX_COLAB_MAX_HOURS (12; 24 on Pro+) as described above."""
         hours = float(os.environ.get("BOX_COLAB_MAX_HOURS", MAX_RUNTIME_S / 3600))
         backend = CliBackend(login(os.environ.get("BOX_COLAB_AUTH", "oauth2")))
         return cls(backend, allow_free=os.environ.get("BOX_COLAB_ALLOW_FREE") == "1", max_runtime_s=int(hours * 3600))
 
     def close(self) -> None:
-        """Close every machine's connections (its streams joined) and the account session. The
-        runtimes go on: closing a provider ends no session. This Colab makes no calls after."""
         self.closed = True
         for machine in list(self._machines.values()):
             machine.close()
         self.backend.close()
 
-    def launch(  # noqa: PLR0913 (keyword-only: what a machine is made with)
+    def launch(  # noqa: PLR0913
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
         labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
     ) -> ColabMachine:  # fmt: skip
-        """Returns once the supervisor's kernel runs BOOT (the supervisor may still be starting).
-        Everything it refuses, it refuses before renting anything."""
-        backstop_at = int(time.time()) + timeout_s  # now, before the assign: timeout_s counts from create's clock reading
+        backstop_at = int(time.time()) + timeout_s
         if image is not None:
             raise ValueError(f"colab provider: Colab runs its own image; got image={image!r} (install what the job needs in the job)")
         if ports:
@@ -285,8 +202,7 @@ class Colab:
         if timeout_s > self.max_runtime_s:
             raise ValueError(self._past_max_runtime(timeout_s))
         accelerator = colab_accelerator(gpu)
-        # Best-effort: Colab runtimes have no names (box's labels are a file on the VM), so two
-        # launches racing can both pass this check; attach(name=) then sees two.
+        # Colab runtimes have no names: this check races
         if LABEL_NAME in labels and self.list({LABEL_NAME: labels[LABEL_NAME]}):
             raise NameTaken(f"colab provider: a live runtime is named {labels[LABEL_NAME]!r}")
         self._check_balance()
@@ -295,7 +211,7 @@ class Colab:
             machine.boot(entrypoint, env, backstop_at)
         except BaseException:
             try:
-                machine.terminate()  # no supervisor will ever end this runtime
+                machine.terminate()
             finally:
                 machine.close()
             raise
@@ -311,8 +227,6 @@ class Colab:
         return machine
 
     def list(self, labels: dict[str, str] | None = None) -> list[ColabMachine]:
-        """Runtimes with box's labels (and all of labels); another runtime that cannot be read is
-        reported and skipped."""
         want = {**(labels or {}), LABEL_BY: "box"}
         found = []
         for a in self.backend.assignments():
@@ -337,7 +251,7 @@ class Colab:
             return None
         return self._track(ColabMachine(self, a, meta["labels"], exec_kernel=meta["exec_kernel"]))
 
-    def root_of(self, machine_id: str) -> str:
+    def root_of(self, machine_id: str) -> str:  # MUST KILL: root is a template with "{machine}" only so the test fake can host many runtimes on one computer; let the fake give each machine its root
         return self.root.replace("{machine}", machine_id)
 
     def _track(self, machine: ColabMachine) -> ColabMachine:
@@ -378,19 +292,15 @@ class ColabMachine:
         self.id = assignment.endpoint
         self.labels = labels
         self.root = colab.root_of(self.id)
-        self.work = self.root.rsplit("/", 1)[0] + "/work"  # beside the root: /content/work by default (synced code)
+        self.work = self.root.rsplit("/", 1)[0] + "/work"
         self._assignment = assignment
         self._exec_kernel = exec_kernel
         self._runtime: Runtime | None = None
-        self._dirs: set[str] = set()  # parents known to exist, for write
-        # One connection (the exec kernel's websocket) shared by the caller and Session.keep's renewal
-        # thread; a stream has a connection of its own, owned by its reader.
+        self._dirs: set[str] = set()
         self._lock = threading.RLock()
-        self._streams: weakref.WeakSet[Pumped] = weakref.WeakSet()  # open ones, for close()
+        self._streams: weakref.WeakSet[Pumped] = weakref.WeakSet()
 
     def boot(self, entrypoint: list[str], env: dict[str, str], backstop_at: int) -> None:
-        """Start the exec kernel, check the runtime can unassign itself, record the labels, then
-        start the supervisor in its own kernel."""
         self._exec_kernel = self._call(lambda rt: rt.start_kernel())
         rc, _, err = self.exec(f'test -n "$TBE_RUNTIME_ADDR" && mkdir -p {shlex.quote(self.root)}')
         if rc != 0:
@@ -416,10 +326,6 @@ class ColabMachine:
         return result["rc"], b64text(result["out"]), b64text(result["err"])
 
     def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Pumped:
-        """cmd in a kernel of its own (STREAM_CELL), its frames read off iopub as the kernel pushes
-        them, by one reader thread that owns the stream's connection and kernel and ends both. The
-        kernel is started here, before the stream's clock starts (a Colab kernel takes seconds).
-        pty=True is refused: a cell is not a terminal (module docstring)."""
         if pty:
             raise ValueError("colab provider: no pty: a kernel cell takes no stdin, so nothing could type into it (Ctrl-C is close())")
         runtime = self._connection()
@@ -429,18 +335,18 @@ class ColabMachine:
             runtime.close()
             raise self._gone_or(e) from e
         cell = STREAM_CELL.format(cmd=base64.b64encode(cmd.encode()).decode(), timeout=timeout_s + KERNEL_SLACK_S, read_bytes=READ_BYTES, mark=MARK)
-        stop = threading.Event()  # set by kill: the cell was interrupted
+        stop = threading.Event()
         rc: list[int] = []
 
         def read(emit: Emit) -> None:
-            discard = False  # the caller closed the stream: drain the interrupted cell, hand on nothing
+            discard = False
             try:
                 for kind, payload in stream_frames(runtime.run(kernel, cell, timeout_s + 2 * KERNEL_SLACK_S, stop), stop, cmd):
                     if kind in STREAM_NAMES and not discard:
                         try:
                             emit(STREAM_NAMES[kind], base64.b64decode(payload))
                         except Closed:
-                            discard = True  # close() calls kill next, which interrupts the cell
+                            discard = True
                     elif kind == "r":
                         rc.append(int(payload))
                     elif kind == "t":
@@ -448,7 +354,7 @@ class ColabMachine:
             except (Unreachable, KernelGone) as e:
                 raise self._gone_or(e) from e
             finally:
-                with contextlib.suppress(Exception):  # a kernel on a runtime that is gone
+                with contextlib.suppress(Exception):
                     runtime.shutdown_kernel(kernel)
                 runtime.close()
             if discard or stop.is_set():
@@ -456,7 +362,7 @@ class ColabMachine:
 
         def kill() -> None:
             stop.set()
-            runtime.interrupt(kernel)  # the cell's `finally` kills the command's process group
+            runtime.interrupt(kernel)
 
         def wait() -> int:
             if not rc:
@@ -477,7 +383,7 @@ class ColabMachine:
         self._call(lambda rt: rt.put_file(path, data))
 
     def read(self, path: str) -> bytes:
-        return self._call(lambda rt: rt.get_file(path))  # FileNotFoundError passes through _call
+        return self._call(lambda rt: rt.get_file(path))
 
     def expose(self, port: int) -> Endpoint:
         raise ValueError(f"colab provider: cannot expose port {port}: Colab's terms forbid web services and proxies")
@@ -486,32 +392,26 @@ class ColabMachine:
         raise ValueError("colab provider: no shell: Colab's terminal is in its UI only, and a kernel cell is not one (stream runs commands)")
 
     def terminate(self) -> None:
-        """Idempotent: an endpoint no longer assigned is already terminated. A stream still open
-        ends with the runtime (its reader sees Gone)."""
         self._drop_connection()
         if self._lookup() is None:
             return
         try:
             self.colab.backend.unassign(self.id)
         except Exception:
-            if self._lookup() is None:  # it ended itself meanwhile (BOOT's unassign)
+            if self._lookup() is None:
                 return
             raise
 
     def gone(self) -> bool:
-        """The account no longer lists this runtime as assigned (no VM, no compute units). One
-        account call, bounded by google-auth's default request timeout (120 s)."""
         return self._lookup() is None
 
     def close(self) -> None:
-        """Close this object's connections and join its open streams; the runtime goes on."""
         for stream in list(self._streams):
             stream.close()
         self._drop_connection()
         self.colab._untrack(self)
 
     def _execute(self, rt: Runtime, cell: str) -> list[dict[str, Any]]:
-        """cell in the exec kernel; a kernel that is gone (died, culled) is replaced once."""
         assert self._exec_kernel is not None, "exec before boot"
         try:
             return list(rt.run(self._exec_kernel, cell, EXEC_TIMEOUT_S + KERNEL_SLACK_S))
@@ -526,7 +426,6 @@ class ColabMachine:
         self._call(lambda rt: rt.put_file(f"{self.root}/{META}", meta))
 
     def _call(self, op: Callable[[Runtime], T]) -> T:
-        """op(runtime) under the lock; a failure on a runtime no longer assigned is Gone."""
         with self._lock:
             runtime = self._shared()
             try:
@@ -537,13 +436,11 @@ class ColabMachine:
                 raise self._gone_or(e) from e
 
     def _gone_or(self, e: BaseException) -> BaseException:
-        """Gone if the runtime is no longer assigned (the failure was the VM going away), else e."""
         if isinstance(e, Exception) and not isinstance(e, Gone) and self._lookup() is None:
             return Gone(f"{self.id}: runtime no longer assigned ({e!r})")
         return e
 
     def _shared(self) -> Runtime:
-        """The connection exec, read and write share, with a proxy token good for REFRESH_MARGIN_S more."""
         with self._lock:
             if self._assignment.expires_at - time.time() < REFRESH_MARGIN_S:
                 self._refresh()
@@ -553,7 +450,6 @@ class ColabMachine:
             return self._runtime
 
     def _connection(self) -> Runtime:
-        """A new connection to the runtime, with a proxy token good for REFRESH_MARGIN_S more."""
         assert not self.colab.closed, "colab provider: closed"
         with self._lock:
             if self._assignment.expires_at - time.time() < REFRESH_MARGIN_S:
@@ -583,16 +479,13 @@ class ColabMachine:
 
 
 class Frames:
-    """A stream cell's stdout, split into its frames (kind, payload). iopub may cut a line anywhere,
-    so the tail of one message waits for the next. A line that is not a frame is the wrapper going
-    wrong (the command's own output only ever arrives inside frames): raised, never passed on."""
-
     def __init__(self, cmd: str) -> None:
         self.cmd = cmd
+        # iopub may split a line across stream messages
         self._partial = ""
 
     def feed(self, text: str) -> list[tuple[str, str]]:
-        lines = (self._partial + text).split("\n")  # not splitlines: it splits on MARK's \x1e
+        lines = (self._partial + text).split("\n")  # not splitlines: it also splits on \x1e, which MARK holds
         self._partial = lines.pop()
         frames = []
         for line in lines:
@@ -608,22 +501,19 @@ class Frames:
 
 
 def stream_frames(outputs: Iterator[dict[str, Any]], stop: threading.Event, cmd: str) -> Iterator[tuple[str, str]]:
-    """A stream cell's frames, from its outputs as they arrive. A Python error in the cell is the
-    wrapper failing, raised; unless stop is set, when it is our own interrupt (KeyboardInterrupt)."""
     frames = Frames(cmd)
     for out in outputs:
         if out["output_type"] == "error":
             if stop.is_set():
                 continue
             raise RuntimeError(f"colab: stream cell failed under `{cmd[:80]}`: {out.get('ename')}: {out.get('evalue')}")
-        if out.get("name") == "stdout":  # not the cell's own stderr (a warning): the command's is inside frames
+        if out.get("name") == "stdout":
             yield from frames.feed(out["text"])
-    if not stop.is_set():  # an interrupted cell may stop mid-line
+    if not stop.is_set():
         frames.end()
 
 
 def colab_accelerator(gpu: str | None) -> str:
-    """A canonical GPU name (box/gpus.py) as a colab_cli Accelerator value; None is a CPU runtime."""
     if gpu is None:
         return CPU
     name, _, count = gpu.partition(":")
@@ -637,7 +527,6 @@ def colab_accelerator(gpu: str | None) -> str:
 
 
 def variant(accelerator: str) -> str:
-    """colab_cli Variant for an accelerator (commands/session.py:66-91)."""
     if accelerator == CPU:
         return "DEFAULT"
     return "TPU" if accelerator in TPU_ACCELERATORS else "GPU"
@@ -651,14 +540,12 @@ def parse_meta(raw: bytes) -> dict[str, Any]:
 
 
 def parse_exec(outputs: list[dict[str, Any]], cmd: str) -> dict[str, Any]:
-    """The exec cell's result from its outputs. A Python error in the cell is the wrapper failing
-    (bash's own failures are its rc), so it is raised, not turned into an exit code."""
     errors = [o for o in outputs if o.get("output_type") == "error"]
     if errors:
         e = errors[0]
         raise RuntimeError(f"colab: exec cell failed under `{cmd[:80]}`: {e.get('ename')}: {e.get('evalue')}")
     stdout = "".join(o.get("text", "") for o in outputs if o.get("output_type") == "stream" and o.get("name") == "stdout")
-    lines = [line for line in stdout.split("\n") if line.startswith(MARK)]  # not splitlines: it splits on \x1e
+    lines = [line for line in stdout.split("\n") if line.startswith(MARK)]  # not splitlines: it also splits on \x1e, which MARK holds
     if len(lines) != 1:
         raise RuntimeError(f"colab: exec cell printed {len(lines)} results under `{cmd[:80]}`: {stdout[-300:]!r}")
     return parse_exec_result(lines[0][len(MARK) :].encode(), cmd)
@@ -677,8 +564,6 @@ def b64text(data: str) -> str:
 
 
 def reply_window(timeout_s: float, stop: threading.Event | None) -> Callable[[], float]:
-    """Seconds left to wait for a cell: timeout_s from now, cut to STOP_GRACE_S once stop is set.
-    0 or less: give up."""
     give_up = time.monotonic() + timeout_s
     stopped_at: list[float] = []
 
@@ -692,16 +577,11 @@ def reply_window(timeout_s: float, stop: threading.Event | None) -> Callable[[],
     return left
 
 
-# ---- the real Colab, through google-colab-cli's modules ----------------------------------------
-
-
 def login(auth: str) -> Any:
-    """An authorized requests session from the `colab` CLI's own login (colab_cli/auth.py:222-242).
-    Refuses to start the browser flow itself: run `colab usage` once to log in."""
     from colab_cli import auth as colab_auth
 
     _check_version()
-    provider = colab_auth.AuthProvider(auth)  # ValueError on anything but oauth2 / adc
+    provider = colab_auth.AuthProvider(auth)
     if provider == colab_auth.AuthProvider.OAUTH2 and not Path(colab_auth.TOKEN_CONFIG_PATH).exists():
         raise SystemExit(f"box: colab: not logged in ({colab_auth.TOKEN_CONFIG_PATH} missing); run `colab usage` once")
     return colab_auth.get_credentials(provider=provider)
@@ -720,14 +600,13 @@ class CliBackend:
         from colab_cli.client import Client, Prod
 
         self.http = http
-        self.client = Client(Prod(), http)  # as the CLI builds it (common.py:70-77)
+        self.client = Client(Prod(), http)
 
     def balance(self) -> Balance:
-        info = self.client.get_consumption_user_info()  # GET /tun/m/ccu-info (client.py:246-250)
+        info = self.client.get_consumption_user_info()
         return Balance(info.paid_compute_units_balance, info.consumption_rate_hourly, info.assignments_count)
 
     def assign(self, accelerator: str) -> Assignment:
-        """A fresh runtime (a new notebook hash each time, as `colab new` does: session.py:140-143)."""
         from colab_cli.client import (
             Accelerator,
             ColabRequestError,
@@ -738,10 +617,10 @@ class CliBackend:
 
         try:
             res = self.client.assign(uuid.uuid4(), variant=Variant(variant(accelerator)), accelerator=Accelerator(accelerator))
-        except TooManyAssignmentsError as e:  # 412 (client.py:282-285; wording from session.py:144-156)
+        except TooManyAssignmentsError as e:
             raise RuntimeError(f"colab: allocation refused: too many runtimes, or a usage/capacity limit for {accelerator}: {e}") from e
         except ColabRequestError as e:
-            if get_status_code(e) == 400 and accelerator != CPU:  # session.py:157-172
+            if get_status_code(e) == 400 and accelerator != CPU:
                 raise RuntimeError(f"colab: no quota or entitlement for {accelerator} on this account") from e
             raise
         return _assignment(res.endpoint, getattr(res, "accelerator", None) or Accelerator(accelerator), res.runtime_proxy_info)
@@ -750,13 +629,13 @@ class CliBackend:
         return [_assignment(a.endpoint, a.accelerator, a.runtime_proxy_info) for a in self.client.list_assignments()]
 
     def unassign(self, endpoint: str) -> None:
-        self.client.unassign(endpoint)  # GET then POST /tun/m/unassign/{endpoint} (client.py:257-263)
+        self.client.unassign(endpoint)
 
     def runtime(self, assignment: Assignment) -> CliRuntime:
         return CliRuntime(assignment.url, assignment.token)
 
     def close(self) -> None:
-        self.http.close()  # google-auth's AuthorizedSession: a requests.Session (its pooled connections)
+        self.http.close()
 
 
 def _assignment(endpoint: str, accelerator: Any, proxy: Any) -> Assignment:
@@ -764,29 +643,23 @@ def _assignment(endpoint: str, accelerator: Any, proxy: Any) -> Assignment:
 
 
 class CliRuntime:
-    """Kernels through colab_cli.runtime.ColabRuntime (its websocket, headers and the proxy token:
-    runtime.py:89-172); files through /api/contents with the params colab_cli sends (contents.py:29-51).
-    Each connected kernel holds a websocket thread (not a daemon); close() joins them."""
-
     def __init__(self, url: str, token: str) -> None:
         self.url = url.rstrip("/")
         self.token = token
-        self._kernels: dict[str, Any] = {}  # kernel id -> connected ColabRuntime
+        self._kernels: dict[str, Any] = {}
 
     def start_kernel(self) -> str:
         from colab_cli.runtime import ColabRuntime
 
         rt = ColabRuntime(self.url, self.token)
-        kernel_id = rt.kernel_client.id  # no kernel id: POST /api/kernels, then connect
+        kernel_id = rt.kernel_client.id
         self._kernels[kernel_id] = rt
         return kernel_id
 
     def run(self, kernel_id: str, code: str, timeout_s: float, stop: threading.Event | None = None) -> Iterator[dict[str, Any]]:
-        """The cell's outputs as iopub delivers them. Not ColabRuntime.execute_code: jupyter_kernel_client's
-        wait spins past its timeout without raising (wsclient.py execute_interactive), stores every
-        cell in history, and hands outputs over only at the end."""
+        # not ColabRuntime.execute_code: jupyter_kernel_client's wait ignores its timeout and returns outputs only at the end
         ws = self._connect(kernel_id)
-        ws.iopub_channel.get_msgs()  # drop what other clients' cells broadcast meanwhile
+        ws.iopub_channel.get_msgs()
         msg_id = ws.execute(code, store_history=False, allow_stdin=False)
         for msg in self._replies(ws, msg_id, reply_window(timeout_s, stop), stop):
             kind, content = msg["header"]["msg_type"], msg["content"]
@@ -795,7 +668,7 @@ class CliRuntime:
             elif kind == "error":
                 yield {"output_type": "error", "ename": content["ename"], "evalue": content["evalue"], "traceback": content["traceback"]}
             elif kind == "status" and content["execution_state"] == "idle":
-                ws.shell_channel.get_msgs()  # our execute_reply; read so the queue does not grow
+                ws.shell_channel.get_msgs()
                 return
 
     def submit(self, kernel_id: str, code: str) -> None:
@@ -803,23 +676,21 @@ class CliRuntime:
         msg_id = ws.execute(code, store_history=False, allow_stdin=False)
         for msg in self._replies(ws, msg_id, reply_window(SUBMIT_ACK_S, None), None):
             if msg["header"]["msg_type"] == "status" and msg["content"]["execution_state"] == "busy":
-                self._kernels.pop(kernel_id).stop()  # closes the websocket, leaves the kernel running (runtime.py:264-276)
+                self._kernels.pop(kernel_id).stop()  # ColabRuntime.stop() closes the websocket and leaves the kernel running
                 return
         raise AssertionError("unreachable: _replies raises when it runs out")
 
     def interrupt(self, kernel_id: str) -> None:
         rt = self._kernels.get(kernel_id)
-        if rt is not None:  # else the reader already shut it down
-            rt.kernel_client.interrupt()  # POST /api/kernels/<id>/interrupt (manager.py interrupt_kernel)
+        if rt is not None:
+            rt.kernel_client.interrupt()
 
     def shutdown_kernel(self, kernel_id: str) -> None:
         rt = self._kernels.pop(kernel_id, None)
         if rt is not None:
-            rt.stop(shutdown_kernel=True)  # closes its websocket, then DELETE /api/kernels/<id>
+            rt.stop(shutdown_kernel=True)
 
     def _replies(self, ws: Any, msg_id: str, left: Callable[[], float], stop: threading.Event | None) -> Iterator[dict[str, Any]]:
-        """iopub messages answering msg_id, until left() runs out (TimeoutError, or after stop, just
-        the end) or the socket closes (Unreachable)."""
         while (remaining := left()) > 0:
             if not ws.connection_ready.is_set():
                 raise Unreachable(f"colab: kernel websocket closed ({self.url})")
@@ -837,8 +708,7 @@ class CliRuntime:
 
         if kernel_id not in self._kernels:
             rt = ColabRuntime(self.url, self.token, kernel_id=kernel_id)
-            # jupyter_kernel_client starts a new kernel when the id is gone (manager.py refresh_model
-            # -> None, client.py start); that is not the kernel asked for
+            # jupyter_kernel_client starts a new kernel when the id is gone
             if rt.kernel_client.id != kernel_id:
                 rt.stop(shutdown_kernel=True)
                 raise KernelGone(kernel_id)
@@ -859,8 +729,6 @@ class CliRuntime:
         self._contents("DELETE", path)
 
     def _contents(self, method: str, path: str, **kw: Any) -> Any:
-        """A /api/contents request. Paths are absolute on the VM; Colab's server root is `/`. A 404
-        from Jupyter (application/json) is FileNotFoundError; any other failure is not."""
         import requests
 
         assert path.startswith("/"), path
@@ -876,13 +744,10 @@ class CliRuntime:
 
     def close(self) -> None:
         for rt in list(self._kernels.values()):
-            with contextlib.suppress(Exception):  # closing a socket to a VM that is gone
-                rt.stop()  # joins its websocket thread (wsclient.py stop_channels)
+            with contextlib.suppress(Exception):
+                rt.stop()
         self._kernels.clear()
 
 
-def _jupyter_error(r: Any) -> bool:
-    """Jupyter's API handlers answer application/json (jupyter_server 2's 404 body is then plain text,
-    "file or directory ... does not exist"; older servers send {"message": ...}). Assumed: a proxy's
-    404 for a runtime that is gone is not application/json. Unverified on Colab (the smoke checks)."""
+def _jupyter_error(r: Any) -> bool:  # MUST KILL: tells a Jupyter 404 from a proxy 404 by content-type, unverified on Colab; check the body shape, or settle it with the smoke
     return r.headers.get("content-type", "").startswith("application/json")
