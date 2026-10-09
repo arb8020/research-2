@@ -34,6 +34,7 @@ MAX_SERVICES = 8
 KINDS = ("jobs", "services")
 LEASE_OPS = ("create", "extend", "release")
 MAX_LEASE_AUDIT = 1024
+PR_SET_PDEATHSIG = 1
 
 
 def main() -> None:  # MUST KILL: main() dispatches the `lease` mode while __main__ dispatches `tail`; route every mode in one place
@@ -298,7 +299,7 @@ def spawn(cmd: str, env: dict[str, str], job_dir: Path, *, stdout: Path, stderr:
 
 def die_with_parent() -> None:
     if sys.platform == "linux":
-        ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGKILL)  # MUST KILL: magic prctl option 1; name it PR_SET_PDEATHSIG
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(PR_SET_PDEATHSIG, signal.SIGKILL)
 
 
 def kill_group(child: subprocess.Popen) -> None:
