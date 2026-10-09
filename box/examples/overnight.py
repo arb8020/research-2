@@ -1,20 +1,3 @@
-"""An overnight-shaped run on real Modal, in minutes: three separate processes share one detached session.
-
-    cd box && uv run python examples/overnight.py                 # runs A, waits, B, then C; log in ~/.cache/box/overnight/
-    cd box && uv run python examples/overnight.py --gap-s 30      # "next morning" sooner
-
-A (the VPS that starts it): create a named session (15 min lease, 1 h ceiling), run a job that prints a numbered line
-every 3 s for ~4 min (max_duration 10 min), exit. Nothing ends the session when A goes: the lease does.
-B (next morning): attach by name, status (running, time left), follow the job's log ~20 s, stop (close the iterator),
-remember the cursor, extend the lease to now + 20 min, exit.
-C: attach again, follow from B's cursor until the job is done (no line missed or repeated across B and C), close()
-and print the Receipt, then read_record() after the machine is gone: status, last log lines, lease audit, receipt.
-
-Each phase is its own process (`overnight.py a|b|c --state FILE`); they share only the state file (session id, cursor,
-what B read) and the Modal Volume the session records into. Profile arb8020 (~/.modal.toml), CPU, region us,
-label box.purpose=lease-e2e. Exits non-zero on the first FAIL.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -33,8 +16,8 @@ from box.providers.modal import Modal, ModalToken, ModalVolumeStore
 PROFILE = "arb8020"
 NAME = "overnight-demo"
 LABELS = {"box.purpose": "lease-e2e"}
-RECORD_VOLUME = "box-sessions"  # the relay's record volume (box/gateway/relay.py)
-LINES, EVERY_S = 80, 3  # the job: 80 numbered lines, 3 s apart (~4 min)
+RECORD_VOLUME = "box-sessions"
+LINES, EVERY_S = 80, 3
 JOB = f'for i in $(seq 1 {LINES}); do echo "overnight line $i of {LINES} at $(date +%H:%M:%S)"; sleep {EVERY_S}; done'
 FOLLOW_B_S = 20.0
 LINE = re.compile(r"^overnight line (\d+) of \d+ at ", re.M)
@@ -102,7 +85,7 @@ def phase_b(state: Path) -> None:
             text, cursor = text + (chunk.text if chunk.stream == "stdout" else ""), chunk.end
             if time.monotonic() - t > FOLLOW_B_S:
                 break
-        logs.close()  # Ctrl-C's equivalent: the stream on the machine is closed
+        logs.close()
         got = numbers(text)
         check(got == list(range(1, len(got) + 1)) and len(got) > 0, f"followed {time.monotonic() - t:.0f} s: lines 1..{len(got)}, stopped at cursor {cursor}")
         before = status.lease
@@ -112,7 +95,7 @@ def phase_b(state: Path) -> None:
     say("B exits")
 
 
-def phase_c(state: Path) -> None:  # noqa: PLR0915 (one story, step by step)
+def phase_c(state: Path) -> None:  # noqa: PLR0915
     header("C: attach again, follow from B's cursor to the end, close, read the record")
     st = json.loads(state.read_text())
     cursor = tuple(st["cursor"])
@@ -170,7 +153,7 @@ def driver(out: Path, gap_s: float) -> int:
         for phase, wait_s in (("a", gap_s), ("b", 5.0), ("c", 0.0)):
             t = time.monotonic()
             proc = subprocess.Popen([sys.executable, __file__, phase, "--state", str(state)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            for line in proc.stdout:  # type: ignore[union-attr]
+            for line in proc.stdout:  # MUST KILL: proc.stdout is Optional (was type: ignore[union-attr]); assert it before iterating
                 sys.stdout.write(line)
                 sys.stdout.flush()
                 f.write(line)
@@ -191,7 +174,7 @@ def driver(out: Path, gap_s: float) -> int:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(description="Three processes share one detached Modal session: create (a), attach and extend (b), follow, close and read the record (c).", formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("phase", nargs="?", choices=["a", "b", "c"], help="one phase (default: run all three as separate processes)")
     ap.add_argument("--state", type=Path, help="(a phase) the file the phases share")
     ap.add_argument("--out", type=Path, default=Path.home() / ".cache" / "box" / "overnight" / time.strftime("%Y%m%d-%H%M%S"))
