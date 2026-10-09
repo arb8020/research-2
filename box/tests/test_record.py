@@ -4,6 +4,8 @@ ended, its jobs, and their output up to the last flush. Same providers as test_s
 
 from __future__ import annotations
 
+import os
+import socket
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -15,7 +17,7 @@ from box.sdk import Ended, Ending, Provider, Running
 from box.store import Store
 from box.supervisor import CHUNK_BYTES, HEARTBEAT_TTL_S
 from box.tests import providers
-from box.tests.test_sdk import eventually, gone
+from box.tests.test_sdk import JOB_S, eventually, gone
 
 
 @pytest.fixture
@@ -28,8 +30,8 @@ def recorded_output(record: sdk.Record, job_id: str, stream: str = "stdout") -> 
 
 
 def test_a_recorded_session_says_why_it_ended_after_its_machine_is_gone(launch: Callable, provider: Provider, store: Store) -> None:
-    with launch(deadline_s=600, record=store, labels={"box.user": "reader-7@relay"}) as s:
-        job = s.run("echo hello; echo oops >&2; exit 3")
+    with launch(ceiling_s=600, record=store, labels={"box.user": "reader-7@relay"}) as s:
+        job = s.run("echo hello; echo oops >&2; exit 3", max_duration_s=JOB_S)
         assert job.wait() == Ending("exited", 3)
     assert gone(provider, s)
     again = sdk.attach(provider, s.id, record=store)  # a fresh process: it never saw the machine
@@ -44,8 +46,8 @@ def test_a_recorded_session_says_why_it_ended_after_its_machine_is_gone(launch: 
 
 
 def test_job_logs_read_on_from_the_record_with_the_same_cursor_once_the_machine_is_gone(launch: Callable, provider: Provider, store: Store) -> None:
-    with launch(deadline_s=600, record=store) as s:
-        job = s.run("echo one; echo two >&2; echo three")
+    with launch(ceiling_s=600, record=store) as s:
+        job = s.run("echo one; echo two >&2; echo three", max_duration_s=JOB_S)
         job.wait()
         first = next(job.logs())  # a reader that saw some of it live
     assert (first.stream, first.text) == ("stdout", "one\nthree\n")
@@ -58,28 +60,43 @@ def test_job_logs_read_on_from_the_record_with_the_same_cursor_once_the_machine_
 
 
 def test_a_job_env_is_recorded_by_name_never_by_value(launch: Callable, store: Store) -> None:
-    with launch(deadline_s=600, record=store) as s:
-        job = s.run("true", env={"API_KEY": "sekrit-value"})
+    with launch(ceiling_s=600, record=store) as s:
+        job = s.run("true", max_duration_s=JOB_S, env={"API_KEY": "sekrit-value"})
         job.wait()
     recorded = b"".join(store.get(key) for key in store.list(f"sessions/{s.id}/"))
     assert b"API_KEY" in recorded
     assert b"sekrit-value" not in recorded
 
 
-def test_a_released_session_records_its_end_and_all_its_output(launch: Callable, provider: Provider, store: Store, scale: float) -> None:
-    s = launch(deadline_s=600, record=store)
-    job = s.run(f"for i in 1 2 3; do echo line $i; sleep {0.5 * scale}; done")
-    s.release()  # ends itself after the job; nobody here reads its ended.json before it goes
-    eventually(lambda: gone(provider, s), timeout_s=60 * scale)
-    assert sdk.attach(provider, s.id, record=store).wait(timeout_s=30 * scale) == Ended("released")
+def test_a_session_ended_by_its_lease_records_its_end_and_all_its_output(launch: Callable, provider: Provider, store: Store, scale: float) -> None:
+    s = launch(lease_s=4 * scale, ceiling_s=600, record=store)
+    job = s.run(f"for i in 1 2 3; do echo line $i; sleep {0.5 * scale}; done", max_duration_s=JOB_S)
+    eventually(lambda: gone(provider, s), timeout_s=60 * scale)  # nobody here reads its ended.json before it goes
+    assert sdk.attach(provider, s.id, record=store).wait(timeout_s=30 * scale) == Ended("lease")
     assert recorded_output(sdk.read_record(store, s.id), job.id) == "line 1\nline 2\nline 3\n"
+
+
+def test_every_change_of_the_lease_is_audited_in_the_record(launch: Callable, provider: Provider, store: Store, scale: float) -> None:
+    s = launch(lease_s=60, ceiling_s=600, record=store)
+    for more_s in (120, 180):  # two extends in a row from this process: one entry, n=2
+        s.extend(time.time() + more_s)
+    s.extend(time.time() + 1)  # shorter: no change, nothing audited
+    released = s.release()
+    assert s.wait() == Ended("released")
+    eventually(lambda: gone(provider, s), timeout_s=60 * scale)
+    record = sdk.read_record(store, s.id)
+    audit = record.lease_audit()
+    assert [(c.op, c.n) for c in audit] == [("create", 1), ("extend", 2), ("release", 1)]
+    assert {(c.host, c.pid) for c in audit} == {(socket.gethostname(), os.getpid())}
+    assert audit[-1].until == released.until
+    assert record.running.lease == released  # the last lease recorded
 
 
 def test_a_supervisor_killed_without_a_word_is_machine_lost_with_logs_up_to_the_last_flush(
     launch: Callable, provider: Provider, store: Store, scale: float
 ) -> None:  # fmt: skip
-    s = launch(deadline_s=600, record=store)
-    job = s.run("echo before; sleep 999")
+    s = launch(ceiling_s=600, record=store)
+    job = s.run("echo before; sleep 999", max_duration_s=JOB_S)
     eventually(lambda: recorded_output(sdk.read_record(store, s.id), job.id) == "before\n", timeout_s=30 * scale)
     providers.kill_supervisor(s.machine)
     killed_at = time.monotonic()
@@ -99,8 +116,8 @@ def test_a_supervisor_killed_without_a_word_is_machine_lost_with_logs_up_to_the_
 
 
 def test_a_character_split_across_flushes_is_recorded_whole(launch: Callable, store: Store, scale: float) -> None:
-    with launch(deadline_s=600, record=store) as s:
-        job = s.run(rf"printf 'caf\xc3'; sleep {3 * scale}; printf '\xa9\n'")  # é = c3 a9, a flush in between
+    with launch(ceiling_s=600, record=store) as s:
+        job = s.run(rf"printf 'caf\xc3'; sleep {3 * scale}; printf '\xa9\n'", max_duration_s=JOB_S)  # é = c3 a9, a flush in between
         job.wait()
     record = sdk.read_record(store, s.id)
     assert recorded_output(record, job.id) == "café\n"
@@ -109,8 +126,8 @@ def test_a_character_split_across_flushes_is_recorded_whole(launch: Callable, st
 
 def test_output_past_a_chunk_is_recorded_in_order_and_never_dropped(launch: Callable, store: Store) -> None:
     lines = 3 * CHUNK_BYTES // 8  # "%07d\n": 8 bytes a line; 3 chunks' worth, more than one flush takes
-    with launch(deadline_s=600, record=store) as s:
-        job = s.run(f"awk 'BEGIN {{ for (i = 1; i <= {lines}; i++) printf \"%07d\\n\", i }}'")
+    with launch(ceiling_s=600, record=store) as s:
+        job = s.run(f"awk 'BEGIN {{ for (i = 1; i <= {lines}; i++) printf \"%07d\\n\", i }}'", max_duration_s=JOB_S)
         job.wait()
     record = sdk.read_record(store, s.id)
     chunks = list(record.logs(job.id))
