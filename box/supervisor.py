@@ -68,6 +68,8 @@ MAX_CHUNKS = 10**CHUNK_DIGITS - 1
 # TODO(handoff): if the supervisor itself dies, nothing writes ended.json or runs BOX_ON_SHUTDOWN;
 # the job dies with it on Linux (PDEATHSIG), and only the provider's backstop ends the machine
 # (Modal: sandbox timeout; RunPod: BOOT's backstop timer, and a container restart deletes the pod).
+# With --record, the record still has everything up to the last flush, and its stale heartbeat plus
+# the machine's absence read as machine_lost (sdk.Record.status).
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--root", required=True)
