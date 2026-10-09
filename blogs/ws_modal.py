@@ -14,10 +14,15 @@ import shlex
 import sys
 import time
 import urllib.request
+import warnings
 
 os.environ.setdefault("MODAL_PROFILE", "arb8020")
 assert os.environ["MODAL_PROFILE"] != "herdora", "verify_workspace never runs on the herdora workspace"
 import modal  # noqa: E402 (after the profile is pinned)
+
+# playwright's sync API runs an event loop on this thread, so Modal's blocking calls warn that they are "in an async
+# context". They are only ever called from this one thread, between playwright calls: the warning is noise here.
+warnings.filterwarnings("ignore", category=modal.exception.AsyncUsageWarning)
 
 APP = "blogs-verify-workspace"
 TAG = {"blogs": "verify-workspace"}

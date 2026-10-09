@@ -375,7 +375,7 @@ def step_scratch_and_stop(run: Run, box: Box) -> None:
     scratch_s = time.perf_counter() - t0
     assert "scratch ran while the check was running: 42" in page.locator("scratch-cell .cell-out").inner_text()
     assert page.get_attribute("ws-cell[name=loop]", "data-job") is not None, "the check ended before the scratch cell ran"
-    spinning = box.sh("pgrep -f build/debug/check_trace || true").split()
+    spinning = box.sh("pgrep -f 'build/debug/check_trac[e] ' || true").split()
     assert spinning, "the hanging check_trace isn't running"
     run.shot("4-scratch-during-check")
     cell.scroll_into_view_if_needed()
@@ -387,7 +387,7 @@ def step_scratch_and_stop(run: Run, box: Box) -> None:
     status = cell.locator(".cell-status").inner_text()
     assert status.startswith("stopped"), status
     time.sleep(0.3)
-    left = box.sh("pgrep -f build/debug/check_trace || true").split()
+    left = box.sh("pgrep -f 'build/debug/check_trac[e] ' || true").split()
     assert not left, f"check_trace survived Stop: {left}"
     assert "pass/ch00/loop" not in refs(box)
     run.timings["scratch_during_check_s"] = round(scratch_s, 3)
