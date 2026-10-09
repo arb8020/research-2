@@ -53,6 +53,7 @@ import sys
 import tarfile
 import threading
 import time
+import zlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
@@ -69,6 +70,7 @@ LABEL_CEILING = "box.ceiling"  # unix time no lease of the session can pass (`bo
 RESERVED = (LABEL_BY, LABEL_SESSION, LABEL_CEILING)  # launch stamps these; a caller's labels are the rest
 CEILING_S = 3600  # create()'s default ceiling, from creation
 BACKSTOP_MARGIN_S = 600  # the provider's own hard stop comes this long after the ceiling
+MAX_ENV_VALUE = 32768  # bytes: Modal's limit on one environment value (Sandbox.create passes env as a secret)
 MAX_KEEP_EVERY_S = 3600  # keep(): renewing less often than hourly is a lease, not keep-alive
 POLL_S = 0.5
 RECORD_PATH = "record"  # where a session's record is mounted on its machine, under the supervisor's root
@@ -256,13 +258,13 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
         *(["--record", RECORD_PATH, *(["--record-sync"] if record.sync_writes else [])] if record else []),
     ]  # fmt: skip
     # the supervisor is installed as a file (ROOT/supervisor.py), so a later exec can run its `lease` command
-    install = "import base64,os; open(os.environ['BOX_ROOT'] + '/supervisor.py', 'wb').write(base64.b64decode(os.environ['BOX_SUPERVISOR']))"
+    install = "import base64,os,zlib; open(os.environ['BOX_ROOT'] + '/supervisor.py', 'wb').write(zlib.decompress(base64.b64decode(os.environ['BOX_SUPERVISOR'])))"
     boot = f'mkdir -p "$BOX_ROOT" && python3 -c {shlex.quote(install)} && exec python3 "$BOX_ROOT/supervisor.py" --root "$BOX_ROOT" {shlex.join(args)}'
     backstop_s = int(lease.ceiling - time.time()) + BACKSTOP_MARGIN_S  # from the ceiling, not from boot
     assert backstop_s > BACKSTOP_MARGIN_S, backstop_s
     machine = provider.launch(
         gpu=gpu, image=image, entrypoint=["bash", "-c", boot],
-        env={**(env or {}), "BOX_SUPERVISOR": base64.b64encode(SUPERVISOR.read_bytes()).decode()},
+        env={**(env or {}), "BOX_SUPERVISOR": supervisor_env()},
         labels={**(labels or {}), LABEL_BY: "box", LABEL_SESSION: session_id, LABEL_CEILING: str(int(lease.ceiling))},
         timeout_s=backstop_s, ports=list(ports), mounts=[Mount(record, record_prefix(session_id), RECORD_PATH)] if record else [],
     )  # fmt: skip
@@ -274,6 +276,14 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
             machine.terminate()
             raise
     return Session(machine, record=record)
+
+
+def supervisor_env() -> str:
+    """The supervisor's source as one environment value: compressed, since Modal refuses a value
+    over MAX_ENV_VALUE (it passes env as a secret), and the plain base64 of it is past that."""
+    value = base64.b64encode(zlib.compress(SUPERVISOR.read_bytes(), 9)).decode()
+    assert len(value) <= MAX_ENV_VALUE, f"the supervisor is {len(value)} bytes as BOX_SUPERVISOR; Modal takes {MAX_ENV_VALUE}"
+    return value
 
 
 def new_session_id() -> str:
