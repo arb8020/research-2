@@ -60,8 +60,8 @@ class Pumped:
         self._closed = threading.Event()
         self._close_lock = threading.Lock()
         self._finished = False  # the command exited and was waited for: nothing to kill
-        # Not daemons: each ends when its source does, which close() forces by killing the command.
-        self._threads = [threading.Thread(target=self._pump, args=(r,), name=f"box-stream-{label}-{i}") for i, r in enumerate(readers)]
+        # Not daemons (said, not inherited from a daemon creator): each ends when its source does, which close() forces by killing the command.
+        self._threads = [threading.Thread(target=self._pump, args=(r,), name=f"box-stream-{label}-{i}", daemon=False) for i, r in enumerate(readers)]
         for t in self._threads:
             t.start()
 
