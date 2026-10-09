@@ -2,6 +2,7 @@
 
 `box run --gpu NAME` takes a canonical name (case-insensitive). Prices live in gpus.json, which
 `box gpus --sync` rewrites from the providers' live price APIs; the table below is hand-kept.
+Colab bills compute units, not $/hr, so it has ids here and no prices.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PRICES = Path(__file__).resolve().parent / "gpus.json"  # {provider: {canonical name: $/hr per GPU}}
-PROVIDERS = ("modal", "runpod")
+PROVIDERS = ("modal", "runpod", "colab")
 
 
 @dataclass(frozen=True)
@@ -20,22 +21,25 @@ class Gpu:
     vram_gb: int
     modal: str | None  # Modal's gpu= string (modal.com/docs/guide/gpu)
     runpod: str | None  # RunPod gpuTypeId (the public `gpuTypes { id }` GraphQL query)
+    colab: str | None = None  # colab_cli Accelerator value (google-colab-cli client.py:62-70); billed in compute units
 
 
 GPUS = (
-    Gpu("T4", 16, "T4", None),
-    Gpu("L4", 24, "L4", "NVIDIA L4"),
+    Gpu("T4", 16, "T4", None, colab="T4"),
+    Gpu("L4", 24, "L4", "NVIDIA L4", colab="L4"),
     Gpu("A10G", 24, "A10", None),
     Gpu("RTX-4090", 24, None, "NVIDIA GeForce RTX 4090"),
     Gpu("RTX-5090", 32, None, "NVIDIA GeForce RTX 5090"),
-    Gpu("A100-40GB", 40, "A100-40GB", "NVIDIA A100-SXM4-40GB"),
+    Gpu("A100-40GB", 40, "A100-40GB", "NVIDIA A100-SXM4-40GB", colab="A100"),  # Colab's A100: 40 GB as reported; unverified
     Gpu("L40S", 48, "L40S", "NVIDIA L40S"),
     Gpu("A100-80GB", 80, "A100-80GB", "NVIDIA A100-SXM4-80GB"),
-    Gpu("H100", 80, "H100", "NVIDIA H100 80GB HBM3"),
-    Gpu("RTX-PRO-6000", 96, "RTX-PRO-6000", "NVIDIA RTX PRO 6000 Blackwell Server Edition"),
+    Gpu("H100", 80, "H100", "NVIDIA H100 80GB HBM3", colab="H100"),
+    Gpu("RTX-PRO-6000", 96, "RTX-PRO-6000", "NVIDIA RTX PRO 6000 Blackwell Server Edition", colab="G4"),  # GCP G4 = this card; unverified on Colab
     Gpu("H200", 141, "H200", "NVIDIA H200"),
     Gpu("B200", 180, "B200", "NVIDIA B200"),
     Gpu("B300", 288, "B300", "NVIDIA B300 SXM6 AC"),
+    Gpu("TPU-v5e-1", 16, None, None, colab="V5E1"),  # one TPU chip (HBM per chip), not a GPU
+    Gpu("TPU-v6e-1", 32, None, None, colab="V6E1"),
 )
 
 # billing.rates() keys that are not gpu_hour_cost_<modal id, lowercased, - -> _>
@@ -101,12 +105,12 @@ def sync() -> list[str]:
 
 def table() -> str:
     p = prices()
-    rows = [("name", "vram", "modal", "$/hr", "runpod", "$/hr")]
+    rows = [("name", "vram", "modal", "$/hr", "runpod", "$/hr", "colab")]
     for g in GPUS:
         rows.append((
             g.name, f"{g.vram_gb}G",
             g.modal or "-", _price(p["modal"].get(g.name)),
-            g.runpod or "-", _price(p["runpod"].get(g.name)),
+            g.runpod or "-", _price(p["runpod"].get(g.name)), g.colab or "-",
         ))  # fmt: skip
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
     return "\n".join("  ".join(c.ljust(w) for c, w in zip(r, widths, strict=True)).rstrip() for r in rows)
