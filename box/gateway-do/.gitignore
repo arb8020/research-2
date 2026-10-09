@@ -10,3 +10,4 @@ results/*.log
 .relay-*.log
 .tunnel-*
 .run/
+.evidence/

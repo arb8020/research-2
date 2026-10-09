@@ -20,22 +20,22 @@
     "A": {
       "files": {
         "gateway/relay.py": {
-          "lines": 672,
-          "code": 555
+          "lines": 732,
+          "code": 602
         },
         "gateway/kernel.Dockerfile": {
           "lines": 4,
           "code": 2
         }
       },
-      "code": 557,
-      "lines": 676
+      "code": 604,
+      "lines": 736
     },
     "B": {
       "files": {
         "gateway/relay.py": {
-          "lines": 672,
-          "code": 555
+          "lines": 732,
+          "code": 602
         },
         "gateway/kernel.Dockerfile": {
           "lines": 4,
@@ -74,22 +74,22 @@
           "code": 45
         },
         "gateway-do/src/owner-do.ts": {
-          "lines": 148,
-          "code": 115
+          "lines": 153,
+          "code": 117
         },
         "gateway-do/src/proxy.ts": {
           "lines": 29,
           "code": 21
         }
       },
-      "code": 1254,
-      "lines": 1577
+      "code": 1303,
+      "lines": 1642
     },
     "C": {
       "files": {
         "gateway/relay.py": {
-          "lines": 672,
-          "code": 555
+          "lines": 732,
+          "code": 602
         },
         "gateway/kernel.Dockerfile": {
           "lines": 4,
@@ -132,31 +132,31 @@
           "code": 15
         }
       },
-      "code": 1133,
-      "lines": 1430
+      "code": 1180,
+      "lines": 1490
     }
   },
   "live": {
     "A": {
       "url": "http://localhost:8780",
-      "session": "s-5f8616a6f06a",
-      "connect_cpu_s": 3.2,
-      "clock_offset_s": 0.051,
+      "session": "s-4b6768216a89",
+      "connect_cpu_s": 3.7,
+      "clock_offset_s": -0.036,
       "two_tabs": {
         "both_saw_all": true,
         "same_order": true,
         "lat_ms_p50": [
-          2012.973,
-          1963.494
+          1473.076,
+          1490.135
         ],
         "lat_ms_max": [
-          2918.821,
-          2869.46
+          2377.953,
+          2395.061
         ]
       },
       "reattach": {
         "resume_code": 200,
-        "resume_first_event_ms": 538,
+        "resume_first_event_ms": 406,
         "resume_gap_lines": [
           0,
           1,
@@ -165,99 +165,24 @@
           4
         ],
         "resume_repeats": 0,
-        "resume_all_gap_ms": 538,
+        "resume_all_gap_ms": 406,
         "reload_replayed": {
           "two": 20,
           "gap": 5
         },
-        "reload_full_replay_ms": 493,
-        "get_ms_p50": 509.024
+        "reload_full_replay_ms": 361,
+        "get_ms_p50": 404.607
       },
       "machine_dies": {
         "reader_saw": [
           {
-            "after_s": 0.7,
+            "after_s": 10.2,
             "kind": "status",
             "what": {
               "state": "ended",
               "gpu": null,
-              "started_at": 1791530091.0,
-              "deadline": 1791531291.0,
-              "reason": "machine_lost"
-            }
-          }
-        ],
-        "run_lines_before_kill": 6,
-        "get_after": {
-          "code": 404,
-          "status": {
-            "error": "modal provider: no live machine for session s-5f8616a6f06a"
-          }
-        },
-        "fresh_tab": {
-          "code": 200,
-          "run_lines_replayed": 0,
-          "events": 17
-        }
-      },
-      "recovery": {
-        "new_session": "s-59d93fc69ec8",
-        "connect_s": 3.4,
-        "end": "stopped"
-      },
-      "modal_usd": 0.0005
-    },
-    "B": {
-      "url": "https://box-gateway-do.chiraagbalu.workers.dev/b",
-      "session": "s-ac345401ed50",
-      "connect_cpu_s": 4.1,
-      "clock_offset_s": 0.186,
-      "two_tabs": {
-        "both_saw_all": true,
-        "same_order": true,
-        "lat_ms_p50": [
-          430.29,
-          429.039
-        ],
-        "lat_ms_max": [
-          594.924,
-          594.89
-        ]
-      },
-      "reattach": {
-        "resume_code": 200,
-        "resume_first_event_ms": 47,
-        "resume_gap_lines": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
-        "resume_repeats": 0,
-        "resume_all_gap_ms": 47,
-        "reload_replayed": {
-          "two": 20,
-          "gap": 5
-        },
-        "reload_full_replay_ms": 50,
-        "get_ms_p50": 43.297
-      },
-      "machine_dies": {
-        "reader_saw": [
-          {
-            "after_s": 20.3,
-            "kind": "step",
-            "what": "no word from the machine for 20 s and the relay finds no machine"
-          },
-          {
-            "after_s": 20.3,
-            "kind": "status",
-            "what": {
-              "state": "ended",
-              "gpu": null,
-              "started_at": 1791530093.3604956,
-              "deadline": 1791531291.551,
+              "started_at": 1791531523.0,
+              "deadline": 1791532723.0,
               "reason": "machine_lost"
             }
           }
@@ -268,44 +193,44 @@
           "status": {
             "state": "ended",
             "gpu": null,
-            "started_at": 1791530093.3604956,
-            "deadline": 1791531291.551,
+            "started_at": 1791531523.0,
+            "deadline": 1791532723.0,
             "reason": "machine_lost"
           }
         },
         "fresh_tab": {
           "code": 200,
-          "run_lines_replayed": 4,
-          "events": 68
+          "run_lines_replayed": 8,
+          "events": 69
         }
       },
       "recovery": {
-        "new_session": "s-9f5a1bf081f4",
-        "connect_s": 4.0,
+        "new_session": "s-b81ba93b3167",
+        "connect_s": 3.2,
         "end": "stopped"
       },
-      "modal_usd": 0.0007
+      "modal_usd": 0.0006
     },
-    "C": {
-      "url": "https://box-gateway-do.chiraagbalu.workers.dev/c",
-      "session": "s-1ee79fca808f",
-      "connect_cpu_s": 4.0,
-      "clock_offset_s": -0.037,
+    "B": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/b",
+      "session": "s-d7472811d799",
+      "connect_cpu_s": 7.3,
+      "clock_offset_s": 0.179,
       "two_tabs": {
         "both_saw_all": true,
         "same_order": true,
         "lat_ms_p50": [
-          237.192,
-          237.155
+          460.642,
+          460.526
         ],
         "lat_ms_max": [
-          356.507,
-          371.772
+          592.643,
+          592.55
         ]
       },
       "reattach": {
         "resume_code": 200,
-        "resume_first_event_ms": 51,
+        "resume_first_event_ms": 68,
         "resume_gap_lines": [
           0,
           1,
@@ -314,13 +239,87 @@
           4
         ],
         "resume_repeats": 0,
-        "resume_all_gap_ms": 51,
+        "resume_all_gap_ms": 68,
         "reload_replayed": {
           "two": 20,
           "gap": 5
         },
-        "reload_full_replay_ms": 47,
-        "get_ms_p50": 573.115
+        "reload_full_replay_ms": 49,
+        "get_ms_p50": 49.742
+      },
+      "machine_dies": {
+        "reader_saw": [
+          {
+            "after_s": 22.5,
+            "kind": "status",
+            "what": {
+              "state": "ended",
+              "gpu": null,
+              "started_at": 1791531527.6142275,
+              "deadline": 1791532723.574,
+              "reason": "machine_lost"
+            }
+          }
+        ],
+        "run_lines_before_kill": 4,
+        "get_after": {
+          "code": 200,
+          "status": {
+            "state": "ended",
+            "gpu": null,
+            "started_at": 1791531527.6142275,
+            "deadline": 1791532723.574,
+            "reason": "machine_lost"
+          }
+        },
+        "fresh_tab": {
+          "code": 200,
+          "run_lines_replayed": 4,
+          "events": 67
+        }
+      },
+      "recovery": {
+        "new_session": "s-c11d644d6f53",
+        "connect_s": 4.8,
+        "end": "stopped"
+      },
+      "modal_usd": 0.0008
+    },
+    "C": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/c",
+      "session": "s-5d30c71ed688",
+      "connect_cpu_s": 6.5,
+      "clock_offset_s": -0.051,
+      "two_tabs": {
+        "both_saw_all": true,
+        "same_order": true,
+        "lat_ms_p50": [
+          210.017,
+          210.128
+        ],
+        "lat_ms_max": [
+          359.055,
+          359.1
+        ]
+      },
+      "reattach": {
+        "resume_code": 200,
+        "resume_first_event_ms": 63,
+        "resume_gap_lines": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "resume_repeats": 0,
+        "resume_all_gap_ms": 63,
+        "reload_replayed": {
+          "two": 20,
+          "gap": 5
+        },
+        "reload_full_replay_ms": 53,
+        "get_ms_p50": 622.257
       },
       "machine_dies": {
         "reader_saw": [
@@ -332,9 +331,13 @@
         ],
         "run_lines_before_kill": 4,
         "get_after": {
-          "code": 404,
+          "code": 200,
           "status": {
-            "error": "modal provider: no live machine for session s-1ee79fca808f"
+            "state": "ended",
+            "gpu": null,
+            "started_at": 1791531523.0,
+            "deadline": 1791532723.0,
+            "reason": "machine_lost"
           }
         },
         "fresh_tab": {
@@ -344,13 +347,164 @@
         }
       },
       "recovery": {
-        "new_session": "s-03399d7c0e59",
-        "connect_s": 5.0,
+        "new_session": "s-33df60d7c76e",
+        "connect_s": 6.1,
         "end": "stopped"
       },
-      "modal_usd": 0.0016
+      "modal_usd": 0.0017
     }
   },
-  "deadline": {},
-  "latency": {}
+  "deadline": {
+    "A": {
+      "url": "http://localhost:8780",
+      "idle": {
+        "session": "s-876ec1cc5595",
+        "held": false,
+        "reason": "idle",
+        "ended_after_running_s": 59.2,
+        "late_vs_deadline_s": -119.5,
+        "steps_near_end": [
+          "supervisor up (1.8 s since connect)",
+          "starting Jupyter Server",
+          "tunnel open: https://ta-01m4fs0ww4m8rb7expx8dt4v2s-8888-0c05f6qb2ir5tdtpzosetvpab.w.modal.host",
+          "Jupyter Server ready (2.9 s since connect)"
+        ]
+      },
+      "deadline": {
+        "session": "s-0fc69a3586a4",
+        "held": true,
+        "reason": "deadline",
+        "ended_after_running_s": 179.3,
+        "late_vs_deadline_s": 0.9,
+        "steps_near_end": []
+      },
+      "modal_usd": 0.0038
+    },
+    "B": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/b",
+      "idle": {
+        "session": "s-cc5face9e22f",
+        "held": false,
+        "reason": "idle",
+        "ended_after_running_s": 57.7,
+        "late_vs_deadline_s": -117.7,
+        "steps_near_end": [
+          "starting Jupyter Server",
+          "tunnel open: https://ta-01m4fs738r7kc0e0ajrtwvwvcs-8888-2bk8a8iecvep3a1kipmmbwrj3.w.modal.host",
+          "forwarder started: the machine pushes its log to the fan-out from here",
+          "Jupyter Server ready (4.6 s since connect)"
+        ]
+      },
+      "deadline": {
+        "session": "s-4d5a6a26f934",
+        "held": true,
+        "reason": "deadline",
+        "ended_after_running_s": 176.8,
+        "late_vs_deadline_s": 1.5,
+        "steps_near_end": [
+          "deadline reached (this gateway's alarm): ending the machine"
+        ]
+      },
+      "modal_usd": 0.0037
+    },
+    "C": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/c",
+      "idle": {
+        "session": "s-5efd08d6403c",
+        "held": false,
+        "reason": "idle",
+        "ended_after_running_s": 59.0,
+        "late_vs_deadline_s": -119.5,
+        "steps_near_end": [
+          "starting Jupyter Server",
+          "tunnel open: https://ta-01m4fs0wyw8n54sk4b4j5ba9ws-8888-i3jf3gljzrsv3r0sgtdvnvq2x.w.modal.host",
+          "forwarder started: the machine pushes its log to the fan-out from here",
+          "Jupyter Server ready (2.9 s since connect)"
+        ]
+      },
+      "deadline": {
+        "session": "s-903d472e400f",
+        "held": true,
+        "reason": "deadline",
+        "ended_after_running_s": 178.9,
+        "late_vs_deadline_s": 0.9,
+        "steps_near_end": []
+      },
+      "modal_usd": 0.0037
+    },
+    "B_first_run_race": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/b",
+      "idle": {
+        "session": "s-fd2911079a6b",
+        "held": false,
+        "reason": "idle",
+        "ended_after_running_s": 58.4,
+        "late_vs_deadline_s": -117.8,
+        "steps_near_end": [
+          "starting Jupyter Server",
+          "tunnel open: https://ta-01m4fs0x3t0x38c74fw54jx0es-8888-lkfjoc2agnndrpagxnbchg5kv.w.modal.host",
+          "forwarder started: the machine pushes its log to the fan-out from here",
+          "Jupyter Server ready (4.0 s since connect)"
+        ]
+      },
+      "deadline": {
+        "session": "s-379fc5040944",
+        "held": true,
+        "reason": "stopped",
+        "ended_after_running_s": 178.6,
+        "late_vs_deadline_s": 1.5,
+        "steps_near_end": [
+          "deadline reached (this gateway's alarm): ending the machine"
+        ]
+      },
+      "modal_usd": 0.0037
+    }
+  },
+  "latency": {
+    "A": {
+      "url": "http://localhost:8780",
+      "session": "s-56687b8fabb6",
+      "gpu_seen": "Tesla T4",
+      "connect_s": 5.6,
+      "first_cell_s": 3.74,
+      "cell_rtt_ms_p50": 78.627,
+      "cell_rtt_ms_p90": 81.795,
+      "end_s": 2.1,
+      "end": {
+        "code": 200,
+        "reason": "stopped"
+      },
+      "modal_usd": 0.0039
+    },
+    "B": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/b",
+      "session": "s-c14cb40e877e",
+      "gpu_seen": "Tesla T4",
+      "connect_s": 7.1,
+      "first_cell_s": 6.08,
+      "cell_rtt_ms_p50": 89.198,
+      "cell_rtt_ms_p90": 94.734,
+      "end_s": 2.3,
+      "end": {
+        "code": 200,
+        "reason": "stopped"
+      },
+      "modal_usd": 0.0045
+    },
+    "C": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/c",
+      "session": "s-31d5f9fd5907",
+      "gpu_seen": "Tesla T4",
+      "connect_s": 7.6,
+      "first_cell_s": 5.04,
+      "cell_rtt_ms_p50": 80.875,
+      "cell_rtt_ms_p90": 84.524,
+      "end_s": 2.4,
+      "end": {
+        "code": 200,
+        "reason": "stopped"
+      },
+      "modal_usd": 0.0045
+    }
+  }
 }
