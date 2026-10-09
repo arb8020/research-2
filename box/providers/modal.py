@@ -192,7 +192,8 @@ class Modal:
             raise Refused(f"modal provider: mounts only a ModalVolumeStore (got {foreign})")
         if timeout_s > MAX_TIMEOUT_S:
             raise Refused(f"modal provider: timeout_s={timeout_s} past Modal's {MAX_TIMEOUT_S} s cap (a ceiling over {MAX_TIMEOUT_S - 600} s)")
-        stores: list[ModalVolumeStore] = [m.store for m in mounts]  # MUST KILL: narrowed by the isinstance check above, which the checker can't see (was type: ignore[misc]); filter with a TypeGuard
+        stores = [m.store for m in mounts if isinstance(m.store, ModalVolumeStore)]
+        assert len(stores) == len(mounts), (stores, mounts)
         match None if image is None else parse_image(image):
             case SnapshotImage(provider="modal", id=snapshot):
                 modal_image = None
