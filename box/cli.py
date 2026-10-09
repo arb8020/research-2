@@ -19,7 +19,8 @@ default: the ceiling), never past its ceiling (--ceiling, default 1h, at most 48
 also ends once it has been idle (its job done) for DETACH_IDLE_S. Nothing ends it because this
 command exits: the lease is the guarantee.
 
-Every command takes --provider (modal by default; runpod; local for a machine on this computer).
+Every command takes --provider (modal by default; runpod; local for a machine on this computer;
+colab for a runtime on your own Colab account: box/providers/colab.py says what it refuses).
 """
 
 from __future__ import annotations
@@ -51,9 +52,18 @@ def until(t: float) -> str:
     return f"{time.strftime('%H:%M:%S', time.localtime(t))} (in {(t - time.time()) / 60:.0f} min)"
 
 
+MADE: list[sdk.Provider] = []  # every provider this command made; main() closes them (Colab's kernel sockets are non-daemon threads)
+
+
 def make_provider(name: str, region: str | None = None) -> sdk.Provider:
     """The one place a provider is named, and where its credentials are read (the providers take
     them as arguments). Imported on use: each pulls its own SDK. region: Modal only; None = anywhere."""
+    provider = _make_provider(name, region)
+    MADE.append(provider)
+    return provider
+
+
+def _make_provider(name: str, region: str | None) -> sdk.Provider:
     if name == "modal":
         from box.providers.modal import Modal, ModalToken
 
@@ -66,7 +76,11 @@ def make_provider(name: str, region: str | None = None) -> sdk.Provider:
         from box.providers.local import Local
 
         return Local()
-    raise SystemExit(f"box: unknown provider {name!r}; known: modal, runpod, local")
+    if name == "colab":
+        from box.providers.colab import Colab
+
+        return Colab.from_env()
+    raise SystemExit(f"box: unknown provider {name!r}; known: modal, runpod, local, colab")
 
 
 def user() -> str:
@@ -191,7 +205,7 @@ def cmd_gpus(a: argparse.Namespace) -> int:
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="box", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--provider", default="modal", help="modal (default), runpod, or local")
+    p.add_argument("--provider", default="modal", help="modal (default), runpod, local, or colab")
     sub = p.add_subparsers(dest="subcmd", required=True)
     s = sub.add_parser("run", help="run a command on a fresh machine")
     s.add_argument("--gpu", default=None, help="GPU name (`box gpus`), e.g. L4, A100-80GB, H100")
@@ -240,4 +254,8 @@ def main() -> None:
     except ValueError as e:  # the SDK refused what was asked (a ceiling past 48 h, a hook that cannot fit): say so, no traceback
         print(f"box: {e}", file=sys.stderr)
         code = 2
+    finally:
+        for provider in MADE:
+            if callable(close := getattr(provider, "close", None)):
+                close()
     sys.exit(code)
