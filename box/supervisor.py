@@ -13,7 +13,8 @@ Everything goes through files under ROOT (no sockets), so a client only needs th
     ROOT/jobs/<id>/status.json  supervisor writes it: {state, reason, exit_code, hook_exit_code, started, ended}
     ROOT/jobs/<id>/kill         client wrote it: kill the job (its hook runs), the session goes on
     ROOT/services/<id>/...      a service: spec.json {cmd, env}, then as a job (no hook)
-    ROOT/watch                  a log follower or job waiter touches it each poll (the machine lingers for it)
+    ROOT/watch                  a log follower (its tail, each beat) or job waiter (each poll) touches it (the machine lingers for it)
+    ROOT/supervisor.py          this file, placed by the boot: a log follower runs `supervisor.py tail` (see tail)
     ROOT/ended.json             supervisor writes it last: {reason}; then it lingers up to LINGER_S
                                 while someone is still reading (see linger)
 
@@ -69,7 +70,7 @@ from typing import BinaryIO
 TICK_S = 0.2
 KILL_GRACE_S = 10.0  # SIGTERM -> SIGKILL
 LINGER_S = 30.0  # after the session ends, the most a reader still there gets to finish reading
-WATCH_TTL_S = 5.0  # a log follower touches ROOT/watch each poll; older than this, nobody is following
+WATCH_TTL_S = 5.0  # a log follower touches ROOT/watch each beat; older than this, nobody is following
 PROC_TCP = ("/proc/net/tcp", "/proc/net/tcp6")
 TCP_ESTABLISHED = "01"  # /proc/net/tcp's st column (include/net/tcp_states.h)
 STREAMS = ("stdout", "stderr")
