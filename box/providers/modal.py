@@ -22,7 +22,7 @@ from anyio.from_thread import BlockingPortal, start_blocking_portal
 from box import gpus
 from box.providers.pump import MAX_SEND_BYTES, Closed, Emit, Pumped, kill_pid_file, with_pid_file
 from box.sdk import (
-    LABEL_BY, LABEL_NAME, LABEL_PORTS, Dockerfile, Dropped, Endpoint, Gone, NameTaken, Refused, RegistryImage, SnapshotImage,
+    LABEL_BY, LABEL_NAME, Dockerfile, Dropped, Endpoint, Gone, NameTaken, Refused, RegistryImage, SnapshotImage,
     declared_ports, parse_image, snapshot_ref,
 )  # fmt: skip
 from box.store import Mount
@@ -443,9 +443,8 @@ class ModalMachine:
         except Gone:
             return True
 
-    def expose(self, port: int) -> Endpoint:  # MUST KILL: falls back to tunnels() for sandboxes from before LABEL_PORTS; drop the back-compat branch
-        declared = declared_ports(self.labels) if LABEL_PORTS in self.labels else tuple(self._live(self.sandbox.tunnels.aio))
-        if port in declared:
+    def expose(self, port: int) -> Endpoint:
+        if port in declared_ports(self.labels):
             tunnels = self._live(self.sandbox.tunnels.aio)
             return Endpoint(tunnels[port].url)
         creds = self._live(lambda: self.sandbox.create_connect_token.aio(port=port))
