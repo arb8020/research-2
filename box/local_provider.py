@@ -16,7 +16,8 @@ import signal
 import subprocess
 from pathlib import Path
 
-from box.sdk import LABEL_BY, Gone
+from box.sdk import LABEL_BY, Endpoint, Gone
+from box.store import DirStore, Mount
 
 BASE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local"
 
@@ -27,16 +28,24 @@ class Local:
     def __init__(self, base: Path = BASE) -> None:
         self.base = base
 
-    def launch(
+    def launch(  # noqa: PLR0913 (keyword-only: what a machine is made with)
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
-        labels: dict[str, str], timeout_s: int,
+        labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
     ) -> LocalMachine:  # fmt: skip
+        """mounts: DirStores only, as symlinks (a local machine shares this computer's disk)."""
         del timeout_s  # the supervisor's deadline is the only clock here; a VM provider enforces this
         if gpu or image:
             raise NotImplementedError(f"local provider: no gpu/image (got gpu={gpu!r}, image={image!r})")
+        if foreign := [m.store.uri for m in mounts if not isinstance(m.store, DirStore)]:
+            raise ValueError(f"local provider: mounts only a DirStore (got {foreign})")
         m = LocalMachine(self.base / f"local-{secrets.token_hex(4)}")
         m.dir.mkdir(parents=True)
+        for mount in mounts:
+            link = Path(m.root, mount.path)
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to(mount.store.dir(mount.prefix), target_is_directory=True)
         (m.dir / "labels.json").write_text(json.dumps(labels))
+        (m.dir / "ports.json").write_text(json.dumps(ports))
         with (m.dir / "supervisor.log").open("wb") as log:
             proc = subprocess.Popen(
                 entrypoint, cwd=m.dir, env={**os.environ, **env, "BOX_ROOT": m.root},
@@ -51,9 +60,10 @@ class Local:
             raise LookupError(f"local provider: no machine {machine_id}")
         return m
 
-    def list(self) -> list[LocalMachine]:
+    def list(self, labels: dict[str, str] | None = None) -> list[LocalMachine]:
+        want = {**(labels or {}), LABEL_BY: "box"}
         found = [LocalMachine(d) for d in sorted(self.base.glob("local-*"))] if self.base.exists() else []
-        return [m for m in found if m.alive() and m.labels.get(LABEL_BY) == "box"]
+        return [m for m in found if m.alive() and want.items() <= m.labels.items()]
 
 
 class LocalMachine:
@@ -79,6 +89,15 @@ class LocalMachine:
     def read(self, path: str) -> bytes:
         self._check_alive()
         return Path(path).read_bytes()
+
+    def expose(self, port: int) -> Endpoint:
+        """This computer's own port: a local machine shares its network. Declared ports only, as
+        on a cloud machine."""
+        self._check_alive()
+        declared = json.loads((self.dir / "ports.json").read_text())
+        if port not in declared:
+            raise ValueError(f"local provider: port {port} was not declared at launch (ports={declared})")
+        return Endpoint(f"http://127.0.0.1:{port}")
 
     def _check_alive(self) -> None:
         """Like a real machine: once its supervisor has exited, it and its files are gone."""

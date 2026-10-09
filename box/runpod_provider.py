@@ -27,7 +27,8 @@ from pathlib import Path
 import requests
 
 from box import gpus
-from box.sdk import LABEL_BY, Gone
+from box.sdk import LABEL_BY, LABEL_SESSION, Endpoint, Gone
+from box.store import Mount
 
 # TODO(handoff): seen live: a pod whose client died before attaching deleted itself at its boot
 # timeout (UP_TIMEOUT_S). Not yet seen live on the current sdk: the normal path, where the
@@ -128,14 +129,16 @@ class RunPod:
             raise RuntimeError(f"runpod: {method} {path} -> {r.status_code}: {r.text[:500]}")
         return r.json() if r.content else None
 
-    def launch(
+    def launch(  # noqa: PLR0913 (keyword-only: what a machine is made with)
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
-        labels: dict[str, str], timeout_s: int,
+        labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
     ) -> RunPodMachine:  # fmt: skip
         """Returns once ssh answers (the supervisor may still be starting)."""
+        if mounts:  # a pod could mount an S3-compatible store (R2): not built yet
+            raise NotImplementedError(f"runpod provider: no store mounts yet (got {[m.store.uri for m in mounts]})")
         body: dict = {
-            "name": f"box-{labels.get('box.user', '')}"[:60], "image": image or IMAGE, "cloud": self.cloud,
-            "disk": DISK_GB, "ports": ["22/tcp"], "entrypoint": ["bash", "-c", BOOT, "boot", *entrypoint],
+            "name": f"box-{labels[LABEL_SESSION]}", "image": image or IMAGE, "cloud": self.cloud,
+            "disk": DISK_GB, "ports": ["22/tcp", *(f"{p}/http" for p in ports)], "entrypoint": ["bash", "-c", BOOT, "boot", *entrypoint],
             "env": {
                 **env, "BOX_ROOT": ROOT, "BOX_ON_SHUTDOWN": SHUTDOWN, "BOX_TIMEOUT_S": str(timeout_s),
                 "BOX_UP_TIMEOUT_S": str(int(UP_TIMEOUT_S)),
@@ -175,7 +178,8 @@ class RunPod:
             raise LookupError(f"runpod: no pod {machine_id} launched by box")
         return RunPodMachine(self, pod)
 
-    def list(self) -> list[RunPodMachine]:
+    def list(self, labels: dict[str, str] | None = None) -> list[RunPodMachine]:
+        want = (labels or {}).items()
         pods, cursor = [], None
         while True:
             page = self.api("GET", "/pods" + (f"?cursor={cursor}" if cursor else "")) or {}
@@ -183,7 +187,7 @@ class RunPod:
             cursor = (page.get("pagination") or {}).get("nextCursor")
             if not cursor:
                 break
-        return [RunPodMachine(self, p) for p in pods if _ours(p) and p["status"] != "TERMINATED"]
+        return [RunPodMachine(self, p) for p in pods if _ours(p) and p["status"] != "TERMINATED" and want <= _labels(p).items()]
 
 
 class RunPodMachine:
@@ -194,6 +198,7 @@ class RunPodMachine:
         self.root = ROOT
         self._direct = (pod.get("ssh") or {}).get("direct")
         self._pod_dc: str | None = pod.get("dataCenterId")
+        self._http_ports = [int(p.split("/")[0]) for p in pod.get("ports") or [] if p.endswith("/http")]
 
     def _pod(self) -> dict:
         """The pod as the API sees it now; Gone if it no longer exists."""
@@ -256,6 +261,13 @@ class RunPodMachine:
 
     def terminate(self) -> None:
         self.rp.api("DELETE", f"/pods/{self.id}")  # a 404 (already gone) is fine
+
+    def expose(self, port: int) -> Endpoint:
+        """RunPod's HTTP proxy for a port declared at launch (as <port>/http). Not seen live yet:
+        the service must listen on 0.0.0.0, and the proxy (Cloudflare) cuts requests at ~100 s."""
+        if port not in self._http_ports:
+            raise ValueError(f"runpod: port {port} was not declared at launch (ports={self._http_ports})")
+        return Endpoint(f"https://{self.id}-{port}.proxy.runpod.net")
 
 
 def _labels(pod: dict) -> dict[str, str]:
