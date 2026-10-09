@@ -121,6 +121,20 @@ def test_crashed_job_still_runs_its_hook(launch: Callable) -> None:
         assert s.machine.read(f"{job.dir}/hook").decode() == "1 exited partial\n"
 
 
+def test_terminating_a_machine_mid_hook_ends_the_hook_too(launch: Callable, name: str) -> None:
+    if name != "local":
+        pytest.skip("reads the hook's heartbeat from this computer's disk")
+    s = launch(ceiling_s=600)
+    job = s.run("exit 0", max_duration_s=JOB_S, on_exit="while true; do touch $BOX_JOB_DIR/hook-beat; sleep 0.1; done", hook_budget_s=300)
+    beat = Path(job.dir) / "hook-beat"
+    eventually(lambda: isinstance(job.status(), sdk.Hooking) and beat.exists(), timeout_s=60)
+    s.machine.terminate()
+    eventually(s.machine.gone)
+    last = beat.stat().st_mtime
+    time.sleep(0.5)
+    assert beat.stat().st_mtime == last, "the hook still runs on a machine that says it is gone"
+
+
 def test_the_lease_running_out_kills_the_job_in_time_for_its_hook_then_ends_the_box(launch: Callable, provider: Provider, scale: float) -> None:
     s = launch(lease_s=3 * scale, ceiling_s=600)
     job = s.run("sleep 999", max_duration_s=JOB_S, on_exit="echo $BOX_REASON > $BOX_JOB_DIR/hook", hook_budget_s=1 * scale)
