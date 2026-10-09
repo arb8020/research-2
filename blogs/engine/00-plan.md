@@ -14,6 +14,8 @@ desc:
 - torch functional forward + full-recompute `generate()`
 - introduces the correctness machinery the whole series reuses: a reference, per-dtype tolerances, a shape / input sweep, and planted bugs (wrong attention scale, missing final layernorm, exact vs tanh GELU, causal mask off by one) showing which checks catch which
 - the reader *uses* the machinery (given), and doesn't write it, for now; revisit later
+- built as if an agent might write the candidate and try to game the check: pygpubench's shape (a trusted parent computes inputs + fp64 truth before importing the candidate; one untrusted spawned child runs it; results over a pipe; timeout). Vendor or reference pygpubench, tilde-research/popcorn, KernelGuard rules as needed; push the heavier hardening later only if it's really hard
+- shape sweeps must cover code paths, not just a toy sample (kelpie's gap: one `randn(4,8)` per op)
 
 check:
 - logits within tolerance of the HuggingFace reference on fixed prompts, fp32 on CPU (~1e-4 to 1e-3)
