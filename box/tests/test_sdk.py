@@ -27,26 +27,6 @@ from box.tests import providers
 # CPU; runpod: minutes, pods boot in 1-2 min). Plan: local stays the inner loop, live is a merge
 # gate; run live with pytest -n (each test owns its machine); share one machine across the tests
 # that don't end their session. The runpod suite has not been seen green on the current sdk.
-@pytest.fixture
-def name(request: pytest.FixtureRequest) -> str:
-    return request.config.getoption("--provider")
-
-
-@pytest.fixture
-def provider(name: str, tmp_path: Path) -> Provider:
-    return providers.make(name, tmp_path / "machines")
-
-
-@pytest.fixture
-def scale(name: str) -> float:
-    return providers.SCALE[name]
-
-
-@pytest.fixture
-def launch(provider: Provider, name: str) -> Callable[..., sdk.Session]:
-    return lambda **kw: sdk.launch(provider, **providers.launch_kw(name), **kw)
-
-
 def output(job: sdk.Job) -> str:
     return "".join(text for stream, text in job.logs() if stream == "stdout")
 
