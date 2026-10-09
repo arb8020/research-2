@@ -16,14 +16,14 @@ from the token the caller passes (the CLI reads ~/.modal.toml with ModalToken.fr
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import io
-import threading
+import math
+import secrets
 import time
 import tomllib
-from collections.abc import Callable
-from concurrent.futures import Future
-from concurrent.futures import TimeoutError as FutureTimeout
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypeVar
@@ -31,6 +31,7 @@ from typing import TypeVar
 import modal
 
 from box import gpus
+from box.providers.pump import Closed, Emit, Pumped, kill_pid_file, with_pid_file
 from box.sdk import LABEL_BY, Endpoint, Gone
 from box.store import Mount
 
@@ -177,23 +178,72 @@ class ModalMachine:
         self._booting = booting  # create returns before Modal schedules it: the first call waits for that
 
     def exec(self, cmd: str) -> tuple[int, str, str]:
-        def run() -> tuple[int, str, str]:
-            p = self.sandbox.exec("bash", "-c", cmd)
-            # each of these is a round trip; in parallel an exec costs ~1 RTT after create, not 3
-            out, err, done = (_in_thread(f) for f in (p.stdout.read, p.stderr.read, p.wait))
-            rc, out, err = done.result(), out.result(), err.result()
-            if (rc is None or rc == -1) and self._ends():  # Modal's code for an exec it killed
-                raise Gone(f"{self.id}: sandbox ended (exit {self.sandbox.returncode}) under `{cmd}`")
+        async def run() -> tuple[int, str, str]:
+            p = await self.sandbox.exec.aio("bash", "-c", cmd)
+            # each of these is a round trip; together an exec costs ~1 RTT after create, not 3
+            out, err, rc = await asyncio.gather(p.stdout.read.aio(), p.stderr.read.aio(), p.wait.aio())
             return rc, out, err
 
-        return self._live(run)
+        rc, out, err = self._live(run)
+        if (rc is None or rc == -1) and self._ends():  # Modal's code for an exec it killed
+            raise Gone(f"{self.id}: sandbox ended (exit {self.sandbox.returncode}) under `{cmd}`")
+        return rc, out, err
+
+    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None) -> Pumped:
+        """An exec whose stdout and stderr are read as they arrive, on one reader thread running its own
+        event loop (so close() can cancel the read, which a sync Modal call cannot be). Modal has no
+        kill for an exec: close() kills it by the pid it noted, in another exec, and Modal ends it
+        anyway at timeout_s (exec's own timeout). An open exec does not keep the sandbox up: it
+        ends (rc 137) when the supervisor exits, seen live; and it is not a connection to an exposed
+        port, so the supervisor never counts it against idleness."""
+        pid_file = f"/tmp/box-stream-{secrets.token_hex(6)}.pid"
+        loop: list[tuple[asyncio.AbstractEventLoop, asyncio.Task]] = []  # the reader's, once it runs
+        rc: list[int | None] = []
+
+        def read(emit: Emit) -> None:
+            async def pump() -> None:
+                p = await self.sandbox.exec.aio("bash", "-c", with_pid_file(cmd, pid_file), text=False, timeout=math.ceil(timeout_s))
+
+                async def drain(name: str, source: AsyncIterator[bytes]) -> None:
+                    async for data in source:
+                        emit(name, data)  # blocks this loop while the caller is behind: backpressure
+
+                await asyncio.gather(drain("stdout", p.stdout), drain("stderr", p.stderr))
+                rc.append(await p.wait.aio())
+
+            runner = asyncio.new_event_loop()
+            try:
+                task = runner.create_task(pump())
+                loop.append((runner, task))
+                runner.run_until_complete(task)
+            except asyncio.CancelledError:
+                raise Closed from None
+            except (modal.exception.NotFoundError, modal.exception.SandboxTerminatedError) as e:
+                raise Gone(f"{self.id}: {e}") from e
+            finally:
+                runner.close()
+
+        def kill() -> None:
+            with contextlib.suppress(Gone):
+                self.exec(kill_pid_file(pid_file))
+            for runner, task in loop:  # if the read is still waiting on Modal, stop waiting
+                with contextlib.suppress(RuntimeError):  # its loop already closed: it ended by itself
+                    runner.call_soon_threadsafe(task.cancel)
+
+        def wait() -> int | None:
+            code = rc[0] if rc else None
+            if code != 0 and self._ends():  # 137 (or -1) is how an exec ends with its sandbox
+                raise Gone(f"{self.id}: sandbox ended (exit {self.sandbox.returncode}) under a stream of `{cmd}`")
+            return code
+
+        return Pumped([read], kill=kill, wait=wait, timeout_s=timeout_s, quiet_s=quiet_s, label=self.id)
 
     def write(self, path: str, data: bytes) -> None:
-        self._live(lambda: self.sandbox.filesystem.write_bytes(data, path))  # creates parent dirs
+        self._live(lambda: self.sandbox.filesystem.write_bytes.aio(data, path))  # creates parent dirs
 
     def read(self, path: str) -> bytes:
         try:
-            return self._live(lambda: self.sandbox.filesystem.read_bytes(path))
+            return self._live(lambda: self.sandbox.filesystem.read_bytes.aio(path))
         except modal.exception.SandboxFilesystemNotFoundError as e:
             raise FileNotFoundError(path) from e
 
@@ -206,22 +256,35 @@ class ModalMachine:
         """The port's Modal tunnel (encrypted_ports at create): an open https URL, websockets too.
         Not Sandbox.create_connect_token, which needs no declaring but gates every request on a
         token (header or ?_modal_connect_token=); see box/NOTES-sessions.md."""
-        tunnels = self._live(self.sandbox.tunnels)
+        tunnels = self._live(self.sandbox.tunnels.aio)
         if port not in tunnels:
             raise ValueError(f"modal provider: port {port} was not declared at launch (ports={sorted(tunnels)})")
         return Endpoint(tunnels[port].url)
 
-    def _live(self, call: Callable[[], T]) -> T:
+    def _live(self, call: Callable[[], Awaitable[T]]) -> T:
         """call, bounded in time, with Modal's 'this sandbox has ended' errors raised as Gone. Once it
         has ended: NotFoundError ("Task has already finished", "Sandbox is unavailable"). While it
         ends: ConflictError ("Sandbox is shutting down") or a bare SandboxFilesystemError ("unexpected
         error"), which are Gone only if the sandbox then turns out to have ended. A call can also
         hang for good on a sandbox stuck ending (seen live: poll() None minutes after its entrypoint
-        exited, every exec stuck in SandboxGetTaskId); past its timeout that is TimeoutError."""
+        exited, every exec stuck in SandboxGetTaskId); past its timeout that is TimeoutError.
+        On this thread, in an event loop of its own: a call past its timeout is cancelled, so nothing
+        is left behind waiting on Modal (before, a daemon watchdog thread per call was)."""
         timeout_s = BOOT_TIMEOUT_S if self._booting else CALL_TIMEOUT_S
+        expired = []
+
+        async def bounded() -> T:
+            async with asyncio.timeout(timeout_s) as bound:
+                try:
+                    return await call()
+                finally:
+                    expired.append(bound.expired())
+
         try:
-            result = _in_thread(call).result(timeout=timeout_s)
-        except FutureTimeout:
+            result = asyncio.run(bounded())
+        except TimeoutError:
+            if not expired or not expired[0]:
+                raise  # the call's own TimeoutError, not this bound's
             if self._ends():
                 raise Gone(f"{self.id}: sandbox ended (exit {self.sandbox.returncode})") from None
             raise TimeoutError(f"{self.id}: Modal call hung for {timeout_s:.0f} s; sandbox still reports running") from None
@@ -247,20 +310,6 @@ class ModalMachine:
 
     def __hash__(self) -> int:
         return hash(self.id)
-
-
-def _in_thread(call: Callable[[], T]) -> Future[T]:
-    """call on its own daemon thread: one stuck in Modal forever then holds only itself."""
-    future: Future[T] = Future()
-
-    def run() -> None:
-        try:
-            future.set_result(call())
-        except BaseException as e:  # noqa: BLE001 (handed to the caller via the future)
-            future.set_exception(e)
-
-    threading.Thread(target=run, daemon=True, name="box-modal-call").start()
-    return future
 
 
 def modal_gpu(gpu: str | None) -> str | None:
