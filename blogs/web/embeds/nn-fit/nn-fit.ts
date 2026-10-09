@@ -3,14 +3,15 @@
 // tokens (custom properties inherit into the shadow root), no ML dependencies.
 //
 // Initial config comes from attributes, all optional (values snap to the nearest slider stop):
-//   dataset="draw|wave|spiral" activation="linear|relu|tanh|sigmoid" layers="0..4" width="1..16"
+//   dataset="draw|wave|spiral|grok" activation="linear|relu|tanh|sigmoid" layers="0..4" width="1..16"
 //   widths="8,4,..." lr="0.03" samples="4..512" noise="0..0.5" wiggles="1..20" roughness="0.5..3"
-//   stages="1..4" seed="1" step-budget="2000" time-budget="5"
+//   stages="1..4" seed="1" step-budget="2000" time-budget="5" train-fraction="0.3|0.4|0.5" (grok)
 // Read-only `stats` exposes the live numbers (tests and any host page can read them).
 //
 // Backends: training runs in this browser (mlp.ts), or, while the page is connected (Connect, connect/kernel.ts),
 // on the session's kernel: remote_train.py in torch, from the same weights on the same data, streaming ticks into
-// the same plot.
+// the same plot. The grokking dataset (a + b mod p, a 1-layer transformer: grok.ts, grok_train.py) is remote only:
+// it shows train and test accuracy against step instead of the plot, and its weights stay on the kernel.
 import { interrupt, kernelState, onKernelState, runCode } from "../../connect/kernel";
 import type { RunResult } from "../../connect/kernel";
 import { must } from "../../dom";
@@ -26,22 +27,27 @@ import {
   CURVE_POINTS, HEAT_GRID, REMOTE_MAX_SECONDS, REMOTE_MAX_STEPS, curveGrid, heatGrid, loadState, parseLine, remoteCode, remoteConfig,
   splitLines,
 } from "./remote";
+import type { GrokLine, GrokPoint } from "./grok";
+import {
+  GROK_MODEL, GROK_P, GROK_TICK_SECONDS, TRAIN_FRACTIONS, addPoint, grokCode, grokParams, grokked, grokTrainPairs, paintGrok,
+  parseGrokLine,
+} from "./grok";
 
-export type Dataset = "draw" | "wave" | "spiral";
-const DATASETS: readonly Dataset[] = ["draw", "wave", "spiral"];
+export type Dataset = "draw" | "wave" | "spiral" | "grok";
+const DATASETS: readonly Dataset[] = ["draw", "wave", "spiral", "grok"];
 export type Backend = "browser" | "remote";
 const BROWSER = "this browser"; // what `device` says after a browser run
 const connected = (): boolean => kernelState() === "idle" || kernelState() === "busy";
 
 export interface NnFitStats {
   readonly dataset: Dataset;
-  readonly sizes: readonly number[];
+  readonly sizes: readonly number[]; // the MLP's; grok: [] (its model is GROK_MODEL)
   readonly params: number;
-  readonly samples: number; // training points (spiral: total over both classes)
+  readonly samples: number; // training points (spiral: total over both classes; grok: training pairs)
   readonly loss: number | null; // training loss on the samples; null with no data
   readonly trueError: number | null; // draw/wave: MSE of the net against the whole clean curve
-  readonly accuracy: number | null; // spiral: on the training points
-  readonly heldOutAccuracy: number | null; // spiral: on a fresh sample from the same spiral
+  readonly accuracy: number | null; // spiral, grok: on the training points
+  readonly heldOutAccuracy: number | null; // spiral: on a fresh sample from the same spiral; grok: the other pairs
   readonly steps: number;
   readonly seconds: number; // training wall-clock time used
   readonly flops: number; // estimated: 6 * params * samples per step
@@ -51,7 +57,47 @@ export interface NnFitStats {
   readonly ready: boolean; // Train is enabled: something is drawn (or spiral) and budget remains
   readonly backend: Backend;
   readonly device: string; // what trained (or is training) the current weights: "this browser", "cuda · Tesla T4"
+  readonly grok: GrokStats | null; // grok only
 }
+
+export interface GrokStats {
+  readonly p: number;
+  readonly trainFraction: number;
+  readonly testLoss: number | null;
+  readonly points: number; // plotted ticks
+  readonly grokked: { readonly step: number; readonly seconds: number } | null; // first tick past 95% test accuracy
+  readonly run: string; // the kernel's key for its weights
+}
+
+// The grokking run: its weights live on the kernel (under `id`), the page keeps the curve and the counters.
+// A new id (Reset weights, New samples, a new train fraction) starts from fresh weights.
+interface GrokRun {
+  readonly id: string;
+  readonly fractionK: number;
+  readonly splitSeed: number;
+  readonly initSeed: number;
+  points: GrokPoint[];
+  steps: number;
+  ms: number;
+  device: string | null; // from the last run's "start" line
+  lost: boolean; // a run failed: the kernel's weights may not match the curve, so the next Train starts a new run
+}
+
+// A grokking run in flight on the kernel (one Train press, until it ends).
+interface GrokFlight {
+  readonly run: GrokRun;
+  stopping: boolean;
+  end: Extract<GrokLine, { kind: "end" }> | null;
+  failure: string | null;
+}
+
+const grokkedAt = (points: readonly GrokPoint[]): GrokStats["grokked"] => {
+  const p = grokked(points);
+  return p === null ? null : { step: p.step, seconds: p.seconds };
+};
+
+const newGrokRun = (fractionK: number, splitSeed: number, initSeed: number): GrokRun =>
+  ({ id: `grok-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`, fractionK, splitSeed, initSeed, points: [], steps: 0, ms: 0, device: null, lost: false });
 
 // A remote run in flight: its latest tick is what the plot and readout show until it ends.
 interface RemoteRun {
@@ -185,6 +231,8 @@ const TEMPLATE = `
   <span class="curve-only" style="--swatch: var(--tok-number)">the network</span>
   <span class="spiral-only dot" style="--swatch: var(--tok-number)">class A</span>
   <span class="spiral-only square" style="--swatch: var(--tok-string)">class B</span>
+  <span class="grok-only" style="--swatch: var(--fg)">train accuracy (the pairs it trains on)</span>
+  <span class="grok-only" style="--swatch: var(--tok-number)">test accuracy (every other pair)</span>
 </p>
 <p class="readout"><span class="metrics"></span><br><span class="usage"></span></p>
 <div class="buttons">
@@ -198,9 +246,14 @@ const TEMPLATE = `
   <legend>Data</legend>
   <div class="controls">
     <label class="control">Data
-      <select class="dataset"><option value="draw">Draw a function</option><option value="wave">Random wave</option><option value="spiral">Spiral</option></select></label>
-    ${range("samples", "Samples", SAMPLE_COUNTS.length - 1)}
-    ${range("noise", "Noise σ", NOISES.length - 1)}
+      <select class="dataset"><option value="draw">Draw a function</option><option value="wave">Random wave</option><option value="spiral">Spiral</option><option value="grok">Modular arithmetic (grokking)</option></select></label>
+    <div class="not-grok" style="display: contents">
+      ${range("samples", "Samples", SAMPLE_COUNTS.length - 1)}
+      ${range("noise", "Noise σ", NOISES.length - 1)}
+    </div>
+    <div class="grok-only" style="display: contents">
+      ${range("fraction", "Train fraction", TRAIN_FRACTIONS.length - 1)}
+    </div>
     <div class="wave-only" style="display: contents">
       ${range("wiggles", "Wiggles K", MAX_WIGGLES - 1)}
       ${range("roughness", "Roughness α", ROUGHNESSES.length - 1)}
@@ -209,7 +262,7 @@ const TEMPLATE = `
   </div>
   <details class="wave-only"><summary>show formula</summary><pre class="formula"></pre></details>
 </fieldset>
-<fieldset class="network">
+<fieldset class="network not-grok">
   <legend>Network</legend>
   <div class="controls">
     <label class="control">Activation
@@ -305,6 +358,8 @@ export class NnFit extends HTMLElement {
   #remote: RemoteRun | null = null;
   #device = BROWSER;
   #remoteNote = ""; // why the last remote run failed; shown under the plot until the next run
+  #grok: GrokRun = newGrokRun(TRAIN_FRACTIONS.indexOf(0.3), 1, 1);
+  #grokFlight: GrokFlight | null = null;
 
   // Data: the true curve (drawn or generated), the training sample drawn from it, the spiral's held-out set.
   #truth: DrawBuffer = makeDrawBuffer(COLUMNS);
@@ -330,6 +385,7 @@ export class NnFit extends HTMLElement {
   #built = false;
 
   get stats(): NnFitStats {
+    if (this.#dataset === "grok") return this.#grokStats();
     const metrics = this.#remote?.tick ? this.#tickMetrics(this.#remote.tick) : this.#metrics();
     return {
       dataset: this.#dataset,
@@ -346,6 +402,23 @@ export class NnFit extends HTMLElement {
       ready: this.#ready(),
       backend: this.#backend,
       device: this.#remote ? this.#remote.device ?? "remote (starting)" : this.#device,
+      grok: null,
+    };
+  }
+
+  #grokStats(): NnFitStats {
+    const g = this.#grok;
+    const last = g.points.at(-1);
+    const fraction = at(TRAIN_FRACTIONS, g.fractionK);
+    const params = grokParams(GROK_P);
+    const pairs = grokTrainPairs(GROK_P, fraction);
+    return {
+      dataset: "grok", sizes: [], params, samples: pairs,
+      loss: last?.loss ?? null, trueError: null, accuracy: last?.accuracy ?? null, heldOutAccuracy: last?.testAccuracy ?? null,
+      steps: g.steps, seconds: g.ms / 1000, flops: 6 * params * pairs * g.steps,
+      stepBudget: this.#stepBudget(), timeBudget: this.#timeBudget(), training: this.#training, ready: this.#ready(),
+      backend: "remote", device: g.device ?? (this.#grokFlight ? "remote (starting)" : "not trained yet"),
+      grok: { p: GROK_P, trainFraction: fraction, testLoss: last?.testLoss ?? null, points: g.points.length, run: g.id, grokked: grokkedAt(g.points) },
     };
   }
 
@@ -420,6 +493,7 @@ export class NnFit extends HTMLElement {
     this.#noiseK = pick("noise", NOISES, this.#noiseK);
     this.#stepBudgetK = pick("step-budget", STEP_BUDGETS, this.#stepBudgetK);
     this.#timeBudgetK = pick("time-budget", TIME_BUDGETS, this.#timeBudgetK);
+    this.#grok = newGrokRun(pick("train-fraction", TRAIN_FRACTIONS, this.#grok.fractionK), 1, 1);
     this.#wave = {
       wiggles: intAttr(this, "wiggles", 1, MAX_WIGGLES, this.#wave.wiggles),
       roughnessK: pick("roughness", ROUGHNESSES, this.#wave.roughnessK),
@@ -444,16 +518,25 @@ export class NnFit extends HTMLElement {
     const canvas = this.#el("canvas", HTMLCanvasElement);
 
     button("train", () => {
-      if (this.#remote) this.#stopRemote();
+      if (this.#remote ?? this.#grokFlight) this.#stopRemote();
+      else if (this.#dataset === "grok") this.#startGrok();
       else if (this.#backend === "remote") this.#startRemote();
       else this.#setTraining(!this.#training);
     });
     button("reset", () => {
+      if (this.#dataset === "grok") {
+        this.#newGrokRun({ initSeed: this.#grok.initSeed + 1 }, "Weights reset to new random values; the curve starts over.");
+        return;
+      }
       this.#seed++;
       this.#rebuildNet();
       this.#announce("Weights reset to new random values; step and time counters back to zero.");
     });
     button("resample", () => {
+      if (this.#dataset === "grok") {
+        this.#newGrokRun({ splitSeed: this.#grok.splitSeed + 1 }, "A new random split of the pairs, and new weights; the curve starts over.");
+        return;
+      }
       this.#sampleSeed++;
       this.#resample();
       this.#announce(`New random sample of ${String(this.#train.n)} training points.`);
@@ -472,16 +555,18 @@ export class NnFit extends HTMLElement {
     const select = this.#el("select.dataset", HTMLSelectElement);
     on(select, "change", () => {
       if (!isDataset(select.value)) return;
-      const inputsBefore = this.#inputs();
       this.#dataset = select.value;
       this.#announce(
         select.value === "draw" ? "Draw a function on the plot, edge to edge."
           : select.value === "wave" ? "Random wave generated. You can draw over it to edit it."
-            : "Spiral dataset: two classes.");
-      if (this.#training && !this.#ready()) this.#setTraining(false);
-      // draw <-> wave keeps the weights. Otherwise the net's input count changes: build it without painting,
-      // since painting it on the old dataset's points reads past their end; the new data paints both.
-      if (this.#inputs() !== inputsBefore) this.#makeNet();
+            : select.value === "spiral" ? "Spiral dataset: two classes."
+              : "Modular arithmetic: a plus b mod 113, trained remotely. The plot shows train and test accuracy against step.");
+      // A browser run pauses when its data goes away, or for grokking (remote only).
+      if (this.#training && (this.#dataset === "grok" || !this.#ready())) this.#setTraining(false);
+      // draw <-> wave keeps the weights, and so does a visit to grok (its model is separate). Otherwise the net's
+      // input count changes: build it without painting, since painting it on the old dataset's points reads
+      // past their end; the new data paints both.
+      if (this.#dataset !== "grok" && this.#net.sizes[0] !== this.#inputs()) this.#makeNet();
       if (select.value === "wave") this.#regenWave();
       else this.#dataChanged();
     });
@@ -527,6 +612,7 @@ export class NnFit extends HTMLElement {
     slider("wiggles", (v) => { this.#wave = { ...this.#wave, wiggles: v + 1 }; }, () => { this.#regenWave(); });
     slider("roughness", (v) => { this.#wave = { ...this.#wave, roughnessK: v }; }, () => { this.#regenWave(); });
     slider("stages", (v) => { this.#wave = { ...this.#wave, stages: v + 1 }; }, () => { this.#regenWave(); });
+    slider("fraction", (v) => { this.#grok = newGrokRun(v, this.#grok.splitSeed, this.#grok.initSeed); }, nothing); // new pairs: a new run
     slider("step-budget", (v) => { this.#stepBudgetK = v; }, nothing);
     slider("time-budget", (v) => { this.#timeBudgetK = v; }, nothing);
 
@@ -598,7 +684,12 @@ export class NnFit extends HTMLElement {
   // --- model and data ---
 
   #isCurve(): boolean {
-    return this.#dataset !== "spiral";
+    return this.#dataset === "draw" || this.#dataset === "wave";
+  }
+
+  // Where Train runs: grok always remotely.
+  #runsRemote(): boolean {
+    return this.#dataset === "grok" || this.#backend === "remote";
   }
 
   #task(): Task {
@@ -606,26 +697,28 @@ export class NnFit extends HTMLElement {
   }
 
   #inputs(): number {
-    return this.#isCurve() ? 1 : 2;
+    return this.#dataset === "spiral" ? 2 : 1;
   }
 
   // Budgets in force: a remote run always stops, so there "off" means the remote cap.
   #stepBudget(): number {
     const budget = at(STEP_BUDGETS, this.#stepBudgetK);
-    return this.#backend === "remote" ? Math.min(budget, REMOTE_MAX_STEPS) : budget;
+    return this.#runsRemote() ? Math.min(budget, REMOTE_MAX_STEPS) : budget;
   }
 
   #timeBudget(): number {
     const budget = at(TIME_BUDGETS, this.#timeBudgetK);
-    return this.#backend === "remote" ? Math.min(budget, REMOTE_MAX_SECONDS) : budget;
+    return this.#runsRemote() ? Math.min(budget, REMOTE_MAX_SECONDS) : budget;
   }
 
   #budgetLeft(): boolean {
-    return this.#steps < this.#stepBudget() && this.#trainMs < this.#timeBudget() * 1000;
+    const [steps, ms] = this.#dataset === "grok" ? [this.#grok.steps, this.#grok.ms] : [this.#steps, this.#trainMs];
+    return steps < this.#stepBudget() && ms < this.#timeBudget() * 1000;
   }
 
-  // Train is enabled when the data is usable and budget remains.
+  // Train is enabled when the data is usable (grok: there is a session to train on) and budget remains.
   #dataReady(): boolean {
+    if (this.#dataset === "grok") return connected();
     return !this.#isCurve() || this.#curve !== null;
   }
 
@@ -711,10 +804,13 @@ export class NnFit extends HTMLElement {
 
   #syncControls(): void {
     const isCurve = this.#isCurve();
+    const grok = this.#dataset === "grok";
     for (const el of this.#root.querySelectorAll(".curve-only")) el.toggleAttribute("hidden", !isCurve);
-    for (const el of this.#root.querySelectorAll(".spiral-only")) el.toggleAttribute("hidden", isCurve);
+    for (const el of this.#root.querySelectorAll(".spiral-only")) el.toggleAttribute("hidden", this.#dataset !== "spiral");
     for (const el of this.#root.querySelectorAll(".wave-only")) el.toggleAttribute("hidden", this.#dataset !== "wave");
-    this.#el(".stage", HTMLDivElement).classList.toggle("spiral", !isCurve);
+    for (const el of this.#root.querySelectorAll(".grok-only")) el.toggleAttribute("hidden", !grok);
+    for (const el of this.#root.querySelectorAll(".not-grok")) el.toggleAttribute("hidden", grok);
+    this.#el(".stage", HTMLDivElement).classList.toggle("spiral", this.#dataset === "spiral");
 
     const set = (cls: string, index: number, text: string): void => {
       const input = this.#el(`input.${cls}`, HTMLInputElement);
@@ -730,16 +826,23 @@ export class NnFit extends HTMLElement {
     set("wiggles", this.#wave.wiggles - 1, String(this.#wave.wiggles));
     set("roughness", this.#wave.roughnessK, at(ROUGHNESSES, this.#wave.roughnessK).toFixed(2));
     set("stages", this.#wave.stages - 1, String(this.#wave.stages));
+    set("fraction", this.#grok.fractionK, formatPct(at(TRAIN_FRACTIONS, this.#grok.fractionK)).replace(".0%", "%"));
     // The sliders show the reader's setting; the readout shows what's in force (remote caps "off").
     set("step-budget", this.#stepBudgetK, formatBudget(at(STEP_BUDGETS, this.#stepBudgetK), ""));
     set("time-budget", this.#timeBudgetK, formatBudget(at(TIME_BUDGETS, this.#timeBudgetK), " s"));
     this.#renderWidths();
 
-    const remote = this.#remote;
+    const remote = this.#remote ?? this.#grokFlight;
     const option = this.#el("select.backend option[value=remote]", HTMLOptionElement);
     option.disabled = !connected();
     option.textContent = connected() ? "remote (the connected session)" : "remote (Connect first)";
-    this.#el("select.backend", HTMLSelectElement).value = this.#backend;
+    const backend = this.#el("select.backend", HTMLSelectElement);
+    backend.value = grok ? "remote" : this.#backend;
+    backend.disabled = grok; // grokking is remote only
+    // Grokking needs the session: offered (as a choice) only while connected; a page that starts on it shows the hint.
+    const grokOption = this.#el("select.dataset option[value=grok]", HTMLOptionElement);
+    grokOption.disabled = !connected() && !grok;
+    grokOption.textContent = connected() ? "Modular arithmetic (grokking)" : "Modular arithmetic (grokking): Connect first";
     // While a remote run trains, everything it was sent stays as it was: data, network, budgets, backend.
     for (const cls of ["data", "network", "compute"]) this.#el(`fieldset.${cls}`, HTMLFieldSetElement).disabled = remote !== null;
     for (const cls of ["reset", "resample", "new-wave", "clear"]) this.#el(`button.${cls}`, HTMLButtonElement).disabled = remote !== null;
@@ -753,12 +856,15 @@ export class NnFit extends HTMLElement {
     // Hidden elements referenced by aria-describedby still count toward the description, so a hidden
     // message is also emptied.
     const empty = this.#isCurve() && this.#curve === null;
+    const offline = grok && !connected();
     const hint = this.#el(".hint", HTMLParagraphElement);
-    hint.hidden = !empty;
-    hint.textContent = !empty ? "" : this.#dataset === "wave" ? "draw a curve, or press New random curve" : "draw a curve, or pick Random wave";
+    hint.hidden = !empty && !offline;
+    hint.textContent = offline ? "Connect (top right) to train this one: it runs on the session's GPU"
+      : !empty ? "" : this.#dataset === "wave" ? "draw a curve, or press New random curve" : "draw a curve, or pick Random wave";
     const filled = this.#isCurve() && this.#curve !== null ? gaps(this.#truth) : [];
     const note = [
       this.#remoteNote,
+      grok && this.#grok.lost && remote === null ? "Train starts a new run." : "",
       this.#budgetLeft() ? "" : "Budget used up. Raise a budget or reset the weights to train again.",
       filled.length > 0 ? `Dashed parts were filled in: ${describeGaps(this.#truth)}.` : "",
     ].filter((m) => m !== "").join(" ");
@@ -821,14 +927,15 @@ export class NnFit extends HTMLElement {
     return null;
   }
 
+  // Stop whichever remote run is in flight (an MLP run or a grokking run): a kernel interrupt.
   #stopRemote(): void {
-    const run = this.#remote;
+    const run = this.#remote ?? this.#grokFlight;
     if (run === null || run.stopping) return;
     run.stopping = true;
     this.#announce("Stopping the remote run.");
     this.#syncControls();
     interrupt().catch((err: unknown) => {
-      if (this.#remote !== run) return;
+      if (this.#remote !== run && this.#grokFlight !== run) return;
       run.stopping = false; // still running: Stop can be pressed again
       this.#announce(`Couldn't stop the remote run: ${String(err)}`);
       this.#syncControls();
@@ -882,6 +989,94 @@ export class NnFit extends HTMLElement {
     this.#paint();
   }
 
+  // --- grokking runs (remote only; the weights stay on the kernel, the page keeps the curve) ---
+
+  #newGrokRun(change: { splitSeed?: number; initSeed?: number }, message: string): void {
+    const g = this.#grok;
+    this.#grok = newGrokRun(g.fractionK, change.splitSeed ?? g.splitSeed, change.initSeed ?? g.initSeed);
+    this.#remoteNote = "";
+    this.#announce(message);
+    this.#syncControls();
+    this.#paint();
+  }
+
+  #startGrok(): void {
+    if (!connected() || !this.#ready()) return;
+    if (this.#grok.lost) this.#grok = newGrokRun(this.#grok.fractionK, this.#grok.splitSeed, this.#grok.initSeed);
+    const run = this.#grok;
+    const code = grokCode({
+      run: run.id, p: GROK_P, train_fraction: at(TRAIN_FRACTIONS, run.fractionK), split_seed: run.splitSeed, init_seed: run.initSeed,
+      step: run.steps, seconds: run.ms / 1000, max_steps: this.#stepBudget(), max_seconds: this.#timeBudget(), tick_seconds: GROK_TICK_SECONDS,
+    });
+    const flight: GrokFlight = { run, stopping: false, end: null, failure: null };
+    this.#grokFlight = flight;
+    this.#training = true;
+    this.#remoteNote = "";
+    this.#announce("Training remotely, on the connected session.");
+    this.#syncControls();
+    let pending = "";
+    const onStdout = (text: string): void => {
+      const split = splitLines(pending, text);
+      pending = split.pending;
+      for (const line of split.lines) this.#onGrokLine(flight, line);
+    };
+    const onStderr = (text: string): void => { console.warn(`<nn-fit> remote stderr: ${text}`); };
+    runCode(code, onStdout, onStderr).then(
+      (result) => { this.#grokDone(flight, result); },
+      (err: unknown) => { this.#grokDone(flight, { status: "aborted", reason: String(err) }); }, // runCode resolves its failures; this is a bug
+    );
+  }
+
+  // One line of the program's stdout. A line that doesn't parse, or a model or split other than the page's,
+  // stops the run: its output can't be trusted.
+  #onGrokLine(flight: GrokFlight, text: string): void {
+    if (this.#grokFlight !== flight || flight.failure !== null) return;
+    const run = flight.run;
+    try {
+      const line = parseGrokLine(text);
+      switch (line.kind) {
+        case "start": {
+          const params = grokParams(GROK_P);
+          const pairs = grokTrainPairs(GROK_P, at(TRAIN_FRACTIONS, run.fractionK));
+          if (line.params !== params || line.train !== pairs) {
+            throw new Error(`the remote model has ${String(line.params)} parameters and ${String(line.train)} training pairs; the page expects ${String(params)} and ${String(pairs)}`);
+          }
+          run.device = line.device === "cpu" ? "cpu (remote)" : `${line.device} · ${line.deviceName}`;
+          break;
+        }
+        case "tick":
+          run.points = addPoint(run.points, { step: line.step, seconds: line.seconds, loss: line.loss, accuracy: line.accuracy, testLoss: line.testLoss, testAccuracy: line.testAccuracy });
+          run.steps = line.step;
+          run.ms = line.seconds * 1000;
+          break;
+        case "end":
+          flight.end = line;
+          break;
+      }
+    } catch (err) {
+      flight.failure = err instanceof Error ? err.message : String(err);
+      this.#stopRemote();
+      return;
+    }
+    this.#paint();
+  }
+
+  // The run's code finished (or never ran, or the session went away). The curve stays; after a failure the
+  // kernel's weights may not match it (or are gone with the session), so the next Train starts a new run.
+  #grokDone(flight: GrokFlight, result: RunResult): void {
+    if (this.#grokFlight !== flight) return;
+    const end = flight.end;
+    const failure = flight.failure ?? runFailure(result) ?? (end === null ? "the remote run ended without saying why" : null);
+    flight.run.lost = failure !== null;
+    this.#grokFlight = null;
+    this.#training = false;
+    if (failure !== null) console.error(`<nn-fit> remote run failed:\n${failure}`);
+    this.#remoteNote = failure === null ? "" : `Remote run failed: ${lastLine(failure)}`;
+    this.#announce(failure === null && end !== null ? `Remote run stopped: ${stopText(end.reason)}.` : this.#remoteNote);
+    this.#syncControls();
+    this.#paint();
+  }
+
   #announce(message: string): void {
     this.#el("[role=status]", HTMLParagraphElement).textContent = message;
     this.#lastAria = 0; // describe the new state right away
@@ -890,7 +1085,7 @@ export class NnFit extends HTMLElement {
   // --- loop ---
 
   #updateLoop(): void {
-    const run = this.#training && this.#remote === null && this.#onScreen && !document.hidden;
+    const run = this.#training && this.#remote === null && this.#grokFlight === null && this.#onScreen && !document.hidden;
     if (run && this.#frame === 0) this.#frame = requestAnimationFrame((t) => { this.#tick(t); });
     if (!run) this.#stopLoop();
   }
@@ -989,7 +1184,10 @@ export class NnFit extends HTMLElement {
     const h = canvas.height / dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    if (this.#isCurve()) this.#paintCurve(ctx, w, h);
+    if (this.#dataset === "grok") {
+      const c = this.#colors();
+      paintGrok(ctx, w, h, this.#grok.points, { fg: c.fg, muted: c.muted, rule: c.rule, train: c.fg, test: c.net });
+    } else if (this.#isCurve()) this.#paintCurve(ctx, w, h);
     else this.#paintSpiral(ctx, w, h);
     this.#paintReadout(now);
   }
@@ -1150,6 +1348,7 @@ export class NnFit extends HTMLElement {
   }
 
   #paintReadout(now: number): void {
+    if (this.#dataset === "grok") { this.#paintGrokReadout(now); return; }
     const s = this.stats;
     const arch = `${s.sizes.join(" → ")} (${formatInt(s.params)} params)`;
     const b = (v: string): string => `<b>${v}</b>`;
@@ -1178,6 +1377,28 @@ export class NnFit extends HTMLElement {
         : `${this.#dataset === "wave" ? "A random wave" : "Your drawn function"} (faint${gaps(this.#truth).length > 0 ? `; filled in, dashed: ${describeGaps(this.#truth)}` : ""}), ${String(s.samples)} training samples as dots, and the fit of ${net}${s.trueError === null ? "" : `; error against the true curve ${formatLoss(s.trueError)}`}.`
       : `Spiral of ${String(s.samples)} training points in two classes, background shaded by the prediction of ${net}, training accuracy ${formatPct(s.accuracy ?? 0)}, held-out accuracy ${formatPct(s.heldOutAccuracy ?? 0)}.`;
     this.#el("canvas", HTMLCanvasElement).setAttribute("aria-label", label);
+  }
+
+  #paintGrokReadout(now: number): void {
+    const s = this.stats;
+    const g = s.grok;
+    if (g === null) throw new Error("grok stats outside the grok dataset");
+    const b = (v: string): string => `<b>${v}</b>`;
+    const pct = (a: number | null): string => (a === null ? "—" : b(formatPct(a)));
+    const loss = (l: number | null): string => (l === null ? "—" : b(formatLoss(l)));
+    const of = (budget: number, unit: string): string => ` / ${formatInt(budget)}${unit}`;
+    const pairs = `a + b mod ${String(g.p)}: trains on ${formatInt(s.samples)} of ${formatInt(g.p * g.p)} pairs`;
+    this.#el(".metrics", HTMLSpanElement).innerHTML = [`train accuracy ${pct(s.accuracy)}`, `test accuracy ${pct(s.heldOutAccuracy)}`,
+      `train loss ${loss(s.loss)}`, `test loss ${loss(g.testLoss)}`,
+      ...(g.grokked === null ? [] : [`test past 95% at step ${b(formatInt(g.grokked.step))} (${g.grokked.seconds.toFixed(1)} s)`])].join(" · ");
+    this.#el(".usage", HTMLSpanElement).innerHTML = [`step ${formatInt(s.steps)}${of(s.stepBudget, "")}`, `${s.seconds.toFixed(1)} s${of(s.timeBudget, " s")}`,
+      `~${formatFlops(s.flops)}`, pairs, `${GROK_MODEL} (${formatInt(s.params)} params)`, `on ${s.device}`].join(" · ");
+
+    if (now - this.#lastAria < ARIA_MS && this.#grokFlight !== null) return;
+    this.#lastAria = now;
+    const state = s.steps === 0 ? "Not trained yet." : `After ${String(s.steps)} steps: train accuracy ${formatPct(s.accuracy ?? 0)}, test accuracy ${formatPct(s.heldOutAccuracy ?? 0)}.`;
+    this.#el("canvas", HTMLCanvasElement).setAttribute("aria-label",
+      `Train and test accuracy against training step (log scale) for a 1-layer transformer learning ${pairs}. ${state}`);
   }
 }
 

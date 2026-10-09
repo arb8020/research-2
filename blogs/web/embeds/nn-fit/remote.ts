@@ -189,32 +189,33 @@ export function loadState(net: Mlp, opt: Adam, state: NetState): void {
   opt.t = state.t;
 }
 
+// Parsing helpers, shared with grok.ts (its lines cross the same network).
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
-function record(v: unknown, where: string): Record<string, unknown> {
+export function record(v: unknown, where: string): Record<string, unknown> {
   if (!isRecord(v)) throw new Error(`${where}: expected an object`);
   return v;
 }
 
-function str(obj: Record<string, unknown>, key: string, where: string): string {
+export function str(obj: Record<string, unknown>, key: string, where: string): string {
   const v = obj[key];
   if (typeof v !== "string") throw new Error(`${where}: ${key} must be a string`);
   return v;
 }
 
-function num(obj: Record<string, unknown>, key: string, where: string): number {
+export function num(obj: Record<string, unknown>, key: string, where: string): number {
   const v = obj[key];
   if (typeof v !== "number") throw new Error(`${where}: ${key} must be a number`);
   return v;
 }
 
-function int(obj: Record<string, unknown>, key: string, where: string): number {
+export function int(obj: Record<string, unknown>, key: string, where: string): number {
   const v = num(obj, key, where);
   if (!Number.isInteger(v) || v < 0) throw new Error(`${where}: ${key} must be a non-negative integer`);
   return v;
 }
 
-function numOrNaN(v: unknown, where: string): number {
+export function numOrNaN(v: unknown, where: string): number {
   if (v === null) return NaN;
   if (typeof v !== "number") throw new Error(`${where}: expected a number or null, got ${JSON.stringify(v)}`);
   return v;
@@ -229,7 +230,7 @@ function floats(v: unknown, where: string): Float64Array {
   return Float64Array.from(v, (x) => numOrNaN(x, where));
 }
 
-function reason(v: unknown, where: string): StopReason {
+export function reason(v: unknown, where: string): StopReason {
   if (v === "steps" || v === "time" || v === "interrupted") return v;
   throw new Error(`${where}: unknown stop reason ${JSON.stringify(v)}`);
 }

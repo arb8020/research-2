@@ -1,6 +1,6 @@
 """```nn-fit fence -> <nn-fit>: one `key: value` line per setting; keys are the element's attributes.
 
-    dataset: wave            draw | wave | spiral
+    dataset: wave            draw | wave | spiral | grok (modular arithmetic; trains only when connected)
     activation: tanh         linear | relu | tanh | sigmoid
     layers: 2                hidden layers, 0..4
     width: 8                 units per hidden layer, 1..16
@@ -14,10 +14,11 @@
     seed: 1                  random wave: which curve, 0..2^31
     step-budget: 2000        positive integer, or off
     time-budget: 5           seconds, or off
+    train-fraction: 0.3      grok: share of the a + b mod p pairs trained on, 0.3..0.5
 
 Every key is optional (the element has defaults; an empty fence is the default widget). Blank lines are
 skipped. An unknown or repeated key, or a value outside the list above, fails the build with its line.
-The element snaps lr, samples, noise, roughness and the budgets to its nearest slider stop.
+The element snaps lr, samples, noise, roughness, the budgets and train-fraction to its nearest slider stop.
 The widget is drawn entirely by element.ts (web/embeds/nn-fit/nn-fit.ts); without JS it is empty.
 """
 
@@ -29,7 +30,7 @@ from collections.abc import Callable
 from html import escape
 
 ACTIVATIONS = ("linear", "relu", "tanh", "sigmoid")
-DATASETS = ("draw", "wave", "spiral")
+DATASETS = ("draw", "wave", "spiral", "grok")
 MAX_LAYERS = 4
 MAX_WIDTH = 16
 
@@ -77,6 +78,7 @@ KEYS: dict[str, tuple[Callable[[str], bool], str]] = {
     "seed": (integer(0, 2**31), "an integer in 0..2^31"),
     "step-budget": (or_off(integer(1, 10**9)), "a positive integer, or off"),
     "time-budget": (or_off(number(1e-3, 1e6)), "a positive number of seconds, or off"),
+    "train-fraction": (number(0.3, 0.5), "a number in 0.3..0.5"),
 }
 
 
