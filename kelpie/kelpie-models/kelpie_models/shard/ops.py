@@ -6,6 +6,15 @@ so the same forward runs at world = 1 without touching torch.distributed.
     x = all_reduce("T M {tp} -> T M", x, mesh)
     x = reduce_scatter("T M {tp} -> T M/tp", x, mesh)
     x = all_to_all("T E/ep -> T/ep E", x, mesh)
+
+Forward only: these call raw torch.distributed, which has no autograd, so nothing correct
+flows backward through them. Training, when it comes, follows seqax (train.py:311): every
+weight stored fully sharded, all_gather'd right before each use, and an assert that every
+updated weight is fully sharded. Then the only backward rules needed are
+all_gather <-> reduce_scatter (an autograd.Function or torch.library op per pair), gradients
+come back already reduced, and the layout strings need no replicate-vs-invariant marker
+(spmd_types R/I). Cost: ~1.5x DDP's comm per step, plus a tiny gather per small weight
+(layernorm). Keeping small weights replicated is exactly the case that needs R/I.
 """
 
 from __future__ import annotations
