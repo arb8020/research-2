@@ -4,6 +4,9 @@ themselves.
 
     box run [--gpu L4] [--image REF] [--put LOCAL:REMOTE]... [--get REMOTE:LOCAL]... [--on-exit CMD]
             [--lease 90m] [--ceiling 8h] [--max-duration 2h] [--region us] [--detach] -- <cmd>
+            [--setup .box/setup [--lock uv.lock]... [--resume .box/resume] [--rebuild]]
+                             this worktree, synced; its setup run once and snapshotted (box/setup_cache.py);
+                             cmd runs in the synced worktree
     box attach <session>     its status (lease, ceiling, jobs) and how to follow it
     box logs <session> [-f]  the session's latest job's output; exits with its exit code once it ends
     box extend <session> <duration>   its lease to now + duration (never past its ceiling, never shorter)
@@ -29,13 +32,17 @@ import argparse
 import contextlib
 import getpass
 import re
+import shlex
 import socket
 import sys
 import time
+from pathlib import Path
 
 from box import gpus, sdk
+from box.setup_cache import SetupSpec
 
 GC_MARGIN_S = 1800  # past box.ceiling by this much (the provider backstop is 600 s), a machine has outlived both
+RECORD_VOLUME = "box-sessions"  # --setup on Modal: where sessions record and setups are remembered
 DETACH_IDLE_S = 120  # a detached run's machine ends this long after its job (no ROOT/released "end when done" any more)
 DURATION = re.compile(r"(\d+(?:\.\d+)?)([smhd]?)")
 UNIT_S = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
@@ -94,9 +101,27 @@ def cmd_run(a: argparse.Namespace) -> int:
         return run(a, cmd, provider)
 
 
+def make_store(name: str, provider: sdk.Provider) -> sdk.Store | None:
+    """Where a --setup session records itself, and remembers its setup's snapshots: the provider's
+    durable store (Modal: the box-sessions Volume; local: a directory). None where there is none
+    (then nothing is snapshotted: the setup runs every boot)."""
+    if name == "modal":
+        from box.providers.modal import ModalVolumeStore
+
+        return ModalVolumeStore(RECORD_VOLUME, provider=provider)  # type: ignore[arg-type]
+    if name == "local":
+        from box.providers.local import BASE
+        from box.store import DirStore
+
+        return DirStore(BASE.parent / "records")
+    return None
+
+
 def run(a: argparse.Namespace, cmd: str, provider: sdk.Provider) -> int:
     max_duration_s = a.max_duration or a.ceiling  # by default the job may use the whole session
     kw = {"gpu": a.gpu, "image": a.image, "lease_s": a.lease, "ceiling_s": a.ceiling, "labels": {"box.cmd": cmd[:200], "box.user": user()}}
+    if a.setup:
+        return run_set_up(a, cmd, provider, max_duration_s, kw)
     if not a.detach:
         ending = sdk.run_job(provider, cmd, max_duration_s=max_duration_s, put=pairs(a.put, "put"), get=pairs(a.get, "get"), on_exit=a.on_exit, **kw)
         print(f"box: {ending.reason}, exit {ending.exit_code}", file=sys.stderr)
@@ -110,6 +135,35 @@ def run(a: argparse.Namespace, cmd: str, provider: sdk.Provider) -> int:
     print(s.id)
     print(f"box attach {s.id}    # status\nbox logs {s.id} -f   # follow\nbox extend {s.id} 1h  # more lease\nbox kill {s.id}      # stop", file=sys.stderr)
     return 0
+
+
+def run_set_up(a: argparse.Namespace, cmd: str, provider: sdk.Provider, max_duration_s: float, kw: dict) -> int:
+    """run with --setup: this worktree's setup (snapshotted where the provider can), then cmd in it."""
+    spec = SetupSpec(repo=Path.cwd(), script=a.setup, lockfiles=tuple(a.lock), resume=a.resume, rebuild=a.rebuild)
+    s = sdk.launch(provider, record=make_store(a.provider, provider), setup=spec, idle_timeout_s=DETACH_IDLE_S if a.detach else 0.0, **kw)
+    prepared = sdk.read_record(s.record, s.id).setup if s.record else None
+    print(f"box: {s.id}: {'booted from ' + str(prepared.image) if prepared and prepared.hit else 'set up'}", file=sys.stderr)
+    try:
+        path = s.sync(Path.cwd()).path  # nothing to send (create synced it): where it is
+        for local, remote in pairs(a.put, "put"):
+            s.put(local, remote)
+        job = s.run(f"cd {shlex.quote(path)} && {cmd}", max_duration_s=max_duration_s, on_exit=a.on_exit)
+    except BaseException:
+        s.close()
+        raise
+    if a.detach:
+        print(s.id)
+        return 0
+    with s:
+        sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
+        for chunk in job.logs(follow=True):
+            sinks[chunk.stream].write(chunk.text)
+            sinks[chunk.stream].flush()
+        ending = job.wait()
+        for remote, local in pairs(a.get, "get"):
+            s.get(remote, local)
+    print(f"box: {ending.reason}, exit {ending.exit_code}", file=sys.stderr)
+    return ending.exit_code if ending.exit_code is not None else 1
 
 
 def cmd_logs(a: argparse.Namespace) -> int:
@@ -224,6 +278,10 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--max-duration", type=duration, default=None, help="the job is killed after this (default: the ceiling)")
     s.add_argument("--region", default=None, help="modal: pin a region (e.g. us; billed at a premium); default anywhere")
     s.add_argument("--detach", action="store_true", help="print the id and return; the machine ends itself (lease, or idle once the job is done)")
+    s.add_argument("--setup", default=None, help="this worktree's setup script (e.g. .box/setup): sync it, run it once, snapshot it, run cmd in it")
+    s.add_argument("--lock", action="append", default=[], help="--setup: a file whose bytes key the snapshot (repeatable), e.g. uv.lock")
+    s.add_argument("--resume", default=None, help="--setup: a script run every boot after the sync (e.g. .box/resume)")
+    s.add_argument("--rebuild", action="store_true", help="--setup: run the setup and replace its snapshot, whatever is cached")
     s.add_argument("cmd", nargs=argparse.REMAINDER, help="-- command, run by bash")
     s.set_defaults(fn=cmd_run)
     s = sub.add_parser("attach", help="a session's status and how to follow it")
