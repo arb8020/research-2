@@ -17,5 +17,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["*.ts", "embeds/*/*.ts"]
+  "include": ["*.ts", "connect/*.ts", "embeds/*/*.ts"]
 }
