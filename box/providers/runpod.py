@@ -14,7 +14,7 @@ import requests
 
 from box import gpus
 from box.providers.pump import JOIN_S, Pumped, kill_pid_file, pipe_reader, with_pid_file
-from box.sdk import LABEL_BY, LABEL_NAME, LABEL_SESSION, Endpoint, Gone, NameTaken, Refused
+from box.sdk import LABEL_BY, LABEL_NAME, LABEL_SESSION, Dropped, Endpoint, Gone, NameTaken, Refused
 from box.store import Mount
 
 API = "https://api.runpod.io/v2"
@@ -246,7 +246,7 @@ class RunPodMachine:
             rc = proc.wait(JOIN_S)
             if rc == 255:
                 self._pod()
-                raise ConnectionError(f"runpod: {self.id}: ssh dropped under a stream of `{cmd[:80]}`")
+                raise Dropped(f"runpod: {self.id}: ssh dropped under a stream of `{cmd[:80]}`")
             return rc
 
         def write(data: bytes) -> None:

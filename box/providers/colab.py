@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 from box import gpus
 from box.providers.pump import READ_BYTES, Closed, Emit, Pumped
-from box.sdk import BACKSTOP_MARGIN_S, LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken, Refused
+from box.sdk import BACKSTOP_MARGIN_S, LABEL_BY, LABEL_NAME, Dropped, Endpoint, Gone, NameTaken, Refused
 from box.store import Mount
 
 T = TypeVar("T")
@@ -352,7 +352,10 @@ class ColabMachine:
                     elif kind == "t":
                         raise TimeoutError(f"colab: {self.id}: stream of `{cmd[:80]}` ran past its cell's own bound; killed")
             except (Unreachable, KernelGone) as e:
-                raise self._gone_or(e) from e
+                gone = self._gone_or(e)
+                if isinstance(gone, Gone):
+                    raise gone from e
+                raise Dropped(f"colab: {self.id}: the stream of `{cmd[:80]}` dropped: {e!r}") from e
             finally:
                 with contextlib.suppress(Exception):
                     runtime.shutdown_kernel(kernel)

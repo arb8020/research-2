@@ -15,12 +15,13 @@ from pathlib import Path
 from typing import TypeVar
 
 import anyio
+import grpclib.exceptions
 import modal
 from anyio.from_thread import BlockingPortal, start_blocking_portal
 
 from box import gpus
 from box.providers.pump import MAX_SEND_BYTES, Closed, Emit, Pumped, kill_pid_file, with_pid_file
-from box.sdk import LABEL_BY, LABEL_NAME, LABEL_PORTS, Endpoint, Gone, NameTaken, Refused, declared_ports
+from box.sdk import LABEL_BY, LABEL_NAME, LABEL_PORTS, Dropped, Endpoint, Gone, NameTaken, Refused, declared_ports
 from box.store import Mount
 
 APP = "box"
@@ -37,6 +38,7 @@ POLL_S = 0.5
 MODAL_TOML = Path.home() / ".modal.toml"
 SNAPSHOT = "modal-snapshot:"
 SNAPSHOT_TIMEOUT_S = 900.0
+STREAM_DROPS = (modal.exception.ConnectionError, grpclib.exceptions.StreamTerminatedError, OSError)
 
 
 @dataclass(frozen=True)
@@ -362,6 +364,8 @@ class ModalMachine:
                 raise Closed from None
             except (modal.exception.NotFoundError, modal.exception.SandboxTerminatedError) as e:
                 raise Gone(f"{self.id}: {e}") from e
+            except STREAM_DROPS as e:
+                raise Dropped(f"{self.id}: the stream of `{cmd}` dropped: {e!r}") from e
             finally:
                 future.cancel()
 
@@ -432,6 +436,8 @@ class ModalMachine:
             raise TimeoutError(f"{self.id}: Modal call hung for {timeout_s:.0f} s; sandbox still reports running") from None
         except (modal.exception.NotFoundError, modal.exception.SandboxTerminatedError) as e:
             raise Gone(f"{self.id}: {e}") from e
+        except modal.exception.ConnectionError as e:
+            raise Dropped(f"{self.id}: {e}") from e
         # a sandbox that is ending raises a bare ConflictError or SandboxFilesystemError
         except (modal.exception.ConflictError, modal.exception.SandboxFilesystemError) as e:
             if type(e) in (modal.exception.ConflictError, modal.exception.SandboxFilesystemError) and self._ends():
