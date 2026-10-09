@@ -65,6 +65,15 @@ def kill_supervisor(machine: Machine) -> None:
             machine.exec("kill -9 1")
 
 
+def freeze_supervisor(machine: Machine) -> None:
+    """SIGSTOP the machine's supervisor: alive, but it never answers (a hung host, a wedged process)."""
+    pid_file = getattr(machine, "dir", None)
+    if pid_file is not None:
+        os.kill(int((pid_file / "pid").read_text()), signal.SIGSTOP)
+    else:
+        machine.exec("kill -STOP 1")
+
+
 class Tested:
     """A provider whose machines carry PURPOSE and a provider backstop of at most MAX_BACKSTOP_S."""
 

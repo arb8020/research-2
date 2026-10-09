@@ -405,6 +405,70 @@ def test_create_returns_before_the_supervisor_is_up_and_launch_is_create_wait_up
     assert s.status() == Ended("stopped")
 
 
+def test_close_gives_a_receipt_once_the_supervisor_said_it_ended_and_the_provider_said_the_machine_is_gone(
+    launch: Callable, provider: Provider
+) -> None:  # fmt: skip
+    s = launch(ceiling_s=600)
+    s.run("sleep 999", max_duration_s=JOB_S)
+    before = time.time()
+    receipt = s.close()
+    assert (receipt.session_id, receipt.machine_id) == (s.id, s.machine.id)
+    assert receipt.ended == Ended("stopped")
+    assert receipt.supervisor_confirmed
+    assert before < receipt.machine_gone_at <= time.time()
+    assert s.machine.gone()
+    assert gone(provider, s)
+    assert s.status() == Ended("stopped")  # a closed session still answers as before
+    assert s.wait() == Ended("stopped")
+
+
+def test_closing_a_machine_whose_supervisor_was_killed_terminates_it_and_the_receipt_says_so(launch: Callable, provider: Provider) -> None:
+    s = launch(ceiling_s=600)
+    s.run("sleep 999", max_duration_s=JOB_S)
+    providers.kill_supervisor(s.machine)  # no ended.json; on macOS its job lives on (no PDEATHSIG)
+    receipt = s.close()
+    assert receipt.ended == Ended("machine_lost")
+    assert not receipt.supervisor_confirmed
+    assert s.machine.gone()  # the job too: terminate() reached it
+    assert gone(provider, s)
+
+
+def test_a_supervisor_that_never_answers_is_terminated_and_its_receipt_is_machine_lost(launch: Callable, scale: float) -> None:
+    s = launch(ceiling_s=600)
+    providers.freeze_supervisor(s.machine)  # alive, so status() still reads Running: only the bound ends the wait
+    t0 = time.monotonic()
+    receipt = s.close(timeout_s=2 * scale)
+    assert time.monotonic() - t0 >= 2 * scale  # it waited out the bound, then terminated
+    assert receipt.ended == Ended("machine_lost")
+    assert not receipt.supervisor_confirmed
+    assert s.machine.gone()
+
+
+class NeverGone:
+    """A machine whose provider never says it is gone (an API that keeps answering for it)."""
+
+    def __init__(self, inner: sdk.Machine) -> None:
+        self.inner = inner
+
+    def gone(self) -> bool:
+        return False
+
+    def __getattr__(self, attr: str) -> object:
+        return getattr(self.inner, attr)
+
+
+def test_close_raises_within_its_bound_when_the_provider_never_confirms_the_machine_is_gone(launch: Callable) -> None:
+    s = launch(ceiling_s=600)
+    real = s.machine
+    s.machine = NeverGone(real)
+    t0 = time.monotonic()
+    with pytest.raises(sdk.NotGone, match="still has it"):
+        s.close(gone_timeout_s=2)
+    assert time.monotonic() - t0 < 2 + 5  # the bound, plus the stop and terminate before it
+    assert s.status() == Ended("stopped")  # the supervisor did end; only the proof is missing
+    assert real.gone()
+
+
 class SlowBoot:
     """A provider whose machines take boot_s to start their entrypoint (as a cloud's do: an
     unpinned Modal L4 took ~6 min), and which notes the backstop (timeout_s) each launch asked for."""

@@ -255,6 +255,14 @@ class ModalMachine:
         with contextlib.suppress(modal.exception.NotFoundError):
             self.sandbox.terminate()
 
+    def gone(self) -> bool:
+        """Modal has a return code for the sandbox (poll(): it has finished, by exiting or by
+        terminate), or no longer knows it (NotFoundError, as Gone). Bounded as every call is (_live)."""
+        try:
+            return self._live(self.sandbox.poll.aio) is not None
+        except Gone:
+            return True
+
     def expose(self, port: int) -> Endpoint:
         """The port's Modal tunnel (encrypted_ports at create): an open https URL, websockets too.
         Not Sandbox.create_connect_token, which needs no declaring but gates every request on a

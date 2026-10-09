@@ -138,9 +138,25 @@ class LocalMachine:
 
     def terminate(self) -> None:
         """Like a VM's terminate: every process on the machine dies, no hooks run."""
-        for status in Path(self.root).glob("*/*/status.json"):  # jobs and services
-            _killpg(json.loads(status.read_text()).get("pgid"))
-        _killpg(int((self.dir / "pid").read_text()))
+        for pgid in self._groups():
+            _killpg(pgid)
+
+    def gone(self) -> bool:
+        """No live process (a zombie is dead) in the supervisor's process group or any job's or
+        service's: what a VM's "terminated" is here. Not alive(): a supervisor SIGKILLed on macOS
+        leaves its job running (no PDEATHSIG), and that machine is not gone until terminate()."""
+        groups = set(self._groups())
+        assert groups, self.id  # the supervisor's own, at least
+        listing = subprocess.run(["ps", "-A", "-o", "pgid=,stat="], capture_output=True, text=True, check=True).stdout
+        rows = [line.split() for line in listing.splitlines() if line.strip()]
+        live = {int(row[0]) for row in rows if not row[1].startswith("Z")}
+        return not groups & live
+
+    def _groups(self) -> list[int]:
+        """The supervisor's process group (its pid: launched in a session of its own), then every job's
+        and service's (status.json's pgid, from when it started; a hook's group is not recorded)."""
+        jobs = [json.loads(status.read_text()).get("pgid") for status in Path(self.root).glob("*/*/status.json")]
+        return [int((self.dir / "pid").read_text()), *(pgid for pgid in jobs if pgid is not None)]
 
 
 def _killpg(pgid: int | None) -> None:
