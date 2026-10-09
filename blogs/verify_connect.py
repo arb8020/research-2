@@ -9,7 +9,10 @@ a bad token fails with a reason (not recorded); then paste a token, pick T4, con
 run the nvidia-smi scratch cell, Stop a long cell, reload (the session and its kernel carry over, no new POST),
 Disconnect, Sign out. Also: phone width, dark mode, and axe on the connected page with the panel and drawer open.
 Lease (screenshots in .evidence/lease/): a custom session length is capped at 12 h and reaches POST /sessions as lease_s,
-the pill counts down, Extend pushes the lease and is clamped at the ceiling, and (fake only) a run-out lease says so.
+the pill counts down, Extend pushes the lease and is clamped at the ceiling, a shorter extend is a no-op (200, lease
+unchanged), and (fake only) a run-out lease says so, extending it after is a no-op (200, ended), and extending while
+booting is 409. Then: a status without lease_until fails the page with a gateway error (not a guess), and a session
+ended from outside the page (POST /end, as another tab or a release would) shows as Disconnected with a reason.
 """
 
 from __future__ import annotations
@@ -27,9 +30,10 @@ import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from playwright.sync_api import Browser, BrowserContext, Page, expect, sync_playwright
+from playwright.sync_api import Browser, BrowserContext, Page, Route, expect, sync_playwright
 
 HERE = Path(__file__).parent
 OUT = HERE / ".evidence" / "verify_connect"
@@ -67,8 +71,10 @@ def start_fake(port: int) -> subprocess.Popen[bytes]:
     raise RuntimeError(f"connect_dev.py never answered on :{port} (see {OUT / 'connect_dev.log'})")
 
 
-def gateway_call(gateway: str, path: str, token: tuple[str, str], method: str = "GET") -> dict[str, Any]:
-    req = Request(f"{gateway}{path}", method=method, headers={"X-Box-Token": f"{token[0]}:{token[1]}"})
+def gateway_call(gateway: str, path: str, token: tuple[str, str], method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
+    headers = {"X-Box-Token": f"{token[0]}:{token[1]}", **({"Content-Type": "application/json"} if body is not None else {})}
+    data = None if body is None else json.dumps(body).encode()
+    req = Request(f"{gateway}{path}", data=data, method=method, headers=headers)
     with urlopen(req, timeout=10) as r:
         body: dict[str, Any] = json.load(r)
     return body
@@ -197,6 +203,7 @@ def lease(browser: Browser, url: str, token: tuple[str, str], gateway: str, fake
     page.on("pageerror", lambda e: errors.append(str(e)))
     sid = lease_connect(page, url, token, gateway)
     lease_extend(page, sid, token, gateway)
+    lease_shorter(sid, token, gateway)
     if fake:
         gateway_call(gateway, f"/dev/sessions/{sid}/expire", token, method="POST")
         page.wait_for_selector("connect-pill[data-phase=disconnected][data-failed]", timeout=30_000)
@@ -206,6 +213,10 @@ def lease(browser: Browser, url: str, token: tuple[str, str], gateway: str, fake
         assert gateway_call(gateway, f"/sessions/{sid}", token)["status"]["reason"] == "lease"
         page.screenshot(path=LEASE_OUT / "6-lease-ended.png")
         print(f"  lease ran out: {failure!r}")
+        after = gateway_call(gateway, f"/sessions/{sid}/extend", token, method="POST", body={"until": time.time() + 3600})["status"]
+        assert after["state"] == "ended" and after["reason"] == "lease", f"extend after the end should be a no-op: {after}"
+        print("  extend after the end: 200, still ended (lease)")
+        lease_booting(token, gateway)
     else:
         open_menu(page)
         page.locator(".connect-end").click()
@@ -291,6 +302,76 @@ def lease_extend(page: Page, sid: str, token: tuple[str, str], gateway: str) -> 
     page.screenshot(path=LEASE_OUT / "5-menu-at-ceiling.png")
     print(f"  extend clamped: asked {extends[-1]['until'] - clamped['started_at']:.0f} s after start, got the ceiling (43200 s)")
     page.keyboard.press("Escape")
+
+
+def lease_shorter(sid: str, token: tuple[str, str], gateway: str) -> None:
+    """An until before lease_until (here: a minute after the start) never cuts the lease: 200, the status unchanged."""
+    before = gateway_call(gateway, f"/sessions/{sid}", token)["status"]
+    after = gateway_call(gateway, f"/sessions/{sid}/extend", token, method="POST", body={"until": before["started_at"] + 60})["status"]
+    assert after["state"] == "running" and after["lease_until"] == before["lease_until"], f"a shorter extend moved the lease: {before} -> {after}"
+    print(f"  shorter extend: 200, lease_until unchanged ({after['lease_until'] - after['started_at']:.0f} s after start)")
+
+
+def lease_booting(token: tuple[str, str], gateway: str) -> None:
+    """(fake) Extend while the session boots: 409, as the relay. Then end it."""
+    req = Request(f"{gateway}/sessions", data=json.dumps({"provider": "modal", "token": {"id": token[0], "secret": token[1]}, "gpu": None}).encode(),
+                  method="POST", headers={"Content-Type": "application/json"})  # fmt: skip
+    with urlopen(req, timeout=10) as r:
+        sid = json.load(r)["session_id"]
+    try:
+        gateway_call(gateway, f"/sessions/{sid}/extend", token, method="POST", body={"until": time.time() + 3600})
+        raise AssertionError("extend while booting should be 409")
+    except HTTPError as e:
+        assert e.code == 409, f"extend while booting: {e.code} {e.read()!r}"
+    finally:
+        gateway_call(gateway, f"/sessions/{sid}/end", token, method="POST")
+    print("  extend while booting: 409")
+
+
+def ended_elsewhere(browser: Browser, url: str, token: tuple[str, str], gateway: str) -> None:
+    """A status without lease_until is a gateway error the page names; a session ended outside the page says so."""
+    context = browser.new_context(viewport={"width": 1100, "height": 760}, device_scale_factor=2)
+    context.add_init_script(f"localStorage.setItem('connect.token.modal', JSON.stringify({{id: '{token[0]}', secret: '{token[1]}'}}))")
+    page = context.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(url)
+    open_menu(page)
+    page.locator(".connect-go").click()
+    page.wait_for_selector("connect-pill[data-phase=connected]", timeout=600_000)
+    sid = page.evaluate("JSON.parse(localStorage.getItem('connect.session')).session_id")
+
+    # Reattach (reload) against a gateway that leaves lease_until out: no guessing from deadline.
+    def strip(route: Route) -> None:
+        response = route.fetch()
+        body = response.json()
+        del body["status"]["lease_until"]
+        route.fulfill(response=response, json=body)
+
+    pattern = re.compile(rf"/sessions/{re.escape(sid)}$")
+    page.route(pattern, strip)
+    page.reload()
+    page.wait_for_selector("connect-pill[data-phase=disconnected][data-failed]", timeout=30_000)
+    open_menu(page)
+    failure = page.locator(".connect-failure").inner_text()
+    assert "lease_until" in failure and "gateway" in failure, failure
+    page.screenshot(path=LEASE_OUT / "7-no-lease-until.png")
+    print(f"  status without lease_until: {failure!r}")
+    page.unroute(pattern)
+
+    page.reload()  # the session still runs: a real gateway reattaches
+    page.wait_for_selector("connect-pill[data-phase=connected]", timeout=60_000)
+    gateway_call(gateway, f"/sessions/{sid}/end", token, method="POST")  # as another tab's Disconnect, or a box release
+    page.wait_for_selector("connect-pill[data-phase=disconnected][data-failed]", timeout=30_000)
+    expect(page.locator(".connect-label")).to_have_text("Connect")
+    expect(page.locator(".connect-announce")).to_have_text(re.compile(r"^Disconnected: the session was stopped outside this page"))
+    open_menu(page)
+    failure = page.locator(".connect-failure").inner_text()
+    assert "stopped outside this page" in failure, failure
+    page.screenshot(path=LEASE_OUT / "8-stopped-elsewhere.png")
+    print(f"  ended outside the page: {failure!r}")
+    assert not errors, errors
+    context.close()
 
 
 def wind_down(page: Page) -> None:
@@ -409,6 +490,7 @@ def main() -> None:
             webm = OUT / "connect.webm"
             Path(video.path()).rename(webm)
             lease(browser, url, token, gateway, fake is not None)
+            ended_elsewhere(browser, url, token, gateway)
             phone_and_dark(browser, url, token)
             axe(browser, url, token)
             browser.close()
