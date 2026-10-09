@@ -21,6 +21,7 @@ from box.sdk import (
     Session,
     Status,
     attach,
+    create,
     launch,
     read_record,
     run_job,
@@ -30,5 +31,5 @@ from box.store import DirStore, Mount, Store
 __all__ = [
     "Booting", "DirStore", "Done", "Ended", "Endpoint", "Ending", "Gone", "Hooking", "Job", "JobRunning", "JobStatus",
     "LogChunk", "LogCursor", "Machine", "Mount", "Provider", "Queued", "Record", "Running", "Session", "Status", "Store",
-    "attach", "launch", "read_record", "run_job",
+    "attach", "create", "launch", "read_record", "run_job",
 ]  # fmt: skip
