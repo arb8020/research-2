@@ -83,13 +83,16 @@ def test_a_supervisor_killed_without_a_word_is_machine_lost_with_logs_up_to_the_
     eventually(lambda: recorded_output(sdk.read_record(store, s.id), job.id) == "before\n", timeout_s=30 * scale)
     providers.kill_supervisor(s.machine)
     killed_at = time.monotonic()
+    # its heartbeat is still fresh: status() waits that out (the end may still be landing), never says Running
+    assert sdk.attach(provider, s.id, record=store).status() == Ended("machine_lost")
+    assert time.monotonic() - killed_at < HEARTBEAT_TTL_S + 5 * scale
     assert s.wait(timeout_s=HEARTBEAT_TTL_S + 30 * scale) == Ended("machine_lost")
     assert time.monotonic() - killed_at < HEARTBEAT_TTL_S + 30 * scale
     s.machine.terminate()  # macOS: the job outlives its supervisor (no PDEATHSIG)
     record = sdk.read_record(store, s.id)
     assert record.ended is None
     assert isinstance(record.running, Running)
-    assert record.status(machine_gone=True, now=time.time()) == Ended("machine_lost")
+    assert record.end(now=time.time()) == Ended("machine_lost")
     assert sdk.attach(provider, s.id, record=store).status() == Ended("machine_lost")
     assert recorded_output(record, job.id) == "before\n"
     s.close()

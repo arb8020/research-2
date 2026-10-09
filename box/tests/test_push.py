@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from box import sdk
 from box.gateway import kernel_client, relay
 from box.gateway.push import Push
 from box.local_provider import Local
@@ -134,13 +135,21 @@ def test_idle_end_is_pushed_with_its_reason(pushing_relay: Callable[..., tuple[s
     sid = create(gw)
     last = fan.wait_for(sid, ended, timeout_s=60)[-1]
     assert last["status"]["reason"] == "idle", last
-    # the relay agrees soon (or the machine is gone). Not at once: between the supervisor killing Jupyter
-    # and writing ended.json (the forwarder's final push sits in between), the relay sees a running
-    # supervisor whose Jupyter does not answer, which it reports as "booting".
-    give_up = time.monotonic() + 15
-    while (after := status(gw, sid))[0] == 200 and after[1]["state"] != "ended":
-        assert time.monotonic() < give_up, after
-        time.sleep(0.5)
+    # the relay agrees at once: its Jupyter is done (the supervisor wrote why before the forwarder's
+    # final push), even while the supervisor has not written ended.json yet
+    code, after = status(gw, sid)
+    assert (code, after["state"], after["reason"]) == (200, "ended", "idle"), after
+
+
+def test_a_session_whose_jupyter_died_says_ended_not_booting(pushing_relay: Callable[..., tuple[str, Fanout]], tmp_path: Path) -> None:
+    gw, fan = pushing_relay()
+    sid = create(gw)
+    fan.wait_for(sid, running)
+    jupyter = sdk.attach(Local(tmp_path / "machines"), sid).jobs()[0]
+    jupyter.kill()  # the forwarder (a service too) keeps the released session alive: supervisor up, Jupyter gone
+    jupyter.wait()
+    code, after = status(gw, sid)
+    assert (code, after["state"], after["reason"]) == (200, "ended", "machine_lost"), after
 
 
 def test_a_terminated_machine_goes_silent(pushing_relay: Callable[..., tuple[str, Fanout]], tmp_path: Path) -> None:

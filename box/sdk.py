@@ -47,7 +47,7 @@ from pathlib import Path
 from typing import Literal, Protocol, TypeVar, get_args
 
 from box.store import Mount, Store
-from box.supervisor import MAX_SERVICES
+from box.supervisor import HEARTBEAT_TTL_S, MAX_SERVICES
 
 SUPERVISOR = Path(__file__).with_name("supervisor.py")
 LABEL_BY = "box.by"
@@ -287,9 +287,10 @@ class Session:
         return self.machine.expose(port)
 
     def status(self) -> Status:
-        """Booting, Running, or Ended (and why), from the supervisor's files; once the machine is
-        gone, from its record (see Record.status). Ended is final: once this Session has seen it,
-        it answers without asking the machine."""
+        """Booting, Running, or Ended (and why), from the supervisor's files. Once the machine is
+        gone, always Ended: machine_lost, or with a record, the record's word (Record.end), which
+        may take up to HEARTBEAT_TTL_S to land. Ended is final: once this Session has seen it, it
+        answers without asking the machine."""
         if self._ended is not None:
             return self._ended
         try:
@@ -305,7 +306,8 @@ class Session:
     def wait(self, timeout_s: float | None = None) -> Ended:
         """Block until the session ends; returns why. While waiting it keeps the machine lingering
         (ROOT/watch), so the supervisor's reason is read before the machine goes. Bounded without
-        timeout_s too: by the session's deadline (or its machine's loss). TimeoutError past timeout_s."""
+        timeout_s too: by the session's deadline (or its machine's loss). TimeoutError past timeout_s
+        (checked between polls: a gone machine's status() can take up to HEARTBEAT_TTL_S)."""
         give_up = None if timeout_s is None else time.monotonic() + timeout_s
         while not (self._watch() or isinstance(status := self.status(), Ended)):  # watch first: no gap to end in
             if give_up is not None and time.monotonic() > give_up:
@@ -378,17 +380,21 @@ class Session:
         except FileNotFoundError:
             return None
 
-    def _status_when_gone(self) -> Status:
-        """No record: machine_lost. Else the record's word, which can still be Running for up to its
-        heartbeat's TTL (the record of the end may still be landing); wait() waits that out."""
-        status = Ended("machine_lost") if self.record is None else read_record(self.record, self.id).status(machine_gone=True, now=time.time())
-        if isinstance(status, Ended):
-            self._ended = status
-        return status
+    def _status_when_gone(self) -> Ended:
+        """No record: machine_lost. Else the record's end, waiting out (at most HEARTBEAT_TTL_S) a
+        heartbeat still fresh, while the record of the end may still be landing."""
+        give_up = time.monotonic() + HEARTBEAT_TTL_S
+        ended = Ended("machine_lost") if self.record is None else None
+        while ended is None and time.monotonic() < give_up:
+            ended = read_record(self.record, self.id).end(now=time.time())
+            if ended is None:
+                time.sleep(POLL_S)
+        self._ended = ended or Ended("machine_lost")  # still fresh past the TTL: its clock is off; nothing more will land
+        return self._ended
 
     def _watch(self) -> None:
         """Tell the supervisor someone is reading, so the machine lingers for us after it ends."""
-        with contextlib.suppress(Gone):  # then the next status() says machine_lost
+        with contextlib.suppress(Gone):  # then the next status() says Ended
             self.machine.exec(f"touch {self._path('watch')}")
 
     def _stop_holding(self) -> None:
@@ -557,17 +563,16 @@ class Record:
     def session_id(self) -> str:
         return self.labels[LABEL_SESSION]
 
-    def status(self, *, machine_gone: bool, now: float) -> Status:
-        """The recorded end if there is one. Else, while the machine lives, Running (or Booting).
-        Once the provider says it is gone: still Running while the heartbeat is fresh (a store
-        can land the record's last writes after the machine ends, as a Modal Volume commits on
-        its own), then machine_lost: it died without a word, or its word never reached the store."""
+    def end(self, now: float) -> Ended | None:
+        """Why the session ended, for one whose machine is gone: the recorded end; else, while the
+        heartbeat is fresh, None (a store can land the record's last writes after the machine
+        ends, as a Modal Volume commits on its own); then machine_lost: it died without a word,
+        or its word never reached the store."""
         if self.ended is not None:
             return self.ended
-        landing = self.heartbeat is not None and now - self.heartbeat.at < self.heartbeat.ttl_s
-        if machine_gone and not landing:
-            return Ended("machine_lost")
-        return self.running or Booting()
+        if self.heartbeat is not None and now - self.heartbeat.at < self.heartbeat.ttl_s:
+            return None
+        return Ended("machine_lost")
 
     def jobs(self) -> list[str]:
         """Every job id recorded, oldest first."""
