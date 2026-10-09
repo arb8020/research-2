@@ -74,7 +74,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar, get_args
 
 from box.gitsync import Synced
 from box.store import Mount, Store
-from box.supervisor import HEARTBEAT_TTL_S, KINDS, MAX_CEILING_S, MAX_EXPOSED, MAX_SERVICES, TAIL_FRAME_BYTES, TAIL_MAX_S, utf8_cut
+from box.supervisor import HEARTBEAT_TTL_S, KINDS, MAX_CEILING_S, MAX_SERVICES, TAIL_FRAME_BYTES, TAIL_MAX_S, utf8_cut
 
 if TYPE_CHECKING:
     from box.proxy import Proxy
@@ -337,7 +337,7 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     for what, e.g. box.user, box.cmd); box stamps only RESERVED. ports: what Session.expose may
     open to a browser later (Modal and RunPod route such a port only if the machine was created
     with it); expose() reaches other ports by a gated route where the provider has one. Idle: no job
-    running, no connection to a port exposed, and nothing touching ROOT/activity (streams, shells,
+    running, no connection to a declared port, and nothing touching ROOT/activity (streams, shells,
     proxies, syncs: Session.touch), for idle_timeout_s (0: never idle).
     name: a handle (NAME) unique among the provider's live machines, for attach(name=) and
     find_or_create; NameTaken if a live machine has it.
@@ -604,28 +604,21 @@ class Session:
         the machine was created with it), so a for_browser flag could only agree with it or ask for
         what cannot be. Declared: the URL alone (headers empty). Otherwise the provider's gated route
         (Modal: a connect token, headers filled), or ValueError where it has none.
-        The port is also registered with the supervisor (ROOT/exposed/<port>), so a connection to it
-        counts as use for idleness, as a declared one's does. Something must listen there (e.g. a
-        job); until it does, requests fail (Modal: 502). A URL-only endpoint is fixed for the
-        machine's life, so it is asked of the provider once per Session; a token one each time."""
+        Idleness: a connection to a declared port is use (the supervisor sees it); to any other port
+        it is not, so go through proxy() (its keepalive) or touch(). Not watched on purpose: seen live
+        (2026-10-09), Modal's connect-token edge keeps a keep-alive client's connection to the
+        sandbox port open for 5+ min after the request (its pool), which would read as use for good;
+        a tunnel leaves none. Something must listen there (e.g. a job); until it does, requests fail
+        (Modal: 502). A URL-only endpoint is fixed for the machine's life, so it is asked of the
+        provider once per Session; a token one each time."""
         if not 0 < port < 65536:
             raise ValueError(f"port {port}: not a TCP port")
         if port in self._endpoints:
             return self._endpoints[port]
-        endpoint = self.machine.expose(port)  # first: a provider that refuses the port leaves nothing registered
-        if port not in declared_ports(self.machine.labels):
-            self._register_exposed(port)
+        endpoint = self.machine.expose(port)
         if not endpoint.headers:
             self._endpoints[port] = endpoint
         return endpoint
-
-    def _register_exposed(self, port: int) -> None:
-        """ROOT/exposed/<port>: the supervisor watches it for connections. At most MAX_EXPOSED, so
-        its per-tick scan stays small (the supervisor checks that bound too)."""
-        exposed = self._path("exposed")
-        script = (f'mkdir -p {exposed} && {{ [ -e {exposed}/{port} ] || [ $(ls {exposed} | wc -l) -lt {MAX_EXPOSED} ] || '
-                  f'{{ echo "at most {MAX_EXPOSED} undeclared ports exposed" >&2; exit 1; }}; }} && touch {exposed}/{port}')  # fmt: skip
-        self._check(script)
 
     def proxy(self, port: int, *, local_port: int = 0) -> Proxy:
         """http://127.0.0.1:<local_port> (0: any free one; Proxy.url says which) forwarding to

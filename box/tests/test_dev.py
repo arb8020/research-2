@@ -137,20 +137,20 @@ def test_racing_creates_of_one_name_get_one_session(dev: Callable, provider: Pro
 @pytest.mark.needs("pty")
 def test_a_pty_stream_merges_its_output_and_gives_its_exit_code(dev: Callable, scale: float) -> None:
     s = dev(ceiling_s=600)
-    with s.stream("echo out; echo err >&2; test -t 0 && echo tty; exit 7", pty=True, timeout_s=60 * scale) as stream:
+    with s.stream("echo out; echo err >&2; test -t 0 && echo tty; exit 7", pty=True, timeout_s=30 * scale) as stream:
         seen = list(stream)
     text = b"".join(data for _, data in seen).decode()
     assert {n for n, _ in seen} == {"stdout"}  # a terminal: one stream, as on a laptop's
     assert "out" in text and "err" in text and "tty" in text
     assert stream.rc == 7
-    with s.stream("echo plain", timeout_s=60 * scale) as plain, pytest.raises(ValueError, match="not a pty"):
+    with s.stream("echo plain", timeout_s=30 * scale) as plain, pytest.raises(ValueError, match="not a pty"):
         plain.send(b"x")
 
 
 @pytest.mark.needs("pty")
 def test_ctrl_c_reaches_a_pty_command(dev: Callable, scale: float) -> None:
     s = dev(ceiling_s=600)
-    with s.stream("trap 'echo got-int; exit 130' INT; echo ready; sleep 60 & wait", pty=True, timeout_s=60 * scale) as stream:
+    with s.stream("trap 'echo got-int; exit 130' INT; echo ready; sleep 60 & wait", pty=True, timeout_s=30 * scale) as stream:
         chunks, seen = iter(stream), b""
         while b"ready" not in seen:
             seen += next(chunks)[1]
@@ -224,7 +224,6 @@ def test_an_undeclared_port_is_exposed_through_the_providers_gated_route(dev: Ca
         assert endpoint.headers == {}
     status, body = get(endpoint.url + "/", endpoint.headers, 30 * scale)
     assert (status, body.splitlines()[0]) == (200, b"seen: None")
-    assert remote(s, f"ls {s.machine.root}/exposed") == str(port)  # the supervisor watches it for connections
 
 
 @pytest.mark.needs("undeclared-ports")
