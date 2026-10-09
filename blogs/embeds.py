@@ -4,9 +4,14 @@
     ...the embed's own text format...
     ```
 
+or, to keep the data out of the prose, an empty fence naming a file next to the chapter:
+
+    ```carousel file=01-flappy-highlights.carousel
+    ```
+
 Each kind is one folder, web/embeds/<kind>/, found by build_page.py at build time (no registry):
-    embed.py     render(src: str, line: int) -> str: the fence body (its first line is chapter line
-                 `line`) -> the HTML that replaces the fence. Bad input fails the build with a line.
+    embed.py     render(src: str, line: int) -> str: the fence body or file= contents (its first line is
+                 line `line` of the chapter, or 1 for a file) -> the HTML that replaces the fence. Bad input fails the build with a line.
     element.ts   the custom element(s) that HTML uses; `npm run build` bundles it to
                  web/build/embeds/<kind>/element.js, and pages that use the kind load it.
     element.css  optional styles, linked only on pages that use the kind.
