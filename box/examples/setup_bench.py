@@ -4,7 +4,7 @@
     uv run python examples/setup_bench.py kelpie --cold 2 --warm 3      # kelpie/.box/setup on kelpie's base image
 
 Ready = create(setup=spec) returned: up, synced, set up or booted from the snapshot, resumed. Each
-session runs one `true` job to prove it, then is closed (receipt). A cold run is rebuild=True, so
+session runs one check job to prove it (the setup's installs are there), then is closed (receipt). A cold run is rebuild=True, so
 each one really runs the setup; the warm runs after them hit the last one's snapshot. Between
 runs the bench edits one tracked file, so every warm sync has a diff to send (pack_bytes).
 Prints one JSON line per run, then medians. Machines are labelled box.purpose=lease-dev-setup.
@@ -62,13 +62,15 @@ def kelpie_spec() -> SetupSpec:
     )  # fmt: skip
 
 
-def one(provider: Modal, store: ModalVolumeStore, spec: SetupSpec, *, image: str, ceiling_s: int, cold: bool) -> dict:
+def one(provider: Modal, store: ModalVolumeStore, spec: SetupSpec, *, image: str, ceiling_s: int, cold: bool, check: str) -> dict:
     began = time.monotonic()
     s = sdk.create(provider, image=image, ceiling_s=ceiling_s, record=store, labels=PURPOSE, setup=dataclasses.replace(spec, rebuild=cold))
     ready_s = time.monotonic() - began
     try:
-        job = s.run("true", max_duration_s=60)
-        assert job.wait() == sdk.Ending("exited", 0)
+        job = s.run(check, max_duration_s=300)  # proof the machine is ready: what the setup installed is there
+        ending = job.wait()
+        checked = "".join(c.text for c in job.logs()).strip()
+        assert ending == sdk.Ending("exited", 0), (ending, checked)
     finally:
         receipt = s.close()
     record = sdk.read_record(store, s.id)
@@ -78,7 +80,7 @@ def one(provider: Modal, store: ModalVolumeStore, spec: SetupSpec, *, image: str
     return {
         "cold": cold, "ready_s": round(ready_s, 2), "session": s.id, "image": prepared.image, "key": prepared.key[:12],
         "pack_bytes": synced["pack_bytes"], "commit": synced["commit"][:12], "timings": prepared.timings,
-        "closed": receipt.ended.reason,
+        "closed": receipt.ended.reason, "check": checked[-200:],
     }  # fmt: skip
 
 
@@ -96,15 +98,17 @@ def main() -> None:
         if a.which == "synthetic":
             tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="box-bench-")))
             spec, image, ceiling_s, edit = synthetic_repo(tmp / "bench"), "python:3.13", 1800, tmp / "bench" / "app.py"
+            check = "cat /opt/synthetic/ready"
         else:
             spec, image, ceiling_s, edit = kelpie_spec(), str(TOP / "kelpie" / "oci" / "Dockerfile"), 2 * 3600, TOP / "kelpie" / ".box" / "bench-edit"
+            check = ". /opt/kelpie/env.sh && python3 -c 'import torch, transformers, triton; print(\"torch\", torch.__version__)' && ls -l $KELPIE_LIB"
         for i, cold in enumerate([True] * a.cold + [False] * a.warm):
             edit.write_text(f"bench edit {i} {time.time()}\n")  # a diff for this run's sync
             if a.which == "kelpie" and i == 0:
                 print(f"note: {edit} is untracked; it rides in paths", flush=True)
             if a.which == "kelpie":
                 spec = dataclasses.replace(spec, paths=("kelpie/.box",))
-            run = one(provider, store, spec, image=image, ceiling_s=ceiling_s, cold=cold)
+            run = one(provider, store, spec, image=image, ceiling_s=ceiling_s, cold=cold, check=check)
             runs.append(run)
             line = json.dumps({"which": a.which, **run})
             print(line, flush=True)
