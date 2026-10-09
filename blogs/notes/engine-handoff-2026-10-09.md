@@ -63,10 +63,11 @@ Spike branch `spike/workspace-cells` (worktree `.claude/worktrees/agent-ab43b364
 5. chapter 1 page: cells over the workspace, checks via `run_checks ch1`
 6. kernel image toolchain line (patch from the workspace-cells branch; box gateway `kernel.Dockerfile`), then chapter 5's engine
 
-## proposed, not yet decided
+## kernel build step (decided; chapter 8, with chapter 12's certification)
 
 - cache keys are recipe (Nix-style) with comment-insensitive code fingerprints; Bazel-style early cutoff for grades off at first
-- zero JIT at runtime: the certification sweep compiles every specialization / autotune config / graph capture once; compile caches (Triton, inductor, FlashInfer, DeepGEMM, extension .so) keyed by code fp + GPU arch + toolchain + versions; autotune pinned from certification records; a "no JIT after warmup" health check (Triton compiles, dynamo recompiles, FlashInfer builds count as failures); runtime-varying ints (sequence lengths) marked `do_not_specialize` or passed as tensors. Belongs in chapters 8 and 12
+- compile + autotune + verify + record as cached derivations: tuned configs are kept and never re-tuned; only configs that pass correctness are eligible; deploy pins configs from the records
+- zero JIT at runtime: the certification sweep compiles every specialization / autotune config / graph capture once; compile caches keyed by code fp + GPU arch + toolchain + versions; a "no JIT after warmup" health check; runtime-varying ints marked `do_not_specialize` or passed as tensors. Details in 00-plan.md chapter 8
 
 ## open
 
