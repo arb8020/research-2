@@ -8,6 +8,8 @@
         s.get("/work/runs", "runs")
     # leaving the block ends the session: a running job is killed and its hook still runs
     s.status()                               # Ended(reason="stopped")
+    s.close()                                # -> Receipt(session_id, machine_id, ended, machine_gone_at): the
+                                             #    supervisor's end, then the provider's word the machine is gone
 
     s = box.launch(provider, lease_s=600, ceiling_s=8 * 3600)   # detached: nothing ends it but its lease
     s.extend(time.time() + 3600)             # -> Lease(until, ceiling): clamped to the ceiling, never shorter
@@ -27,7 +29,7 @@
     job.logs(after=chunk.end)                # resumes where a reader left off, live or from the record
     r = box.read_record(store, s.id)         # Record: no machine, no provider needed
 
-A provider only rents raw machines (Machine: exec, stream, write, read, terminate). Everything else is
+A provider only rents raw machines (Machine: exec, stream, write, read, terminate, gone). Everything else is
 here, built from those calls and the supervisor (box/supervisor.py), which every machine
 runs as its entrypoint and which talks to this file only through files under machine.root.
 
@@ -121,6 +123,10 @@ class Machine(Protocol):
     def read(self, path: str) -> bytes: ...  # FileNotFoundError if absent
     def terminate(self) -> None: ...  # hard stop, idempotent; no hooks run
     def expose(self, port: int) -> Endpoint: ...  # ValueError unless port was declared at launch
+    # The provider's own word that this machine id runs nothing any more (no process, no bill): one
+    # bounded check, never Gone (gone is the answer). Session.close polls it; a provider that cannot
+    # say it honestly cannot be closed honestly, so it is required, as stream is.
+    def gone(self) -> bool: ...
 
 
 class Provider(Protocol):
@@ -180,6 +186,34 @@ class Ended:
 
 
 Status = Booting | Running | Ended
+
+GONE_TIMEOUT_S = 60.0  # close(): how long the provider gets to confirm the machine is gone (Modal: ~1-5 s after terminate)
+
+
+class NotGone(TimeoutError):
+    """close() terminated the machine, but the provider never said it was gone: it may still run
+    (and bill). Never reported as a success: whoever sees this must look (box who, the console)."""
+
+
+@dataclass(frozen=True)
+class Receipt:
+    """What Session.close() proves: the session ended (ended: the supervisor's word, or machine_lost
+    if it never gave one) and then its provider said this exact machine is gone (machine_gone_at,
+    unix time, this computer's clock). A receipt exists only once both are true: close() raises
+    rather than make one without the second. The two facts are separate events, as seeker learned:
+    a release is not a confirmed death."""
+
+    session_id: str
+    machine_id: str
+    ended: Ended
+    machine_gone_at: float
+
+    # Derived, not a field: Ended's reasons other than machine_lost are by definition the supervisor's
+    # own (ended.json), so a stored flag could only agree with ended or contradict it.
+    @property
+    def supervisor_confirmed(self) -> bool:
+        """The supervisor said why it ended (False: it died, or close terminated it, before saying)."""
+        return self.ended.reason != "machine_lost"
 
 
 @dataclass(frozen=True)
@@ -420,15 +454,48 @@ class Session:
                 "--host", socket.gethostname(), "--pid", str(os.getpid())]  # fmt: skip
         return parse_lease(self._check(shlex.join(argv)).encode())
 
-    def close(self, timeout_s: float = 900.0) -> None:
-        """End the session: kill any running job, let its hook run, then terminate the machine.
-        Waits up to timeout_s for the supervisor to say it ended (status() then has why)."""
+    def close(self, timeout_s: float = 900.0, gone_timeout_s: float = GONE_TIMEOUT_S) -> Receipt:
+        """End the session and prove it: ask the supervisor to stop (a running job is killed, its hook
+        runs), wait up to timeout_s for it to say it ended, terminate the machine, then wait up to
+        gone_timeout_s for the provider to say the machine is gone. A supervisor that never answers
+        is terminated anyway: the receipt's end is then machine_lost (supervisor_confirmed False),
+        unless its word reached the record first. NotGone if the provider never confirms: never a
+        receipt without that. With a record, the receipt is written to it (receipt.json)."""
+        assert timeout_s > 0, timeout_s
+        assert gone_timeout_s > 0, gone_timeout_s
+        ended = self._stop_and_wait(timeout_s)  # None: the supervisor did not answer in time
+        # terminate even after the supervisor's word: it would linger for readers (LINGER_S), and on
+        # RunPod its own delete is one more thing that could fail; ended.json is already written.
+        self.machine.terminate()
+        gone_at = self._confirm_gone(gone_timeout_s)
+        if ended is None:  # read only now: the machine is gone, so this is the record's word or machine_lost
+            ended = self.status()
+            assert isinstance(ended, Ended), ended
+        receipt = Receipt(session_id=self.id, machine_id=self.machine.id, ended=ended, machine_gone_at=gone_at)
+        if self.record is not None:
+            self.record.put(f"{record_prefix(self.id)}/receipt.json", receipt_json(receipt))
+        return receipt
+
+    def _stop_and_wait(self, timeout_s: float) -> Ended | None:
+        """close()'s first half: stop, then the supervisor's end (or machine_lost if the machine went
+        without one); None if it was still running at timeout_s."""
         if not isinstance(self.status(), Ended):  # mkdir: a booting supervisor ends at once on stop
             with contextlib.suppress(Gone):  # it may end as soon as the supervisor exits
                 self.machine.exec(f"mkdir -p {self.machine.root} && touch {self._path('watch')} {self._path('stop')}")
-            with contextlib.suppress(TimeoutError):
-                self.wait(timeout_s)
-        self.machine.terminate()
+        try:
+            return self.wait(timeout_s)
+        except TimeoutError:
+            return None
+
+    def _confirm_gone(self, timeout_s: float) -> float:
+        """Poll the provider until it says the machine is gone; when it did (unix time). NotGone past
+        timeout_s. A check that errors (the provider unreachable) is not a confirmation: it propagates."""
+        give_up = time.monotonic() + timeout_s
+        while not self.machine.gone():
+            if time.monotonic() > give_up:
+                raise NotGone(f"{self.id}: {self.machine.id} terminated, but its provider still has it after {timeout_s:.0f} s")
+            time.sleep(POLL_S)
+        return time.time()
 
     def expose(self, port: int) -> Endpoint:
         """Where to reach `port` on the machine (one of launch's ports) from anywhere. Something
@@ -852,6 +919,11 @@ class Lost:
     def terminate(self) -> None:
         """Already gone: nothing to do."""
 
+    def gone(self) -> bool:
+        """attach() found no live machine for the session (provider.list, the provider's word) before
+        making this; a machine never comes back, so that answer stands."""
+        return True
+
 
 @dataclass(frozen=True)
 class LeaseChange:
@@ -886,6 +958,7 @@ class Record:
     running: Running | None  # None: the supervisor never came up
     ended: Ended | None  # None: no end recorded (yet)
     heartbeat: Heartbeat | None
+    receipt: Receipt | None  # None: nobody closed it (yet), or it ended on its own (lease, idle)
 
     @property
     def session_id(self) -> str:
@@ -967,6 +1040,7 @@ def read_record(store: Store, session_id: str) -> Record:
         running=_recorded_running(store, prefix),
         ended=_parse_if_present(store, f"{prefix}/ended.json", parse_ended),
         heartbeat=_parse_if_present(store, f"{prefix}/heartbeat.json", parse_heartbeat),
+        receipt=_parse_if_present(store, f"{prefix}/receipt.json", parse_receipt),
     )  # fmt: skip
 
 
@@ -1035,6 +1109,30 @@ def parse_job_status(raw: bytes) -> JobStatus:
             return Done(ending, float(d["started"]) if "started" in d else None, float(d["ended"]))
         case state:
             raise ValueError(f"status.json: unknown job state {state!r}")
+
+
+def receipt_json(receipt: Receipt) -> bytes:
+    """receipt.json: supervisor_confirmed spelled out for a reader of the JSON alone."""
+    assert SESSION_ID.fullmatch(receipt.session_id), receipt  # pair: parse_receipt
+    assert receipt.ended.reason in get_args(EndReason), receipt
+    assert receipt.machine_gone_at > 0, receipt
+    d = {"session_id": receipt.session_id, "machine_id": receipt.machine_id, "reason": receipt.ended.reason,
+         "supervisor_confirmed": receipt.supervisor_confirmed, "machine_gone_at": receipt.machine_gone_at}  # fmt: skip
+    return json.dumps(d).encode()
+
+
+def parse_receipt(raw: bytes) -> Receipt:
+    """receipt.json, as Session.close() wrote it."""
+    d = json.loads(raw)
+    reason = d["reason"]
+    if reason not in get_args(EndReason):
+        raise ValueError(f"receipt.json: unknown end reason {reason!r}")
+    receipt = Receipt(str(d["session_id"]), str(d["machine_id"]), Ended(reason), float(d["machine_gone_at"]))
+    if not SESSION_ID.fullmatch(receipt.session_id):
+        raise ValueError(f"receipt.json: not a session id: {receipt.session_id!r}")
+    if d["supervisor_confirmed"] is not receipt.supervisor_confirmed:
+        raise ValueError(f"receipt.json: supervisor_confirmed {d['supervisor_confirmed']!r} contradicts reason {reason!r}")
+    return receipt
 
 
 def parse_ended(raw: bytes) -> Ended:

@@ -294,6 +294,12 @@ class RunPodMachine:
     def terminate(self) -> None:
         self.rp.api("DELETE", f"/pods/{self.id}")  # a 404 (already gone) is fine
 
+    def gone(self) -> bool:
+        """The API no longer has the pod (404) or says TERMINATED. Not EXITED: an exited pod still
+        exists (its disk bills) and restarts. Not seen live yet."""
+        pod = self.rp.api("GET", f"/pods/{self.id}")
+        return pod is None or pod["status"] == "TERMINATED"
+
     def expose(self, port: int) -> Endpoint:
         """RunPod's HTTP proxy for a port declared at launch (as <port>/http). Not seen live yet:
         the service must listen on 0.0.0.0, and the proxy (Cloudflare) cuts requests at ~100 s."""

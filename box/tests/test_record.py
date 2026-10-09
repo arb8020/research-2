@@ -4,6 +4,7 @@ ended, its jobs, and their output up to the last flush. Same providers as test_s
 
 from __future__ import annotations
 
+import json
 import os
 import socket
 import time
@@ -113,6 +114,35 @@ def test_a_supervisor_killed_without_a_word_is_machine_lost_with_logs_up_to_the_
     assert sdk.attach(provider, s.id, record=store).status() == Ended("machine_lost")
     assert recorded_output(record, job.id) == "before\n"
     s.close()
+
+
+def test_the_receipt_is_in_the_record_and_readable_after_the_machine_is_gone(launch: Callable, provider: Provider, store: Store) -> None:
+    s = launch(ceiling_s=600, record=store)
+    s.run("sleep 999", max_duration_s=JOB_S)
+    receipt = s.close()
+    assert gone(provider, s)
+    record = sdk.read_record(store, s.id)
+    assert record.receipt == receipt
+    assert record.receipt.supervisor_confirmed
+    assert record.ended == receipt.ended == Ended("stopped")
+    assert sdk.attach(provider, s.id, record=store).status() == Ended("stopped")  # a fresh process, after the fact
+
+
+def test_a_session_nobody_closed_has_no_receipt(launch: Callable, provider: Provider, store: Store, scale: float) -> None:
+    s = launch(ceiling_s=600, record=store)
+    s.release()
+    assert s.wait() == Ended("released")
+    eventually(lambda: gone(provider, s), timeout_s=60 * scale)
+    assert sdk.read_record(store, s.id).receipt is None  # it ended on its own: no closer, no receipt
+
+
+def test_a_receipt_that_contradicts_itself_is_refused() -> None:
+    receipt = sdk.Receipt("s-0123456789ab", "m-1", Ended("machine_lost"), 1.8e9)
+    raw = json.loads(sdk.receipt_json(receipt))
+    assert raw["supervisor_confirmed"] is False
+    assert sdk.parse_receipt(json.dumps(raw).encode()) == receipt
+    with pytest.raises(ValueError, match="contradicts"):
+        sdk.parse_receipt(json.dumps({**raw, "supervisor_confirmed": True}).encode())
 
 
 def test_a_character_split_across_flushes_is_recorded_whole(launch: Callable, store: Store, scale: float) -> None:
