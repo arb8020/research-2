@@ -43,6 +43,15 @@ def test_a_recorded_session_says_why_it_ended_after_its_machine_is_gone(launch: 
     assert recorded_output(record, job.id, "stderr") == "oops\n"
 
 
+def test_a_job_env_is_recorded_by_name_never_by_value(launch: Callable, store: Store) -> None:
+    with launch(deadline_s=600, record=store) as s:
+        job = s.run("true", env={"API_KEY": "sekrit-value"})
+        job.wait()
+    recorded = b"".join(store.get(key) for key in store.list(f"sessions/{s.id}/"))
+    assert b"API_KEY" in recorded
+    assert b"sekrit-value" not in recorded
+
+
 def test_a_released_session_records_its_end_and_all_its_output(launch: Callable, provider: Provider, store: Store, scale: float) -> None:
     s = launch(deadline_s=600, record=store)
     job = s.run(f"for i in 1 2 3; do echo line $i; sleep {0.5 * scale}; done")

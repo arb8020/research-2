@@ -33,7 +33,7 @@ there every FLUSH_S (sooner past FLUSH_BYTES of new output), so it outlives the 
 
     DIR/session.json            as ROOT/session.json, at start
     DIR/heartbeat.json          every flush: {at, ttl_s}; older than ttl_s, the recorder has stopped
-    DIR/jobs/<id>/spec.json     \\ as under ROOT, copied when they change
+    DIR/jobs/<id>/spec.json     \\ as under ROOT (env: names only), copied when they change
     DIR/jobs/<id>/status.json   /
     DIR/jobs/<id>/<stream>.<n>  closed chunks of new output, n = 1, 2, ... per job across both streams
     DIR/ended.json              as ROOT/ended.json, written (and synced) before ROOT/ended.json
@@ -326,6 +326,13 @@ def run_hook(cmd: str, env: dict[str, str], job_dir: Path, timeout: float) -> in
         return None
 
 
+def recorded_spec(raw: bytes) -> bytes:
+    """A job spec as the record keeps it: env values never leave the machine (they hold secrets,
+    e.g. a service's JUPYTER_TOKEN, and the record outlives it), only their names."""
+    spec = json.loads(raw)
+    return json.dumps({**spec, "env": sorted(spec.get("env", {}))}).encode()
+
+
 class Recorder:
     """Copies the session under root into dest (a store mounted on the machine) every FLUSH_S, on
     its own thread, so the session outlives the machine (layout: module docstring). main owns it:
@@ -382,7 +389,7 @@ class Recorder:
     def flush_job(self, job_dir: Path, *, final: bool) -> None:
         job = job_dir.name
         if (job_dir / "spec.json").exists():
-            self.copy(f"jobs/{job}/spec.json", (job_dir / "spec.json").read_bytes())
+            self.copy(f"jobs/{job}/spec.json", recorded_spec((job_dir / "spec.json").read_bytes()))
         status = (job_dir / "status.json").read_bytes() if (job_dir / "status.json").exists() else None  # before the output
         caught_up = all([self.record_output(job_dir, stream, final=final) for stream in STREAMS])
         if status is not None and caught_up:  # a recorded "done" comes with all of the job's output
