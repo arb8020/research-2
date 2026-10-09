@@ -240,7 +240,7 @@ def test_list_and_get_see_only_runtimes_box_launched(colab: Callable, backend: F
             mine.get(foreign.endpoint)
         with pytest.raises(LookupError, match="no runtime"):
             mine.get("fake-t4-000000")
-        assert sdk.attach(mine, s.id).machine.exec("echo again")[1] == "again\n"
+        assert sdk.attach(mine, session_id=s.id).machine.exec("echo again")[1] == "again\n"
     backend.unassign(foreign.endpoint)
 
 

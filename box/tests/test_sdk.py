@@ -166,7 +166,7 @@ def test_a_vanished_client_ends_nothing_and_its_session_ends_with_its_lease(name
     session_id = proc.stdout.readline().strip()
     proc.kill()  # SIGKILL: no cleanup, no goodbye
     proc.wait()
-    s = sdk.attach(provider, session_id)
+    s = sdk.attach(provider, session_id=session_id)
     assert isinstance(s.status(), Running)  # detached: its caller going away ends nothing
     assert s.wait(timeout_s=30 * scale) == Ended("lease")  # the lease does
     eventually(lambda: gone(provider, s), timeout_s=20 * scale)
@@ -221,7 +221,7 @@ def test_another_process_can_attach_and_read_logs_and_status(launch: Callable, p
     with launch(ceiling_s=600) as s:
         first = s.run("echo hello; echo oops >&2", max_duration_s=JOB_S)
         first.wait()
-        again = sdk.attach(provider, s.id)
+        again = sdk.attach(provider, session_id=s.id)
         assert s.machine.id in {m.id for m in provider.list()}
         logs = [(c.stream, c.text) for c in sdk.Job(again, first.id).logs()]  # a job id is all another process needs
     assert ("stdout", "hello\n") in logs and ("stderr", "oops\n") in logs
@@ -230,10 +230,10 @@ def test_another_process_can_attach_and_read_logs_and_status(launch: Callable, p
 def test_a_session_has_its_own_id_and_attach_finds_it_by_that(launch: Callable, provider: Provider) -> None:
     with launch(ceiling_s=600) as s, launch(ceiling_s=600) as other:
         assert s.id != s.machine.id
-        assert sdk.attach(provider, s.id).machine.id == s.machine.id
-        assert sdk.attach(provider, other.id).machine.id == other.machine.id
+        assert sdk.attach(provider, session_id=s.id).machine.id == s.machine.id
+        assert sdk.attach(provider, session_id=other.id).machine.id == other.machine.id
         with pytest.raises(LookupError):
-            sdk.attach(provider, "s-000000000000")
+            sdk.attach(provider, session_id="s-000000000000")
 
 
 def test_labels_are_the_callers_and_box_stamps_only_its_own(launch: Callable, provider: Provider) -> None:
@@ -281,8 +281,7 @@ def test_a_port_declared_at_launch_is_reachable_through_expose(launch: Callable,
         s.run(f"mkdir -p www && echo hello from the box > www/index.html && exec python3 -m http.server {port} --directory www", max_duration_s=JOB_S)
         endpoint = s.expose(port)
         eventually(lambda: fetch(endpoint) == "hello from the box\n", timeout_s=30 * scale)
-        with pytest.raises(ValueError, match="not declared"):
-            s.expose(port + 1)
+        assert endpoint.headers == {}  # declared: the URL alone reaches it (an undeclared port: test_dev)
 
 
 @pytest.mark.needs("ports")
@@ -321,7 +320,7 @@ def test_a_hook_budget_that_cannot_fit_is_refused(launch: Callable) -> None:
 def test_following_a_session_that_ends_after_its_job_sees_its_last_line_and_exit(launch: Callable, provider: Provider, scale: float) -> None:
     s = launch(ceiling_s=600, idle_timeout_s=1 * scale)  # as `box run --detach`: idle ends it once the job is done
     job = s.run(f"sleep {1 * scale}; echo last; exit 4", max_duration_s=JOB_S)
-    follower = sdk.Job(sdk.attach(provider, s.id), job.id)
+    follower = sdk.Job(sdk.attach(provider, session_id=s.id), job.id)
     assert "".join(c.text for c in follower.logs(follow=True)) == "last\n"
     assert follower.wait() == Ending("exited", 4)  # still readable: the machine lingers while we read
     eventually(lambda: gone(provider, s), timeout_s=60)
@@ -362,7 +361,7 @@ def test_a_caller_can_name_the_session_before_launch_returns(launch: Callable, p
     session_id = sdk.new_session_id()
     with launch(ceiling_s=600, session_id=session_id) as s:
         assert s.id == session_id
-        assert sdk.attach(provider, session_id).machine.id == s.machine.id
+        assert sdk.attach(provider, session_id=session_id).machine.id == s.machine.id
     with pytest.raises(ValueError, match="new_session_id"):
         launch(ceiling_s=600, session_id="mine")
 
@@ -400,7 +399,7 @@ def test_a_session_lists_its_jobs_and_its_services_apart(launch: Callable) -> No
 
 def test_create_returns_before_the_supervisor_is_up_and_launch_is_create_wait_up(name: str, provider: Provider) -> None:
     s = sdk.create(provider, ceiling_s=600, **providers.launch_kw(name))
-    assert sdk.attach(provider, s.id).machine.id == s.machine.id  # it exists, booting or not
+    assert sdk.attach(provider, session_id=s.id).machine.id == s.machine.id  # it exists, booting or not
     s.wait_up(timeout_s=120)
     assert isinstance(s.status(), Running)
     assert s.run("echo up", max_duration_s=JOB_S).wait() == Ending("exited", 0)

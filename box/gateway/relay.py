@@ -655,7 +655,7 @@ class Relay:
 
 def attach(access: Access, sid: str) -> sdk.Session:
     """The session, live or (machine gone) from its record. LookupError (404) if neither knows it."""
-    return sdk.attach(access.provider, sid, record=access.record)
+    return sdk.attach(access.provider, session_id=sid, record=access.record)
 
 
 @dataclass

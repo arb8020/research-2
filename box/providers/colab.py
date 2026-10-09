@@ -34,6 +34,10 @@ What a machine is here:
 Refused (each before anything is rented, with an error that says why):
 - image: Colab runs its own image.
 - ports / expose: Colab's terms forbid web services and proxies; the only ways in are kernels and files.
+- stream(pty=True) and shell_argv: a kernel cell cannot be a terminal. A running cell takes no input
+  but an input_request it makes itself (input()), so there is no stdin to type Ctrl-C into, and a
+  pty made inside the cell would have nothing on this side to drive it; Colab's own terminal is in
+  its UI only, and reaching one from outside would be the remote control its terms restrict.
 - mounts, so record=: Colab has no volumes. A Colab session has no durable record: once its runtime
   is gone, so is everything it wrote (status, logs, ended.json); get results out before it ends.
 - more than one accelerator (`:N`); a GPU Colab does not rent (gpus.py `colab` ids). gpu=None is a CPU runtime.
@@ -68,7 +72,7 @@ from urllib.parse import quote
 
 from box import gpus
 from box.providers.pump import READ_BYTES, Closed, Emit, Pumped
-from box.sdk import BACKSTOP_MARGIN_S, LABEL_BY, Endpoint, Gone
+from box.sdk import BACKSTOP_MARGIN_S, LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken
 from box.store import Mount
 
 T = TypeVar("T")
@@ -281,6 +285,10 @@ class Colab:
         if timeout_s > self.max_runtime_s:
             raise ValueError(self._past_max_runtime(timeout_s))
         accelerator = colab_accelerator(gpu)
+        # Best-effort: Colab runtimes have no names (box's labels are a file on the VM), so two
+        # launches racing can both pass this check; attach(name=) then sees two.
+        if LABEL_NAME in labels and self.list({LABEL_NAME: labels[LABEL_NAME]}):
+            raise NameTaken(f"colab provider: a live runtime is named {labels[LABEL_NAME]!r}")
         self._check_balance()
         machine = self._track(ColabMachine(self, self.backend.assign(accelerator), labels, exec_kernel=None))
         try:
@@ -370,6 +378,7 @@ class ColabMachine:
         self.id = assignment.endpoint
         self.labels = labels
         self.root = colab.root_of(self.id)
+        self.work = self.root.rsplit("/", 1)[0] + "/work"  # beside the root: /content/work by default (synced code)
         self._assignment = assignment
         self._exec_kernel = exec_kernel
         self._runtime: Runtime | None = None
@@ -406,10 +415,13 @@ class ColabMachine:
             raise TimeoutError(f"colab: {self.id}: `{cmd[:80]}` ran past {EXEC_TIMEOUT_S} s (killed)")
         return result["rc"], b64text(result["out"]), b64text(result["err"])
 
-    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None) -> Pumped:
+    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Pumped:
         """cmd in a kernel of its own (STREAM_CELL), its frames read off iopub as the kernel pushes
         them, by one reader thread that owns the stream's connection and kernel and ends both. The
-        kernel is started here, before the stream's clock starts (a Colab kernel takes seconds)."""
+        kernel is started here, before the stream's clock starts (a Colab kernel takes seconds).
+        pty=True is refused: a cell is not a terminal (module docstring)."""
+        if pty:
+            raise ValueError("colab provider: no pty: a kernel cell takes no stdin, so nothing could type into it (Ctrl-C is close())")
         runtime = self._connection()
         try:
             kernel = runtime.start_kernel()
@@ -469,6 +481,9 @@ class ColabMachine:
 
     def expose(self, port: int) -> Endpoint:
         raise ValueError(f"colab provider: cannot expose port {port}: Colab's terms forbid web services and proxies")
+
+    def shell_argv(self, cmd: str) -> list[str]:
+        raise ValueError("colab provider: no shell: Colab's terminal is in its UI only, and a kernel cell is not one (stream runs commands)")
 
     def terminate(self) -> None:
         """Idempotent: an endpoint no longer assigned is already terminated. A stream still open

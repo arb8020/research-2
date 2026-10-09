@@ -37,7 +37,7 @@ def test_a_recorded_session_says_why_it_ended_after_its_machine_is_gone(launch: 
         job = s.run("echo hello; echo oops >&2; exit 3", max_duration_s=JOB_S)
         assert job.wait() == Ending("exited", 3)
     assert gone(provider, s)
-    again = sdk.attach(provider, s.id, record=store)  # a fresh process: it never saw the machine
+    again = sdk.attach(provider, session_id=s.id, record=store)  # a fresh process: it never saw the machine
     assert again.status() == Ended("stopped")
     assert again.wait() == Ended("stopped")
     record = sdk.read_record(store, s.id)
@@ -54,7 +54,7 @@ def test_job_logs_read_on_from_the_record_with_the_same_cursor_once_the_machine_
         job.wait()
         first = next(job.logs())  # a reader that saw some of it live
     assert (first.stream, first.text) == ("stdout", "one\nthree\n")
-    (again,) = sdk.attach(provider, s.id, record=store).jobs()  # the machine is gone: its record answers
+    (again,) = sdk.attach(provider, session_id=s.id, record=store).jobs()  # the machine is gone: its record answers
     assert again.id == job.id
     rest = list(again.logs(after=(len("one\n"), 0), follow=True))
     assert [(c.stream, c.text) for c in rest] == [("stdout", "three\n"), ("stderr", "two\n")]
@@ -75,7 +75,7 @@ def test_a_session_ended_by_its_lease_records_its_end_and_all_its_output(launch:
     s = launch(lease_s=4 * scale, ceiling_s=600, record=store)
     job = s.run(f"for i in 1 2 3; do echo line $i; sleep {0.5 * scale}; done", max_duration_s=JOB_S)
     eventually(lambda: gone(provider, s), timeout_s=60 * scale)  # nobody here reads its ended.json before it goes
-    assert sdk.attach(provider, s.id, record=store).wait(timeout_s=30 * scale) == Ended("lease")
+    assert sdk.attach(provider, session_id=s.id, record=store).wait(timeout_s=30 * scale) == Ended("lease")
     assert recorded_output(sdk.read_record(store, s.id), job.id) == "line 1\nline 2\nline 3\n"
 
 
@@ -104,7 +104,7 @@ def test_a_supervisor_killed_without_a_word_is_machine_lost_with_logs_up_to_the_
     providers.kill_supervisor(s.machine)
     killed_at = time.monotonic()
     # its heartbeat is still fresh: status() waits that out (the end may still be landing), never says Running
-    assert sdk.attach(provider, s.id, record=store).status() == Ended("machine_lost")
+    assert sdk.attach(provider, session_id=s.id, record=store).status() == Ended("machine_lost")
     assert time.monotonic() - killed_at < HEARTBEAT_TTL_S + 5 * scale
     assert s.wait(timeout_s=HEARTBEAT_TTL_S + 30 * scale) == Ended("machine_lost")
     assert time.monotonic() - killed_at < HEARTBEAT_TTL_S + 30 * scale
@@ -113,7 +113,7 @@ def test_a_supervisor_killed_without_a_word_is_machine_lost_with_logs_up_to_the_
     assert record.ended is None
     assert isinstance(record.running, Running)
     assert record.end(now=time.time()) == Ended("machine_lost")
-    assert sdk.attach(provider, s.id, record=store).status() == Ended("machine_lost")
+    assert sdk.attach(provider, session_id=s.id, record=store).status() == Ended("machine_lost")
     assert recorded_output(record, job.id) == "before\n"
     s.close()
 
@@ -127,7 +127,7 @@ def test_the_receipt_is_in_the_record_and_readable_after_the_machine_is_gone(lau
     assert record.receipt == receipt
     assert record.receipt.supervisor_confirmed
     assert record.ended == receipt.ended == Ended("stopped")
-    assert sdk.attach(provider, s.id, record=store).status() == Ended("stopped")  # a fresh process, after the fact
+    assert sdk.attach(provider, session_id=s.id, record=store).status() == Ended("stopped")  # a fresh process, after the fact
 
 
 def test_a_session_nobody_closed_has_no_receipt(launch: Callable, provider: Provider, store: Store, scale: float) -> None:
@@ -175,7 +175,7 @@ def test_a_session_never_recorded_is_not_found(provider: Provider, store: Store)
     with pytest.raises(LookupError):
         sdk.read_record(store, "s-000000000000")
     with pytest.raises(LookupError):
-        sdk.attach(provider, "s-000000000000", record=store)
+        sdk.attach(provider, session_id="s-000000000000", record=store)
     with pytest.raises(ValueError, match="not a session id"):
         sdk.read_record(store, "../etc")
 
