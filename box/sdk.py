@@ -7,6 +7,11 @@
         ending = job.wait()                  # Ending(reason="exited", exit_code=0, ...)
         s.get("/work/runs", "runs")
     # leaving the block ends the session: a running job is killed and its hook still runs
+    s.status()                               # Ended(reason="stopped")
+
+    s = box.attach(provider, session_id)     # from anywhere, by the session's own id
+    match s.status():                        # Booting() | Running(started_at, deadline_at) | Ended(reason)
+        case Running(): s.wait()             # -> Ended: the awaitable terminal state
 
 A provider only rents raw machines (Machine: exec, write, read, terminate). Everything else is
 here, built from those four calls and the supervisor (box/supervisor.py), which every machine
@@ -16,6 +21,7 @@ runs as its entrypoint and which talks to this file only through files under mac
 from __future__ import annotations
 
 import base64
+import contextlib
 import io
 import json
 import secrets
@@ -28,7 +34,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol, get_args
 
 SUPERVISOR = Path(__file__).with_name("supervisor.py")
 LABEL_BY = "box.by"
@@ -65,6 +71,35 @@ class Provider(Protocol):
     ) -> Machine: ...  # fmt: skip
     def get(self, machine_id: str) -> Machine: ...  # LookupError if box did not launch it
     def list(self, labels: dict[str, str] | None = None) -> list[Machine]: ...  # live machines labelled LABEL_BY and all of labels
+
+
+@dataclass(frozen=True)
+class Booting:
+    """The machine exists; its supervisor is not up yet (a session attached to mid-launch)."""
+
+
+@dataclass(frozen=True)
+class Running:
+    """The supervisor is up and the session has not ended. Unix times, by the machine's clock."""
+
+    started_at: float
+    deadline_at: float
+
+
+EndReason = Literal["stopped", "deadline", "idle", "lease_lost", "released", "machine_lost"]
+
+
+@dataclass(frozen=True)
+class Ended:
+    """Why a session ended. All but machine_lost are the supervisor's word (ROOT/ended.json).
+    machine_lost: the machine is gone and this Session never read ended.json, so either it died
+    (supervisor crash, provider loss, backstop timeout) or it ended and was gone before anyone read
+    why (Session.wait() and close() read it before letting go, so they never see this for an end)."""
+
+    reason: EndReason
+
+
+Status = Booting | Running | Ended
 
 
 @dataclass(frozen=True)
@@ -130,7 +165,8 @@ def attach(provider: Provider, session_id: str) -> Session:
 class Session:
     machine: Machine
     _holding: threading.Event | None = field(default=None, repr=False)
-    _session_json: dict | None = field(default=None, repr=False)  # the supervisor's, read once
+    _running: Running | None = field(default=None, repr=False)  # session.json: fixed once written
+    _ended: Ended | None = field(default=None, repr=False)  # terminal: once known, it stays
 
     @property
     def id(self) -> str:
@@ -164,23 +200,52 @@ class Session:
         self._touch("released")
 
     def close(self, timeout_s: float = 900.0) -> None:
-        """End the session: kill any running job, let its hook run, then terminate the machine."""
+        """End the session: kill any running job, let its hook run, then terminate the machine.
+        Waits up to timeout_s for the supervisor to say it ended (status() then has why)."""
         self._stop_holding()
-        try:  # the machine may end as soon as the supervisor exits (Modal: the entrypoint is the sandbox)
-            if self.ended() is None:
-                self.machine.exec(f"touch {self._path('stop')}")
-            give_up = time.monotonic() + timeout_s
-            while time.monotonic() < give_up and not self._exists("ended.json"):
-                time.sleep(POLL_S)
-        except Gone:
-            pass
+        if not isinstance(self.status(), Ended):  # mkdir: a booting supervisor ends at once on stop
+            with contextlib.suppress(Gone):  # it may end as soon as the supervisor exits
+                self.machine.exec(f"mkdir -p {self.machine.root} && touch {self._path('watch')} {self._path('stop')}")
+            with contextlib.suppress(TimeoutError):
+                self.wait(timeout_s)
         self.machine.terminate()
+
+    def status(self) -> Status:
+        """Booting, Running, or Ended (and why), from the supervisor's files. Ended is final: once
+        this Session has seen it, it answers without asking the machine."""
+        if self._ended is None:
+            self._ended = self._read_ended()
+        if self._ended is not None:
+            return self._ended
+        if self._running is None:
+            try:
+                self._running = parse_running(self.machine.read(self._path("session.json")))
+            except FileNotFoundError:
+                return Booting()
+            except Gone:
+                self._ended = Ended("machine_lost")
+                return self._ended
+        return self._running
+
+    def wait(self, timeout_s: float | None = None) -> Ended:
+        """Block until the session ends; returns why. While waiting it keeps the machine lingering
+        (ROOT/watch), so the supervisor's reason is read before the machine goes. Bounded without
+        timeout_s too: by the session's deadline (or its machine's loss). TimeoutError past timeout_s."""
+        give_up = None if timeout_s is None else time.monotonic() + timeout_s
+        while not (self._watch() or isinstance(status := self.status(), Ended)):  # watch first: no gap to end in
+            if give_up is not None and time.monotonic() > give_up:
+                raise TimeoutError(f"{self.id}: still {status} after {timeout_s:.0f} s")
+            time.sleep(POLL_S)
+        return status
 
     def run(self, cmd: str, *, on_exit: str | None = None, hook_budget_s: float = 300.0, env: dict[str, str] | None = None) -> Job:
         """Queue cmd (bash). Jobs run one at a time, in order. on_exit (bash) runs after it ends
         however it ended, with BOX_EXIT_CODE, BOX_REASON, BOX_JOB_DIR set, within hook_budget_s;
         the job is killed hook_budget_s before the session's deadline to leave the hook that time."""
-        left = self._started()["deadline_at"] - time.time()
+        running = self.status()
+        if not isinstance(running, Running):
+            raise RuntimeError(f"{self.id}: cannot run a job on a session that is {running}")
+        left = running.deadline_at - time.time()
         if on_exit and hook_budget_s >= left:
             raise ValueError(f"hook_budget_s={hook_budget_s} does not fit in the session's {left:.0f} s left")
         job = Job(self, f"{int(time.time())}-{secrets.token_hex(3)}")
@@ -215,18 +280,20 @@ class Session:
         out = self._check(f"ls {self._path('jobs')}")
         return [Job(self, name) for name in sorted(out.split()) if not name.endswith(".tmp")]
 
-    def ended(self) -> str | None:
-        """Why the session ended, or None while it lasts."""
+    def _read_ended(self) -> Ended | None:
+        """ended.json's reason; None while the session lasts; machine_lost if the machine is gone.
+        Seam: once the supervisor also records status to durable storage, Gone reads that record."""
         try:
-            return json.loads(self.machine.read(self._path("ended.json")))["reason"]
+            return parse_ended(self.machine.read(self._path("ended.json")))
         except FileNotFoundError:
             return None
+        except Gone:
+            return Ended("machine_lost")
 
-    def _started(self) -> dict:
-        """The supervisor's session.json: {started_at, deadline_at}, fixed for the session's life."""
-        if self._session_json is None:
-            self._session_json = json.loads(self.machine.read(self._path("session.json")))
-        return self._session_json
+    def _watch(self) -> None:
+        """Tell the supervisor someone is reading, so the machine lingers for us after it ends."""
+        with contextlib.suppress(Gone):  # then the next status() says machine_lost
+            self.machine.exec(f"touch {self._path('watch')}")
 
     def _stop_holding(self) -> None:
         if self._holding is not None:
@@ -270,14 +337,10 @@ class Job:
     # TODO(handoff): every poll here and in logs(follow) is 2-3 execs (~100 ms each on Modal, an ssh
     # round trip on RunPod). One exec returning status + both log tails would cut that to one.
     def wait(self) -> Ending:
-        while not (self._watch() or self.done()):
+        while not (self.session._watch() or self.done()):
             time.sleep(POLL_S)
         s = self.status() or {}
         return Ending(s["reason"], s["exit_code"], s.get("hook_exit_code"))
-
-    def _watch(self) -> None:
-        """Tell the supervisor someone is reading, so the machine lingers for us after it ends."""
-        self.session.machine.exec(f"touch {self.session._path('watch')}")
 
     def kill(self) -> None:
         """Kill this job (its whole process group); its hook runs; the session goes on."""
@@ -288,7 +351,7 @@ class Job:
         offsets = {"stdout": 0, "stderr": 0}
         while True:
             if follow:
-                self._watch()
+                self.session._watch()
             finished = self.done()  # read before the logs, so nothing written before "done" is missed
             for stream in offsets:
                 rc, text, _ = self.session.machine.exec(f"tail -c +{offsets[stream] + 1} {self.dir}/{stream} 2>/dev/null")
@@ -318,6 +381,20 @@ def run_job(
         for remote, local in get:
             s.get(remote, local)
     return ending
+
+
+def parse_running(raw: bytes) -> Running:
+    """session.json, as the supervisor wrote it."""
+    d = json.loads(raw)
+    return Running(started_at=float(d["started_at"]), deadline_at=float(d["deadline_at"]))
+
+
+def parse_ended(raw: bytes) -> Ended:
+    """ended.json, as the supervisor wrote it: its reason must be one box knows."""
+    reason = json.loads(raw)["reason"]
+    if reason not in get_args(EndReason) or reason == "machine_lost":
+        raise ValueError(f"ended.json: unknown end reason {reason!r}")
+    return Ended(reason)
 
 
 def ignored(rel: str, ignore: tuple[str, ...]) -> bool:

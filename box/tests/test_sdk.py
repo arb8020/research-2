@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from box import sdk
-from box.sdk import Ending, Provider
+from box.sdk import Ended, Ending, Provider, Running
 from box.tests import providers
 
 
@@ -96,7 +96,7 @@ def test_deadline_kills_the_job_in_time_for_its_hook_then_ends_the_box(launch: C
     s = launch(deadline_s=int(3 * scale))
     job = s.run("sleep 999", on_exit="echo $BOX_REASON > $BOX_JOB_DIR/hook", hook_budget_s=1 * scale)
     assert job.wait() == Ending("deadline", -15, hook_exit_code=0)
-    assert s.ended() == "deadline"  # still readable: the machine lingers while its holder heartbeats
+    assert s.status() == Ended("deadline")  # still readable: the machine lingers while its holder heartbeats
     assert s.machine.read(f"{job.dir}/hook").decode() == "deadline\n"
     s.close()
     assert gone(provider, s)
@@ -173,6 +173,36 @@ def test_labels_are_the_callers_and_box_stamps_only_its_own(launch: Callable, pr
         assert [m.id for m in provider.list({"box.user": "reader-7@relay"})] == [s.machine.id]
     with pytest.raises(ValueError, match="box's own"):
         launch(deadline_s=600, labels={sdk.LABEL_SESSION: "s-mine"})
+
+
+def test_a_session_is_running_until_it_ends_and_then_says_why(launch: Callable) -> None:
+    s = launch(deadline_s=600)
+    running = s.status()
+    assert isinstance(running, Running)
+    assert running.deadline_at - running.started_at == 600
+    s.run("sleep 2")  # wait() starts watching well before the session can end
+    s.release()  # ends itself once no job is left
+    assert s.wait() == Ended("released")
+    assert s.status() == Ended("released")  # final: the machine is gone, the answer is not
+    s.close()
+
+
+def test_a_closed_session_was_stopped(launch: Callable) -> None:
+    with launch(deadline_s=600) as s:
+        s.run("sleep 999")
+    assert s.status() == Ended("stopped")
+
+
+def test_a_machine_gone_without_a_word_is_machine_lost(launch: Callable) -> None:
+    s = launch(deadline_s=600)
+    s.machine.terminate()  # the provider's hard stop: no supervisor gets to write why
+    assert s.wait() == Ended("machine_lost")
+    s.close()
+
+
+def test_waiting_on_a_session_is_bounded(launch: Callable) -> None:
+    with launch(deadline_s=600) as s, pytest.raises(TimeoutError):
+        s.wait(timeout_s=1)
 
 
 def test_run_job_is_launch_put_run_get_close(name: str, provider: Provider, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
