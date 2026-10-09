@@ -376,10 +376,6 @@ arch notes:
 - deferred: local backend (`session.py` vs `connect_dev.py`; they're separate code paths today)
 
 ## open questions
-
-- TODO: KV-aware routing (Dynamo-shaped): a router across engine replicas by prefix-cache overlap + load; engine emits KV events (blocks stored / removed, with hashes) and load metrics; KV offload tiers (LMCache, Mooncake, NIXL). Where it goes in the order, and core vs production chapter
-- TODO: prefill / decode disaggregation: separate prefill and decode workers with KV handoff (vLLM KV connector, SGLang PD, Dynamo disagg, DistServe / Splitwise); what the plan and scheduler must support; when it pays off
-- TODO: model-optimizer-shaped work: quantization (FP8, NVFP4, INT4 AWQ) and calibration (NVIDIA ModelOpt, llm-compressor, torchao), KV-cache quantization, draft-model training for spec decode; how quantized checkpoints, scales and kernels flow in; correctness budgets for low precision
 - chapter 5: split into two if too heavy
 - chapter 1 model: gpt2 only, or move to qwen3-0.6b
 - "after the core": async / overlap, KV quantization, batch invariance, benchmarking
@@ -395,3 +391,9 @@ arch notes:
 - `~/dotfiles/docs/raw/how_to_test_matklad.md`
 - `~/dotfiles/docs/raw/heinrich_multiprocessing.md`
 - `~/work/crucible/crucible/other/inference_curriculum/ROADMAP.md` (2026-08-27)
+
+## TODO (after the roadmap above)
+
+- KV-aware routing (Dynamo-shaped): a router across engine replicas by prefix-cache overlap + load; engine emits KV events (blocks stored / removed, with hashes) and load metrics; KV offload tiers (LMCache, Mooncake, NIXL)
+- prefill / decode disaggregation: separate prefill and decode workers with KV handoff (vLLM KV connector, SGLang PD, Dynamo disagg, DistServe / Splitwise); what the plan and scheduler must support; when it pays off
+- model-optimizer-shaped work: quantization (FP8, NVFP4, INT4 AWQ) and calibration (NVIDIA ModelOpt, llm-compressor, torchao), KV-cache quantization, draft-model training for spec decode; how quantized checkpoints, scales and kernels flow in; correctness budgets for low precision
