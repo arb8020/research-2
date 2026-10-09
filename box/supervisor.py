@@ -21,6 +21,20 @@ idleness, since a provider's own idle timer (Modal's) sees only connections, nev
 Whatever
 ends it, a running job is killed (whole process group) and its on_exit hook still runs, inside
 the time left before the deadline. The job is killed hook_budget_s before the deadline for that.
+
+With --record DIR (a store mounted on the machine, box/store.py), a Recorder copies the session
+there every FLUSH_S (sooner past FLUSH_BYTES of new output), so it outlives the machine:
+
+    DIR/session.json            as ROOT/session.json, at start
+    DIR/heartbeat.json          every flush: {at, ttl_s}; older than ttl_s, the recorder has stopped
+    DIR/jobs/<id>/spec.json     \\ as under ROOT, copied when they change
+    DIR/jobs/<id>/status.json   /
+    DIR/jobs/<id>/<stream>.<n>  closed chunks of new output, n = 1, 2, ... per job across both streams
+    DIR/ended.json              as ROOT/ended.json, written (and synced) before ROOT/ended.json
+
+Every file is whole (tmp + rename) and never changes once a reader could have seen it, except the
+JSON ones, which are replaced whole. --record-sync runs `sync DIR` after each flush (a Modal
+Volume commits on it). A chunk never splits a UTF-8 character unless the output is not UTF-8.
 """
 
 from __future__ import annotations
@@ -32,6 +46,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -41,6 +56,13 @@ LINGER_S = 30.0  # after the session ends, the most a reader still there gets to
 WATCH_TTL_S = 5.0  # a log follower touches ROOT/watch each poll; older than this, nobody is following
 PROC_TCP = ("/proc/net/tcp", "/proc/net/tcp6")
 TCP_ESTABLISHED = "01"  # /proc/net/tcp's st column (include/net/tcp_states.h)
+STREAMS = ("stdout", "stderr")
+FLUSH_S = 2.0  # the record lags the machine by at most this (plus a sync)
+FLUSH_BYTES = 256 * 1024  # new output past this flushes sooner
+CHUNK_BYTES = 4 * 1024 * 1024  # one chunk per stream per flush, at most this: more waits (backpressure, never dropped)
+HEARTBEAT_TTL_S = 5 * FLUSH_S  # a reader takes a heartbeat older than this as "the recorder stopped"
+CHUNK_DIGITS = 6  # flushes come at most every TICK_S, so a 24 h session (Modal's cap) has < 2 * 432000 chunks
+MAX_CHUNKS = 10**CHUNK_DIGITS - 1
 
 
 # TODO(handoff): if the supervisor itself dies, nothing writes ended.json or runs BOX_ON_SHUTDOWN;
@@ -53,6 +75,8 @@ def main() -> None:
     p.add_argument("--lease-ttl-s", type=float, default=60.0, help="lost if not touched for this long")
     p.add_argument("--idle-timeout-s", type=float, default=0.0, help="end after this long with no job and no connection; 0 = never")
     p.add_argument("--ports", type=lambda s: [int(p) for p in s.split(",") if p], default=[], help="exposed ports, comma-separated")
+    p.add_argument("--record", default="", help="record the session into this directory (a mounted store), relative to --root")
+    p.add_argument("--record-sync", action="store_true", help="run `sync <record dir>` after each flush (Modal Volumes)")
     p.add_argument(
         "--on-shutdown", default=os.environ.get("BOX_ON_SHUTDOWN", ""),
         help="bash run last, to end the machine itself (a provider sets BOX_ON_SHUTDOWN, e.g. its API's delete)",
@@ -62,9 +86,15 @@ def main() -> None:
     (root / "jobs").mkdir(parents=True, exist_ok=True)
     started_at = time.time()
     write_json(root / "session.json", {"started_at": started_at, "deadline_at": started_at + a.deadline_s})
+    recorder = Recorder(root, root / a.record, sync=a.record_sync) if a.record else None
+    if recorder:
+        recorder.start()  # the record has session.json before anyone is told the supervisor is up
     (root / "lease").touch()  # last: a client takes the lease as "the supervisor is up"
     reason = supervise(root, time.monotonic() + a.deadline_s, a.lease_ttl_s, a.idle_timeout_s, a.ports)
-    write_json(root / "ended.json", {"reason": reason, "at": time.time()})
+    ended = {"reason": reason, "at": time.time()}
+    if recorder:
+        recorder.finish(ended)  # first: a closer terminates the machine once it reads ROOT/ended.json
+    write_json(root / "ended.json", ended)
     linger(root, reason, a.lease_ttl_s)
     if a.on_shutdown:
         subprocess.run(["bash", "-c", a.on_shutdown], check=False)
@@ -233,6 +263,126 @@ def run_hook(cmd: str, env: dict[str, str], job_dir: Path, timeout: float) -> in
         os.killpg(hook.pid, signal.SIGKILL)
         hook.wait()
         return None
+
+
+class Recorder:
+    """Copies the session under root into dest (a store mounted on the machine) every FLUSH_S, on
+    its own thread, so the session outlives the machine (layout: module docstring). main owns it:
+    start() before the lease, finish() before ROOT/ended.json. A recording that fails (the store
+    unreachable, disk full) is reported on stderr and stops; the session goes on (fail-open: the
+    job is the point), and readers see the heartbeat go stale."""
+
+    def __init__(self, root: Path, dest: Path, *, sync: bool) -> None:
+        self.root = root
+        self.dest = dest
+        self.sync = sync
+        self.offsets: dict[tuple[str, str], int] = {}  # (job, stream) -> bytes of it recorded
+        self.chunks: dict[str, int] = {}  # job -> chunks written (numbered from 1)
+        self.copied: dict[str, bytes] = {}  # rel path -> what was last copied there
+        self.stop = threading.Event()
+        self.thread = threading.Thread(target=self.run, daemon=True, name="box-recorder")
+
+    def start(self) -> None:
+        self.dest.mkdir(parents=True, exist_ok=True)
+        self.flush(final=False)  # session.json + a first heartbeat, synced
+        self.thread.start()
+
+    def finish(self, ended: dict) -> None:
+        self.stop.set()
+        self.thread.join()
+        try:
+            self.flush(final=True)
+            put(self.dest / "ended.json", json.dumps(ended).encode())
+            self.commit()
+        except Exception as e:  # noqa: BLE001 (fail-open, see class docstring)
+            print(f"box supervisor: recording into {self.dest} failed at the end: {e!r}", file=sys.stderr, flush=True)
+
+    def run(self) -> None:
+        last = time.monotonic()
+        while not self.stop.wait(TICK_S):
+            if time.monotonic() - last < FLUSH_S and self.pending() < FLUSH_BYTES:
+                continue
+            try:
+                self.flush(final=False)
+            except Exception as e:  # noqa: BLE001 (fail-open, see class docstring)
+                print(f"box supervisor: recording into {self.dest} stopped: {e!r}", file=sys.stderr, flush=True)
+                return
+            last = time.monotonic()
+
+    def flush(self, *, final: bool) -> None:
+        """Everything new since the last flush, then the heartbeat, then a sync. final: drain all
+        output (the session has ended, nothing is written any more)."""
+        self.copy("session.json", (self.root / "session.json").read_bytes())
+        for job_dir in sorted(d for d in (self.root / "jobs").iterdir() if d.is_dir()):
+            self.flush_job(job_dir, final=final)
+        put(self.dest / "heartbeat.json", json.dumps({"at": time.time(), "ttl_s": HEARTBEAT_TTL_S}).encode())
+        self.commit()
+
+    def flush_job(self, job_dir: Path, *, final: bool) -> None:
+        job = job_dir.name
+        if (job_dir / "spec.json").exists():
+            self.copy(f"jobs/{job}/spec.json", (job_dir / "spec.json").read_bytes())
+        status = (job_dir / "status.json").read_bytes() if (job_dir / "status.json").exists() else None  # before the output
+        caught_up = all([self.record_output(job_dir, stream, final=final) for stream in STREAMS])
+        if status is not None and caught_up:  # a recorded "done" comes with all of the job's output
+            self.copy(f"jobs/{job}/status.json", status)
+
+    def record_output(self, job_dir: Path, stream: str, *, final: bool) -> bool:
+        """New bytes of job_dir/stream as closed chunks: one per flush (backpressure), all of them
+        if final. Returns whether the record has all of it now."""
+        job, src = job_dir.name, job_dir / stream
+        if not src.exists():
+            return True
+        while True:
+            offset = self.offsets.get((job, stream), 0)
+            with src.open("rb") as f:
+                f.seek(offset)
+                data = f.read(CHUNK_BYTES)
+            at_end = final and len(data) < CHUNK_BYTES
+            cut = len(data) if at_end else utf8_cut(data)
+            if cut == 0:
+                return not data
+            n = self.chunks.get(job, 0) + 1
+            if n > MAX_CHUNKS:
+                raise RuntimeError(f"{job}: more than {MAX_CHUNKS} chunks of output")
+            put(self.dest / "jobs" / job / f"{stream}.{n:0{CHUNK_DIGITS}d}", data[:cut])
+            self.chunks[job] = n
+            self.offsets[(job, stream)] = offset + cut
+            if not final:
+                return src.stat().st_size == offset + cut
+
+    def pending(self) -> int:
+        """Bytes of output not recorded yet."""
+        sizes = {(d.name, s): (d / s).stat().st_size for d in (self.root / "jobs").iterdir() for s in STREAMS if (d / s).exists()}
+        return sum(size - self.offsets.get(key, 0) for key, size in sizes.items())
+
+    def copy(self, rel: str, data: bytes) -> None:
+        if self.copied.get(rel) != data:
+            put(self.dest / rel, data)
+            self.copied[rel] = data
+
+    def commit(self) -> None:
+        if self.sync:
+            subprocess.run(["sync", str(self.dest)], check=True, capture_output=True)
+
+
+def utf8_cut(data: bytes) -> int:
+    """The longest prefix of data that does not end inside a UTF-8 character. Output that is not
+    UTF-8 is cut anywhere (len(data)): holding back is only for a character split by a flush."""
+    for back in range(1, min(4, len(data)) + 1):
+        byte = data[-back]
+        if byte & 0xC0 != 0x80:  # not a continuation byte: ASCII or the lead of a character
+            need = 1 if byte < 0x80 else 2 if byte >> 5 == 0b110 else 3 if byte >> 4 == 0b1110 else 4 if byte >> 3 == 0b11110 else 1
+            return len(data) if back >= need else len(data) - back
+    return len(data)
+
+
+def put(path: Path, data: bytes) -> None:
+    """Whole: readers never see half a file (tmp + rename)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(path)
 
 
 def write_json(path: Path, data: dict) -> None:
