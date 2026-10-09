@@ -170,7 +170,7 @@ class Colab:
         self.log = log
         self.closed = False
         # a kernel websocket runs a non-daemon thread (jupyter_kernel_client) that holds the process open at exit
-        self._machines: dict[int, ColabMachine] = {}  # MUST KILL: keyed by id() because ColabMachine.__eq__/__hash__ compare runtime ids; hold machines in a list, or drop the custom equality
+        self._machines: dict[str, ColabMachine] = {}
 
     @classmethod
     def from_env(cls) -> Colab:
@@ -252,11 +252,11 @@ class Colab:
 
     def _track(self, machine: ColabMachine) -> ColabMachine:
         assert not self.closed, "colab provider: closed"
-        self._machines[id(machine)] = machine
-        return machine
+        return self._machines.setdefault(machine.id, machine)
 
     def _untrack(self, machine: ColabMachine) -> None:
-        self._machines.pop(id(machine), None)
+        if self._machines.get(machine.id) is machine:
+            del self._machines[machine.id]
 
     def _past_max_runtime(self, timeout_s: int) -> str:
         ceiling_h = (timeout_s - BACKSTOP_MARGIN_S) / 3600
