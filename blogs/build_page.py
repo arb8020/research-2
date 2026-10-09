@@ -1,5 +1,8 @@
 """Build a chapter's reader page: rl/01-flappy.md -> dist/01-flappy/index.html (+ page.js, page.css, play widget).
 
+page.js and settings.js are esbuild bundles of web/page.ts and web/settings.ts (`npm run build` in web/;
+run `npm ci` there once).
+
     uv run build_page.py rl/01-flappy.md [--session-url http://localhost:8787]
     python3 -m http.server 8010 -d dist        # then open http://localhost:8010/01-flappy/
 
@@ -16,6 +19,7 @@ import argparse
 import html
 import re
 import shutil
+import subprocess
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
@@ -83,8 +87,9 @@ def main() -> None:
     for key, value in {"TITLE": html.escape(title[1] if title else out.name), "SESSION": args.session_url, "BODY": body}.items():
         page = page.replace("{{" + key + "}}", value)
     (out / "index.html").write_text(page)
-    for f in ("page.js", "page.css", "typeset.css", "settings.js", "play.html"):
-        shutil.copy(HERE / "web" / f, out / f)
+    subprocess.run(["npm", "run", "--silent", "build"], cwd=HERE / "web", check=True)
+    for f in ("build/page.js", "build/settings.js", "page.css", "typeset.css", "play.html"):
+        shutil.copy(HERE / "web" / f, out / Path(f).name)
 
     build_web.ensure_raylib()
     with tempfile.TemporaryDirectory() as tmp:
