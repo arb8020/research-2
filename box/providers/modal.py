@@ -23,7 +23,7 @@ from box import gpus
 from box.providers.pump import MAX_SEND_BYTES, Closed, Emit, Pumped, kill_pid_file, with_pid_file
 from box.sdk import (
     LABEL_BY, LABEL_NAME, Dockerfile, Dropped, Endpoint, Gone, NameTaken, Refused, RegistryImage, SnapshotImage,
-    declared_ports, parse_image, snapshot_ref,
+    Shell, declared_ports, parse_image, snapshot_ref,
 )  # fmt: skip
 from box.store import Mount
 
@@ -424,8 +424,9 @@ class ModalMachine:
 
         return Pumped([read], kill=kill, wait=wait, timeout_s=timeout_s, quiet_s=quiet_s, label=self.id, send=write if pty else None)
 
-    def shell_argv(self, cmd: str) -> list[str]:  # MUST KILL: runs `modal shell` on the CLI's ambient credentials, not this provider's token (maybe another workspace); pass the token in the child's env
-        return [sys.executable, "-m", "modal", "shell", self.id, "--cmd", shlex.join(["bash", "-c", cmd])]
+    def shell(self, cmd: str) -> Shell:
+        argv = [sys.executable, "-m", "modal", "shell", self.id, "--cmd", shlex.join(["bash", "-c", cmd])]
+        return Shell(argv, env={"MODAL_TOKEN_ID": self.provider.token.id, "MODAL_TOKEN_SECRET": self.provider.token.secret})
 
     def write(self, path: str, data: bytes) -> None:
         self._live(lambda: self.sandbox.filesystem.write_bytes.aio(data, path), transfer_s=transfer_timeout_s(len(data)))

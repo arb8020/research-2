@@ -106,7 +106,7 @@ def test_a_pty_and_a_shell_are_refused_and_a_plain_stream_still_works(colab: Cal
         with pytest.raises(ValueError, match="no pty: a kernel cell takes no stdin"):
             s.stream("bash", pty=True)
         with pytest.raises(ValueError, match="no shell"):
-            s.shell_argv()
+            s.shell()
         with s.stream("echo plain", timeout_s=60) as stream:
             assert b"".join(data for _, data in stream) == b"plain\n"
 

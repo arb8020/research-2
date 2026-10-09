@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 from box import gpus
 from box.providers.pump import READ_BYTES, Closed, Emit, Pumped
-from box.sdk import BACKSTOP_MARGIN_S, LABEL_BY, LABEL_NAME, Dropped, Endpoint, Gone, NameTaken, Refused
+from box.sdk import BACKSTOP_MARGIN_S, LABEL_BY, LABEL_NAME, Dropped, Endpoint, Gone, NameTaken, Refused, Shell
 from box.store import Mount
 
 T = TypeVar("T")
@@ -391,7 +391,7 @@ class ColabMachine:
     def expose(self, port: int) -> Endpoint:
         raise Refused(f"colab provider: cannot expose port {port}: Colab's terms forbid web services and proxies")
 
-    def shell_argv(self, cmd: str) -> list[str]:
+    def shell(self, cmd: str) -> Shell:
         raise Refused("colab provider: no shell: Colab's terminal is in its UI only, and a kernel cell is not one (stream runs commands)")
 
     def terminate(self) -> None:

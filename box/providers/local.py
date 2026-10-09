@@ -13,7 +13,7 @@ import termios
 from pathlib import Path
 
 from box.providers.pump import JOIN_S, Pty, Pumped, pipe_readers
-from box.sdk import LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken, Refused, SnapshotImage, parse_image, snapshot_ref
+from box.sdk import LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken, Refused, Shell, SnapshotImage, parse_image, snapshot_ref
 from box.store import DirStore, Mount
 
 BASE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local"
@@ -146,9 +146,9 @@ class LocalMachine:
             readers, kill=kill, wait=wait, timeout_s=timeout_s, quiet_s=quiet_s, check=self._check_alive, label=self.id, send=send,
         )  # fmt: skip
 
-    def shell_argv(self, cmd: str) -> list[str]:
+    def shell(self, cmd: str) -> Shell:
         self._check_alive()
-        return ["bash", "-c", f"cd {shlex.quote(str(self.dir))} || exit 1; {cmd}"]
+        return Shell(["bash", "-c", f"cd {shlex.quote(str(self.dir))} || exit 1; {cmd}"])
 
     def write(self, path: str, data: bytes) -> None:
         self._check_alive()
