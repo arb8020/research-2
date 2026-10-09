@@ -520,7 +520,7 @@ def test_ceilings_past_48_hours_and_leases_past_the_ceiling_are_refused(provider
     now = time.time()  # the supervisor asserts the same of the absolute times it is given (the pair)
     for lease_until, ceiling in ((now + 60, now + MAX_CEILING_S + 1), (now + 120, now + 60)):
         argv = ["--root", str(tmp_path / "root"), "--created-at", repr(now), "--lease-until", repr(lease_until),
-                "--ceiling", repr(ceiling), "--host", "h", "--pid", "1"]  # fmt: skip
+                "--ceiling", repr(ceiling), "--host", "h", "--pid", "1", "--session-id", "s-000000000000"]  # fmt: skip
         done = subprocess.run([sys.executable, str(sdk.SUPERVISOR), *argv], capture_output=True, text=True, timeout=30)
         assert done.returncode != 0
         assert "AssertionError" in done.stderr
