@@ -7,7 +7,7 @@ Everything goes through files under ROOT (no sockets), so a client only needs th
     ROOT/lease                  client touches it to hold the session (mtime = last heartbeat)
     ROOT/released               client wrote it: stop checking the lease; end when no job is left
     ROOT/stop                   client wrote it: kill any job, run its hook, end
-    ROOT/jobs/<id>/spec.json    client writes it (atomically) to start a job: {cmd, on_exit, hook_budget_s, env}
+    ROOT/jobs/<id>/spec.json    client writes it (atomically) to start a job: {cmd, on_exit, hook_budget_s, env, service}
     ROOT/jobs/<id>/stdout       \\ the job's output
     ROOT/jobs/<id>/stderr       /
     ROOT/jobs/<id>/status.json  supervisor writes it: {state, reason, exit_code, hook_exit_code, started, ended}
@@ -15,12 +15,18 @@ Everything goes through files under ROOT (no sockets), so a client only needs th
     ROOT/ended.json             supervisor writes it last: {reason}; then it lingers up to LINGER_S
                                 while someone is still reading (see linger)
 
-A session ends on: stop, deadline, lease lost, idle timeout, or (released) no job left. Idle means
-no job running and no established TCP connection to an exposed port (--ports): the supervisor owns
-idleness, since a provider's own idle timer (Modal's) sees only connections, never work in the box.
-Whatever
-ends it, a running job is killed (whole process group) and its on_exit hook still runs, inside
-the time left before the deadline. The job is killed hook_budget_s before the deadline for that.
+A session ends on: stop, deadline, lease lost, idle timeout, or (released) no job or service left.
+Idle means no job running and no established TCP connection to an exposed port (--ports): the
+supervisor owns idleness, since a provider's own idle timer (Modal's) sees only connections, never
+work in the box. Whatever ends it, a running job is killed (whole process group) and its on_exit
+hook still runs, inside the time left before the deadline. The job is killed hook_budget_s before
+the deadline for that.
+
+A service (spec "service": true) is a long-lived server, e.g. a Jupyter Server behind an exposed
+port. It starts at once, beside the job queue (never waits for a job, never holds one up), and it
+is not work for idleness: its connections are what count. It keeps a released session alive (it
+is something left), has no hook, and is killed (whole group) when the session ends; its
+status.json says why, as a job's does.
 
 With --record DIR (a store mounted on the machine, box/store.py), a Recorder copies the session
 there every FLUSH_S (sooner past FLUSH_BYTES of new output), so it outlives the machine:
@@ -48,6 +54,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 TICK_S = 0.2
@@ -63,6 +70,7 @@ CHUNK_BYTES = 4 * 1024 * 1024  # one chunk per stream per flush, at most this: m
 HEARTBEAT_TTL_S = 5 * FLUSH_S  # a reader takes a heartbeat older than this as "the recorder stopped"
 CHUNK_DIGITS = 6  # flushes come at most every TICK_S, so a 24 h session (Modal's cap) has < 2 * 432000 chunks
 MAX_CHUNKS = 10**CHUNK_DIGITS - 1
+MAX_SERVICES = 8  # a session's long-lived servers; more is a client bug, not a workload
 
 
 # TODO(handoff): if the supervisor itself dies, nothing writes ended.json or runs BOX_ON_SHUTDOWN;
@@ -119,26 +127,76 @@ def linger(root: Path, reason: str, lease_ttl_s: float) -> None:
 
 
 def supervise(root: Path, deadline: float, lease_ttl_s: float, idle_timeout_s: float, ports: list[int]) -> str:
-    """Run jobs one at a time until the session ends; returns why it ended."""
+    """Run jobs one at a time (services beside them) until the session ends; returns why it ended."""
     done: set[str] = set()
+    services: dict[Path, subprocess.Popen] = {}  # every service started, running or not
+    plain: set[Path] = set()  # job dirs known not to be services (a spec never changes once written)
+    end = None
     idle_since = time.monotonic()
-    while True:
+    while end is None:
+        tend_services(root, services, plain)
         now = time.monotonic()
         if idle_timeout_s and ports and connected(ports):
             idle_since = now  # someone is using an exposed port: not idle
         if (end := session_end(root, now, deadline, lease_ttl_s, idle_timeout_s, idle_since)) is not None:
-            return end
+            break
         job_dir = next_job(root, done)
         if job_dir is None:
-            if (root / "released").exists():
-                return "released"
+            if (root / "released").exists() and all(child.poll() is not None for child in services.values()):
+                end = "released"
+                break
             time.sleep(TICK_S)
             continue
         done.add(job_dir.name)
-        end = run_job(root, job_dir, deadline, lease_ttl_s)
-        if end is not None:
-            return end
+        end = run_job(root, job_dir, deadline, lease_ttl_s, lambda: tend_services(root, services, plain))
         idle_since = time.monotonic()
+    stop_services(services, end)
+    return end
+
+
+def tend_services(root: Path, services: dict[Path, subprocess.Popen], plain: set[Path]) -> None:
+    """Start every service spec not started yet; kill those asked to (ROOT/jobs/<id>/kill); record
+    the end of each that exited by itself."""
+    for job_dir in sorted((root / "jobs").iterdir()):
+        if job_dir in services or job_dir in plain or not (job_dir / "spec.json").exists():
+            continue
+        if not is_service(job_dir):
+            plain.add(job_dir)
+            continue
+        assert len(services) < MAX_SERVICES, f"more than {MAX_SERVICES} services in one session"
+        spec = json.loads((job_dir / "spec.json").read_text())
+        env = {**spec.get("env", {}), "BOX_JOB_ID": job_dir.name, "BOX_JOB_DIR": str(job_dir)}
+        services[job_dir] = child = spawn(spec["cmd"], env, job_dir, stdout=job_dir / "stdout", stderr=job_dir / "stderr")
+        write_json(job_dir / "status.json", {"state": "running", "service": True, "started": time.time(), "pgid": child.pid})
+    for job_dir, child in services.items():
+        if child.poll() is None and (job_dir / "kill").exists():
+            kill_group(child)
+            end_service(job_dir, "killed", child.returncode)
+        elif child.poll() is not None and service_state(job_dir) == "running":
+            end_service(job_dir, "exited", child.returncode)
+
+
+def stop_services(services: dict[Path, subprocess.Popen], reason: str) -> None:
+    """The session ended: kill every running service's group; its status says the session's reason."""
+    for job_dir, child in services.items():
+        if child.poll() is None:
+            kill_group(child)
+            end_service(job_dir, reason, child.returncode)
+        elif service_state(job_dir) == "running":
+            end_service(job_dir, "exited", child.returncode)
+
+
+def end_service(job_dir: Path, reason: str, code: int | None) -> None:
+    status = json.loads((job_dir / "status.json").read_text())
+    write_json(job_dir / "status.json", {**status, "state": "done", "reason": reason, "exit_code": code, "ended": time.time()})
+
+
+def service_state(job_dir: Path) -> str:
+    return json.loads((job_dir / "status.json").read_text())["state"]
+
+
+def is_service(job_dir: Path) -> bool:
+    return json.loads((job_dir / "spec.json").read_text()).get("service") is True
 
 
 def session_end(root: Path, now: float, deadline: float, lease_ttl_s: float, idle_timeout_s: float, idle_since: float) -> str | None:
@@ -178,14 +236,14 @@ def established_local_ports() -> list[int]:
 
 
 def next_job(root: Path, done: set[str]) -> Path | None:
-    """The oldest job with a spec that has not run yet."""
-    pending = [d for d in (root / "jobs").iterdir() if d.name not in done and (d / "spec.json").exists()]
+    """The oldest job (not a service) with a spec that has not run yet."""
+    pending = [d for d in (root / "jobs").iterdir() if d.name not in done and (d / "spec.json").exists() and not is_service(d)]
     return min(pending, key=lambda d: (d / "spec.json").stat().st_mtime, default=None)
 
 
-def run_job(root: Path, job_dir: Path, deadline: float, lease_ttl_s: float) -> str | None:
-    """Run one job and its hook. Returns the session's end reason if the session ended meanwhile,
-    else None (the job finished on its own, and the session goes on)."""
+def run_job(root: Path, job_dir: Path, deadline: float, lease_ttl_s: float, tick: Callable[[], None]) -> str | None:
+    """Run one job and its hook, calling tick (services) while it runs. Returns the session's end
+    reason if the session ended meanwhile, else None (the job finished on its own; the session goes on)."""
     spec = json.loads((job_dir / "spec.json").read_text())
     spec["env"] = {**spec.get("env", {}), "BOX_JOB_ID": job_dir.name, "BOX_JOB_DIR": str(job_dir)}
     budget = float(spec.get("hook_budget_s", 300)) if spec.get("on_exit") else 0.0  # time kept for the hook
@@ -210,6 +268,7 @@ def run_job(root: Path, job_dir: Path, deadline: float, lease_ttl_s: float) -> s
             kill_group(child)
             code = child.returncode
             break
+        tick()
         time.sleep(TICK_S)
     else:
         reason = "exited"
