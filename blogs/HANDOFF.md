@@ -34,7 +34,7 @@ uv run build_web.py rl/01-flappy.md --diff          # wasm play widget + native~
 uv run build_page.py rl/01-flappy.md                # dist/01-flappy/index.html
 uv run session.py rl/01-flappy.md --timeout 20      # local session stand-in, :8787
 ./dev.sh                                            # build + session :8787 + page :8010 in tmux "blogs"
-rm -rf .session && uv run --with playwright verify_page.py   # headless proof, screenshots/page-builder/
+rm -rf .session && uv run --with playwright verify_page.py   # headless proof, screenshots in .evidence/verify_page/ (gitignored)
 uv run --with playwright a11y.py                    # axe accessibility lint, light + dark (page must be served)
 (cd web && npm ci)                                  # once: esbuild/tsc/eslint + codemirror (build_page.py bundles web/*.ts)
 (cd web && npm run lint)                            # tsc + eslint + ruff; blogs/pre-commit runs it (install line inside)
