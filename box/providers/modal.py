@@ -35,11 +35,14 @@ DEFAULT_PYTHON = "3.13"
 T = TypeVar("T")
 ENDING_S = 10.0
 BOOT_TIMEOUT_S = 900.0
-CALL_TIMEOUT_S = 60.0  # MUST KILL: one 60 s bound for every call after boot, write/read of a put/get tarball of any size included; size the bound by payload
+CALL_TIMEOUT_S = 60.0
+MIN_TRANSFER_BYTES_PER_S = 1 << 20
+MAX_TRANSFER_BYTES = 2 << 30
 CREATE_TIMEOUT_S = 3600.0
 POLL_S = 0.5
 MODAL_TOML = Path.home() / ".modal.toml"
 SNAPSHOT_TIMEOUT_S = 900.0
+assert CALL_TIMEOUT_S + MAX_TRANSFER_BYTES / MIN_TRANSFER_BYTES_PER_S < CREATE_TIMEOUT_S
 STREAM_DROPS = (modal.exception.ConnectionError, grpclib.exceptions.StreamTerminatedError, OSError)
 
 
@@ -425,11 +428,12 @@ class ModalMachine:
         return [sys.executable, "-m", "modal", "shell", self.id, "--cmd", shlex.join(["bash", "-c", cmd])]
 
     def write(self, path: str, data: bytes) -> None:
-        self._live(lambda: self.sandbox.filesystem.write_bytes.aio(data, path))
+        self._live(lambda: self.sandbox.filesystem.write_bytes.aio(data, path), transfer_s=transfer_timeout_s(len(data)))
 
     def read(self, path: str) -> bytes:
         try:
-            return self._live(lambda: self.sandbox.filesystem.read_bytes.aio(path))
+            size = self._live(lambda: self.sandbox.filesystem.stat.aio(path)).size
+            return self._live(lambda: self.sandbox.filesystem.read_bytes.aio(path), transfer_s=transfer_timeout_s(size))
         except modal.exception.SandboxFilesystemNotFoundError as e:
             raise FileNotFoundError(path) from e
 
@@ -450,8 +454,9 @@ class ModalMachine:
         creds = self._live(lambda: self.sandbox.create_connect_token.aio(port=port))
         return Endpoint(creds.url.rstrip("/"), {"Authorization": f"Bearer {creds.token}"})
 
-    def _live(self, call: Callable[[], Awaitable[T]]) -> T:
-        timeout_s = BOOT_TIMEOUT_S if self._booting else CALL_TIMEOUT_S
+    def _live(self, call: Callable[[], Awaitable[T]], *, transfer_s: float | None = None) -> T:
+        bound_s = CALL_TIMEOUT_S if transfer_s is None else transfer_s
+        timeout_s = max(BOOT_TIMEOUT_S, bound_s) if self._booting else bound_s
         try:
             result = self.provider._call(call, timeout_s=timeout_s)
         except Hung:
@@ -487,6 +492,13 @@ class ModalMachine:
 
     def __hash__(self) -> int:
         return hash(self.id)
+
+
+def transfer_timeout_s(n_bytes: int) -> float:
+    assert n_bytes >= 0, n_bytes
+    if n_bytes > MAX_TRANSFER_BYTES:
+        raise Refused(f"modal provider: {n_bytes} bytes in one file transfer; at most {MAX_TRANSFER_BYTES}")
+    return CALL_TIMEOUT_S + n_bytes / MIN_TRANSFER_BYTES_PER_S
 
 
 def modal_gpu(gpu: str | None) -> str | None:
