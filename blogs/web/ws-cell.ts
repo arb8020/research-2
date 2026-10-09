@@ -19,7 +19,8 @@ import { CheckOutput } from "./check-output";
 import { WorkspaceFile } from "./workspace-file";
 import { bootWorkspace, checkCell, onWorkspace, refreshStatus, stopCheck, workspaceStatus } from "./workspace";
 
-const MAX_LINES = 30; // a bounded cell is at most this many lines tall (its region + a line of context each side)
+const MAX_LINES = 40; // a bounded cell is at most this many lines tall (its region + a line of context each side)
+const MIN_LINES = 20; // ...and at least this many: a stub region is a few lines, and the reader needs room to write
 const UNREGIONED_LINES = 18; // a region cell whose markers are missing (at load) shows this much of the top of the file
 
 interface Span { first: number; last: number } // 1-based lines, markers included
@@ -162,7 +163,7 @@ class WorkspaceCell extends HTMLElement {
           const last = span === undefined ? Math.min(UNREGIONED_LINES, doc.lines) : Math.min(span.last + 1, doc.lines);
           const top = v.lineBlockAt(doc.line(first).from).top;
           const bottom = v.lineBlockAt(doc.line(last).from).bottom;
-          return { top: span === undefined ? 0 : top, height: Math.min(bottom - top, MAX_LINES * v.defaultLineHeight) };
+          return { top: span === undefined ? 0 : top, height: Math.min(Math.max(bottom - top, MIN_LINES * v.defaultLineHeight), MAX_LINES * v.defaultLineHeight) };
         },
         write: ({ top, height }) => {
           editor.style.setProperty("--cell-h", `${String(Math.ceil(height + 10))}px`); // + the content's padding
