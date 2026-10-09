@@ -20,6 +20,7 @@ import pytest
 from box.gateway import kernel_client, relay
 from box.gateway.push import Push
 from box.local_provider import Local
+from box.store import DirStore
 from box.tests.test_relay import AUTH, call, create, free_port, status
 
 SECRET = bytes(range(32))
@@ -81,7 +82,7 @@ def pushing_relay(tmp_path: Path) -> Iterator[Callable[..., tuple[str, Fanout]]]
         fan = Fanout()
         push = Push(fan.url, SECRET).start()
         cfg = relay.Config(
-            provider=lambda token: Local(tmp_path / "machines"), image=None, gpus=(None,), labels={"box.purpose": "relay-test"},
+            access=lambda token: relay.Access(Local(tmp_path / "machines"), DirStore(tmp_path / "records")), image=None, gpus=(None,), labels={"box.purpose": "relay-test"},
             origins=re.compile(relay.LOCAL_ORIGIN), python=sys.executable, ip="127.0.0.1", port=free_port,
             idle_timeout_s=idle_timeout_s, push=push,
         )  # fmt: skip

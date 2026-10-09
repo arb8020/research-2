@@ -6,7 +6,7 @@ a directory + processes here), for iterating on box/gateway-do under `wrangler d
     # A = http://localhost:8790   B = http://localhost:8797/b   C = http://localhost:8797/c
     uv run --extra dev python -m box.gateway.scenarios --provider local --a ... --b ... --c ...
 
-Same relay code as on Modal (relay.serve), with Config(provider=Local) as box/tests/test_relay.py builds it.
+Same relay code as on Modal (relay.serve), with Config(access=Local + a DirStore) as box/tests/test_relay.py builds it.
 """
 
 from __future__ import annotations
@@ -22,13 +22,15 @@ from pathlib import Path
 from box.gateway import relay
 from box.gateway.push import Push, parse_secret
 from box.local_provider import Local
+from box.store import DirStore
 
 MACHINES = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local-stack"
+RECORDS = MACHINES.with_name("local-stack-records")
 
 
 def config(push: Push | None, deadline_s: int, idle_timeout_s: float) -> relay.Config:
     return relay.Config(
-        provider=lambda token: Local(MACHINES), image=None, gpus=(None,), labels={"box.purpose": "reader-path-dev"},
+        access=lambda token: relay.Access(Local(MACHINES), DirStore(RECORDS)), image=None, gpus=(None,), labels={"box.purpose": "reader-path-dev"},
         origins=re.compile(relay.LOCAL_ORIGIN), python=sys.executable, ip="127.0.0.1", port=free_port,
         deadline_s=deadline_s, idle_timeout_s=idle_timeout_s, push=push,
     )  # fmt: skip
