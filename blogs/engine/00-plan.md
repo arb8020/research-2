@@ -170,6 +170,8 @@ check:
 arch notes:
 - worker-side only; kernel builds use torch's C++20, separate from the engine build
 - later chapters (SWA, MoE, spec decode) plug their kernels in here
+- the kernel build step lives here, as cached derivations (the same store as the check runner's run / grade): compile, autotune, verify, record. Keys are recipe-style: kernel code fingerprint (comments ignored) + shape + dtype + GPU arch + toolchain + versions. Autotune results are cached outputs, so a tuned config is never re-tuned; only configs that pass the correctness checks are eligible, and the chosen config is pinned from the records at deploy (popcorn-style dispatch from records). Compile caches (Triton, inductor, FlashInfer, DeepGEMM, extension .so) keyed the same way (fixes kelpie's "GPU arch recorded for provenance, not the cache key")
+- zero JIT at runtime: chapter 12's certification sweep triggers every specialization / config / capture once; after warmup, any compile (Triton compile, dynamo recompile, FlashInfer build) is a failed health check; runtime-varying ints (sequence lengths) marked `do_not_specialize` or passed as tensors
 
 ### 9. admission + preemption
 
