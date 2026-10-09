@@ -12,7 +12,7 @@ import time
 from collections.abc import Callable, Iterator
 from typing import IO
 
-from box.sdk import Refused
+from box.sdk import Dropped, Refused
 
 QUEUE_CHUNKS = 64
 PUT_TICK_S = 0.1
@@ -100,7 +100,7 @@ class Pumped:
         if now >= self._give_up:
             raise TimeoutError(f"{self.label}: stream ran past {self._timeout_s:.0f} s; killed")
         if self._quiet_s is not None and now - last >= self._quiet_s:
-            raise TimeoutError(f"{self.label}: no output for {self._quiet_s:.0f} s; killed")
+            raise Dropped(f"{self.label}: no output for {self._quiet_s:.0f} s; killed")
 
     def send(self, data: bytes) -> None:
         if self._send is None:

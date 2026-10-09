@@ -549,7 +549,7 @@ def test_closing_a_stream_kills_its_command(launch: Callable, scale: float) -> N
 
 def test_a_stream_is_bounded_in_time_and_in_silence(launch: Callable, scale: float) -> None:
     with launch(ceiling_s=600) as s:
-        with pytest.raises(TimeoutError, match="no output"), s.machine.stream("echo hi; exec sleep 999", timeout_s=60 * scale, quiet_s=2 * scale) as stream:
+        with pytest.raises(sdk.Dropped, match="no output"), s.machine.stream("echo hi; exec sleep 999", timeout_s=60 * scale, quiet_s=2 * scale) as stream:
             list(stream)
         with pytest.raises(TimeoutError, match="past"), s.machine.stream("while true; do echo .; sleep 0.2; done", timeout_s=3 * scale) as stream:
             list(stream)
@@ -570,3 +570,24 @@ def test_a_follower_that_leaves_and_comes_back_misses_nothing_and_repeats_nothin
         assert "".join(c.text for c in both if c.stream == "stderr") == "e1\ne2\n"
         assert both[-1].end == (len("café ok\n".encode()), len("e1\ne2\n"))
         assert [c.end for c in both] == sorted(c.end for c in both)  # the cursor only moves on
+
+
+def test_a_follower_reconnects_after_a_dropped_stream_and_stops_at_any_other_error(launch: Callable, monkeypatch: pytest.MonkeyPatch) -> None:
+    with launch(ceiling_s=600) as s:
+        job = s.run("echo one; echo two", max_duration_s=JOB_S)
+        job.wait()
+        stream = s.machine.stream
+        failures: list[BaseException] = [sdk.Dropped("the channel went away")]
+
+        def flaky(cmd: str, **kw: object) -> sdk.Stream:
+            if failures:
+                raise failures.pop()
+            return stream(cmd, **kw)
+
+        monkeypatch.setattr(s.machine, "stream", flaky)
+        monkeypatch.setattr(sdk, "FOLLOW_BACKOFF_S", 0.01)
+        assert "".join(c.text for c in job.logs(follow=True)) == "one\ntwo\n"
+        failures.append(RuntimeError("a bug, not a drop"))
+        with pytest.raises(RuntimeError, match="a bug, not a drop"):
+            list(job.logs(follow=True))
+        assert failures == []

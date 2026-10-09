@@ -69,6 +69,10 @@ class Refused(ValueError):
     pass
 
 
+class Dropped(ConnectionError):
+    pass
+
+
 class Stream(Protocol):
     rc: int | None
 
@@ -742,9 +746,7 @@ class Job:
                 self.session.wait()
                 yield from read_record(self.session.record, self.session.id).logs(self.id, after=cursor, kind=self.kind)
                 return
-            except TailError:
-                raise
-            except Exception as e:  # MUST KILL: any Exception counts as a dropped stream because Modal's and ssh's errors differ; give Stream a typed drop error
+            except Dropped as e:
                 tries = 1 if tail.frames else tries + 1
                 if tries > FOLLOW_TRIES:
                     raise
