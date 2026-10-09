@@ -7,7 +7,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-10-01T19:14:38.742299Z"
+exclude-newer = "2026-10-01T19:34:08.463303Z"
 exclude-newer-span = "P8D"
 
 [[package]]
@@ -313,7 +313,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anyio", specifier = ">=4.5" },
+    { name = "anyio", specifier = ">=4.10" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = "~=7.1" },
     { name = "jupyter-server", marker = "extra == 'dev'", specifier = "~=2.17" },
     { name = "modal", specifier = ">=1.5" },
