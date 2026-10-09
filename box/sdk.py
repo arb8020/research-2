@@ -143,6 +143,35 @@ class Ending:
     hook_exit_code: int | None = None
 
 
+@dataclass(frozen=True)
+class Queued:
+    """The job waits its turn (a service: about to start). Also a job its record has no status for."""
+
+
+@dataclass(frozen=True)
+class JobRunning:
+    started_at: float  # unix time, the machine's clock
+
+
+@dataclass(frozen=True)
+class Hooking:
+    """The job ended (how: ending); its on_exit hook runs."""
+
+    ending: Ending
+
+
+@dataclass(frozen=True)
+class Done:
+    """Ended, hook included. started_at is None for a service refused before it started."""
+
+    ending: Ending
+    started_at: float | None
+    ended_at: float
+
+
+JobStatus = Queued | JobRunning | Hooking | Done
+
+
 def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     provider: Provider, *, deadline_s: int, gpu: str | None = None, image: str | None = None,
     env: dict[str, str] | None = None, labels: dict[str, str] | None = None,
@@ -451,21 +480,21 @@ class Job:
     def dir(self) -> str:
         return self.session._path(f"{self.kind}/{self.id}")
 
-    def status(self) -> dict | None:
-        """The supervisor's status.json, or None while the job waits its turn."""
+    def status(self) -> JobStatus:
+        """Queued, JobRunning, Hooking, or Done, from the supervisor's status.json."""
         try:
-            return json.loads(self.session.machine.read(f"{self.dir}/status.json"))
+            return parse_job_status(self.session.machine.read(f"{self.dir}/status.json"))
         except FileNotFoundError:
-            return None
+            return Queued()
 
     def done(self) -> bool:
-        return (self.status() or {}).get("state") == "done"
+        return isinstance(self.status(), Done)
 
     def wait(self) -> Ending:
         """Block until the job is done (its hook too); how it ended. One exec per poll."""
-        while (status := self._read_live(None, watch=True).status) is None or status["state"] != "done":
+        while not isinstance(status := self._read_live(None, watch=True).status, Done):
             time.sleep(POLL_S)
-        return Ending(status["reason"], status["exit_code"], status.get("hook_exit_code"))
+        return status.ending
 
     def kill(self) -> None:
         """Kill this job (its whole process group); its hook runs; the session goes on."""
@@ -520,8 +549,8 @@ class Job:
         if len(lines) != len(files) + 1 or lines[-1]:
             raise RuntimeError(f"{self.id}: reading the job gave {len(lines) - 1} lines for {len(files)} files")
         raw = [base64.b64decode(line) for line in lines[:-1]]
-        status = json.loads(raw[0]) if raw[0] else None
-        done = status is not None and status["state"] == "done"
+        status = parse_job_status(raw[0]) if raw[0] else Queued()
+        done = isinstance(status, Done)
         chunks, cursor, more = [], after, False
         for i, data in enumerate(raw[1:]):
             full = len(data) == MAX_LOG_READ
@@ -535,16 +564,16 @@ class Job:
 
 @dataclass(frozen=True)
 class JobRead:
-    """One look at a job (Job.read): its status.json (None while it waits its turn) and its output
-    past a cursor. more: some stream had over MAX_LOG_READ new bytes: read on from the last chunk."""
+    """One look at a job (Job.read): its status and its output past a cursor. more: some stream
+    had over MAX_LOG_READ new bytes: read on from the last chunk."""
 
-    status: dict | None
+    status: JobStatus
     chunks: list[LogChunk]
     more: bool = False
 
     @property
     def done(self) -> bool:
-        return self.status is not None and self.status["state"] == "done"
+        return isinstance(self.status, Done)
 
 
 @dataclass(frozen=True)
@@ -642,13 +671,13 @@ class Record:
         prefix = f"{record_prefix(self.session_id)}/{kind}/"
         return sorted({key[len(prefix) :].split("/", 1)[0] for key in self.store.list(prefix)})
 
-    def job_status(self, job_id: str, kind: str = "jobs") -> dict | None:
-        """The job's status.json as last recorded (with all its output, once "done"); None if
-        none was (it never started, or started after the last flush)."""
+    def job_status(self, job_id: str, kind: str = "jobs") -> JobStatus:
+        """The job's status as last recorded (Done comes with all its output); Queued if none was
+        (it never started, or started after the last flush)."""
         try:
-            return json.loads(self.store.get(f"{record_prefix(self.session_id)}/{kind}/{job_id}/status.json"))
+            return parse_job_status(self.store.get(f"{record_prefix(self.session_id)}/{kind}/{job_id}/status.json"))
         except FileNotFoundError:
-            return None
+            return Queued()
 
     def logs(self, job_id: str, after: LogCursor = (0, 0), kind: str = "jobs") -> Iterator[LogChunk]:
         """The job's recorded output past `after`, in the order it was recorded, as Job.logs gives
@@ -715,6 +744,21 @@ def parse_running(raw: bytes) -> Running:
     """session.json, as the supervisor wrote it."""
     d = json.loads(raw)
     return Running(started_at=float(d["started_at"]), deadline_at=float(d["deadline_at"]))
+
+
+def parse_job_status(raw: bytes) -> JobStatus:
+    """A job's status.json, as the supervisor wrote it: {state: running | hook | done, ...}."""
+    d = json.loads(raw)
+    match d["state"]:
+        case "running":
+            return JobRunning(float(d["started"]))
+        case "hook":
+            return Hooking(Ending(d["reason"], d["exit_code"]))
+        case "done":
+            ending = Ending(d["reason"], d["exit_code"], d.get("hook_exit_code"))
+            return Done(ending, float(d["started"]) if "started" in d else None, float(d["ended"]))
+        case state:
+            raise ValueError(f"status.json: unknown job state {state!r}")
 
 
 def parse_ended(raw: bytes) -> Ended:
