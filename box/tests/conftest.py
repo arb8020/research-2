@@ -1,7 +1,7 @@
 """pytest configuration for box tests, and the fixtures every feature test takes: which provider
 (--provider), how slow it is (scale), and launch on it."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -35,8 +35,10 @@ def name(request: pytest.FixtureRequest) -> str:
 
 
 @pytest.fixture
-def provider(name: str, tmp_path: Path) -> Provider:
-    return providers.make(name, tmp_path / "machines")
+def provider(name: str, tmp_path: Path) -> Iterator[Provider]:
+    p = providers.make(name, tmp_path / "machines")
+    yield p
+    p.close()  # the test made it, the test closes it (Modal: joins its loop thread)
 
 
 @pytest.fixture

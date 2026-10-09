@@ -25,6 +25,7 @@ Every command takes --provider (modal by default; runpod; local for a machine on
 from __future__ import annotations
 
 import argparse
+import contextlib
 import getpass
 import re
 import socket
@@ -53,7 +54,8 @@ def until(t: float) -> str:
 
 def make_provider(name: str, region: str | None = None) -> sdk.Provider:
     """The one place a provider is named, and where its credentials are read (the providers take
-    them as arguments). Imported on use: each pulls its own SDK. region: Modal only; None = anywhere."""
+    them as arguments). Imported on use: each pulls its own SDK. region: Modal only; None = anywhere.
+    The caller closes it (every command: `with contextlib.closing(make_provider(...))`)."""
     if name == "modal":
         from box.providers.modal import Modal, ModalToken
 
@@ -83,7 +85,11 @@ def pairs(specs: list[str], what: str) -> list[tuple[str, str]]:
 
 def cmd_run(a: argparse.Namespace) -> int:
     cmd = " ".join(a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd) or "nvidia-smi"
-    provider = make_provider(a.provider, a.region)
+    with contextlib.closing(make_provider(a.provider, a.region)) as provider:
+        return run(a, cmd, provider)
+
+
+def run(a: argparse.Namespace, cmd: str, provider: sdk.Provider) -> int:
     max_duration_s = a.max_duration or a.ceiling  # by default the job may use the whole session
     kw = {"gpu": a.gpu, "image": a.image, "lease_s": a.lease, "ceiling_s": a.ceiling, "labels": {"box.cmd": cmd[:200], "box.user": user()}}
     if not a.detach:
@@ -102,7 +108,11 @@ def cmd_run(a: argparse.Namespace) -> int:
 
 
 def cmd_logs(a: argparse.Namespace) -> int:
-    s = sdk.attach(make_provider(a.provider), a.id)
+    with contextlib.closing(make_provider(a.provider)) as provider:
+        return logs(a, sdk.attach(provider, a.id))
+
+
+def logs(a: argparse.Namespace, s: sdk.Session) -> int:
     jobs = s.jobs()
     if not jobs:
         print(f"box: {a.id} has no job", file=sys.stderr)
@@ -124,59 +134,64 @@ def cmd_logs(a: argparse.Namespace) -> int:
 
 
 def cmd_who(a: argparse.Namespace) -> int:
-    provider = make_provider(a.provider)
-    machines = provider.list()
-    print(f"{len(machines)} running")
-    for m in machines:
-        ceiling = float(m.labels.get(sdk.LABEL_CEILING, 0))
-        status = sdk.Session(m).status()  # one exec each
-        lease = f"lease {(status.lease.until - time.time()) / 60:.0f} min" if isinstance(status, sdk.Running) else type(status).__name__.lower()
-        print(f"{m.labels[sdk.LABEL_SESSION]}  {m.id}  {m.labels.get('box.user', '?')}  {lease}, ceiling {(ceiling - time.time()) / 60:.0f} min\n    {m.labels.get('box.cmd', '')}")
+    with contextlib.closing(make_provider(a.provider)) as provider:
+        machines = provider.list()
+        print(f"{len(machines)} running")
+        for m in machines:
+            ceiling = float(m.labels.get(sdk.LABEL_CEILING, 0))
+            status = sdk.Session(m).status()  # one exec each
+            lease = f"lease {(status.lease.until - time.time()) / 60:.0f} min" if isinstance(status, sdk.Running) else type(status).__name__.lower()
+            print(f"{m.labels[sdk.LABEL_SESSION]}  {m.id}  {m.labels.get('box.user', '?')}  {lease}, ceiling {(ceiling - time.time()) / 60:.0f} min\n    {m.labels.get('box.cmd', '')}")
     return 0
 
 
 def cmd_attach(a: argparse.Namespace) -> int:
-    s = sdk.attach(make_provider(a.provider), a.id)
-    match s.status():
-        case sdk.Running(started_at=started_at, lease=lease):
-            print(f"{a.id}: running since {time.strftime('%H:%M:%S', time.localtime(started_at))}; lease until {until(lease.until)}, ceiling {until(lease.ceiling)}")
-        case status:
-            print(f"{a.id}: {status}")
-    jobs = s.jobs()
-    print(f"{len(jobs)} job(s){f'; latest {jobs[-1].id}: {jobs[-1].status()}' if jobs else ''}")
+    with contextlib.closing(make_provider(a.provider)) as provider:
+        s = sdk.attach(provider, a.id)
+        match s.status():
+            case sdk.Running(started_at=started_at, lease=lease):
+                print(f"{a.id}: running since {time.strftime('%H:%M:%S', time.localtime(started_at))}; lease until {until(lease.until)}, ceiling {until(lease.ceiling)}")
+            case status:
+                print(f"{a.id}: {status}")
+        jobs = s.jobs()
+        print(f"{len(jobs)} job(s){f'; latest {jobs[-1].id}: {jobs[-1].status()}' if jobs else ''}")
     print(f"box logs {a.id} -f   # follow\nbox extend {a.id} 1h  # more lease\nbox release {a.id}   # end it now", file=sys.stderr)
     return 0
 
 
 def cmd_extend(a: argparse.Namespace) -> int:
-    lease = sdk.attach(make_provider(a.provider), a.id).extend(time.time() + a.duration)
+    with contextlib.closing(make_provider(a.provider)) as provider:
+        lease = sdk.attach(provider, a.id).extend(time.time() + a.duration)
     print(f"box: {a.id}: lease until {until(lease.until)}, ceiling {until(lease.ceiling)}")
     return 0
 
 
 def cmd_release(a: argparse.Namespace) -> int:
-    lease = sdk.attach(make_provider(a.provider), a.id).release()
+    with contextlib.closing(make_provider(a.provider)) as provider:
+        lease = sdk.attach(provider, a.id).release()
     print(f"box: {a.id}: released; its lease ended {time.strftime('%H:%M:%S', time.localtime(lease.until))}")
     return 0
 
 
 def cmd_kill(a: argparse.Namespace) -> int:
-    try:
-        s = sdk.attach(make_provider(a.provider), a.id)
-    except LookupError as exc:
-        print(f"box: refusing to stop {a.id}: {exc}", file=sys.stderr)
-        return 2
-    r = s.close()
+    with contextlib.closing(make_provider(a.provider)) as provider:
+        try:
+            s = sdk.attach(provider, a.id)
+        except LookupError as exc:
+            print(f"box: refusing to stop {a.id}: {exc}", file=sys.stderr)
+            return 2
+        r = s.close()
     print(f"box: {r.session_id} {r.machine_id}: ended {r.ended.reason} (supervisor {'confirmed' if r.supervisor_confirmed else 'silent'}), machine gone {time.strftime('%H:%M:%S', time.localtime(r.machine_gone_at))}")
     return 0
 
 
 def cmd_gc(a: argparse.Namespace) -> int:
-    late = [m for m in make_provider(a.provider).list() if time.time() > int(m.labels[sdk.LABEL_CEILING]) + GC_MARGIN_S]
-    for m in late:
-        print(f"  {m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  past its ceiling by {(time.time() - int(m.labels[sdk.LABEL_CEILING])) / 3600:.1f} h")
-        if a.yes:
-            m.terminate()
+    with contextlib.closing(make_provider(a.provider)) as provider:
+        late = [m for m in provider.list() if time.time() > int(m.labels[sdk.LABEL_CEILING]) + GC_MARGIN_S]
+        for m in late:
+            print(f"  {m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  past its ceiling by {(time.time() - int(m.labels[sdk.LABEL_CEILING])) / 3600:.1f} h")
+            if a.yes:
+                m.terminate()
     print(f"box gc: {len(late)} past their ceiling; {'terminated' if a.yes else 'nothing done (--yes terminates)'}")
     return 0
 
