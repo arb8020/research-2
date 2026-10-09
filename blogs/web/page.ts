@@ -8,6 +8,7 @@ import { syntaxHighlighting } from "@codemirror/language";
 import { classHighlighter } from "@lezer/highlight";
 import { vim } from "@replit/codemirror-vim";
 import { attr, must } from "./dom";
+import "./page-link";
 
 // GET {SESSION}/state (session.py): the reader's latest passing source per cell, and per C cell the
 // session path of a play widget built from it.
@@ -233,4 +234,7 @@ class EnvPlay extends HTMLElement {
 }
 customElements.define("env-play", EnvPlay);
 
-refresh().catch((e: unknown) => { console.warn("session unreachable", e); });
+// Only pages with cells or play widgets talk to the session (a prose-only page like neural-nets has nothing to ask).
+if (document.querySelector("code-cell, env-play") !== null) {
+  refresh().catch((e: unknown) => { console.warn("session unreachable", e); });
+}
