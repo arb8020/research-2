@@ -34,7 +34,7 @@ POST_TIMEOUT_S = 10.0
 MAX_READ = 64 * 1024  # bytes per stream per tick; more waits for the next tick (backpressure, nothing dropped)
 MAX_BATCH = 500  # events per POST
 JUPYTER_REASON_S = 5.0  # on SIGTERM, how long to wait for Jupyter's status.json to name the reason
-STREAMS = ("stdout", "stderr")
+USER_AGENT = "box-forwarder/0"  # workers.dev answers urllib's default ("Python-urllib/3.x") with 403 (error 1010)
 
 
 def post(url: str, key: str, events: list[dict]) -> None:
@@ -42,7 +42,7 @@ def post(url: str, key: str, events: list[dict]) -> None:
     The relay's push (push.py) sends its boot events through this too."""
     assert len(events) <= MAX_BATCH, f"{len(events)} events in one push"
     body = "\n".join(json.dumps(e) for e in events).encode()
-    req = urllib.request.Request(url, data=body, method="POST", headers={"X-Push-Key": key, "Content-Type": "application/x-ndjson"})
+    req = urllib.request.Request(url, data=body, method="POST", headers={"X-Push-Key": key, "Content-Type": "application/x-ndjson", "User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=POST_TIMEOUT_S) as r:
         assert 200 <= r.status < 300, r.status
 

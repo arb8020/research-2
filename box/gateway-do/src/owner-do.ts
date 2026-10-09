@@ -7,7 +7,8 @@
 //
 // meta (beyond hub.ts's): id, origin (the gateway's public base, for status.kernel.url), status,
 // token (the reader's {id, secret}), kernel_token (what the browser shows the proxy), upstream (the
-// Jupyter {url, token} behind the proxy), retry_at (a failed deadline end is retried then).
+// Jupyter {url, token} behind the proxy), retry_at (a failed deadline end is retried then), ending
+// (the reason this DO is ending the machine for, while the relay works on it).
 
 import { Hub, json } from "./hub";
 import { proxy } from "./proxy";
@@ -64,7 +65,9 @@ export class OwnerDO extends Hub {
       this.watch(true);
       return;
     }
-    this.setEnded(said.reason);
+    // While this DO is ending the machine (deadline, stop), the machine's own report of that end
+    // (the forwarder: "stopped") can arrive before the relay answers: the DO's reason is the one.
+    this.setEnded(this.meta<EndReason>("ending") ?? said.reason);
   }
 
   // The machine went quiet: ask the relay (with the token this DO holds) whether it still exists.
@@ -130,9 +133,11 @@ export class OwnerDO extends Hub {
     const s = this.status();
     if (s.state === "ended") return s;
     const token = this.meta<ModalToken>("token")!;
+    this.setMeta("ending", reason);
     const r = await relayCall(this.env.RELAY_B, "POST", `/sessions/${this.meta<string>("id")}/end`, token).catch((e: unknown) => ({ code: 0, body: String(e) }));
     if (r.code !== 200 && r.code !== 404) {
       this.step(`relay end failed (${r.code}): ${JSON.stringify(r.body).slice(0, 200)}`);
+      this.dropMeta("ending");
       return null;
     }
     return this.setEnded(reason);
@@ -142,7 +147,7 @@ export class OwnerDO extends Hub {
     const s = this.status();
     if (s.state === "ended") return s;
     this.watch(false);
-    this.dropMeta("token", "kernel_token", "upstream", "retry_at"); // the session is over: so is holding its credentials
+    this.dropMeta("token", "kernel_token", "upstream", "retry_at", "ending"); // the session is over: so is holding its credentials
     return this.setStatus({ state: "ended", gpu: s.gpu, started_at: s.started_at, deadline: s.deadline, reason });
   }
 }
