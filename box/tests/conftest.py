@@ -1,7 +1,7 @@
 """pytest configuration for box tests, and the fixtures every feature test takes: which provider
 (--provider), how slow it is (scale), and launch on it."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -13,6 +13,7 @@ from box.tests import providers
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "live: requires real API credentials")
+    config.addinivalue_line("markers", "needs(what): skipped on a provider that cannot do what (providers.CANNOT)")
 
 
 def pytest_collection_modifyitems(config, items):
@@ -22,11 +23,17 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "live" in item.keywords:
                 item.add_marker(skip)
+    cannot = providers.CANNOT.get(config.getoption("--provider"), {})
+    for item in items:
+        for mark in item.iter_markers("needs"):
+            (what,) = mark.args
+            if what in cannot:
+                item.add_marker(pytest.mark.skip(reason=cannot[what]))
 
 
 def pytest_addoption(parser):
     parser.addoption("--live", action="store_true", help="run live API tests")
-    parser.addoption("--provider", default="local", help="the provider test_sdk runs on: local, modal, runpod")
+    parser.addoption("--provider", default="local", help="the provider test_sdk runs on: local, modal, runpod, colab-fake")
 
 
 @pytest.fixture
@@ -35,8 +42,11 @@ def name(request: pytest.FixtureRequest) -> str:
 
 
 @pytest.fixture
-def provider(name: str, tmp_path: Path) -> Provider:
-    return providers.make(name, tmp_path / "machines")
+def provider(name: str, tmp_path: Path) -> Iterator[Provider]:
+    p = providers.make(name, tmp_path / "machines")
+    yield p
+    if callable(close := getattr(p, "close", None)):  # a provider that holds connections (Modal's client, Colab's kernels)
+        close()
 
 
 @pytest.fixture
