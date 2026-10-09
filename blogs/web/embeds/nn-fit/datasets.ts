@@ -98,3 +98,33 @@ export function fillExample(buf: DrawBuffer): void {
     buf[c] = 0.55 * Math.sin(2.5 * Math.PI * x) + 0.25 * x;
   }
 }
+
+// Undrawn column ranges [from, to] (inclusive), left to right. Training needs none: the drawn
+// function must span the whole x axis, otherwise the net is free to do anything over a gap.
+export function gaps(buf: DrawBuffer): { from: number; to: number }[] {
+  const out: { from: number; to: number }[] = [];
+  let start = -1;
+  buf.forEach((y, c) => {
+    const empty = Number.isNaN(y);
+    if (empty && start < 0) start = c;
+    if (!empty && start >= 0) { out.push({ from: start, to: c - 1 }); start = -1; }
+  });
+  if (start >= 0) out.push({ from: start, to: buf.length - 1 });
+  return out;
+}
+
+// "left edge to 40%, 55–70%, 90% to right edge": short, for the hint line. At most 3 ranges named.
+export function describeGaps(buf: DrawBuffer): string {
+  const columns = buf.length;
+  const num = (c: number): string => String(Math.round((c / columns) * 100));
+  const pct = (c: number): string => `${num(c)}%`;
+  const ranges = gaps(buf);
+  if (ranges.length === 1 && ranges[0]?.from === 0 && ranges[0].to === columns - 1) return "everything";
+  const named = ranges.slice(0, 3).map(({ from, to }) => {
+    if (from === 0) return `left edge to ${pct(to + 1)}`;
+    if (to === columns - 1) return `${pct(from)} to right edge`;
+    return `${num(from)}–${pct(to + 1)}`;
+  });
+  if (ranges.length > 3) named.push(`${String(ranges.length - 3)} more`);
+  return named.join(", ");
+}
