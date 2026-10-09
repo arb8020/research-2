@@ -39,7 +39,6 @@ import functools
 import hashlib
 import hmac
 import json
-import os
 import re
 import sys
 import threading
@@ -51,16 +50,13 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO
+from typing import Any, BinaryIO
 from urllib.parse import parse_qs, quote, urlsplit
 
 from box import sdk
 from box.providers.modal import ModalToken
 from box.sdk import Booting, Done, Ended, Queued, Running
 from box.store import Store
-
-if TYPE_CHECKING:
-    from box.gateway.push import Push
 
 HERE = Path(__file__).parent
 KERNEL_IMAGE = str(HERE / "kernel.Dockerfile")
@@ -116,7 +112,6 @@ class Config:
     port: Callable[[], int] = lambda: PORT
     deadline_s: int = DEADLINE_S
     idle_timeout_s: float = IDLE_TIMEOUT_S
-    push: Push | None = None  # variants (B)/(C): boot events and a machine-side forwarder push to a fan-out (push.py)
 
 
 @dataclass(frozen=True)
@@ -143,7 +138,6 @@ class Boot:
     ended_at: float | None = None  # monotonic; set once the boot is over (running or failed)
     cancelled: bool = False
     changed: threading.Condition = field(default_factory=threading.Condition)
-    push: Callable[[dict[str, Any]], None] | None = None  # each event, also to a fan-out (Push.send)
 
     def emit(self, kind: str, **fields: Any) -> None:
         with self.changed:
@@ -151,10 +145,7 @@ class Boot:
                 self.dropped += 1
                 return
             assert len(self.events) < MAX_BOOT_EVENTS + 64, f"{self.session_id}: {len(self.events)} boot events"
-            event = {"t": time.time(), "kind": kind, **fields}
-            self.events.append(event)
-            if self.push is not None:
-                self.push(event)
+            self.events.append({"t": time.time(), "kind": kind, **fields})
             if kind == "status":
                 self.status = fields["status"]
             self.changed.notify_all()
@@ -289,8 +280,7 @@ def jupyter_ready(kernel: dict[str, str]) -> bool:
 
 
 def kernel_service(s: sdk.Session) -> sdk.Job | None:
-    """The session's Jupyter: its first service (with --push, the forwarder is the second). None
-    before the boot has started it."""
+    """The session's Jupyter: its first service. None before the boot has started it."""
     services = s.services()
     return services[0] if services else None
 
@@ -349,10 +339,6 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
         if not isinstance(running, Running):  # it ended as it came up (its deadline, an idle timeout shorter than the boot)
             raise RuntimeError(f"{rec.session_id}: {running} as Jupyter came up")
         status = wire("running", rec.gpu, running.started_at, running.deadline_at, kernel=kernel)
-        if cfg.push is not None:
-            cmd, env = cfg.push.forwarder_service(rec.session_id, cfg.python, job.dir, rec.log_cursor, status, REASONS)
-            session.serve(cmd, env=env)
-            rec.step("machine", "forwarder started: the machine pushes its log to the fan-out from here")
         rec.step("machine", f"Jupyter Server ready ({time.monotonic() - t0:.1f} s since connect)")
         rec.finish(status)
     except Cancelled:
@@ -502,8 +488,7 @@ class Relay:
         """Start a boot on its own thread; returns the session's first (booting) status at once."""
         now = time.time()
         sid = sdk.new_session_id()
-        push = None if self.cfg.push is None else functools.partial(self.cfg.push.send, sid)
-        rec = Boot(sid, digest(req.token), req.gpu, now, now + self.cfg.deadline_s, push=push)
+        rec = Boot(sid, digest(req.token), req.gpu, now, now + self.cfg.deadline_s)
         thread = threading.Thread(target=self._boot, args=(rec, req, origin), name=f"boot-{sid}")
         with self._changed:
             self._forget_old_boots()
@@ -815,10 +800,10 @@ def modal_access(token: ModalToken, region: str) -> Access:
     return Access(provider, ModalVolumeStore(RECORD_VOLUME, client=provider.client), close=provider.close)
 
 
-def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...], push: Push | None) -> Config:
+def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...]) -> Config:
     return Config(
         access=lambda token: modal_access(token, a.region), image=KERNEL_IMAGE, gpus=gpus, labels=dict(a.label),
-        origins=re.compile(LOCAL_ORIGIN), deadline_s=a.deadline_s, idle_timeout_s=a.idle_timeout_s, push=push,
+        origins=re.compile(LOCAL_ORIGIN), deadline_s=a.deadline_s, idle_timeout_s=a.idle_timeout_s,
     )  # fmt: skip
 
 
@@ -861,27 +846,17 @@ def main() -> None:
     ap.add_argument("--idle-timeout-s", type=float, default=IDLE_TIMEOUT_S, help="no connection to Jupyter for this long ends a session")
     ap.add_argument("--label", type=label, action="append", default=[("box.purpose", "reader-path-dev")],
                     help="key=value stamped on every session (default box.purpose=reader-path-dev, for sweeps)")  # fmt: skip
-    ap.add_argument("--push", metavar="URL", help="variants B/C: push events to this fan-out (box/gateway-do); env BOX_PUSH_SECRET")
     a = ap.parse_args()
     gpus = (None, *[g for g in a.gpus.split(",") if g])
     if a.deadline_s + 600 > 24 * 3600:
         ap.error("--deadline-s: Modal caps a sandbox at 24 h, and box adds a 600 s backstop")
-    push = None if a.push is None else push_to(a.push, os.environ.get("BOX_PUSH_SECRET", ""))
-    cfg = modal_config(a, gpus, push)
+    cfg = modal_config(a, gpus)
     server = serve(cfg, a.port)
     print(f"relay on http://localhost:{a.port} (modal, region {a.region}, gpus {list(gpus)}, labels {dict(a.label)}, "
-          f"deadline {a.deadline_s} s, idle {a.idle_timeout_s} s, push {a.push})", flush=True)  # fmt: skip
+          f"deadline {a.deadline_s} s, idle {a.idle_timeout_s} s)", flush=True)  # fmt: skip
     with contextlib.suppress(KeyboardInterrupt):  # booted sessions outlive the relay: idle/deadline end them
         server.serve_forever()
     server.server_close()  # in-flight boots end (cancelled), streams stop, readers' clients close
-    if push is not None:
-        push.close()
-
-
-def push_to(url: str, secret: str) -> Push:
-    from box.gateway.push import Push, parse_secret
-
-    return Push(url.rstrip("/"), parse_secret(secret)).start()
 
 
 if __name__ == "__main__":
