@@ -30,7 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shlex
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -100,6 +100,7 @@ class SetupRecord:
     built_at: float | None  # when that snapshot was made
     setup_job: str | None  # the job that ran the setup (a miss)
     resume_job: str | None
+    timings: dict[str, float] = field(default_factory=dict)  # s per phase from create: boot, sync, setup, snapshot, resume
 
 
 def top(repo: Path) -> Path:
@@ -158,7 +159,7 @@ def parse_setup_record(raw: bytes) -> SetupRecord:
     d = json.loads(raw)
     return SetupRecord(
         key=str(d["key"]), hit=bool(d["hit"]), image=d["image"], base=str(d["base"]), built_at=d["built_at"],
-        setup_job=d["setup_job"], resume_job=d["resume_job"],
+        setup_job=d["setup_job"], resume_job=d["resume_job"], timings=dict(d.get("timings", {})),
     )  # fmt: skip
 
 

@@ -207,3 +207,16 @@ def test_without_snapshots_every_boot_runs_the_setup(provider: Provider, name: s
             assert prepared is not None
             assert (prepared.hit, prepared.image) == (False, None)
     assert store.list(f"{CACHE_PREFIX}/") == []  # nothing to remember
+
+
+def test_wait_up_waits_for_this_sessions_supervisor_not_a_snapshots(create: Callable, spec: SetupSpec, store: Store) -> None:
+    """A snapshot holds the snapshotted session's ROOT/up until the boot clears it: seen live on
+    Modal, a wait_up that took it for its own, then a Booting session."""
+    s = create(record=store, setup=spec)
+    up = f"{s.machine.root}/up"
+    assert remote(s, f"cat {up}") == s.id
+    remote(s, f"echo s-0123456789ab > {up}")  # another session's, as a snapshot has it
+    with pytest.raises(TimeoutError):
+        s.wait_up(1.0)
+    remote(s, f"echo {s.id} > {up}")
+    s.wait_up(1.0)
