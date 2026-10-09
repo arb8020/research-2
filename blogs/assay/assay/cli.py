@@ -8,6 +8,7 @@
     run_checks ch01 --grade-only                     grade stored runs only (exit 2 if a run is missing): regrading
     run_checks ch01 --spawn                          no warm process: run in this process, spawn fresh children
     run_checks ch00 ring                             (ch00's cell as a positional: how the page invokes it today)
+    run_checks report [<run id>]                     a stored session as a table (default: the latest), from the store
 
 stdout, one JSON object per line:
     {"kind":"log","text":...}
@@ -64,6 +65,9 @@ def parse(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["report"]:
+        print(report(core.Store.from_env(), argv[1] if len(argv) > 1 else None))
+        return 0
     args = parse(argv)
     if args.chapter in NEEDS_TORCH and not args.spawn and os.environ.get("ASSAY_SPAWN") != "1":
         return client(argv)
@@ -168,6 +172,37 @@ def summarize(records: list[dict[str, Any]], selftest: bool) -> tuple[str, dict[
     if any(v["outcome"] == "fail" and v.get("blocking", True) for v in verdicts):
         return "fail", counts
     return ("pass" if verdicts else "error"), counts
+
+
+def report(store: core.Store, session: str | None) -> str:
+    """One row per verdict of a stored session: what ran, what it was graded by, and why it failed."""
+    if session is None:
+        index = (store.root / "index.jsonl").read_text().splitlines()
+        sessions = [json.loads(line) for line in index if json.loads(line)["kind"] == "session"]
+        if not sessions:
+            return "no sessions in the store"
+        session = sessions[-1]["key"]
+    entry = store.get("session", session)
+    if entry is None:
+        return f"no session {session} in {store.root}"
+    meta = entry.meta
+    out = [f"run {session}: `run_checks {' '.join(meta['argv'])}` -> {meta['outcome']} {meta['counts']} "
+           f"(isolation {meta['isolation']['mode']})", "",
+           "| op | case | dtype | outcome | grader | first failure | metrics |", "|---|---|---|---|---|---|---|"]
+    for row in meta["records"]:
+        graded = store.get("grade", row["grade"]) if row.get("grade") else None
+        if graded is None:
+            out.append(f"| {row.get('op')} | {row.get('case') or row.get('candidate')} | {row.get('dtype')} | "
+                       f"{row.get('outcome') or ('ok' if row.get('ok') else 'MISSED')} | | | |")
+            continue
+        bad = core.first_failure(graded)
+        metrics = {k: v for r in graded.meta["checks"] for k, v in r["metrics"].items()
+                   if k in ("err", "budget", "ratio", "kl_max")}
+        shown = " ".join(f"{k}={v:.3g}" if isinstance(v, float) else f"{k}={v}" for k, v in metrics.items())
+        out.append(f"| {row['op']} | {row['case']} | {row['dtype']} | {graded.meta['outcome']} | "
+                   f"{graded.meta['grader']['name']} | {(bad['check'] + ': ' + bad['notes'])[:80] if bad else ''} | "
+                   f"{shown} |")
+    return "\n".join(out)
 
 
 def _watchdog(client_pid: int) -> None:

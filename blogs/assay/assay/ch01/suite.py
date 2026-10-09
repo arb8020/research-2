@@ -193,21 +193,31 @@ OPS: dict[str, tuple[Op, str]] = {  # op -> (spec, child adapter); the reader's 
     "causal_attention": (ops.causal_attention, "plain"), "forward": (ops.forward, "forward")}
 
 # chip -> dtype -> None (checkable) or why it is skipped. Unknown chips: fp32 only.
-_ALL = {"fp32": None, "fp16": None, "bf16": None}
-CAPABILITY: dict[str, dict[str, str | None]] = {
-    "cpu": {"fp32": None, "bf16": None, "fp16": "CPU has no native fp16 math; checked on GPU"},
-    "sm_75": {"fp32": None, "fp16": None, "bf16": "sm_75 (T4) has no native bf16: a bf16 check there would test an "
-                                                 "emulation, not the kernel"},
-    **{f"sm_{n}": _ALL for n in (80, 86, 87, 89, 90, 100, 120)},
+# The capability table, in the shape of blogs/engine/capabilities.json (branch engine/ch01-image; the T4 row is its live
+# probe): arch -> dtype -> testable, else a skip_reason the verdict shows. A dtype a chip can't honestly test is a
+# VISIBLE skip, and the cell can still pass. "model" overrides a dtype for model-level ops. Unknown arch: fp32 only.
+_SM80 = {"fp32": {"testable": True}, "fp16": {"testable": True}, "bf16": {"testable": True}}
+CHIPS: dict[str, dict[str, Any]] = {
+    "cpu": {"device_name": "CPU (the laptop rule)", "dtypes": {
+        "fp32": {"testable": True},
+        "bf16": {"testable": True, "model": {"testable": False, "skip_reason": (
+            "bf16 gpt2 forward on CPU is ~50x slower than fp32 (no fast bf16 GEMM, RESULTS.md): checked on GPU")}},
+        "fp16": {"testable": False, "skip_reason": "CPU has no native fp16 math: checked on GPU"}}},
+    "sm_75": {"device_name": "Tesla T4", "dtypes": {
+        "fp32": {"testable": True}, "fp16": {"testable": True},
+        "bf16": {"testable": False, "skip_reason": (
+            "sm_75 has no bf16 hardware: torch.cuda.is_bf16_supported(including_emulation=False) is False; bf16 "
+            "runs only emulated, so it does not test the bf16 kernels a bf16 chip (sm_80+) would run")}}},
+    **{f"sm_{n}": {"dtypes": _SM80} for n in (80, 86, 87, 89, 90, 100, 120)},
 }
-MODEL_SKIP = {("cpu", "bf16"): "bf16 gpt2 forward on CPU is ~50x slower than fp32 (no fast bf16 GEMM): checked on GPU"}
 
 
 def skip_reason(chip: str, dtype: str, kind: str) -> str | None:
-    table = CAPABILITY.get(chip, {"fp32": None})
-    if dtype not in table:
-        return f"{chip}: {dtype} not in the capability table"
-    return table[dtype] or (MODEL_SKIP.get((chip, dtype)) if kind == "model" else None)
+    row = CHIPS.get(chip, {"dtypes": {"fp32": {"testable": True}}})["dtypes"].get(dtype)
+    if row is None:
+        return f"{chip}: {dtype} is not in the capability table"
+    row = row.get(kind, row) if kind == "model" else row
+    return None if row["testable"] else row["skip_reason"]
 
 
 @dataclass(frozen=True)

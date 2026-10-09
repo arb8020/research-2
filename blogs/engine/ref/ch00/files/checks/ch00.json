@@ -1,8 +1,8 @@
 {
   "chapter": "ch00",
   "cells": [
-    {"name": "ring", "file": "ring.cpp", "steps": [["make", "-s", "build/debug/check_ring"], ["build/debug/check_ring"]]},
-    {"name": "loop", "file": "loop.cpp", "steps": [["make", "-s", "build/debug/check_trace"], ["build/debug/check_trace", "sched.trace"]]},
-    {"name": "budget", "file": "budget.py", "steps": [["{python}", "test_budget.py"]]}
+    {"name": "ring", "file": "ring.cpp", "ops": ["ring"], "cmd": ["run_checks", "ch00", "--op", "ring"]},
+    {"name": "loop", "file": "loop.cpp", "ops": ["loop"], "cmd": ["run_checks", "ch00", "--op", "loop"]},
+    {"name": "budget", "file": "budget.py", "ops": ["budget"], "cmd": ["run_checks", "ch00", "--op", "budget"]}
   ]
 }
