@@ -350,6 +350,21 @@ check:
 arch notes:
 - the frontend fetches the image and computes `mm_hash`; the engine folds it into the prefix chain (kelpie's engine submits 0 today, a bug)
 
+## workspace + cells (decided 2026-10-09)
+
+- cells are views onto real files in a per-reader workspace (a git repo in the reader's sandbox, reader's own Modal account)
+- start with whole-file cells, one CodeMirror per cell (tabs / a file picker if a chapter needs several files); regions later, as display / jump-to rather than edit
+- persistence: the repo lives on the sandbox disk; a `git bundle` is copied to a Modal Volume (reader's account) on every pass commit and restored at boot; unpassed drafts mirrored in browser localStorage
+- reference code: layered chapter folders (`engine/ref/chNN/` holds only files that chapter adds or changes; materialize(chN) = ch1..chN stacked, later wins); a generator emits a tagged repo (`chN/start`, `chN/solution`) for harbor, Colab and reader workspaces; the last chapter materialized is kelpie
+- checks: per-cell where a piece can be tested alone, plus a chapter-level end-to-end check (the harbor task runs the chapter check); `run_checks chN [cell]`
+- gating: running a check builds the latest passing tree + only this cell's edits; pass -> commit + tag `pass/chN/<cell>`
+- carrying code forward: splice. Chapter N+1 starts from the reference tree with the reader's passing files spliced in (reference fallback + a note if a cell was skipped or failed). Authoring rule: a later chapter never silently edits reader-owned code; it hands the file back as a cell
+- output: like a Jupyter cell. Build + check output streams under the cell; `file:line` becomes a link that jumps the editor. Inline diagnostics later via LSP (`@codemirror/lsp-client` + clangd / pyright through `jupyter-lsp` in the sandbox)
+- checks run as a background subprocess, so the kernel stays usable
+- speed targets: cell checks under ~2-3 s (rebuild the changed file only, ccache, pure-function checks vs traces); chapter checks under ~30-60 s on CPU (debug + ASan for cell checks; release build only for perf checks); model weights cached on the Volume
+- editor: CodeMirror (already integrated, light, good vim); revisit Monaco only if the editor becomes a full IDE pane
+- deferred: local backend (`session.py` vs `connect_dev.py`; they're separate code paths today)
+
 ## open questions
 
 - chapter 5: split into two if too heavy
