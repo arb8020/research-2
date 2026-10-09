@@ -221,7 +221,7 @@ class ConnectPill extends HTMLElement {
     };
     go.onclick = () => {
       const p = currentPhase();
-      if (p.kind !== "connected" || p.ceiling === undefined) return; // the button is hidden/disabled then
+      if (p.kind !== "connected") return; // the button is hidden then
       const add = Number(by.value);
       // Ask for what the reader picked, uncapped: the gateway clamps to the ceiling and we show where it landed.
       const until = add === 0 ? p.ceiling : Math.max(p.leaseUntil, now()) + add;
@@ -230,7 +230,7 @@ class ConnectPill extends HTMLElement {
       extend(until).then(() => {
         const q = currentPhase();
         if (q.kind !== "connected") return;
-        const capped = q.ceiling !== undefined && q.leaseUntil >= q.ceiling;
+        const capped = q.leaseUntil >= q.ceiling;
         result.textContent = `Now ends ${endsAt(q.leaseUntil)}${capped ? ", the 12 h limit" : ""}.`;
         row.hidden = true;
         opener.setAttribute("aria-expanded", "false");
@@ -308,7 +308,7 @@ class ConnectPill extends HTMLElement {
       : p.kind === "connecting" ? `Connecting: ${p.step}` : p.failure ?? "Connect a GPU to run remote cells";
     this.renderPanel(p);
     must(this.drawer, ".drawer-status", HTMLParagraphElement).textContent = p.kind === "connected"
-      ? `${p.id} · ${gpuName(p.gpu)} on Modal · running, up ${uptime(p.startedAt)} · ends ${clock(p.leaseUntil)}${p.ceiling === undefined ? "" : ` (extendable to ${clock(p.ceiling)})`}`
+      ? `${p.id} · ${gpuName(p.gpu)} on Modal · running, up ${uptime(p.startedAt)} · ends ${clock(p.leaseUntil)} (extendable to ${clock(p.ceiling)})`
       : p.kind === "connecting" ? `connecting: ${p.step}` : `disconnected${p.failure ? `: ${p.failure}` : ""}`;
   }
 
@@ -333,7 +333,7 @@ class ConnectPill extends HTMLElement {
     this.renderLease(menu, p);
   }
 
-  // The menu's lease line and Extend…: hidden until connected, and on a relay that can't extend (no ceiling).
+  // The menu's lease line and Extend…: hidden until connected; Extend… disabled at the ceiling.
   private renderLease(menu: HTMLDivElement, p: Phase): void {
     const line = must(menu, ".connect-lease", HTMLParagraphElement);
     const opener = must(menu, ".connect-extend-open", HTMLButtonElement);
@@ -343,15 +343,14 @@ class ConnectPill extends HTMLElement {
       must(menu, ".connect-extend-result", HTMLParagraphElement).textContent = "";
       return;
     }
-    const atCeiling = p.ceiling !== undefined && p.leaseUntil >= p.ceiling;
+    const atCeiling = p.leaseUntil >= p.ceiling;
     line.hidden = false;
     line.textContent = `Ends ${endsAt(p.leaseUntil)} · ${left(p.leaseUntil)}${atCeiling ? " · at the 12 h limit" : ""}`;
-    opener.hidden = p.ceiling === undefined;
+    opener.hidden = false;
     opener.disabled = atCeiling;
     if (atCeiling) row.hidden = true;
     opener.setAttribute("aria-expanded", String(!row.hidden));
     const ceiling = p.ceiling;
-    if (ceiling === undefined) return;
     const options = must(row, "select", HTMLSelectElement).options;
     EXTENDS.forEach(([add, label], i) => {
       const until = add === 0 ? ceiling : Math.max(p.leaseUntil, now()) + add;
