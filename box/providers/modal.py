@@ -297,6 +297,13 @@ class ModalVolumeStore:
         self.provider._call(upload, timeout_s=CALL_TIMEOUT_S)
 
 
+@dataclass
+class Executed:
+    rc: int | None = None
+    out: str = ""
+    err: str = ""
+
+
 class ModalMachine:
     root = ROOT
     work = WORK
@@ -309,24 +316,31 @@ class ModalMachine:
         self._booting = booting
 
     def exec(self, cmd: str) -> tuple[int, str, str]:
-        async def run() -> tuple[int, str, str]:
+        async def run() -> Executed:
             p = await self.sandbox.exec.aio("bash", "-c", cmd)
-            results: dict[str, object] = {}  # MUST KILL: dict[str, object] loses the types (was type: ignore[return-value]); gather into typed variables
+            done = Executed()
 
-            async def get(key: str, call: Callable[[], Awaitable[object]]) -> None:
-                results[key] = await call()
+            async def out() -> None:
+                done.out = await p.stdout.read.aio()
+
+            async def err() -> None:
+                done.err = await p.stderr.read.aio()
+
+            async def rc() -> None:
+                done.rc = await p.wait.aio()
 
             async with anyio.create_task_group() as tg:
-                tg.start_soon(get, "out", p.stdout.read.aio)
-                tg.start_soon(get, "err", p.stderr.read.aio)
-                tg.start_soon(get, "rc", p.wait.aio)
-            return results["rc"], results["out"], results["err"]
+                tg.start_soon(out)
+                tg.start_soon(err)
+                tg.start_soon(rc)
+            return done
 
-        rc, out, err = self._live(run)
+        executed = self._live(run)
         # Modal: rc None or -1 is an exec it killed; 137 is an exec in a sandbox mid-death
-        if rc in (None, -1, 137) and self._ends():
+        rc = -1 if executed.rc is None else executed.rc
+        if rc in (-1, 137) and self._ends():
             raise Gone(f"{self.id}: sandbox ended (exit {self.sandbox.returncode}) under `{cmd}`")
-        return rc, out, err
+        return rc, executed.out, executed.err
 
     def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Pumped:
         self.provider._open()
