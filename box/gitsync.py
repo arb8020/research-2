@@ -20,7 +20,8 @@ GIT_TIMEOUT_S = 300.0
 INLINE_PACK_BYTES = 64 << 10
 ORIGIN = "box sync from "
 IDENTITY = {"GIT_AUTHOR_NAME": "box", "GIT_AUTHOR_EMAIL": "box@localhost", "GIT_COMMITTER_NAME": "box", "GIT_COMMITTER_EMAIL": "box@localhost"}
-NO_GIT, MOVED, DRIFT = 3, 4, 6  # MUST KILL: 3/4/6 repeated as bare `exit` literals inside PROBE and APPLY; interpolate these constants into the scripts
+NO_GIT, MOVED, DRIFT = 3, 4, 6
+EXIT_CODES = {"NO_GIT": str(NO_GIT), "MOVED": str(MOVED), "DRIFT": str(DRIFT)}
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,7 @@ class Moved(Exception):
 PROBE = """
 set -euo pipefail
 touch "$TOUCH"
-command -v git >/dev/null || { echo "box sync: no git on the machine (its image needs git)" >&2; exit 3; }
+command -v git >/dev/null || { echo "box sync: no git on the machine (its image needs git)" >&2; exit "$NO_GIT"; }
 mkdir -p "$W" && { [ -d "$G" ] || git init -q --bare "$G"; }
 if [ -e "$T/.git" ]; then git -C "$T" log -1 --format='own %H%norigin %s' HEAD; fi
 for dot in "$W"/*/.git; do if [ -e "$dot" ]; then git -C "${dot%/.git}" log -1 --format='have %H' HEAD; fi; done
@@ -50,23 +51,23 @@ for dot in "$W"/*/.git; do if [ -e "$dot" ]; then git -C "${dot%/.git}" log -1 -
 APPLY = """
 set -euo pipefail
 lock="$G/box-sync-$WT"
-mkdir "$lock" 2>/dev/null || { echo "box sync: another sync of $WT is running here (if none is: rm -r $lock)" >&2; exit 4; }
+mkdir "$lock" 2>/dev/null || { echo "box sync: another sync of $WT is running here (if none is: rm -r $lock)" >&2; exit "$MOVED"; }
 trap 'rm -rf "$lock" "$PACK"' EXIT
 git --git-dir="$G" index-pack --stdin < "$PACK" >/dev/null
 if [ ! -e "$T/.git" ]; then
-  [ -z "$OLD" ] || { echo "box sync: $T is gone; expected it at $OLD" >&2; exit 4; }
+  [ -z "$OLD" ] || { echo "box sync: $T is gone; expected it at $OLD" >&2; exit "$MOVED"; }
   git --git-dir="$G" worktree add -q --no-checkout --detach "$T" "$NEW"
   git -C "$T" read-tree --reset -u HEAD
   exit 0
 fi
 cur=$(git -C "$T" rev-parse HEAD)
-[ "$cur" = "$OLD" ] || { echo "box sync: $T is at $cur, not $OLD (another sync got there first?)" >&2; exit 4; }
+[ "$cur" = "$OLD" ] || { echo "box sync: $T is at $cur, not $OLD (another sync got there first?)" >&2; exit "$MOVED"; }
 if [ "$FORCE" = 1 ]; then
   git -C "$T" read-tree --reset -u "$NEW"
 else
   git -C "$T" update-index -q --refresh >/dev/null || true
   drift=$(git -C "$T" diff-files --name-only)
-  [ -z "$drift" ] || { echo "$drift" >&2; exit 6; }
+  [ -z "$drift" ] || { echo "$drift" >&2; exit "$DRIFT"; }
   git -C "$T" read-tree -m -u "$cur" "$NEW"
 fi
 git -C "$T" update-ref --no-deref HEAD "$NEW" "$cur"
@@ -77,7 +78,7 @@ def sync(machine: Machine, repo: Path, *, paths: tuple[str, ...], force: bool, k
     top = Path(git(repo, "rev-parse", "--show-toplevel"))
     origin = f"{ORIGIN}{top}"
     where = {"W": machine.work, "G": f"{machine.work}/{STORE}", "T": f"{machine.work}/{top.name}", "WT": top.name}
-    rc, out, err = machine.exec(assign({**where, "TOUCH": touch}) + PROBE)
+    rc, out, err = machine.exec(assign({**where, **EXIT_CODES, "TOUCH": touch}) + PROBE)
     if rc == NO_GIT:
         raise RuntimeError(err.strip())
     if rc != 0:
@@ -102,7 +103,7 @@ def sync(machine: Machine, repo: Path, *, paths: tuple[str, ...], force: bool, k
     else:
         machine.write(incoming, data)
         send = ""
-    rc, _, err = machine.exec(assign({**where, "OLD": old, "NEW": new, "PACK": incoming, "FORCE": "1" if force else "0"}) + send + APPLY)
+    rc, _, err = machine.exec(assign({**where, **EXIT_CODES, "OLD": old, "NEW": new, "PACK": incoming, "FORCE": "1" if force else "0"}) + send + APPLY)
     if rc == DRIFT:
         raise Drift(f"changed on {machine.id} since the last sync (force=True overwrites):\n{err.rstrip()}")
     if rc == MOVED:
