@@ -146,7 +146,7 @@ class LocalMachine:
     def shell_argv(self, cmd: str) -> list[str]:
         """bash here, in the machine's directory: this computer is the machine."""
         self._check_alive()
-        return ["bash", "-c", f"cd {shlex.quote(str(self.dir))} && {cmd}"]
+        return ["bash", "-c", f"cd {shlex.quote(str(self.dir))} || exit 1; {cmd}"]
 
     def write(self, path: str, data: bytes) -> None:
         self._check_alive()

@@ -697,7 +697,9 @@ class Session:
         activity = shlex.quote(self._path("activity"))
         loop = (f"while kill -0 $$ 2>/dev/null; do touch {activity}; "
                 f"if [ $(date +%s) -ge {int(until)} ]; then kill -HUP $$; exit; fi; sleep {self._keepalive_every_s():g}; done")  # fmt: skip
-        return f"( {loop} ) </dev/null >/dev/null 2>&1 & {then}"
+        # Braced, so `&` backgrounds the loop alone: `x && ( loop ) &` would background `x` too, in a
+        # shell that holds the caller's stdout open until the loop ends.
+        return f"{{ ( {loop} ) </dev/null >/dev/null 2>&1 & }} && {then}"
 
     def status(self) -> Status:
         """Booting, Running (with the lease as it is now), or Ended (and why), from the

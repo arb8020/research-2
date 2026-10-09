@@ -25,8 +25,12 @@ CANNOT = {
         "record": "Colab has no volumes: a Colab session has no durable record",
         "pty": "a Colab kernel cell is not a terminal: no stdin to type into",
         "shell": "Colab's terminal is in its UI only",
+        "unique-names": "Colab runtimes have no names: box's name check is best-effort there",
     },
-    "runpod": {"undeclared-ports": "RunPod has no gated route for a port not declared at create"},
+    "runpod": {
+        "undeclared-ports": "RunPod has no gated route for a port not declared at create",
+        "unique-names": "RunPod has no unique pod names: box's name check is best-effort there",
+    },
 }
 DEV_IMAGE = "python:3.13"  # Session.sync also needs git on the machine; the non-slim image has it
 PURPOSE = {"box.purpose": os.environ.get("BOX_TEST_PURPOSE", "reader-path-dev")}  # every test machine carries it, so a sweep finds strays
