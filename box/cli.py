@@ -114,7 +114,7 @@ def run(a: argparse.Namespace, cmd: str, provider: sdk.Provider) -> int:
 
 def cmd_logs(a: argparse.Namespace) -> int:
     with contextlib.closing(make_provider(a.provider)) as provider:
-        return logs(a, sdk.attach(provider, a.id))
+        return logs(a, sdk.attach(provider, session_id=a.id))
 
 
 def logs(a: argparse.Namespace, s: sdk.Session) -> int:
@@ -152,7 +152,7 @@ def cmd_who(a: argparse.Namespace) -> int:
 
 def cmd_attach(a: argparse.Namespace) -> int:
     with contextlib.closing(make_provider(a.provider)) as provider:
-        s = sdk.attach(provider, a.id)
+        s = sdk.attach(provider, session_id=a.id)
         match s.status():
             case sdk.Running(started_at=started_at, lease=lease):
                 print(f"{a.id}: running since {time.strftime('%H:%M:%S', time.localtime(started_at))}; lease until {until(lease.until)}, ceiling {until(lease.ceiling)}")
@@ -166,14 +166,14 @@ def cmd_attach(a: argparse.Namespace) -> int:
 
 def cmd_extend(a: argparse.Namespace) -> int:
     with contextlib.closing(make_provider(a.provider)) as provider:
-        lease = sdk.attach(provider, a.id).extend(time.time() + a.duration)
+        lease = sdk.attach(provider, session_id=a.id).extend(time.time() + a.duration)
     print(f"box: {a.id}: lease until {until(lease.until)}, ceiling {until(lease.ceiling)}")
     return 0
 
 
 def cmd_release(a: argparse.Namespace) -> int:
     with contextlib.closing(make_provider(a.provider)) as provider:
-        lease = sdk.attach(provider, a.id).release()
+        lease = sdk.attach(provider, session_id=a.id).release()
     print(f"box: {a.id}: released; its lease ended {time.strftime('%H:%M:%S', time.localtime(lease.until))}")
     return 0
 
@@ -181,7 +181,7 @@ def cmd_release(a: argparse.Namespace) -> int:
 def cmd_kill(a: argparse.Namespace) -> int:
     with contextlib.closing(make_provider(a.provider)) as provider:
         try:
-            s = sdk.attach(provider, a.id)
+            s = sdk.attach(provider, session_id=a.id)
         except LookupError as exc:
             print(f"box: refusing to stop {a.id}: {exc}", file=sys.stderr)
             return 2

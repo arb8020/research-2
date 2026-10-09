@@ -24,6 +24,8 @@ import contextlib
 import io
 import math
 import secrets
+import shlex
+import sys
 import threading
 import tomllib
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -37,14 +39,15 @@ import modal
 from anyio.from_thread import BlockingPortal, start_blocking_portal
 
 from box import gpus
-from box.providers.pump import Closed, Emit, Pumped, kill_pid_file, with_pid_file
-from box.sdk import LABEL_BY, Endpoint, Gone
+from box.providers.pump import MAX_SEND_BYTES, Closed, Emit, Pumped, kill_pid_file, with_pid_file
+from box.sdk import LABEL_BY, LABEL_NAME, LABEL_PORTS, Endpoint, Gone, NameTaken, declared_ports
 from box.store import Mount
 
 APP = "box"
 # TODO(handoff): T below is a TypeVar (ruff UP047); left for the generics/TypeVar decision.
 # TODO(handoff): calls after the first are bounded at 60 s; a large put/get tar could exceed that.
 ROOT = "/box"
+WORK = "/work"  # synced code (Session.sync)
 MAX_TIMEOUT_S = 24 * 3600  # Modal refuses a longer sandbox timeout
 DEFAULT_PYTHON = "3.13"
 T = TypeVar("T")
@@ -227,7 +230,9 @@ class Modal:
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
         labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
     ) -> ModalMachine:  # fmt: skip
-        """mounts: ModalVolumeStores only, each a sub_path of its Volume (created on start if missing)."""
+        """mounts: ModalVolumeStores only, each a sub_path of its Volume (created on start if missing).
+        labels[LABEL_NAME], if given, is also the sandbox's own name: Modal keeps it unique among the
+        app's running sandboxes, so a taken name is refused by Modal itself (NameTaken), race-free."""
         if foreign := [m.store.uri for m in mounts if not isinstance(m.store, ModalVolumeStore)]:
             raise ValueError(f"modal provider: mounts only a ModalVolumeStore (got {foreign})")
         if timeout_s > MAX_TIMEOUT_S:  # refused, not clamped: a clamped backstop would end the sandbox before the session's ceiling
@@ -241,12 +246,16 @@ class Modal:
             for m, store in zip(mounts, stores, strict=True):
                 volumes[f"{ROOT}/{m.path}"] = (await store.volume()).with_mount_options(sub_path=f"/{m.prefix}")
             return await modal.Sandbox.create.aio(
-                *entrypoint, app=await self.app(), image=modal_image, gpu=modal_gpu_, region=self.region,
+                *entrypoint, app=await self.app(), name=labels.get(LABEL_NAME), image=modal_image, gpu=modal_gpu_, region=self.region,
                 env={**env, "BOX_ROOT": ROOT}, tags=labels, timeout=timeout_s, client=client,
                 encrypted_ports=ports, volumes=volumes,
             )  # fmt: skip
 
-        return ModalMachine(self, self._call(create, timeout_s=CREATE_TIMEOUT_S), labels, booting=True)
+        try:
+            sandbox = self._call(create, timeout_s=CREATE_TIMEOUT_S)
+        except modal.exception.AlreadyExistsError as e:
+            raise NameTaken(f"modal provider: a running sandbox in app {APP!r} is named {labels[LABEL_NAME]!r}") from e
+        return ModalMachine(self, sandbox, labels, booting=True)
 
     def get(self, machine_id: str) -> ModalMachine:
         async def lookup() -> tuple[modal.Sandbox, dict[str, str]]:
@@ -324,6 +333,7 @@ class ModalMachine:
     closed, every call here raises ProviderClosed (attach a new Modal to reach the sandbox again)."""
 
     root = ROOT
+    work = WORK
 
     def __init__(self, provider: Modal, sandbox: modal.Sandbox, labels: dict[str, str], *, booting: bool = False) -> None:
         self.provider = provider
@@ -355,7 +365,7 @@ class ModalMachine:
             raise Gone(f"{self.id}: sandbox ended (exit {self.sandbox.returncode}) under `{cmd}`")
         return rc, out, err
 
-    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None) -> Pumped:
+    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Pumped:
         """An exec whose stdout and stderr are read as they arrive: a pump task on the provider's loop
         hands chunks through a zero-buffer channel to the reader thread Pumped owns (the loop never
         blocks on a slow caller: backpressure is the pump awaiting its send). close() cancels the
@@ -363,18 +373,25 @@ class ModalMachine:
         the pid it noted, in another exec, and Modal ends it anyway at timeout_s (exec's own
         timeout). An open exec does not keep the sandbox up: it ends (rc 137) when the supervisor
         exits, seen live; and it is not a connection to an exposed port, so the supervisor never
-        counts it against idleness."""
+        counts it against idleness. pty=True: exec(pty=True), whose terminal merges stderr into
+        stdout; send() writes its stdin (b"\x03" is Ctrl-C), each write a bounded call on the loop."""
         self.provider._open()  # ProviderClosed now, not at the stream's first chunk
         pid_file = f"/tmp/box-stream-{secrets.token_hex(6)}.pid"
         pumping: list[Future[None]] = []  # the pump, once started
         rc: list[int | None] = []
+        process: list[modal.container_process.ContainerProcess] = []  # the exec, once started (send writes to it)
+        started = threading.Event()  # set once process has it, or the pump ended without it
 
         def read(emit: Emit) -> None:
             send, receive = anyio.create_memory_object_stream[tuple[str, bytes]](0)
 
             async def pump() -> None:
                 async with send:  # however the pump ends, the reader's next receive sees EndOfStream
-                    p = await self.sandbox.exec.aio("bash", "-c", with_pid_file(cmd, pid_file), text=False, timeout=math.ceil(timeout_s))
+                    try:
+                        p = await self.sandbox.exec.aio("bash", "-c", with_pid_file(cmd, pid_file), text=False, timeout=math.ceil(timeout_s), **({"pty": True} if pty else {}))
+                        process.append(p)
+                    finally:
+                        started.set()
 
                     async def drain(name: str, source: AsyncIterator[bytes]) -> None:
                         async for data in source:
@@ -419,7 +436,26 @@ class ModalMachine:
                 raise Gone(f"{self.id}: sandbox ended (exit {self.sandbox.returncode}) under a stream of `{cmd}`")
             return code
 
-        return Pumped([read], kill=kill, wait=wait, timeout_s=timeout_s, quiet_s=quiet_s, label=self.id)
+        def write(data: bytes) -> None:
+            assert len(data) <= MAX_SEND_BYTES, len(data)  # pair: Pumped.send
+            if not started.wait(CALL_TIMEOUT_S) or not process:
+                raise TimeoutError(f"{self.id}: the stream's exec did not start in {CALL_TIMEOUT_S:.0f} s")
+
+            async def to_stdin() -> None:
+                process[0].stdin.write(data)
+                await process[0].stdin.drain.aio()
+
+            self._live(to_stdin)
+
+        return Pumped([read], kill=kill, wait=wait, timeout_s=timeout_s, quiet_s=quiet_s, label=self.id, send=write if pty else None)
+
+    def shell_argv(self, cmd: str) -> list[str]:
+        """`modal shell <sandbox id> --cmd ...`: Modal's own interactive terminal into the sandbox.
+        That CLI reads its own credentials (MODAL_TOKEN_ID/SECRET, MODAL_PROFILE, else the active
+        profile of ~/.modal.toml), not this provider's token: the argv never carries the secret
+        (anyone on this computer can read a process's argv), so the caller runs it where the CLI's
+        credentials are this workspace's."""
+        return [sys.executable, "-m", "modal", "shell", self.id, "--cmd", shlex.join(["bash", "-c", cmd])]
 
     def write(self, path: str, data: bytes) -> None:
         self._live(lambda: self.sandbox.filesystem.write_bytes.aio(data, path))  # creates parent dirs
@@ -444,13 +480,18 @@ class ModalMachine:
             return True
 
     def expose(self, port: int) -> Endpoint:
-        """The port's Modal tunnel (encrypted_ports at create): an open https URL, websockets too.
-        Not Sandbox.create_connect_token, which needs no declaring but gates every request on a
-        token (header or ?_modal_connect_token=); see box/NOTES-sessions.md."""
-        tunnels = self._live(self.sandbox.tunnels.aio)
-        if port not in tunnels:
-            raise ValueError(f"modal provider: port {port} was not declared at launch (ports={sorted(tunnels)})")
-        return Endpoint(tunnels[port].url)
+        """Two Modal mechanisms behind one method, by whether the port was declared at create:
+        declared (encrypted_ports): its tunnel, an open https URL, websockets too, which a browser
+        reaches (the relay's Jupyter). Not declared: a connect token (Sandbox.create_connect_token),
+        which needs no declaring but gates every request on the token, sent as a bearer header
+        (Modal also takes ?_modal_connect_token=; a header keeps it out of URLs and logs). A sandbox
+        from before LABEL_PORTS existed has no such label: its tunnels say what was declared."""
+        declared = declared_ports(self.labels) if LABEL_PORTS in self.labels else tuple(self._live(self.sandbox.tunnels.aio))
+        if port in declared:
+            tunnels = self._live(self.sandbox.tunnels.aio)
+            return Endpoint(tunnels[port].url)
+        creds = self._live(lambda: self.sandbox.create_connect_token.aio(port=port))
+        return Endpoint(creds.url.rstrip("/"), {"Authorization": f"Bearer {creds.token}"})
 
     def _live(self, call: Callable[[], Awaitable[T]]) -> T:
         """call on the provider's loop, bounded in time, with Modal's 'this sandbox has ended' errors
