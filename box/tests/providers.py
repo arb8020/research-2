@@ -47,7 +47,7 @@ def make_store(name: str, base: Path, provider: Provider) -> Store:
     if name == "modal":
         from box.providers.modal import ModalVolumeStore
 
-        return ModalVolumeStore(RECORD_VOLUME, client=provider.client)
+        return ModalVolumeStore(RECORD_VOLUME, provider=provider)  # type: ignore[arg-type] (a Tested Modal)
     raise ValueError(f"no store for provider {name!r}")
 
 
@@ -89,6 +89,9 @@ class Tested:
 
     def launch(self, *, labels: dict[str, str], timeout_s: int, **kw: object) -> Machine:
         return self.inner.launch(labels={**labels, **PURPOSE}, timeout_s=min(timeout_s, MAX_BACKSTOP_S), **kw)
+
+    def close(self) -> None:
+        self.inner.close()
 
     def __getattr__(self, attr: str) -> object:
         return getattr(self.inner, attr)
