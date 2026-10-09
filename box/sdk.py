@@ -112,6 +112,40 @@ class Provider(Protocol):
 
 
 @dataclass(frozen=True)
+class Dockerfile:
+    path: Path
+
+
+@dataclass(frozen=True)
+class RegistryImage:
+    ref: str
+
+
+@dataclass(frozen=True)
+class SnapshotImage:
+    provider: str
+    id: str
+
+
+Image = Dockerfile | RegistryImage | SnapshotImage
+SNAPSHOT_REF = re.compile(r"(modal|local)-snapshot:(.+)")
+
+
+def parse_image(image: str) -> Image:
+    if snapshot := SNAPSHOT_REF.fullmatch(image):
+        return SnapshotImage(provider=snapshot[1], id=snapshot[2])
+    if image.lower().endswith("dockerfile"):
+        return Dockerfile(Path(image))
+    return RegistryImage(image)
+
+
+def snapshot_ref(provider: str, snapshot_id: str) -> str:
+    ref = f"{provider}-snapshot:{snapshot_id}"
+    assert parse_image(ref) == SnapshotImage(provider, snapshot_id), ref
+    return ref
+
+
+@dataclass(frozen=True)
 class Endpoint:
     url: str
     headers: dict[str, str] = field(default_factory=dict)

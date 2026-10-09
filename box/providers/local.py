@@ -13,11 +13,10 @@ import termios
 from pathlib import Path
 
 from box.providers.pump import JOIN_S, Pty, Pumped, pipe_readers
-from box.sdk import LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken, Refused
+from box.sdk import LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken, Refused, SnapshotImage, parse_image, snapshot_ref
 from box.store import DirStore, Mount
 
 BASE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local"
-SNAPSHOT = "local-snapshot:"
 
 
 class Local:
@@ -32,9 +31,15 @@ class Local:
     ) -> LocalMachine:  # fmt: skip
         del timeout_s
         del ports
-        if gpu or (image and not image.startswith(SNAPSHOT)):
-            raise NotImplementedError(f"local provider: no gpu/image (got gpu={gpu!r}, image={image!r})")
-        snapshot = self.base / "snapshots" / image.removeprefix(SNAPSHOT) if image else None
+        if gpu:
+            raise NotImplementedError(f"local provider: no gpu (got gpu={gpu!r})")
+        match None if image is None else parse_image(image):
+            case None:
+                snapshot = None
+            case SnapshotImage(provider="local", id=snapshot_id):
+                snapshot = self.base / "snapshots" / snapshot_id
+            case _:
+                raise NotImplementedError(f"local provider: no image but its own snapshots (got image={image!r})")
         if snapshot is not None and not snapshot.is_dir():
             raise LookupError(f"local provider: no snapshot {image!r}")
         if foreign := [m.store.uri for m in mounts if not isinstance(m.store, DirStore)]:
@@ -84,7 +89,7 @@ class Local:
         del ttl_s
         snapshot_id = secrets.token_hex(6)
         shutil.copytree(machine.work, self.base / "snapshots" / snapshot_id, symlinks=True)
-        return SNAPSHOT + snapshot_id
+        return snapshot_ref(self.name, snapshot_id)
 
 
 class LocalMachine:
