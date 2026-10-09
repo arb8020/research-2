@@ -374,7 +374,7 @@ arch notes:
 - editor: CodeMirror (already integrated, light, good vim); revisit Monaco only if the editor becomes a full IDE pane
 - from the spike (`spike/workspace-cells`): file I/O via Jupyter's Contents API (works cross-origin, ~15 ms on Modal); kernel image gains `git clang make ccache g++ libc6-dev`; check builds use g++ and `-fno-sanitize-recover=all`; background checks run in their own process group with output routed to the starting cell (or a second kernel for checks: undecided); bundle written temp + rename, previous kept, verified before restore; measured end to end ~190 ms per cell check on Modal CPU
 - deferred: local backend (`session.py` vs `connect_dev.py`; they're separate code paths today)
-- slice built (branch `blogs/workspace-cells`): `engine/ch00-toy.md` over `ref/ch00` (2-file C++ + 1 Python cell), `ref.py`, `ws.py` (in the sandbox), `<ws-cell>`, `kernel.ts` job mode; local backend for workspace pages = `connect_dev.py --root --persist`; proof `verify_workspace.py` (local, and `--modal` on a CPU sandbox). Still open: splice (`ws.py advance` is a stub), regions, LSP, the relay's Volume mount + toolchain line (`notes/kernel-toolchain.patch`)
+- slice built (branch `blogs/workspace-cells`): `engine/ch00-toy.md` over `ref/ch00` (2-file C++ + 1 Python cell), `ref.py`, `workspace.py` (in the sandbox), `<ws-cell>`, `kernel.ts` job mode; local backend for workspace pages = `connect_dev.py --root --persist`; proof `verify_workspace.py` (local, and `--modal` on a CPU sandbox). Still open: splice (`workspace.py advance` is a stub), regions, LSP, the relay's Volume mount + toolchain line (`notes/kernel-toolchain.patch`)
 
 ## open questions
 - chapter 5: split into two if too heavy

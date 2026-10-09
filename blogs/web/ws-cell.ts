@@ -1,7 +1,7 @@
 // <ws-cell>: a whole-file cell over the reader's workspace (```cpp cell=X file=F in the chapter). The editor is a view
 // of workspace/F in the sandbox: loaded from it on connect, every edit saved back (debounced, Contents API) and
 // mirrored to localStorage (the sandbox can die; the browser keeps the draft). Run checks the latest passing tree
-// + this file as a background job; its output streams below with file:line links. Gating comes from ws.py status.
+// + this file as a background job; its output streams below with file:line links. Gating comes from workspace.py status.
 import { EditorView, basicSetup } from "codemirror";
 import { EditorState } from "@codemirror/state";
 import { attr, must } from "./dom";

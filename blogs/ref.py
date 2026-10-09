@@ -12,7 +12,7 @@ Layout (engine/ref/ by default; --root to point elsewhere):
 
 materialize(chN, "solution") stacks ch00..chN's files/ (a later chapter wins). materialize(chN, "start") is the
 solution of chN-1 with chN's files/ and then chN's start/ on top. The cells are listed in the tree itself, in
-checks/chNN.json (cell name, file, check steps), so the sandbox's run_checks and ws.py read the same list.
+checks/chNN.json (cell name, file, check steps), so the sandbox's run_checks and workspace.py read the same list.
 """
 
 from __future__ import annotations

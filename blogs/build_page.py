@@ -11,14 +11,14 @@ run `npm ci` there once).
 cell=X     -> <code-cell> editor prefilled with the stub, Run button, output pane
 given      -> collapsed, read-only code (the reader calls into it, so they can read it)
 ```K cell=X file=F, on a <!-- page: workspace=chNN --> page -> <ws-cell>: a whole-file editor over the reader's
-                      workspace file F (ws.py in their sandbox); the fence body is optional and, if there, must equal F at
-                      chNN/start (ref.py). Its check=X fence is one shell command (run_checks chNN X), run by ws.py check
+                      workspace file F (workspace.py in their sandbox); the fence body is optional and, if there, must equal F at
+                      chNN/start (ref.py). Its check=X fence is one shell command (run_checks chNN X), run by workspace.py check
 ```K given file=F (workspace page) -> read-only view of F at chNN/start; output lines naming F link to it
 ```python scratch -> <scratch-cell>: editable, Run executes on the Connect session's kernel; no checks, no gating
 <!-- page: connect --> on its own line -> this page has the header Connect control (gateway: --gateway-url);
                       a page with scratch cells or workspace cells must have it
 <!-- page: workspace=chNN --> -> the page's file= cells are chapter chNN of the reference (engine/ref/chNN); the page
-                      ships ws.py and the chapter's start bundle (ref.bundle) for the sandbox
+                      ships workspace.py and the chapter's start bundle (ref.bundle) for the sandbox
 solution=X, check=X, budget=X -> not in the page; the session runs them
 <!-- ... --> on its own line -> a muted "todo" note
 <!-- wip: ... --> on its own line -> a visible "under construction" banner (🚧 + the text), for readers
@@ -54,7 +54,7 @@ from check import HIDDEN, ROLES, Block, cell_order, parse
 HERE = Path(__file__).parent
 PAGE_FLAG = re.compile(r"^<!--\s*page:\s*(\S+)\s*-->\s*$", re.MULTILINE)
 PAGE_FLAGS = ("connect", "workspace")
-CHECK_COMMAND = re.compile(r"[\w./=-]+(?: [\w./=-]+)*")  # ws.py splits it on spaces: no quoting
+CHECK_COMMAND = re.compile(r"[\w./=-]+(?: [\w./=-]+)*")  # workspace.py splits it on spaces: no quoting
 
 
 class Workspace(NamedTuple):
@@ -318,7 +318,7 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
     for f in ("build/page.js", "build/settings.js", "page.css", "typeset.css", "play.html"):
         shutil.copy(HERE / "web" / f, out / Path(f).name)
     if ws is not None:
-        shutil.copy(HERE / "ws.py", out / "ws.py")  # the page uploads both into the sandbox (web/workspace.ts)
+        shutil.copy(HERE / "workspace.py", out / "workspace.py")  # the page uploads both into the sandbox (web/workspace.ts)
         ref.reader_bundle(ws.chapter, out / "ref.bundle")
 
     if envs:
