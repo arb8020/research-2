@@ -110,6 +110,7 @@ class WorkspaceCell extends HTMLElement {
       vimExtension(), basicSetup, syntax(lang), look(`${this.name}: ${this.file} (${lang})`),
       View.lineWrapping, // never a sideways scroll: a reader's long line wraps; shipped code is held to 80 columns
       region === null ? [] : regionHighlight(region),
+      this.hideReferenceOnEdit(),
     ], this, (line) => this.holds(line));
     must(this, ".cell-editor", HTMLDivElement).append(this.view.dom);
     this.view.scrollDOM.tabIndex = 0;
@@ -141,19 +142,31 @@ class WorkspaceCell extends HTMLElement {
     this.gate();
   }
 
-  // Show/hide the solution's region in its own read-only editor (copyable; the reader's doc is never touched).
-  private toggleReference(lang: string, text: string): void {
+  // Show/hide the solution's region in its own read-only editor. The reader's doc is never touched. It is for reading,
+  // not copying: no selection, copy/cut/drag are blocked (a speed bump, not security: the page source has it), and it
+  // closes as soon as the reader edits this cell (hideReferenceOnEdit).
+  private toggleReference(lang: string, text: string, want?: boolean): void {
     const box = must(this, ".cell-reference", HTMLDivElement);
+    const show = want ?? box.hidden; // no argument: toggle
     const button = must(this, ".show-reference", HTMLButtonElement);
     if (this.referenceView === undefined) {
       this.referenceView = new View({ parent: box, state: EditorState.create({ doc: text, extensions: [
-        basicSetup, syntax(lang), readingLook(`reference: ${this.name} (read-only)`), View.lineWrapping, EditorState.readOnly.of(true),
+        syntax(lang), readingLook(`reference: ${this.name} (read-only)`), View.lineWrapping,
+        EditorState.readOnly.of(true), View.editable.of(false),
       ] }) });
-      this.referenceView.scrollDOM.tabIndex = 0;
+      for (const kind of ["copy", "cut", "dragstart", "contextmenu"]) box.addEventListener(kind, (e) => { e.preventDefault(); });
     }
-    box.hidden = !box.hidden;
-    button.setAttribute("aria-pressed", String(!box.hidden));
-    button.setAttribute("aria-expanded", String(!box.hidden));
+    box.hidden = !show;
+    button.setAttribute("aria-pressed", String(show));
+    button.setAttribute("aria-expanded", String(show));
+  }
+
+  // An edit made in this cell (its view has focus) closes the reference.
+  private hideReferenceOnEdit(): Extension {
+    return View.updateListener.of((u) => {
+      if (!u.docChanged || !u.view.hasFocus || this.referenceView === undefined) return;
+      if (!must(this, ".cell-reference", HTMLDivElement).hidden) this.toggleReference("", "", false);
+    });
   }
 
   private span(): Span | undefined {

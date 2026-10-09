@@ -129,7 +129,7 @@ code-cell, scratch-cell, ws-cell { display: block; margin: 1.6em -16px; border: 
 .show-reference { font: inherit; padding: 3px 8px; border: 1px solid var(--rule); border-radius: 4px; background: none; color: var(--muted); cursor: pointer; }
 .show-reference[aria-pressed="true"] { color: var(--fg); background: var(--active); border-color: var(--muted); }
 .show-reference[hidden], .cell-reference[hidden] { display: none; }
-.cell-reference { border-top: 1px solid var(--rule); border-left: 3px solid var(--tok-comment); }
+.cell-reference { border-top: 1px solid var(--rule); border-left: 3px solid var(--tok-comment); user-select: none; -webkit-user-select: none; }
 .cell-reference-head { padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); border-bottom: 1px dashed var(--rule); }
 .cell-note { margin: 0; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); border-bottom: 1px dashed var(--rule); }
 .cell-conflict { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 10px; font-size: 12.5px;
