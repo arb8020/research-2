@@ -1,0 +1,11 @@
+base http://localhost:8797 session fanout-1791524505487
+POST->SSE latency ms: p50=1.6 p90=2.8 max=3.6
+WS->SSE latency ms: p50=0.4 p90=0.6 max=0.8
+ok: reconnect replay count 31 (got 31)
+ok: replayed lines in order, none duplicated
+ok: reader a saw all 51 live events (got 51)
+ok: event ids are contiguous
+ok: gap notice: "replay gap: 150 events dropped"
+ok: ring replay holds exactly 1000 (got 1000)
+ok: ring replay ends at the latest seq
+status {"session_id":"fanout-1791524505487","status":{"state":"booting","gpu":null,"started_at":1791524506225,"deadline":null}}

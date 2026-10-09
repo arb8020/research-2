@@ -1,0 +1,7 @@
+SSE through a cloudflared quick tunnel (trycloudflare.com), 2026-10-09, cloudflared 2026.3.0:
+- gateway (wrangler dev) via tunnel: response headers arrive, body never arrives while open
+  (no `retry:` preamble, no events, no 15 s heartbeat, not even after an 8 KB event) -> fully buffered.
+- isolation: a 10-line python SSE server (chunked, flush per event, 1 tick/s for 8 s) through its own quick
+  tunnel: all 8 ticks arrive at the same second, at stream end. So it's the quick tunnel, not wrangler/workerd.
+- same gateway, same code, deployed to workers.dev: SSE streams live (see deployed.txt).
+- POST and websockets through the quick tunnel work (tunnel.txt, proxy-tunnel.txt).

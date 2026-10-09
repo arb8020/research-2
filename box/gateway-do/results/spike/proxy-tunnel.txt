@@ -1,0 +1,15 @@
+ok: upstream set for proxy-echo-1791525075767: kernel.url=<gateway-tunnel>/sessions/proxy-echo-1791525075767/kernel
+echo direct     RTT p50=83.6 p90=84.6 min=82.8 ms (n=20)
+echo via DO     RTT p50=94.6 p90=96.1 min=91.6 ms (n=20)
+ok: upstream set for proxy-jupyter-1791525079972: kernel.url=<gateway-tunnel>/sessions/proxy-jupyter-1791525079972/kernel
+ok: jupyter direct without token refused (403)
+ok: jupyter direct tunnel: GET /api/status 200 in 141 ms
+ok: jupyter direct tunnel: POST /api/kernels -> cecaf26e-d08f-411b-bb72-02d363650063
+ok: jupyter direct tunnel: kernel ran code over ws: pid 96555
+ok: jupyter direct tunnel: IPython ! shell works
+jupyter direct tunnel: rest 141 ms, ws open 400 ms, execute RTT p50=20.0 p90=23.1 min=17.3 ms (n=20)
+ok: jupyter via DO      : GET /api/status 200 in 173 ms
+ok: jupyter via DO      : POST /api/kernels -> 4ee7886c-75c4-40be-859f-f35c121728ac
+ok: jupyter via DO      : kernel ran code over ws: pid 96659
+ok: jupyter via DO      : IPython ! shell works
+jupyter via DO      : rest 173 ms, ws open 304 ms, execute RTT p50=37.5 p90=42.7 min=34.6 ms (n=20)

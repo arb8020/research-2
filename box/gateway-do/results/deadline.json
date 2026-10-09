@@ -1,0 +1,155 @@
+{
+  "run": "deadline",
+  "provider": "modal",
+  "started": 1791530922.378322,
+  "seconds": 183,
+  "variants": {
+    "A": {
+      "url": "http://localhost:8780",
+      "idle": {
+        "session": "s-876ec1cc5595",
+        "held": false,
+        "reason": "idle",
+        "ended_after_running_s": 59.2,
+        "late_vs_deadline_s": -119.5,
+        "steps_near_end": [
+          "supervisor up (1.8 s since connect)",
+          "starting Jupyter Server",
+          "tunnel open: https://ta-01m4fs0ww4m8rb7expx8dt4v2s-8888-0c05f6qb2ir5tdtpzosetvpab.w.modal.host",
+          "Jupyter Server ready (2.9 s since connect)"
+        ]
+      },
+      "deadline": {
+        "session": "s-0fc69a3586a4",
+        "held": true,
+        "reason": "deadline",
+        "ended_after_running_s": 179.3,
+        "late_vs_deadline_s": 0.9,
+        "steps_near_end": []
+      },
+      "modal_usd": 0.0038
+    },
+    "B": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/b",
+      "idle": {
+        "session": "s-cc5face9e22f",
+        "held": false,
+        "reason": "idle",
+        "ended_after_running_s": 57.7,
+        "late_vs_deadline_s": -117.7,
+        "steps_near_end": [
+          "starting Jupyter Server",
+          "tunnel open: https://ta-01m4fs738r7kc0e0ajrtwvwvcs-8888-2bk8a8iecvep3a1kipmmbwrj3.w.modal.host",
+          "forwarder started: the machine pushes its log to the fan-out from here",
+          "Jupyter Server ready (4.6 s since connect)"
+        ]
+      },
+      "deadline": {
+        "session": "s-4d5a6a26f934",
+        "held": true,
+        "reason": "deadline",
+        "ended_after_running_s": 176.8,
+        "late_vs_deadline_s": 1.5,
+        "steps_near_end": [
+          "deadline reached (this gateway's alarm): ending the machine"
+        ]
+      },
+      "modal_usd": 0.0037
+    },
+    "C": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/c",
+      "idle": {
+        "session": "s-5efd08d6403c",
+        "held": false,
+        "reason": "idle",
+        "ended_after_running_s": 59.0,
+        "late_vs_deadline_s": -119.5,
+        "steps_near_end": [
+          "starting Jupyter Server",
+          "tunnel open: https://ta-01m4fs0wyw8n54sk4b4j5ba9ws-8888-i3jf3gljzrsv3r0sgtdvnvq2x.w.modal.host",
+          "forwarder started: the machine pushes its log to the fan-out from here",
+          "Jupyter Server ready (2.9 s since connect)"
+        ]
+      },
+      "deadline": {
+        "session": "s-903d472e400f",
+        "held": true,
+        "reason": "deadline",
+        "ended_after_running_s": 178.9,
+        "late_vs_deadline_s": 0.9,
+        "steps_near_end": []
+      },
+      "modal_usd": 0.0037
+    },
+    "B_first_run_race": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/b",
+      "idle": {
+        "session": "s-fd2911079a6b",
+        "held": false,
+        "reason": "idle",
+        "ended_after_running_s": 58.4,
+        "late_vs_deadline_s": -117.8,
+        "steps_near_end": [
+          "starting Jupyter Server",
+          "tunnel open: https://ta-01m4fs0x3t0x38c74fw54jx0es-8888-lkfjoc2agnndrpagxnbchg5kv.w.modal.host",
+          "forwarder started: the machine pushes its log to the fan-out from here",
+          "Jupyter Server ready (4.0 s since connect)"
+        ]
+      },
+      "deadline": {
+        "session": "s-379fc5040944",
+        "held": true,
+        "reason": "stopped",
+        "ended_after_running_s": 178.6,
+        "late_vs_deadline_s": 1.5,
+        "steps_near_end": [
+          "deadline reached (this gateway's alarm): ending the machine"
+        ]
+      },
+      "modal_usd": 0.0037
+    }
+  },
+  "sessions": [
+    [
+      "C",
+      null,
+      62.0
+    ],
+    [
+      "A",
+      null,
+      62.0
+    ],
+    [
+      "B",
+      null,
+      62.7
+    ],
+    [
+      "B",
+      null,
+      182.0
+    ],
+    [
+      "C",
+      null,
+      182.5
+    ],
+    [
+      "A",
+      null,
+      182.9
+    ],
+    [
+      "B",
+      null,
+      62.5
+    ],
+    [
+      "B",
+      null,
+      181.7
+    ]
+  ],
+  "note": "B rerun after the end-reason race fix (owner-do.ts 'ending'); the first B run (held session reported 'stopped') kept as B_first_run_race"
+}
