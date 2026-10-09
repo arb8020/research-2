@@ -1,20 +1,21 @@
 // The page's Connect session: one state machine, the token and session in localStorage, the event log.
 //
-//   disconnected --connect()--> connecting --status running + kernel attached--> connected
-//        ^                          |                                               |
-//        +---- ended / disconnect() / failure (the reason stays on `failure`) ------+
+//   disconnected --connect()--> connecting --status running + kernel attached--> connected <-+
+//        ^                          |                                               |   |      |
+//        +---- ended / disconnect() / failure (the reason stays on `failure`) ------+   +------+
+//                                                                  status / extend(): new lease times
 //
 // Storage (box/CONTRACT-gateway.md, "Browser storage"):
 //   connect.token.modal = {id, secret}                        until Sign out
 //   connect.session     = {gateway, session_id, provider, gpu} while a session lives; any opted-in page reattaches
-import { createSession, endSession, getSession, subscribe } from "./gateway";
+import { createSession, endSession, extendSession, getSession, subscribe } from "./gateway";
 import type { EndedReason, GatewayEvent, Status, Token } from "./gateway";
 import { attach, detach, onKernelState } from "./kernel";
 
 export type Phase =
   | { kind: "disconnected"; failure: string | undefined }
   | { kind: "connecting"; gpu: string | null; step: string }
-  | { kind: "connected"; id: string; gpu: string | null; startedAt: number; deadline: number };
+  | { kind: "connected"; id: string; gpu: string | null; startedAt: number; leaseUntil: number; ceiling: number | undefined };
 
 export interface LogLine {
   t: number; // unix seconds
@@ -37,6 +38,7 @@ const REATTACH_GAP_MS = 10_000;
 
 const REASONS: Record<EndedReason, string | undefined> = {
   stopped: undefined,
+  lease: "the session length ran out (Connect again to keep going)",
   deadline: "the session reached its time limit",
   idle: "the session was idle too long and was stopped",
   lease_lost: "the session lost its lease (another tab or the gateway ended it)",
@@ -119,13 +121,13 @@ function storedSession(): Stored | undefined {
 const describe = (e: unknown): string =>
   e instanceof TypeError ? `the gateway at ${gateway()} is unreachable` : e instanceof Error ? e.message : String(e);
 
-export async function connect(token: Token, gpu: string | null): Promise<void> {
+export async function connect(token: Token, gpu: string | null, leaseS: number): Promise<void> {
   if (phase.kind !== "disconnected") throw new Error(`connect() while ${phase.kind}`);
   writeJson(TOKEN_KEY, token);
   setPhase({ kind: "connecting", gpu, step: "asking the gateway" });
-  note(`connect: modal, gpu ${gpu ?? "none"}, gateway ${gateway()}`);
+  note(`connect: modal, gpu ${gpu ?? "none"}, length ${String(leaseS / 60)} min, gateway ${gateway()}`);
   try {
-    const { id, status } = await createSession(gateway(), token, gpu);
+    const { id, status } = await createSession(gateway(), token, gpu, leaseS);
     if (currentPhase().kind !== "connecting") { // cancelled while the gateway was creating it
       note(`session ${id} created after Cancel; ending it`);
       await endSession(gateway(), id, token);
@@ -181,13 +183,14 @@ function receive(event: GatewayEvent): void {
 function apply(status: Status): void {
   if (live === undefined) return;
   if (status.state === "ended") { end(status.reason, REASONS[status.reason]); return; }
-  if (status.state === "booting" || phase.kind === "connected" || attaching) return;
+  if (status.state === "booting" || attaching) return;
+  if (phase.kind === "connected") { setPhase({ ...phase, leaseUntil: status.leaseUntil, ceiling: status.ceiling }); return; }
   const kernel = status.kernel;
   attaching = true;
   setPhase({ kind: "connecting", gpu: status.gpu, step: "starting the kernel" });
   attach(kernel).then(() => {
     note(`kernel attached (${kernel.url})`);
-    if (live !== undefined) setPhase({ kind: "connected", id: live.stored.session_id, gpu: status.gpu, startedAt: status.startedAt, deadline: status.deadline });
+    if (live !== undefined) setPhase({ kind: "connected", id: live.stored.session_id, gpu: status.gpu, startedAt: status.startedAt, leaseUntil: status.leaseUntil, ceiling: status.ceiling });
   }, (e: unknown) => {
     note(`kernel attach failed: ${describe(e)}`, "error");
     void recheck();
@@ -220,6 +223,17 @@ function end(reason: EndedReason | undefined, failure: string | undefined): void
   setPhase({ kind: "disconnected", failure });
 }
 
+// Ask for the lease to run until `until` (unix s). The gateway clamps to the ceiling; the phase gets what it granted.
+// Throws on a gateway error (the menu shows it); the session itself is unaffected.
+export async function extend(until: number): Promise<void> {
+  const current = live;
+  if (current === undefined || phase.kind !== "connected") throw new Error(`extend() while ${phase.kind}`);
+  const status = await extendSession(gateway(), current.stored.session_id, current.token, until);
+  const clamped = status.leaseUntil < until ? " (capped at 12 h after the start)" : "";
+  note(`lease extended: asked until ${new Date(until * 1000).toLocaleTimeString()}, now ends ${new Date(status.leaseUntil * 1000).toLocaleTimeString()}${clamped}`);
+  apply(status);
+}
+
 export async function disconnect(): Promise<void> {
   const current = live;
   if (current === undefined) { end(undefined, undefined); return; }
@@ -227,8 +241,8 @@ export async function disconnect(): Promise<void> {
   try {
     await endSession(gateway(), current.stored.session_id, current.token);
   } catch (e) {
-    // The machine may outlive this (the gateway reaps it at its deadline); say so rather than pretend.
-    note(`end failed: ${describe(e)}; the session stops at its deadline`, "error");
+    // The machine may outlive this (the gateway reaps it when its lease ends); say so rather than pretend.
+    note(`end failed: ${describe(e)}; the session stops when its length runs out`, "error");
   }
   end(undefined, undefined);
 }
