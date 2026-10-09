@@ -1,5 +1,15 @@
 # Handoff: blogs/ interactive RL series (2026-10-08)
 
+## Open threads (2026-10-09 night: reader path)
+- **Connect works on a real Modal T4** (branch `blogs/connect`; box side on `box/reader-path`). `dl/neural-nets.md` has
+  `<!-- page: connect -->`, a ```` ```python scratch ```` `!nvidia-smi` cell, and nn-fit "Run on: remote" incl. a
+  remote-only grokking dataset (a + b mod 113; T4 21.5 s vs CPU 123 s). Prose todos: two `<!-- write: -->`.
+- Run: tmux `reader-path` (relay :8790 + page :8012), or see box/NOTES-sessions.md "Overnight result".
+  Proofs: `verify_connect.py`, `web/embeds/nn-fit/remote_e2e.py [--gateway URL] [--case grok]`, `demo_tour.py`.
+  No cloud: `connect_dev.py` (fake gateway, local Jupyter, FAKE nvidia-smi).
+- Page changes to review before merging into blogs/flappy: corner controls become a sticky bar < 1280px
+  (fixes the overlap TODO); kernel keepalive on the control channel; nn-fit curve->spiral crash fixed (still on flappy).
+
 ## Open threads (2026-10-09)
 - **Landed today (all on `blogs/flappy`):**
   - `<nn-fit>` is an embed (```` ```nn-fit file=... ````, `key: value` settings, bad keys fail the build). It lives on its own page `dl/neural-nets.md` under a `<!-- wip: ... -->` banner (new: renders a 🚧 note; plain `<!-- -->` stays a todo).
