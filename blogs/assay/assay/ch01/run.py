@@ -1,24 +1,22 @@
-"""The run step for chapter 1: expected answers (trusted, cached) and candidate Runs (isolated child, cached).
+"""Chapter 1's run step: the trusted parent computes expected answers and stores candidate Runs; the untrusted child
+imports the reader's file and calls one function. Both sides import this module (the child only uses its child part).
 
-    execute(ctx, op, candidate, cases)
-      expected(case)       store "expected" <- (fp64 truth on ctx.device, the reference's own error); the truth tensor
-                           itself is a "truth" entry (a model's is dtype-independent: one ~150 MB copy, not one per dtype)
-      run keys             candidate file sha256 + attr + case + env + runner code fp + expected key
-      all in the store?    -> done, no child at all (a warm check never imports the reader's code)
-      else one Child       load -> blocked (import / bind error) | ready
-                           per case: call -> facts (returned? dtype, shape, inputs unchanged, deterministic, err vs
-                           truth, logit reductions) -> store "run"
-                           finish -> coverage of the bound function's lines -> store "run" (case "coverage")
-A died / timed-out call is recorded for grading but not cached (it may be the machine, not the code), and the cases
-after it are reported as not run.
+Sections: tensors over frames, the untrusted child, the run step (trusted parent).
 """
 
 from __future__ import annotations
 
 import ast
+import hashlib
+import importlib.util
 import json
+import math
 import platform
 import re
+import sys
+import tempfile
+import time
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import metadata
@@ -27,16 +25,270 @@ from typing import Any
 
 import torch
 
-from assay.ch01.cases import Case, make_inputs
-from assay.ch01.numerics import band, reduce_output, reference_stats
-from assay.ch01.registry import Op
-from assay.ch01.tensors import decode, digest, pack_args, raw
-from assay.sandbox import Child, ChildDied, ChildTimeout, Isolation, ProtocolError
-from assay.store import Entry, Store, files_fp, key_of, sha256
+from assay.ch01.ops import NAMES, Case, Op, band, make_inputs, reduce_output, reference_stats
+from assay.core import (
+    Child,
+    ChildDied,
+    ChildTimeout,
+    Entry,
+    Isolation,
+    ProtocolError,
+    Store,
+    child_recv,
+    child_send,
+    files_fp,
+    key_of,
+    sha256,
+)
+
+# --------------------------------------------------------------------------------------------------------------------
+# tensors over frames
+#
+# Tensors over frames: a spec in the JSON header (dtype, shape) + raw bytes in a blob. Both sides use this; the parent
+# parses what the child sends with `decode`, which checks every size before it interprets a byte.
+# --------------------------------------------------------------------------------------------------------------------
+
+DTYPES = {"float64": torch.float64, "float32": torch.float32, "float16": torch.float16, "bfloat16": torch.bfloat16,
+          "int64": torch.int64, "int32": torch.int32, "bool": torch.bool}
+
+
+def raw(tensor: torch.Tensor) -> bytes:
+    flat = tensor.detach().cpu().contiguous().reshape(-1)
+    return flat.view(torch.uint8).numpy().tobytes() if flat.numel() else b""
+
+
+def digest(tensor: torch.Tensor) -> str:
+    """sha256 of dtype, shape and raw bytes: equal digests = bitwise equal (NaN payloads and -0.0 included)."""
+    h = hashlib.sha256(f"{tensor.dtype}|{list(tensor.shape)}|".encode())
+    h.update(raw(tensor))
+    return h.hexdigest()
+
+
+def spec(tensor: torch.Tensor) -> dict[str, Any]:
+    dtype = str(tensor.dtype).removeprefix("torch.")
+    assert dtype in DTYPES, f"cannot send dtype {tensor.dtype}"
+    return {"dtype": dtype, "shape": list(tensor.shape)}
+
+
+def decode(spec_: Any, data: bytes) -> torch.Tensor:
+    if not isinstance(spec_, dict):
+        raise ProtocolError("tensor spec is not an object")
+    dtype_name, shape = spec_.get("dtype"), spec_.get("shape")
+    if dtype_name not in DTYPES:
+        raise ProtocolError(f"dtype {dtype_name!r} not allowed")
+    if not isinstance(shape, list) or not all(isinstance(d, int) and d >= 0 for d in shape):
+        raise ProtocolError(f"shape {shape!r} is not a list of sizes")
+    dtype = DTYPES[dtype_name]
+    if len(data) != math.prod(shape) * torch.empty((), dtype=dtype).element_size():
+        raise ProtocolError(f"{len(data)} bytes for shape {shape} {dtype_name}")
+    if not data:
+        return torch.empty(shape, dtype=dtype)
+    return torch.frombuffer(bytearray(data), dtype=torch.uint8).view(dtype).reshape(shape)
+
+
+def pack_args(args: tuple) -> tuple[list[Any], dict[str, bytes]]:
+    """Call arguments -> header list (a tensor spec, or a plain JSON scalar) + blobs arg0, arg1, ..."""
+    header: list[Any] = []
+    blobs: dict[str, bytes] = {}
+    for i, arg in enumerate(args):
+        if isinstance(arg, torch.Tensor):
+            header.append({"tensor": spec(arg)})
+            blobs[f"arg{i}"] = raw(arg)
+        else:
+            assert isinstance(arg, int | float), f"arg {i}: {type(arg)} is neither a tensor nor a scalar"
+            header.append({"scalar": arg})
+    return header, blobs
+
+
+def unpack_args(header: list[Any], blobs: dict[str, bytes]) -> tuple:
+    return tuple(decode(a["tensor"], blobs[f"arg{i}"]) if "tensor" in a else a["scalar"]
+                 for i, a in enumerate(header))
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# the untrusted child
+#
+# The untrusted side: runs in the isolated child (sandbox.Child), imports the reader's file, calls one function.
+#
+#     parent                                         child
+#                                                    import torch, coverage          -> boot
+#     load {file, attr, adapter, device, coverage}   coverage.start(); import file    -> ready | import_error {file, line}
+#                                                                                        | bind_error
+#     call {args, dtype} + arg blobs                 out0 = fn(clones); out1 = fn(clones)
+#                                                    -> returned {out spec, sha256 of out1 and of every arg after each
+#                                                       run} + out0's bytes | raised {error}
+#     finish                                         coverage.stop()                  -> coverage {missing lines/branches}
+#
+# Only run 0's output crosses the pipe in full; run 1 and the inputs-after come back as digests, which the parent
+# compares against the bytes it has (a gpt2 output is ~77 MB at 384 tokens; two of them per call would be waste).
+# Everything here is as honest as the candidate lets it be: it can patch this module (forges_reply does), but the parent
+# only ever parses JSON + raw bytes from it.
+# --------------------------------------------------------------------------------------------------------------------
+
+def main(in_fd: int, out_fd: int) -> None:
+    import coverage
+
+    _send(out_fd, {"kind": "boot", "torch": torch.__version__}, {})
+    header, _ = child_recv(in_fd)
+    assert header["kind"] == "load", header
+    path = Path(header["file"])
+    tracer = None
+    if header["coverage"]:
+        tracer = coverage.Coverage(branch=True, include=[str(path)], data_file=None, config_file=False)
+        tracer.clear_exclude()  # a `# pragma: no cover` must not hide an untested line
+        tracer.start()
+    try:
+        module = _import(path)
+    except BaseException as exc:  # noqa: BLE001 -- any import failure is reported (blocked), then we exit
+        _send(out_fd, {"kind": "import_error", **_where(exc, path)}, {})
+        return
+    try:
+        fn = ADAPTERS[header["adapter"]](module, header["attr"], header["device"])
+    except Exception as exc:  # noqa: BLE001
+        _send(out_fd, {"kind": "bind_error", "error": f"{type(exc).__name__}: {exc}"}, {})
+        return
+    _send(out_fd, {"kind": "ready"}, {})
+    _serve(in_fd, out_fd, fn, header["device"], tracer, path)
+
+
+def _serve(in_fd: int, out_fd: int, fn: Callable[..., Any], device: str, tracer: Any, path: Path) -> None:
+    while True:
+        try:
+            header, blobs = child_recv(in_fd)
+        except Exception:  # noqa: BLE001 -- EOF: the parent is done with us
+            return
+        if header["kind"] == "finish":
+            if tracer is not None:
+                tracer.stop()
+            _send(out_fd, _coverage_report(tracer, path), {})
+            return
+        assert header["kind"] == "call", header
+        args = unpack_args(header["args"], blobs)
+        reply, out = _call_twice(fn, args, NAMES[header["dtype"]], device)
+        _send(out_fd, reply, out)
+
+
+def _import(path: Path) -> Any:
+    sys.path.insert(0, str(path.parent))  # the reader's file may import its siblings
+    spec_ = importlib.util.spec_from_file_location(path.stem, path)
+    assert spec_ is not None and spec_.loader is not None, f"cannot load {path}"
+    module = importlib.util.module_from_spec(spec_)
+    sys.modules[path.stem] = module
+    spec_.loader.exec_module(module)
+    return module
+
+
+def _where(exc: BaseException, path: Path) -> dict[str, Any]:
+    """file:line of an import failure, in the reader's file when it is there (a SyntaxError, or the deepest frame of
+    the traceback inside the file)."""
+    line = None
+    if isinstance(exc, SyntaxError) and exc.filename and Path(exc.filename).resolve() == path.resolve():
+        line = exc.lineno
+    else:
+        for frame in traceback.extract_tb(exc.__traceback__):
+            if Path(frame.filename).resolve() == path.resolve():
+                line = frame.lineno
+    error = "".join(traceback.format_exception_only(type(exc), exc)).strip()
+    return {"error": error, "file": path.name, "line": line, "traceback": traceback.format_exc()[-4000:]}
+
+
+def _plain(module: Any, attr: str, device: str) -> Callable[..., Any]:
+    if not hasattr(module, attr):
+        raise AttributeError(f"{Path(module.__file__).name} defines no `{attr}`")
+    fn = getattr(module, attr)
+
+    def call(*args: Any, dtype: torch.dtype) -> Any:
+        return fn(*args)
+
+    return call
+
+
+def _forward(module: Any, attr: str, device: str) -> Callable[..., Any]:
+    """gpt2.py's model contract: `load(dtype) -> (weights, config)`, `forward(weights, config, tokens) -> logits`.
+    Weights load once per dtype (inside the first call, under its timeout)."""
+    for name in ("load", attr):
+        if not hasattr(module, name):
+            raise AttributeError(f"{Path(module.__file__).name} defines no `{name}`")
+    loaded: dict[torch.dtype, Any] = {}
+
+    def call(tokens: torch.Tensor, *, dtype: torch.dtype) -> Any:
+        if dtype not in loaded:
+            weights, config = module.load(dtype)
+            loaded[dtype] = ({k: v.to(device) for k, v in weights.items()}, config)
+        weights, config = loaded[dtype]
+        with torch.no_grad():
+            return getattr(module, attr)(weights, config, tokens)
+
+    return call
+
+
+ADAPTERS = {"plain": _plain, "forward": _forward}
+
+
+def _call_twice(fn: Callable[..., Any], args: tuple, dtype: torch.dtype,
+                device: str) -> tuple[dict[str, Any], dict[str, bytes]]:
+    """Two runs on fresh clones; digests of run 1's output and of the args right after each run."""
+    out0: torch.Tensor | None = None
+    digests: dict[str, Any] = {"args_after": []}
+    started = time.perf_counter()
+    for run in (0, 1):
+        clones = tuple(a.clone().to(device) if isinstance(a, torch.Tensor) else a for a in args)
+        try:
+            out = fn(*clones, dtype=dtype)
+        except Exception as exc:  # noqa: BLE001 -- a raising candidate is a verdict
+            return {"kind": "raised", "error": f"{type(exc).__name__}: {exc}"[:2000]}, {}
+        if type(out) is not torch.Tensor:
+            return {"kind": "raised", "error": f"returned {type(out).__module__}.{type(out).__qualname__}, "
+                                               f"want a plain torch.Tensor"}, {}
+        out = out.detach().cpu().clone()
+        digests["args_after"].append([digest(a.cpu()) if isinstance(a, torch.Tensor) else None for a in clones])
+        if run == 0:
+            out0 = out
+        else:
+            digests["out1"] = digest(out)
+    assert out0 is not None
+    return ({"kind": "returned", "out": spec(out0), "seconds": time.perf_counter() - started, **digests},
+            {"out": raw(out0)})
+
+
+def _coverage_report(tracer: Any, path: Path) -> dict[str, Any]:
+    if tracer is None:
+        return {"kind": "coverage", "measured": False}
+    with tempfile.TemporaryDirectory() as scratch:
+        out = Path(scratch) / "coverage.json"
+        tracer.json_report(outfile=str(out), include=[str(path)])
+        report = json.loads(out.read_text())
+    files = list(report["files"].values())
+    if not files:
+        return {"kind": "coverage", "measured": True, "executed": False, "missing_lines": [], "missing_branches": []}
+    return {"kind": "coverage", "measured": True, "executed": True, "missing_lines": files[0]["missing_lines"],
+            "missing_branches": files[0].get("missing_branches", [])}
+
+
+def _send(fd: int, header: dict[str, Any], blobs: dict[str, bytes]) -> None:
+    child_send(fd, header, blobs)
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# the run step (trusted parent)
+#
+# The run step for chapter 1: expected answers (trusted, cached) and candidate Runs (isolated child, cached).
+#
+#     execute(ctx, op, candidate, cases)
+#       expected(case)       store "expected" <- (fp64 truth on ctx.device, the reference's own error); the truth tensor
+#                            itself is a "truth" entry (a model's is dtype-independent: one ~150 MB copy, not one per dtype)
+#       run keys             candidate file sha256 + attr + case + env + runner code fp + expected key
+#       all in the store?    -> done, no child at all (a warm check never imports the reader's code)
+#       else one Child       load -> blocked (import / bind error) | ready
+#                            per case: call -> facts (returned? dtype, shape, inputs unchanged, deterministic, err vs
+#                            truth, logit reductions) -> store "run"
+#                            finish -> coverage of the bound function's lines -> store "run" (case "coverage")
+# A died / timed-out call is recorded for grading but not cached (it may be the machine, not the code), and the cases
+# after it are reported as not run.
+# --------------------------------------------------------------------------------------------------------------------
 
 ASSAY = Path(__file__).resolve().parents[1]  # .../assay (the package)
-RUN_CODE = ("store.py", "sandbox.py", "ch01/child.py", "ch01/tensors.py", "ch01/numerics.py", "ch01/run.py",
-            "ch01/cases.py")
+RUN_CODE = ("core.py", "ch01/ops.py", "ch01/run.py")
 KEEP_FULL_BYTES = 16 << 20  # outputs up to this size are stored whole; bigger ones only when they look wrong
 STORAGE_MULT, STORAGE_FLOORS = 2.0, {"fp32": 2e-5, "fp16": 1e-3, "bf16": 2e-2}  # "looks wrong", for storage only
 
@@ -53,7 +305,7 @@ class Ctx:
     log: Callable[[str], None]
     startup_timeout: float = 180.0
     call_timeout: float = 60.0
-    zygote: Path | None = None  # the warm process's socket: children fork from it instead of spawning
+    warm: Path | None = None  # the warm process's socket: children fork from it instead of spawning
 
     @property
     def device(self) -> str:
@@ -100,8 +352,8 @@ def runner_fp() -> str:
 
 
 def reference_fp(op: Op) -> str:
-    spec_file = Path(op.reference.__code__.co_filename)
-    return files_fp([spec_file, ASSAY / "ch01/numerics.py", ASSAY / "ch01/cases.py", ASSAY / "ch01/texts.py"], ASSAY)
+    """The references, inputs, prompts and numerics all live in ops.py: any edit there recomputes expected answers."""
+    return files_fp([ASSAY / "ch01/ops.py"], ASSAY)
 
 
 def _inputs_key(case: Case) -> dict[str, Any]:
@@ -153,9 +405,9 @@ def execute(ctx: Ctx, op: Op, cand: Candidate, cases: list[Case], *, grade_only:
     if grade_only:
         raise InfraError(f"--grade-only: {op.name} has runs missing from the store; run without it first")
     ctx.log(f"{op.name}: running {cand.file.name}:{cand.attr} on {len(cases)} cases in an isolated child "
-            f"({ctx.iso.mode}, {'forked' if ctx.zygote else 'spawned'})")
-    with Child("assay.ch01.child", cwd=cand.file.parent, iso=ctx.iso, pythonpath=ASSAY.parent,
-               extra_env={"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}, zygote=ctx.zygote) as child:
+            f"({ctx.iso.mode}, {'forked' if ctx.warm else 'spawned'})")
+    with Child("assay.ch01.run", cwd=cand.file.parent, iso=ctx.iso, pythonpath=ASSAY.parent,
+               extra_env={"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}, warm=ctx.warm) as child:
         blocked = _load(ctx, child, cand, want_coverage)
         if blocked is not None:
             return OpRuns(blocked, [(c, None) for c in cases], None, executed=True)
@@ -309,4 +561,3 @@ def where(path: Path, line: int | None, attr: str | None = None) -> dict[str, An
     if region is not None:
         out["region"] = region
     return out
-

@@ -8,7 +8,7 @@ import pickle
 
 from torch import Tensor
 
-import assay.ch01.child
+import assay.ch01.run
 
 
 class RunsCodeWhenUnpickled:
@@ -20,7 +20,7 @@ def _forged_send(fd: int, header: dict, blobs: dict) -> None:
     os.write(fd, pickle.dumps(RunsCodeWhenUnpickled()))
 
 
-_original_send = assay.ch01.child._send
+_original_send = assay.ch01.run._send
 
 
 def _send_ready_then_forge(fd: int, header: dict, blobs: dict) -> None:
@@ -28,7 +28,7 @@ def _send_ready_then_forge(fd: int, header: dict, blobs: dict) -> None:
     sender(fd, header, blobs)
 
 
-assay.ch01.child._send = _send_ready_then_forge
+assay.ch01.run._send = _send_ready_then_forge
 
 
 def layer_norm(x: Tensor, weight: Tensor, bias: Tensor, eps: float) -> Tensor:

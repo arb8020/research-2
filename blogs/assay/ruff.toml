@@ -6,5 +6,4 @@ known-first-party = ["assay"]
 
 [lint.per-file-ignores]
 # jaxtyping's dim strings (`Float[Tensor, "rows hidden"]`) are not forward references.
-"assay/ch01/specs.py" = ["F722", "F821", "UP037"]
-"assay/ch01/model.py" = ["F722", "F821", "UP037"]
+"assay/ch01/ops.py" = ["F722", "F821", "UP037"]
