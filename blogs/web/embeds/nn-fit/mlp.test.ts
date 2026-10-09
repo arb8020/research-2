@@ -4,7 +4,7 @@ import type { Activation, Batch, Mlp, Task } from "./mlp";
 import { ACTIVATIONS, evaluate, get, initMlp, lossAndGrad, makeAdam, seeded, trainStep } from "./mlp";
 import type { WaveParams } from "./datasets";
 import {
-  INPUT_SCALE, columnAt, curveSamples, describeGaps, drawSamples, fillWave, filledColumns, gaps, makeDrawBuffer, paintStroke,
+  INPUT_SCALE, columnAt, completeCurve, curveSamples, describeGaps, drawSamples, fillWave, filledColumns, gaps, makeDrawBuffer, paintStroke,
   spiral, valueAt, waveAt, waveStages,
 } from "./datasets";
 
@@ -76,6 +76,20 @@ for (const task of ["regression", "binary"] as const) {
   const full = makeDrawBuffer(100);
   paintStroke(full, { x: -1, y: 0 }, { x: 1, y: 0 });
   check(gaps(full).length === 0, "a stroke from edge to edge leaves no gaps");
+}
+
+// Completion: flat ends, linear interior, drawn columns untouched.
+{
+  const buf = makeDrawBuffer(10);
+  buf[2] = 0.5; buf[3] = 0.4; buf[7] = -0.2;
+  const done = completeCurve(buf);
+  const want = [0.5, 0.5, 0.5, 0.4, 0.25, 0.1, -0.05, -0.2, -0.2, -0.2];
+  check(done !== null && want.every((v, i) => Math.abs(v - get(done, i)) < 1e-12),
+    `completeCurve: flat ends, linear interior [${done === null ? "null" : Array.from(done, (v) => v.toFixed(2)).join(", ")}]`);
+  check(Number.isNaN(get(buf, 0)), "completeCurve returns a new buffer (the drawing keeps its gaps)");
+  check(completeCurve(makeDrawBuffer(10)) === null, "completeCurve of an empty drawing is null");
+  const one = makeDrawBuffer(5); one[4] = 0.3;
+  check(completeCurve(one)?.every((v) => v === 0.3) ?? false, "completeCurve of a single column is flat");
 }
 
 // Wave generator: determinism, range, and "turning K or d up keeps the same curve".
