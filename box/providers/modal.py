@@ -1,23 +1,3 @@
-"""The Modal provider: a machine is a Modal Sandbox whose entrypoint is the supervisor.
-
-A sandbox lives exactly as long as its entrypoint, so when the supervisor exits the sandbox ends
-by itself (no BOX_ON_SHUTDOWN needed), and its files go with it. Sandbox.create's `timeout` is
-Modal's hard backstop past the session's ceiling (Modal caps it at 24 h, so a ceiling past
-24 h - 600 s is refused here, never clamped). No Modal
-`idle_timeout`, on purpose: Modal counts only connections and execs as activity, never work inside
-the sandbox, so it would reap a long job nobody watches; the supervisor owns idleness. labels are sandbox
-tags; list()/get() only see sandboxes tagged box.by=box under the "box" app.
-
-Credentials are an argument, never looked up here: every Modal call goes through a client built
-from the token the caller passes (the CLI reads ~/.modal.toml with ModalToken.from_config).
-
-A Modal owns a thread running one event loop, where every one of its calls runs (see Modal): it is
-opened by its first call and must be closed by whoever made it.
-
-    with Modal(token=ModalToken.from_config(), region="us", volumes={"/data": "kelpie-a1"}) as provider:  # volumes: {mount path: name}, created if missing
-        store = ModalVolumeStore("box-sessions", provider=provider)  # a Store (box/store.py): launch(record=)
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -44,35 +24,28 @@ from box.sdk import LABEL_BY, LABEL_NAME, LABEL_PORTS, Endpoint, Gone, NameTaken
 from box.store import Mount
 
 APP = "box"
-# TODO(handoff): T below is a TypeVar (ruff UP047); left for the generics/TypeVar decision.
-# TODO(handoff): calls after the first are bounded at 60 s; a large put/get tar could exceed that.
 ROOT = "/box"
-WORK = "/work"  # synced code (Session.sync)
-MAX_TIMEOUT_S = 24 * 3600  # Modal refuses a longer sandbox timeout
+WORK = "/work"
+MAX_TIMEOUT_S = 24 * 3600  # Modal refuses a sandbox timeout over 24 h
 DEFAULT_PYTHON = "3.13"
 T = TypeVar("T")
-ENDING_S = 10.0  # how long a sandbox mid-shutdown takes to report it has ended
-BOOT_TIMEOUT_S = 900.0  # the first call after create: Modal schedules the sandbox (an L4 took 330 s unpinned)
-CALL_TIMEOUT_S = 60.0  # every later call (a healthy exec is 20-400 ms)
-CREATE_TIMEOUT_S = 3600.0  # Sandbox.create, which builds the image first (a Dockerfile with CUDA builds for many minutes)
-POLL_S = 0.5  # how often _ends asks a sandbox mid-shutdown whether it has finished
-MODAL_TOML = Path.home() / ".modal.toml"  # where `modal token set` keeps profiles
-SNAPSHOT = "modal-snapshot:"  # an image ref of this provider's own: a filesystem snapshot's image id (snapshot())
-SNAPSHOT_TIMEOUT_S = 900.0  # Sandbox.snapshot_filesystem: a few MB took 0.6 s (2026-10-09); GBs of deps take longer
+ENDING_S = 10.0
+BOOT_TIMEOUT_S = 900.0
+CALL_TIMEOUT_S = 60.0  # MUST KILL: one 60 s bound for every call after boot, write/read of a put/get tarball of any size included; size the bound by payload
+CREATE_TIMEOUT_S = 3600.0
+POLL_S = 0.5
+MODAL_TOML = Path.home() / ".modal.toml"
+SNAPSHOT = "modal-snapshot:"
+SNAPSHOT_TIMEOUT_S = 900.0
 
 
 @dataclass(frozen=True)
 class ModalToken:
-    """A Modal API token: id "ak-...", secret "as-..." (modal.com -> Settings -> API tokens).
-    It acts as its owner in that whole workspace (Modal has no sandbox-only scope). Never printed."""
-
     id: str = field(repr=False)
     secret: str = field(repr=False)
 
     @classmethod
     def from_config(cls, path: Path = MODAL_TOML) -> ModalToken:
-        """The profile marked `active = true` in Modal's config file (what `modal profile activate`
-        sets). Exactly one must be active: picking one for the caller would pick a workspace."""
         profiles = tomllib.loads(path.read_text())
         active = [name for name, p in profiles.items() if isinstance(p, dict) and p.get("active") is True]
         if len(active) != 1:
@@ -81,7 +54,6 @@ class ModalToken:
 
     @classmethod
     def from_profile(cls, name: str, path: Path = MODAL_TOML) -> ModalToken:
-        """The named profile of Modal's config file, active or not (a script pinned to one workspace)."""
         profile = tomllib.loads(path.read_text()).get(name)
         if not (isinstance(profile, dict) and isinstance(profile.get("token_id"), str) and isinstance(profile.get("token_secret"), str)):
             raise ValueError(f"{path}: no profile {name!r} with token_id/token_secret")
@@ -89,37 +61,27 @@ class ModalToken:
 
 
 class ProviderClosed(RuntimeError):
-    """This Modal was closed: it makes no more calls, and neither do its machines or stores. Never
-    reopened behind the caller's back: whoever closed it owns that; a later user opens a new Modal."""
+    pass
 
 
 class Hung(TimeoutError):
-    """A Modal call ran past its bound and was cancelled (not a TimeoutError of the call's own)."""
+    pass
 
 
 class Modal:
-    """Owns one event loop on one thread (an anyio BlockingPortal, asyncio backend: Modal's .aio
-    needs asyncio). Every Modal call made for it, its machines and its stores is a task on that loop,
-    bounded by a cancel scope; a caller already inside an event loop (a Jupyter cell) is never asked
-    to run one. Open on first use; close() (or leaving `with`) cancels what is pending, closes the
-    client and joins the thread. Closed is final: ProviderClosed after."""
-
     name = "modal"
 
     def __init__(self, *, token: ModalToken, region: str | None, volumes: dict[str, str] | None = None) -> None:
-        """region (e.g. "us"), no default: every caller chooses. None lets Modal place the sandbox
-        anywhere, which once put an L4 in ap-northeast: ~330 s to start, ~390 ms per exec from
-        California (vs 5 s / 66 ms in "us"). Modal bills a region-pinned sandbox at a premium."""
         self.token = token
         self.volumes = dict(volumes or {})
         self.region = region
-        self._client: modal.Client | None = None  # opened on the loop by the first call that needs it
+        self._client: modal.Client | None = None
         self._app: modal.App | None = None
-        self._lock = threading.Lock()  # guards the fields below (portal start, close, pumps)
+        self._lock = threading.Lock()
         self._portal: BlockingPortal | None = None
         self._portal_cm: contextlib.AbstractContextManager[BlockingPortal] | None = None
-        self._connect: anyio.Lock | None = None  # on the loop: one task opens the client and app
-        self._pumps: set[Future[None]] = set()  # open streams' pump tasks: close() cancels them first
+        self._connect: anyio.Lock | None = None
+        self._pumps: set[Future[None]] = set()
         self._closed = False
 
     def __enter__(self) -> Modal:
@@ -133,45 +95,39 @@ class Modal:
         return self._closed
 
     def close(self) -> None:
-        """Idempotent. Open streams end (their readers raise ProviderClosed; their commands run on
-        until killed by Modal's exec timeout or the sandbox ending, since killing them is a call),
-        the client closes, anything else still on the loop is cancelled, the thread is joined."""
         with self._lock:
             if self._closed:
                 return
             self._closed = True
             portal, portal_cm, pumps = self._portal, self._portal_cm, list(self._pumps)
         if portal is None or portal_cm is None:
-            return  # never used: no thread, no client
+            return
         for pump in pumps:
-            pump.cancel()  # first, so a stream ends cancelled, not with a closed client's error
+            pump.cancel()
         try:
             if self._client is not None:
                 portal.call(self._close_client)
         finally:
-            portal.call(portal.stop, True)  # cancel_remaining: e.g. another thread's call in flight
-            portal_cm.__exit__(None, None, None)  # joins the portal's thread
+            portal.call(portal.stop, True)
+            portal_cm.__exit__(None, None, None)
 
     async def _close_client(self) -> None:
         assert self._client is not None
         with anyio.fail_after(CALL_TIMEOUT_S):
-            await self._client.__aexit__(None, None, None)  # modal.Client's own close (it has no public close())
+            await self._client.__aexit__(None, None, None)  # modal.Client has no public close()
 
     def _open(self) -> BlockingPortal:
         with self._lock:
             if self._closed:
                 raise ProviderClosed("modal provider: closed (a Machine or store outlived the Modal it came from?)")
             if self._portal is None:
-                # One owned thread, one loop, for this provider's life. A future async mode (an async
-                # relay) would await these same coroutines directly on its own loop, with no portal:
-                # anyio, trio-style, so the bodies here already are what it would run.
+                # Modal's .aio API needs asyncio
                 self._portal_cm = start_blocking_portal(backend="asyncio", name=f"box-modal-{id(self):x}")
                 self._portal = self._portal_cm.__enter__()
                 self._connect = self._portal.call(anyio.Lock)
             return self._portal
 
     def _call(self, call: Callable[[], Awaitable[T]], *, timeout_s: float) -> T:
-        """call() on the loop, cancelled past timeout_s (Hung). ProviderClosed if closed before or during."""
         portal = self._open()
 
         async def bounded() -> T:
@@ -182,17 +138,16 @@ class Modal:
             except TimeoutError:
                 if scope is not None and scope.cancelled_caught:
                     raise Hung(f"modal provider: call cancelled past its {timeout_s:.0f} s bound") from None
-                raise  # the call's own TimeoutError, not this bound's
+                raise
 
         try:
             return portal.call(bounded)
-        except (CancelledError, RuntimeError) as e:  # cancelled by close(), or the portal stopped under it
+        except (CancelledError, RuntimeError) as e:
             if self._closed:
                 raise ProviderClosed(f"modal provider: closed during a call: {e!r}") from e
             raise
 
     def _start(self, pump: Callable[[], Awaitable[None]]) -> Future[None]:
-        """pump as a task on the loop, unbounded (a stream's own bounds kill it): close() cancels it."""
         portal = self._open()
         with self._lock:
             if self._closed:
@@ -203,7 +158,6 @@ class Modal:
         return future
 
     def _wait(self, call: Callable[[], Awaitable[T]]) -> T:
-        """An unbounded call on the loop (a stream's next chunk), for _start's readers only."""
         try:
             return self._open().call(call)
         except (CancelledError, RuntimeError) as e:
@@ -212,7 +166,6 @@ class Modal:
             raise
 
     async def client(self) -> modal.Client:
-        """On the loop. Opens a connection on first use: not at construction, so Modal(...) is free."""
         assert self._connect is not None
         async with self._connect:
             if self._client is None:
@@ -220,7 +173,6 @@ class Modal:
             return self._client
 
     async def app(self) -> modal.App:
-        """On the loop. A network call, like client."""
         client = await self.client()
         assert self._connect is not None
         async with self._connect:
@@ -228,25 +180,22 @@ class Modal:
                 self._app = await modal.App.lookup.aio(APP, client=client, create_if_missing=True)
             return self._app
 
-    def launch(  # noqa: PLR0913 (keyword-only: what a machine is made with)
+    def launch(  # noqa: PLR0913
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
         labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
     ) -> ModalMachine:  # fmt: skip
-        """mounts: ModalVolumeStores only, each a sub_path of its Volume (created on start if missing).
-        labels[LABEL_NAME], if given, is also the sandbox's own name: Modal keeps it unique among the
-        app's running sandboxes, so a taken name is refused by Modal itself (NameTaken), race-free."""
         if foreign := [m.store.uri for m in mounts if not isinstance(m.store, ModalVolumeStore)]:
             raise ValueError(f"modal provider: mounts only a ModalVolumeStore (got {foreign})")
-        if timeout_s > MAX_TIMEOUT_S:  # refused, not clamped: a clamped backstop would end the sandbox before the session's ceiling
+        if timeout_s > MAX_TIMEOUT_S:
             raise ValueError(f"modal provider: timeout_s={timeout_s} past Modal's {MAX_TIMEOUT_S} s cap (a ceiling over {MAX_TIMEOUT_S - 600} s)")
-        stores: list[ModalVolumeStore] = [m.store for m in mounts]  # type: ignore[misc] (checked above)
+        stores: list[ModalVolumeStore] = [m.store for m in mounts]  # MUST KILL: narrowed by the isinstance check above, which the checker can't see (was type: ignore[misc]); filter with a TypeGuard
         snapshot = image.removeprefix(SNAPSHOT) if image and image.startswith(SNAPSHOT) else None
         modal_image, modal_gpu_ = None if snapshot else resolve_image(image), modal_gpu(gpu)
 
         async def create() -> modal.Sandbox:
             client = await self.client()
             nonlocal modal_image
-            if snapshot is not None:  # lazy: looked up by Sandbox.create (NotFoundError there if Modal no longer has it)
+            if snapshot is not None:  # Image.from_id is lazy: an unknown id fails at Sandbox.create (NotFoundError)
                 modal_image = modal.Image.from_id(snapshot, client=client)
             volumes = {path: modal.Volume.from_name(v, create_if_missing=True, client=client) for path, v in self.volumes.items()}
             for m, store in zip(mounts, stores, strict=True):
@@ -268,13 +217,6 @@ class Modal:
         return ModalMachine(self, sandbox, labels, booting=True)
 
     def snapshot(self, machine: ModalMachine, *, ttl_s: int) -> str:
-        """Sandbox.snapshot_filesystem: an Image of the sandbox's root filesystem as it is now (only
-        the files changed from its image are stored), which launch(image=) boots another sandbox
-        from. Not in it: mounted Volumes (the record), processes, env. Modal deletes it ttl_s after,
-        so a snapshot nobody refreshes costs no storage for long (seen live 2026-10-09: the
-        snapshot's own call took 0.6 s for a small setup; Image.from_id on an unknown id is
-        NotFoundError at Sandbox.create)."""
-
         async def snap() -> str:
             image = await machine.sandbox.snapshot_filesystem.aio(timeout=int(SNAPSHOT_TIMEOUT_S), ttl=ttl_s)
             return image.object_id
@@ -295,7 +237,6 @@ class Modal:
         return ModalMachine(self, sandbox, tags)
 
     def list(self, labels: dict[str, str] | None = None) -> list[ModalMachine]:
-        """Running sandboxes only: Modal's list drops a sandbox once it has ended."""
         tags = {**(labels or {}), LABEL_BY: "box"}
 
         async def found() -> list[tuple[modal.Sandbox, dict[str, str]]]:
@@ -306,13 +247,7 @@ class Modal:
 
 
 class ModalVolumeStore:
-    """A Modal Volume (v2: concurrent writers, per-file commits) as a Store. Readers see what has
-    been committed. Seen live (2026-10-09, CPU sandboxes in "us", a sub_path mount): a sandbox's
-    `sync <mount>` commits (~70 ms); unsynced writes commit by themselves within ~5 s, and also land
-    when the sandbox is terminate()d, its entrypoint exits, or its PID 1 is SIGKILLed.
-    The Volume is in the provider's workspace: whoever holds that token can read every session in it.
-    Its calls run on the provider's loop, so it is usable only while that Modal is open."""
-
+    # a Modal Volume v2 commits a sandbox's writes on `sync <mount>`
     sync_writes = True
 
     def __init__(self, name: str, *, provider: Modal) -> None:
@@ -322,7 +257,6 @@ class ModalVolumeStore:
         self._volume: modal.Volume | None = None
 
     async def volume(self) -> modal.Volume:
-        """On the provider's loop. A handle only (from_name is lazy): created on the first call that uses it."""
         if self._volume is None:
             self._volume = modal.Volume.from_name(self.name, version=2, create_if_missing=True, client=await self.provider.client())
         return self._volume
@@ -331,7 +265,7 @@ class ModalVolumeStore:
         async def read() -> bytes:
             return b"".join([chunk async for chunk in (await self.volume()).read_file.aio(key)])
 
-        return self.provider._call(read, timeout_s=CALL_TIMEOUT_S)  # FileNotFoundError if absent
+        return self.provider._call(read, timeout_s=CALL_TIMEOUT_S)
 
     def list(self, prefix: str) -> list[str]:
         async def entries() -> list[modal.volume.FileEntry]:
@@ -353,9 +287,6 @@ class ModalVolumeStore:
 
 
 class ModalMachine:
-    """A sandbox, reached through the Modal that found or made it. Never owns that Modal: once it is
-    closed, every call here raises ProviderClosed (attach a new Modal to reach the sandbox again)."""
-
     root = ROOT
     work = WORK
 
@@ -364,13 +295,12 @@ class ModalMachine:
         self.sandbox = sandbox
         self.id = sandbox.object_id
         self.labels = labels
-        self._booting = booting  # create returns before Modal schedules it: the first call waits for that
+        self._booting = booting
 
     def exec(self, cmd: str) -> tuple[int, str, str]:
         async def run() -> tuple[int, str, str]:
             p = await self.sandbox.exec.aio("bash", "-c", cmd)
-            # each of these is a round trip; together an exec costs ~1 RTT after create, not 3
-            results: dict[str, object] = {}
+            results: dict[str, object] = {}  # MUST KILL: dict[str, object] loses the types (was type: ignore[return-value]); gather into typed variables
 
             async def get(key: str, call: Callable[[], Awaitable[object]]) -> None:
                 results[key] = await call()
@@ -379,38 +309,27 @@ class ModalMachine:
                 tg.start_soon(get, "out", p.stdout.read.aio)
                 tg.start_soon(get, "err", p.stderr.read.aio)
                 tg.start_soon(get, "rc", p.wait.aio)
-            return results["rc"], results["out"], results["err"]  # type: ignore[return-value]
+            return results["rc"], results["out"], results["err"]
 
         rc, out, err = self._live(run)
-        # None, -1: Modal's code for an exec it killed. 137: an exec in a sandbox mid-death (seen live
-        # after `kill -9 1`: "FetchSpec failed: loading container: file does not exist"). box's own
-        # execs never exit 137 on a live sandbox, so the ENDING_S wait that rules it out is rare.
+        # Modal: rc None or -1 is an exec it killed; 137 is an exec in a sandbox mid-death
         if rc in (None, -1, 137) and self._ends():
             raise Gone(f"{self.id}: sandbox ended (exit {self.sandbox.returncode}) under `{cmd}`")
         return rc, out, err
 
     def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Pumped:
-        """An exec whose stdout and stderr are read as they arrive: a pump task on the provider's loop
-        hands chunks through a zero-buffer channel to the reader thread Pumped owns (the loop never
-        blocks on a slow caller: backpressure is the pump awaiting its send). close() cancels the
-        pump, which a sync Modal call could not be. Modal has no kill for an exec: close() kills it by
-        the pid it noted, in another exec, and Modal ends it anyway at timeout_s (exec's own
-        timeout). An open exec does not keep the sandbox up: it ends (rc 137) when the supervisor
-        exits, seen live; and it is not a connection to an exposed port, so the supervisor never
-        counts it against idleness. pty=True: exec(pty=True), whose terminal merges stderr into
-        stdout; send() writes its stdin (b"\x03" is Ctrl-C), each write a bounded call on the loop."""
-        self.provider._open()  # ProviderClosed now, not at the stream's first chunk
+        self.provider._open()
         pid_file = f"/tmp/box-stream-{secrets.token_hex(6)}.pid"
-        pumping: list[Future[None]] = []  # the pump, once started
+        pumping: list[Future[None]] = []
         rc: list[int | None] = []
-        process: list[modal.container_process.ContainerProcess] = []  # the exec, once started (send writes to it)
-        started = threading.Event()  # set once process has it, or the pump ended without it
+        process: list[modal.container_process.ContainerProcess] = []
+        started = threading.Event()
 
         def read(emit: Emit) -> None:
             send, receive = anyio.create_memory_object_stream[tuple[str, bytes]](0)
 
             async def pump() -> None:
-                async with send:  # however the pump ends, the reader's next receive sees EndOfStream
+                async with send:
                     try:
                         p = await self.sandbox.exec.aio("bash", "-c", with_pid_file(cmd, pid_file), text=False, timeout=math.ceil(timeout_s), **({"pty": True} if pty else {}))
                         process.append(p)
@@ -419,7 +338,7 @@ class ModalMachine:
 
                     async def drain(name: str, source: AsyncIterator[bytes]) -> None:
                         async for data in source:
-                            await send.send((name, data))  # waits while the reader is behind
+                            await send.send((name, data))
 
                     async with anyio.create_task_group() as tg:
                         tg.start_soon(drain, "stdout", p.stdout)
@@ -435,33 +354,33 @@ class ModalMachine:
                             name, data = self.provider._wait(receive.receive)
                         except anyio.EndOfStream:
                             break
-                        emit(name, data)  # raises Closed once the stream is closed
-                future.result()  # the pump's own end: its error, or cancelled
+                        emit(name, data)
+                future.result()
             except CancelledError:
                 if self.provider.closed:
                     raise ProviderClosed(f"{self.id}: modal provider closed under a stream of `{cmd}`") from None
-                raise Closed from None  # cancelled by kill(): the stream was closed
+                raise Closed from None
             except (modal.exception.NotFoundError, modal.exception.SandboxTerminatedError) as e:
                 raise Gone(f"{self.id}: {e}") from e
             finally:
-                future.cancel()  # a no-op once it has ended
+                future.cancel()
 
         def kill() -> None:
             try:
                 with contextlib.suppress(Gone):
                     self.exec(kill_pid_file(pid_file))
             finally:
-                for future in pumping:  # if the pump is still waiting on Modal, stop waiting
+                for future in pumping:
                     future.cancel()
 
         def wait() -> int | None:
             code = rc[0] if rc else None
-            if code != 0 and self._ends():  # 137 (or -1) is how an exec ends with its sandbox
+            if code != 0 and self._ends():
                 raise Gone(f"{self.id}: sandbox ended (exit {self.sandbox.returncode}) under a stream of `{cmd}`")
             return code
 
         def write(data: bytes) -> None:
-            assert len(data) <= MAX_SEND_BYTES, len(data)  # pair: Pumped.send
+            assert len(data) <= MAX_SEND_BYTES, len(data)
             if not started.wait(CALL_TIMEOUT_S) or not process:
                 raise TimeoutError(f"{self.id}: the stream's exec did not start in {CALL_TIMEOUT_S:.0f} s")
 
@@ -473,16 +392,11 @@ class ModalMachine:
 
         return Pumped([read], kill=kill, wait=wait, timeout_s=timeout_s, quiet_s=quiet_s, label=self.id, send=write if pty else None)
 
-    def shell_argv(self, cmd: str) -> list[str]:
-        """`modal shell <sandbox id> --cmd ...`: Modal's own interactive terminal into the sandbox.
-        That CLI reads its own credentials (MODAL_TOKEN_ID/SECRET, MODAL_PROFILE, else the active
-        profile of ~/.modal.toml), not this provider's token: the argv never carries the secret
-        (anyone on this computer can read a process's argv), so the caller runs it where the CLI's
-        credentials are this workspace's."""
+    def shell_argv(self, cmd: str) -> list[str]:  # MUST KILL: runs `modal shell` on the CLI's ambient credentials, not this provider's token (maybe another workspace); pass the token in the child's env
         return [sys.executable, "-m", "modal", "shell", self.id, "--cmd", shlex.join(["bash", "-c", cmd])]
 
     def write(self, path: str, data: bytes) -> None:
-        self._live(lambda: self.sandbox.filesystem.write_bytes.aio(data, path))  # creates parent dirs
+        self._live(lambda: self.sandbox.filesystem.write_bytes.aio(data, path))
 
     def read(self, path: str) -> bytes:
         try:
@@ -491,25 +405,16 @@ class ModalMachine:
             raise FileNotFoundError(path) from e
 
     def terminate(self) -> None:
-        """Idempotent: terminating an ended sandbox is a no-op on Modal."""
         with contextlib.suppress(modal.exception.NotFoundError):
             self.provider._call(self.sandbox.terminate.aio, timeout_s=CALL_TIMEOUT_S)
 
     def gone(self) -> bool:
-        """Modal has a return code for the sandbox (poll(): it has finished, by exiting or by
-        terminate), or no longer knows it (NotFoundError, as Gone). Bounded as every call is (_live)."""
         try:
             return self._live(self.sandbox.poll.aio) is not None
         except Gone:
             return True
 
-    def expose(self, port: int) -> Endpoint:
-        """Two Modal mechanisms behind one method, by whether the port was declared at create:
-        declared (encrypted_ports): its tunnel, an open https URL, websockets too, which a browser
-        reaches (the relay's Jupyter). Not declared: a connect token (Sandbox.create_connect_token),
-        which needs no declaring but gates every request on the token, sent as a bearer header
-        (Modal also takes ?_modal_connect_token=; a header keeps it out of URLs and logs). A sandbox
-        from before LABEL_PORTS existed has no such label: its tunnels say what was declared."""
+    def expose(self, port: int) -> Endpoint:  # MUST KILL: falls back to tunnels() for sandboxes from before LABEL_PORTS; drop the back-compat branch
         declared = declared_ports(self.labels) if LABEL_PORTS in self.labels else tuple(self._live(self.sandbox.tunnels.aio))
         if port in declared:
             tunnels = self._live(self.sandbox.tunnels.aio)
@@ -518,13 +423,6 @@ class ModalMachine:
         return Endpoint(creds.url.rstrip("/"), {"Authorization": f"Bearer {creds.token}"})
 
     def _live(self, call: Callable[[], Awaitable[T]]) -> T:
-        """call on the provider's loop, bounded in time, with Modal's 'this sandbox has ended' errors
-        raised as Gone. Once it has ended: NotFoundError ("Task has already finished", "Sandbox is
-        unavailable"). While it ends: ConflictError ("Sandbox is shutting down") or a bare
-        SandboxFilesystemError ("unexpected error"), which are Gone only if the sandbox then turns out
-        to have ended. A call can also hang for good on a sandbox stuck ending (seen live: poll() None
-        minutes after its entrypoint exited, every exec stuck in SandboxGetTaskId); past its timeout
-        it is cancelled (its cancel scope), so nothing is left waiting on Modal, and it is TimeoutError."""
         timeout_s = BOOT_TIMEOUT_S if self._booting else CALL_TIMEOUT_S
         try:
             result = self.provider._call(call, timeout_s=timeout_s)
@@ -534,6 +432,7 @@ class ModalMachine:
             raise TimeoutError(f"{self.id}: Modal call hung for {timeout_s:.0f} s; sandbox still reports running") from None
         except (modal.exception.NotFoundError, modal.exception.SandboxTerminatedError) as e:
             raise Gone(f"{self.id}: {e}") from e
+        # a sandbox that is ending raises a bare ConflictError or SandboxFilesystemError
         except (modal.exception.ConflictError, modal.exception.SandboxFilesystemError) as e:
             if type(e) in (modal.exception.ConflictError, modal.exception.SandboxFilesystemError) and self._ends():
                 raise Gone(f"{self.id}: {e}") from e
@@ -542,7 +441,6 @@ class ModalMachine:
         return result
 
     def _ends(self) -> bool:
-        """Whether Modal reports the sandbox finished within ENDING_S (polled on the loop)."""
         within_s = ENDING_S
 
         async def ended() -> bool:
@@ -562,7 +460,6 @@ class ModalMachine:
 
 
 def modal_gpu(gpu: str | None) -> str | None:
-    """A canonical GPU name (box/gpus.py), optionally ':<count>', as Modal's gpu= string."""
     if gpu is None:
         return None
     name, _, count = gpu.partition(":")
@@ -572,9 +469,7 @@ def modal_gpu(gpu: str | None) -> str | None:
     return f"{modal_id}:{count}" if count else modal_id
 
 
-def resolve_image(image: str | None) -> modal.Image:
-    """None: Modal's debian_slim (bash + python3). A path ending in Dockerfile: built with its
-    directory as the context. Anything else: an OCI registry ref."""
+def resolve_image(image: str | None) -> modal.Image:  # MUST KILL: image is a str sniffed by suffix (Dockerfile path vs OCI ref), and by prefix (SNAPSHOT) in launch; give image a typed union
     if image is None:
         return modal.Image.debian_slim(python_version=DEFAULT_PYTHON)
     if image.lower().endswith("dockerfile"):
