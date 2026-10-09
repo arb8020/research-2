@@ -13,7 +13,7 @@ Each kind is one folder, web/embeds/<kind>/, found by build_page.py at build tim
     embed.py     render(src: str, line: int) -> str: the fence body or file= contents (its first line is
                  line `line` of the chapter, or 1 for a file) -> the HTML that replaces the fence. Bad input fails the build with a line.
     element.ts   the custom element(s) that HTML uses; `npm run build` bundles it to
-                 web/build/embeds/<kind>/element.js, and pages that use the kind load it.
+                 web/build/embeds/<kind>/element.js; pages that use the kind load it (link previews: on first open).
     element.css  optional styles, linked only on pages that use the kind.
 A new embed is a new folder; nothing here or in build_page.py changes.
 """
@@ -48,15 +48,20 @@ def discover() -> dict[str, Embed]:
     return found
 
 
-def install(kinds: set[str], out: Path) -> str:
-    """Copy the used kinds' built files into the page dir; return the <head> tags that load them."""
+def install(eager: set[str], lazy: set[str], out: Path) -> str:
+    """Copy the used kinds' built files into the page dir; return the <head> tags that load them.
+
+    `eager` kinds are in the page itself: their CSS and script load with it. `lazy` kinds appear only in link
+    previews: their CSS loads with the page (cheap) and <page-link> imports their script on its first open.
+    """
     tags = []
-    for kind in sorted(kinds):
+    for kind in sorted(eager | lazy):
         dest = out / "embeds" / kind
         dest.mkdir(parents=True, exist_ok=True)
         shutil.copy(WEB / "build" / "embeds" / kind / "element.js", dest)
         if (css := WEB / "embeds" / kind / "element.css").exists():
             shutil.copy(css, dest)
             tags.append(f'<link rel="stylesheet" href="embeds/{kind}/element.css">')
-        tags.append(f'<script type="module" src="embeds/{kind}/element.js"></script>')
+        if kind in eager:
+            tags.append(f'<script type="module" src="embeds/{kind}/element.js"></script>')
     return "\n".join(tags)

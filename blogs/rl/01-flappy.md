@@ -18,9 +18,7 @@ reinforcement learning is about teaching `agents` to behave in `environments` by
 
 in particular, here we're going to study reinforcement learning using neural networks. neural networks are basically functions that are constructed of many smaller functions whose parameters are fit on on lots of data. it turns out these are very good at the general task of approximating a function f(x) when given a lot of data. 
 
-<!-- wip: still working on connecting network depth/learning ability on some dataset -->
-```nn-fit file=01-flappy-nnfit.nnfit
-```
+see [[neural-nets#fitting a curve]]
 
 deep reinforcement learning, in particular, is about trying to do reinforcement learning with deep learning methods. since we are pretty convinced that deep learning is really good at its job, we'd like to have neural networks that learn to take actions that maximize reward in their situations. we'll call this a `policy`, basically the brain of an agent
 

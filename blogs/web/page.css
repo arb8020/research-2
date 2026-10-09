@@ -132,3 +132,20 @@ page-settings { position: fixed; top: 12px; right: 12px; z-index: 10; display: f
 .settings-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
 .settings-actions button { font: inherit; padding: 5px; border: 1px solid var(--rule); border-radius: 4px; background: var(--code-bg); color: var(--fg); cursor: pointer; }
 .settings-actions button:hover { background: var(--active); }
+
+/* [[page#Heading]] links (page-link.ts) and their preview cards. A card is a clone of the link's <template>, placed
+ * with position: fixed by page-link.ts. Its first 200ms ignore the pointer (the grace), so a pointer passing over
+ * it on the way elsewhere doesn't hold it open. Prose in a card is typeset like the page, a size down. */
+.link-card { position: fixed; z-index: 20; width: min(420px, calc(100vw - 16px)); max-height: 460px; overflow: hidden;
+             padding: 4px 16px 12px; font-size: 15px; line-height: 1.6; background: var(--bg); color: var(--fg);
+             border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+             animation: link-card-grace 200ms step-end; }
+@keyframes link-card-grace { from, to { pointer-events: none; } }
+.link-card[data-clipped]::after { content: ""; position: absolute; inset: auto 0 0; height: 64px; pointer-events: none;
+                                  background: linear-gradient(to bottom, transparent, var(--bg)); }
+.link-card-title { margin: 8px 0 0; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.link-card .link-card-heading { font-weight: 600; font-size: 1.1em; margin-top: 0.4em; }
+.link-card .link-card-heading + * { margin-top: 0.6em; }
+.link-card figure.excerpt, .link-card details.given { margin-inline: 0; }
+.link-card nn-fit, .link-card .todo, .link-card .wip { margin-block: 0.8em; }
+@media (pointer: coarse) { .link-card { display: none; } }
