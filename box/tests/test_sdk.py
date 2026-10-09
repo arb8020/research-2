@@ -315,3 +315,12 @@ def test_logs_resume_from_byte_offsets(launch: Callable) -> None:
         job = s.run("printf 'héllo\\n'; printf 'oops\\n' >&2")
         job.wait()
         assert list(job.logs(start=(len("hé".encode()), 2))) == [("stdout", "llo\n"), ("stderr", "ps\n")]
+
+
+def test_a_caller_can_name_the_session_before_launch_returns(launch: Callable, provider: Provider) -> None:
+    session_id = sdk.new_session_id()
+    with launch(deadline_s=600, session_id=session_id) as s:
+        assert s.id == session_id
+        assert sdk.attach(provider, session_id).machine.id == s.machine.id
+    with pytest.raises(ValueError, match="new_session_id"):
+        launch(deadline_s=600, session_id="mine")
