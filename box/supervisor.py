@@ -26,7 +26,8 @@ A service (spec "service": true) is a long-lived server, e.g. a Jupyter Server b
 port. It starts at once, beside the job queue (never waits for a job, never holds one up), and it
 is not work for idleness: its connections are what count. It keeps a released session alive (it
 is something left), has no hook, and is killed (whole group) when the session ends; its
-status.json says why, as a job's does.
+status.json says why, as a job's does. A session runs at most MAX_SERVICES: past that a service
+spec ends at once with reason "refused" (the client refuses first; this covers two racing clients).
 
 With --record DIR (a store mounted on the machine, box/store.py), a Recorder copies the session
 there every FLUSH_S (sooner past FLUSH_BYTES of new output), so it outlives the machine:
@@ -130,7 +131,7 @@ def supervise(root: Path, deadline: float, lease_ttl_s: float, idle_timeout_s: f
     """Run jobs one at a time (services beside them) until the session ends; returns why it ended."""
     done: set[str] = set()
     services: dict[Path, subprocess.Popen] = {}  # every service started, running or not
-    plain: set[Path] = set()  # job dirs known not to be services (a spec never changes once written)
+    plain: set[Path] = set()  # job dirs tend_services is done with: jobs (a spec never changes once written), refused services
     end = None
     idle_since = time.monotonic()
     while end is None:
@@ -163,7 +164,10 @@ def tend_services(root: Path, services: dict[Path, subprocess.Popen], plain: set
         if not is_service(job_dir):
             plain.add(job_dir)
             continue
-        assert len(services) < MAX_SERVICES, f"more than {MAX_SERVICES} services in one session"
+        if len(services) >= MAX_SERVICES:  # the client checks too, but two clients can race past it
+            write_json(job_dir / "status.json", {"state": "done", "service": True, "reason": "refused", "exit_code": None, "ended": time.time()})
+            plain.add(job_dir)
+            continue
         spec = json.loads((job_dir / "spec.json").read_text())
         env = {**spec.get("env", {}), "BOX_JOB_ID": job_dir.name, "BOX_JOB_DIR": str(job_dir)}
         services[job_dir] = child = spawn(spec["cmd"], env, job_dir, stdout=job_dir / "stdout", stderr=job_dir / "stderr")

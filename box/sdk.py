@@ -47,6 +47,7 @@ from pathlib import Path
 from typing import Literal, Protocol, TypeVar, get_args
 
 from box.store import Mount, Store
+from box.supervisor import MAX_SERVICES
 
 SUPERVISOR = Path(__file__).with_name("supervisor.py")
 LABEL_BY = "box.by"
@@ -131,7 +132,8 @@ Status = Booting | Running | Ended
 
 @dataclass(frozen=True)
 class Ending:
-    """How a job ended. reason: exited | killed | deadline | lease_lost | stopped."""
+    """How a job ended. reason: exited | killed | deadline | lease_lost | stopped; a service also
+    idle | released (the session's end), or refused (past MAX_SERVICES, never started)."""
 
     reason: str
     exit_code: int | None
@@ -324,6 +326,8 @@ class Session:
             raise RuntimeError(f"{self.id}: cannot run a job on a session that is {running}")
         if service and on_exit:
             raise ValueError("a service has no on_exit hook (it ends with the session)")
+        if service and len(self._check(f"grep -l '\"service\": true' {self._path('jobs')}/*/spec.json || true").split()) >= MAX_SERVICES:
+            raise ValueError(f"{self.id}: a session runs at most {MAX_SERVICES} services")
         left = running.deadline_at - time.time()
         if on_exit and hook_budget_s >= left:
             raise ValueError(f"hook_budget_s={hook_budget_s} does not fit in the session's {left:.0f} s left")
