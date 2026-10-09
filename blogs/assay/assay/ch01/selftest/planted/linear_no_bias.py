@@ -4,4 +4,4 @@ from torch import Tensor
 
 
 def linear(x: Tensor, weight: Tensor, bias: Tensor) -> Tensor:
-    return x @ weight.T
+    return x @ weight

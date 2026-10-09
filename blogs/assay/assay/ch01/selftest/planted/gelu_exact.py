@@ -4,5 +4,5 @@ import torch.nn.functional as F
 from torch import Tensor
 
 
-def gelu_tanh(x: Tensor) -> Tensor:
+def gelu(x: Tensor) -> Tensor:
     return F.gelu(x)
