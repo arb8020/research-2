@@ -72,6 +72,11 @@ EOF
 """
 
 
+# The relay contract's lease fields (box/CONTRACT-gateway.md @ 42c05b12), minimally: lease_until = --deadline,
+# no extend, ended reason "lease". The full fake lease (lease_s, extend) is on blogs/lease.
+CEILING_S = 12 * 3600
+
+
 @dataclass
 class Session:
     id: str
@@ -89,7 +94,8 @@ class Session:
     changed: threading.Condition = field(default_factory=threading.Condition)
 
     def status(self) -> dict[str, Any]:
-        s: dict[str, Any] = {"state": self.state, "gpu": self.gpu, "started_at": self.started_at, "deadline": self.deadline}
+        s: dict[str, Any] = {"state": self.state, "gpu": self.gpu, "started_at": self.started_at,
+                             "lease_until": self.deadline, "ceiling": self.started_at + CEILING_S, "deadline": self.deadline}
         if self.reason is not None:
             s["reason"] = self.reason
         if self.kernel is not None:
@@ -186,7 +192,7 @@ def boot(session: Session, machine: Machine) -> None:
     session.emit("status", status=session.status())
     while session.state != "ended":
         if time.time() > session.deadline:
-            session.end("deadline")
+            session.end("lease")
         elif session.proc.poll() is not None:
             session.end("machine_lost")
         time.sleep(1)
@@ -206,7 +212,7 @@ def attach_running(session: Session, kernel: dict[str, str]) -> None:
     session.emit("status", status=session.status())
     while session.state != "ended":
         if time.time() > session.deadline:
-            session.end("deadline")
+            session.end("lease")
         time.sleep(1)
 
 
