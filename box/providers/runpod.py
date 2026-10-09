@@ -14,7 +14,7 @@ import requests
 
 from box import gpus
 from box.providers.pump import JOIN_S, Pumped, kill_pid_file, pipe_reader, with_pid_file
-from box.sdk import LABEL_BY, LABEL_NAME, LABEL_SESSION, Endpoint, Gone, NameTaken
+from box.sdk import LABEL_BY, LABEL_NAME, LABEL_SESSION, Endpoint, Gone, NameTaken, Refused
 from box.store import Mount
 
 API = "https://api.runpod.io/v2"
@@ -136,7 +136,7 @@ class RunPod:
         else:
             gpu_id = gpus.provider_id(gpus.lookup(gpu), "runpod")
             if gpu_id is None:
-                raise ValueError(f"runpod: no RunPod id for GPU {gpu!r} in box/gpus.py")
+                raise Refused(f"runpod: no RunPod id for GPU {gpu!r} in box/gpus.py")
             body["gpu"] = {"id": gpu_id, "count": 1}
         for attempt in range(LAUNCH_TRIES):
             if UNREACHABLE:
@@ -289,7 +289,7 @@ class RunPodMachine:
 
     def expose(self, port: int) -> Endpoint:
         if port not in self._http_ports:
-            raise ValueError(f"runpod: port {port} was not declared at launch (ports={self._http_ports}); RunPod has no route for an undeclared one")
+            raise Refused(f"runpod: port {port} was not declared at launch (ports={self._http_ports}); RunPod has no route for an undeclared one")
         return Endpoint(f"https://{self.id}-{port}.proxy.runpod.net")
 
 

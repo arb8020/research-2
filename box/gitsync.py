@@ -137,7 +137,9 @@ def pack(top: Path, new: str, *, exclude: str | None) -> bytes:
         ["git", "pack-objects", "--revs", "--stdout", "-q"], cwd=top, input=revs.encode(), capture_output=True, check=True, timeout=GIT_TIMEOUT_S,
     ).stdout  # fmt: skip
     if len(data) > MAX_PACK_BYTES:
-        raise ValueError(f"box sync: {len(data) >> 20} MiB to send (limit {MAX_PACK_BYTES >> 20}); is something big tracked or under paths?")
+        from box.sdk import Refused
+
+        raise Refused(f"box sync: {len(data) >> 20} MiB to send (limit {MAX_PACK_BYTES >> 20}); is something big tracked or under paths?")
     return data
 
 

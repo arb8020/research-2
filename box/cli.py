@@ -278,7 +278,7 @@ def main() -> None:
     a = parser().parse_args()
     try:
         code = a.fn(a)
-    except ValueError as e:  # MUST KILL: reads every ValueError (a bug's too) as 'the SDK refused'; give refusals their own exception type
+    except sdk.Refused as e:
         print(f"box: {e}", file=sys.stderr)
         code = 2
     sys.exit(code)
