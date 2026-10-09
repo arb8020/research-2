@@ -118,7 +118,7 @@ class LocalMachine:
 
     def terminate(self) -> None:
         """Like a VM's terminate: every process on the machine dies, no hooks run."""
-        for status in Path(self.root, "jobs").glob("*/status.json"):
+        for status in Path(self.root).glob("*/*/status.json"):  # jobs and services
             _killpg(json.loads(status.read_text()).get("pgid"))
         _killpg(int((self.dir / "pid").read_text()))
 

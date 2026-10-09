@@ -145,7 +145,7 @@ def test_a_session_whose_jupyter_died_says_ended_not_booting(pushing_relay: Call
     gw, fan = pushing_relay()
     sid = create(gw)
     fan.wait_for(sid, running)
-    jupyter = sdk.attach(Local(tmp_path / "machines"), sid).jobs()[0]
+    jupyter = sdk.attach(Local(tmp_path / "machines"), sid).services()[0]
     jupyter.kill()  # the forwarder (a service too) keeps the released session alive: supervisor up, Jupyter gone
     jupyter.wait()
     code, after = status(gw, sid)
