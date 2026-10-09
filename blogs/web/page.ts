@@ -8,6 +8,7 @@ import { syntaxHighlighting } from "@codemirror/language";
 import { classHighlighter } from "@lezer/highlight";
 import { vim } from "@replit/codemirror-vim";
 import { attr, must } from "./dom";
+import "./page-link";
 
 // GET {SESSION}/state (session.py): the reader's latest passing source per cell, and per C cell the
 // session path of a play widget built from it.
@@ -64,6 +65,8 @@ async function* lines(body: ReadableStream<Uint8Array<ArrayBuffer>>): AsyncGener
   if (buf !== "") yield buf;
 }
 
+// TODO(page): ports and the session URL in one place (now: build_page.py --session-url default, session.py --port,
+// dev.sh, verify_page.py/a11y.py default URLs).
 function sessionUrl(): string {
   const fromQuery = new URLSearchParams(location.search).get("session");
   return fromQuery !== null && fromQuery !== "" ? fromQuery : must(document, 'meta[name="session-url"]', HTMLMetaElement).content;
@@ -130,6 +133,8 @@ class CodeCell extends HTMLElement {
     const name = this.cellName;
     const lang = attr(this, "data-lang");
     const stub = must(this, "pre", HTMLPreElement).textContent;
+    // TODO(page): show-solution button here: fetched from the session on click (the page stays solution-free),
+    // shown read-only with copy blocked.
     this.innerHTML = `
       <div class="cell-head"><span>${name} · ${lang}</span>
         <span class="cell-status"></span><button class="vim-toggle" aria-pressed="${String(vimOn)}">vim</button><button class="run">Run</button></div>
@@ -148,6 +153,8 @@ class CodeCell extends HTMLElement {
     this.gate();
   }
 
+  // TODO(page): drafts survive reload: keep unpassed edits in localStorage, show "draft" in the status, add
+  // "revert to last passing". Fold in: cell order is decided twice (check.py cell_order on the server, DOM order here).
   gate(): void {
     const name = this.cellName;
     const cells = [...document.querySelectorAll("code-cell")];
@@ -233,4 +240,7 @@ class EnvPlay extends HTMLElement {
 }
 customElements.define("env-play", EnvPlay);
 
-refresh().catch((e: unknown) => { console.warn("session unreachable", e); });
+// Only pages with cells or play widgets talk to the session (a prose-only page like neural-nets has nothing to ask).
+if (document.querySelector("code-cell, env-play") !== null) {
+  refresh().catch((e: unknown) => { console.warn("session unreachable", e); });
+}

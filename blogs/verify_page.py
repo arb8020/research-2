@@ -4,7 +4,8 @@
     python3 -m http.server 8010 -d dist                # in another
     uv run --with playwright verify_page.py [url]      # default http://localhost:8010/01-flappy/
 
-The session URL is the one the page was built with (its session-url meta tag).
+The session URL is the one the page was built with (its session-url meta tag). The nn-fit and link cases also
+need ../neural-nets/ built next to it (build_page.py --all).
 Pastes the hidden C solution into the editor programmatically (testing only).
 """
 
@@ -16,6 +17,7 @@ import re
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urljoin
 from urllib.request import urlopen
 
 from playwright.sync_api import Browser, Locator, sync_playwright
@@ -25,6 +27,7 @@ from check import parse
 HERE = Path(__file__).parent
 SHOTS = HERE / ".evidence" / "verify_page"
 PAGE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8010/01-flappy/"
+NEURAL_NETS = urljoin(PAGE, "../neural-nets/")  # the [[neural-nets#fitting a curve]] target, home of <nn-fit>
 CHROME = sorted(glob.glob(os.path.expanduser(
     "~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")))[-1]  # fmt: skip
 BLOCKS = parse((HERE / "rl" / "01-flappy.md").read_text())
@@ -51,17 +54,17 @@ SHOTS.mkdir(parents=True, exist_ok=True)
 
 
 def nn_fit_and_wip(browser: Browser, scheme: str) -> None:
-    """The wip banner shows its text; <nn-fit> renders from its .nnfit file and its loss falls after Train."""
+    """On neural-nets: the wip banner shows its text; <nn-fit> renders from its .nnfit file and its loss falls after Train."""
     page = browser.new_page(viewport={"width": 900, "height": 1000}, device_scale_factor=2, color_scheme=scheme)
     page.on("pageerror", lambda e: print("  pageerror:", e))
-    page.goto(PAGE)
+    page.goto(NEURAL_NETS)
     wip = page.locator(".wip")
     assert wip.count() == 1 and wip.is_visible(), "the wip banner is missing"
     assert "still working on" in wip.inner_text(), wip.inner_text()
     nn = page.locator("nn-fit")
     nn.scroll_into_view_if_needed()
     before = page.evaluate("document.querySelector('nn-fit').stats")
-    assert before["dataset"] == "wave" and before["sizes"] == [1, 12, 12, 1], before  # 01-flappy-nnfit.nnfit
+    assert before["dataset"] == "wave" and before["sizes"] == [1, 12, 12, 1], before  # dl/neural-nets-fit.nnfit
     assert before["steps"] == 0 and before["loss"] is not None, before
     nn.locator("button.train").click()
     page.wait_for_function("document.querySelector('nn-fit').stats.steps >= 200", timeout=20_000)
@@ -77,6 +80,93 @@ def nn_fit_and_wip(browser: Browser, scheme: str) -> None:
     page.close()
 
 
+def link_preview(browser: Browser, scheme: str) -> None:
+    """[[neural-nets#fitting a curve]] on 01-flappy: hover shows the card (title, section heading, a live <nn-fit>),
+    the card ignores the pointer for its 200ms grace, Escape closes, keyboard focus opens, click lands on #fitting-a-curve."""
+    page = browser.new_page(viewport={"width": 900, "height": 900}, device_scale_factor=2, color_scheme=scheme)
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(PAGE)
+    assert page.evaluate("customElements.get('nn-fit')") is None, "nn-fit should load only when a card first needs it"
+    link = page.locator("page-link > a")
+    assert link.count() == 1 and link.get_attribute("href") == "../neural-nets/#fitting-a-curve", link.get_attribute("href")
+    page.evaluate("scrollBy(0, document.querySelector('page-link').getBoundingClientRect().top - 120)")
+
+    # Grace: an open card is not hit-testable at first, then is (dispatched in-page so the timing is exact).
+    grace = page.evaluate("""async () => {
+        const host = document.querySelector('page-link');
+        host.dispatchEvent(new PointerEvent('pointerenter', {pointerType: 'mouse'}));
+        const card = document.querySelector('.link-card');
+        const hit = () => { const r = card.getBoundingClientRect(); return card.contains(document.elementFromPoint(r.left + r.width / 2, r.top + 20)); };
+        const early = hit();
+        await new Promise((ok) => setTimeout(ok, 350));
+        const late = hit();
+        host.dispatchEvent(new PointerEvent('pointerleave', {pointerType: 'mouse'}));
+        await new Promise((ok) => setTimeout(ok, 450));
+        return {early, late, closed: document.querySelector('.link-card') === null};
+    }""")
+    assert grace == {"early": False, "late": True, "closed": True}, grace
+
+    link.hover()
+    card = page.locator(".link-card")
+    card.wait_for()
+    assert card.locator(".link-card-title").inner_text() == "neural networks", card.locator(".link-card-title").inner_text()
+    assert card.locator(".link-card-heading").inner_text() == "fitting a curve"
+    page.wait_for_function("document.querySelector('.link-card nn-fit')?.stats?.loss != null")
+    stats = page.evaluate("document.querySelector('.link-card nn-fit').stats")
+    assert stats["dataset"] == "wave" and stats["sizes"] == [1, 12, 12, 1], stats
+    page.wait_for_timeout(300)  # past the grace; the card as a reader first sees it
+    page.screenshot(path=SHOTS / f"link-card-{scheme}.png")
+    card.screenshot(path=SHOTS / f"link-card-only-{scheme}.png")
+    box = card.bounding_box()
+    link_box = link.bounding_box()
+    assert box is not None and link_box is not None
+    assert box["y"] > link_box["y"] and box["width"] <= 430, (box, link_box)
+    overflow = page.evaluate("document.documentElement.scrollWidth - innerWidth")
+    assert overflow <= 0, f"the page scrolls sideways by {overflow}px with the card open"
+    nn_box = card.locator("nn-fit").bounding_box()
+    assert nn_box is not None and nn_box["x"] + nn_box["width"] <= box["x"] + box["width"], (nn_box, box)
+    # Live: the card's own Train button trains its own net.
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + 40)  # into the card (after the grace)
+    card.locator("nn-fit button.train").click()
+    page.wait_for_function("document.querySelector('.link-card nn-fit').stats.steps >= 50", timeout=20_000)
+    card.locator("nn-fit button.train").click()
+    print(f"  link card ({scheme}): {box['width']:.0f}x{box['height']:.0f}px, nn-fit {nn_box['width']:.0f}px wide,"
+          f" trained {page.evaluate('document.querySelector(\'.link-card nn-fit\').stats.steps')} steps in the card")
+    card.screenshot(path=SHOTS / f"link-card-trained-{scheme}.png")
+    page.keyboard.press("Escape")
+    assert card.count() == 0, "Escape should close the card"
+
+    # Keyboard: focus opens it, Escape closes it and focus stays on the link (no reopening).
+    page.mouse.move(5, 5)
+    page.evaluate("document.activeElement.blur()")
+    link.focus()
+    card.wait_for()
+    page.keyboard.press("Escape")
+    assert card.count() == 0 and page.evaluate("document.activeElement === document.querySelector('page-link > a')")
+
+    link.click()
+    page.wait_for_url("**/neural-nets/#fitting-a-curve")
+    top = page.evaluate("document.getElementById('fitting-a-curve').getBoundingClientRect().top")
+    assert 0 <= top < 200, f"#fitting-a-curve is at y={top}, not at the top of the view"
+    page.screenshot(path=SHOTS / f"link-target-{scheme}.png")
+    assert not errors, errors
+    print(f"  link click ({scheme}): {page.url}, heading at y={top:.0f}")
+    page.close()
+
+
+def link_on_touch(browser: Browser) -> None:
+    """(pointer: coarse): a tap navigates; no card."""
+    context = browser.new_context(viewport={"width": 390, "height": 800}, is_mobile=True, has_touch=True)
+    page = context.new_page()
+    page.goto(PAGE)
+    assert page.evaluate("matchMedia('(pointer: coarse)').matches"), "the touch emulation isn't coarse"
+    page.locator("page-link > a").tap()
+    page.wait_for_url("**/neural-nets/#fitting-a-curve")
+    print("  link on touch: tap navigated, no card")
+    context.close()
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch(executable_path=CHROME)
     page = browser.new_page(viewport={"width": 900, "height": 1000}, device_scale_factor=2)
@@ -89,6 +179,8 @@ with sync_playwright() as p:
 
     for scheme in ("light", "dark"):
         nn_fit_and_wip(browser, scheme)
+        link_preview(browser, scheme)
+    link_on_touch(browser)
 
     page.locator("env-play").scroll_into_view_if_needed()
     time.sleep(2)
