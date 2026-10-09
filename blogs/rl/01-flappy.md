@@ -3,13 +3,13 @@
 reinforcement learning can do a lot of cool things: 
 ```carousel
 title: AlphaGo, move 37
-youtube: WXuK6gekU1Y
+youtube: JNrXgpSEEIE
 caption: In game 2 against Lee Sedol, AlphaGo played move 37, a move DeepMind says had a 1 in 10,000 chance of being used.
 source: AlphaGo
 org: Google DeepMind
 year: 2016
 link: https://deepmind.google/research/alphago/
-license: Video: AlphaGo - The Movie (full documentary), Google DeepMind's YouTube; embedded, not copied.
+license: Video: "Move 37!! Lee Sedol vs AlphaGo Match 2", match broadcast clip uploaded by Daniel Estrada (not an official DeepMind upload); embedded, not copied.
 
 title: Hide-and-seek
 youtube: kopoLzvh5jY
@@ -28,6 +28,15 @@ org: Google DeepMind
 year: 2019
 link: https://deepmind.google/blog/alphastar-mastering-the-real-time-strategy-game-starcraft-ii/
 license: Video: Google DeepMind's YouTube; embedded, not copied.
+
+title: OpenAI Five, Dota 2
+youtube: -FoZAM9xqS4
+caption: OpenAI Five beat OG, the reigning Dota 2 world champions, at the OpenAI Five Finals in April 2019. This is game 2.
+source: OpenAI Five defeats Dota 2 world champions
+org: OpenAI
+year: 2019
+link: https://openai.com/index/openai-five-defeats-dota-2-world-champions/
+license: Video: OpenAI Five vs. OG, Game 2 | OpenAI Five Finals, OpenAI's YouTube; embedded, not copied.
 
 title: A robot hand and a Rubik's Cube
 youtube: x4O8pojMF0w
