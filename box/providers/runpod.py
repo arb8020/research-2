@@ -27,7 +27,6 @@ UP_TIMEOUT_S = 900.0
 EXEC_TIMEOUT_S = 600
 SSH_GRACE_S = 60
 LAUNCH_TRIES = 3
-UNREACHABLE: set[str] = set()  # MUST KILL: process-global mutable set shared by every RunPod instance; make it RunPod state
 SSH_OPTS = [
     "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
     "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
@@ -88,6 +87,7 @@ class RunPod:
         self.http = requests.Session()
         self.http.headers.update({"Authorization": f"Bearer {api_key}", "User-Agent": "box"})
         self.cloud = cloud
+        self.unreachable: set[str] = set()
 
     @classmethod
     def from_env(cls) -> RunPod:
@@ -139,9 +139,9 @@ class RunPod:
                 raise Refused(f"runpod: no RunPod id for GPU {gpu!r} in box/gpus.py")
             body["gpu"] = {"id": gpu_id, "count": 1}
         for attempt in range(LAUNCH_TRIES):
-            if UNREACHABLE:
+            if self.unreachable:
                 dcs = (self.api("GET", "/catalog/datacenters") or {})["dataCenters"]
-                body["dataCenterIds"] = [dc["id"] for dc in dcs if dc["id"] not in UNREACHABLE]
+                body["dataCenterIds"] = [dc["id"] for dc in dcs if dc["id"] not in self.unreachable]
             pod = self.api("POST", "/pods", body)
             assert pod is not None
             m = RunPodMachine(self, pod)
@@ -150,7 +150,7 @@ class RunPod:
                 return m
             except Unreachable:
                 m.terminate()
-                UNREACHABLE.add(m._pod_dc or "")
+                self.unreachable.add(m._pod_dc or "")
                 if attempt == LAUNCH_TRIES - 1:
                     raise
             except BaseException:
