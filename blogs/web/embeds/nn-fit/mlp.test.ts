@@ -2,7 +2,11 @@
 // Throws (exit 1) on the first failure; prints one line per check.
 import type { Activation, Batch, Mlp, Task } from "./mlp";
 import { ACTIVATIONS, evaluate, get, initMlp, lossAndGrad, makeAdam, seeded, trainStep } from "./mlp";
-import { columnAt, describeGaps, drawSamples, fillExample, filledColumns, gaps, makeDrawBuffer, paintStroke, spiral } from "./datasets";
+import type { WaveParams } from "./datasets";
+import {
+  INPUT_SCALE, columnAt, curveSamples, describeGaps, drawSamples, fillWave, filledColumns, gaps, makeDrawBuffer, paintStroke,
+  spiral, valueAt, waveAt, waveStages,
+} from "./datasets";
 
 function check(ok: boolean, message: string): void {
   if (!ok) throw new Error(`FAIL ${message}`);
@@ -74,6 +78,49 @@ for (const task of ["regression", "binary"] as const) {
   check(gaps(full).length === 0, "a stroke from edge to edge leaves no gaps");
 }
 
+// Wave generator: determinism, range, and "turning K or d up keeps the same curve".
+{
+  const wave = (p: Partial<WaveParams>): Float64Array => {
+    const buf = makeDrawBuffer(640);
+    fillWave(buf, waveStages({ wiggles: 6, roughness: 1.5, stages: 2, seed: 5, ...p }, seeded));
+    return buf;
+  };
+  const same = (a: Float64Array, b: Float64Array): boolean => a.every((v, i) => v === b[i]);
+  check(same(wave({}), wave({})), "wave: same params and seed give the identical curve");
+  check(!same(wave({}), wave({ seed: 6 })), "wave: a different seed gives a different curve");
+  let lo = Infinity, hi = -Infinity, worstStage = 0;
+  for (const seed of [1, 2, 3, 4, 5]) for (const stages of [1, 2, 3, 4]) for (const wiggles of [1, 7, 20]) {
+    const buf = wave({ seed, stages, wiggles });
+    for (const v of buf) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    const st = waveStages({ wiggles, roughness: 0.5, stages, seed }, seeded);
+    for (let j = 0; j <= 5000; j++) worstStage = Math.max(worstStage, Math.abs(waveAt(st, -1 + j / 2500)));
+  }
+  check(lo === -1 && hi === 1, `wave: every filled buffer spans exactly [-1, 1] (60 configs: min ${String(lo)}, max ${String(hi)})`);
+  check(worstStage < 1.001, `wave: composed stages stay in [-1, 1] off the range grid too (max |f| ${worstStage.toFixed(5)})`);
+  const k4 = waveStages({ wiggles: 4, roughness: 1.5, stages: 3, seed: 9 }, seeded);
+  const k9 = waveStages({ wiggles: 9, roughness: 1.5, stages: 3, seed: 9 }, seeded);
+  check(k4.every((st, i) => {
+    const longer = k9[i];
+    return longer !== undefined && st.amp.every((a, k) => a === longer.amp[k] && st.phase[k] === longer.phase[k]);
+  }),
+    "wave: raising K keeps the seed (the first K terms of every stage are unchanged)");
+  const d1 = waveStages({ wiggles: 4, roughness: 1.5, stages: 1, seed: 9 }, seeded);
+  check(d1[0]?.amp.every((a, k) => a === k4[0]?.amp[k]) === true, "wave: raising d keeps the earlier stages");
+}
+
+// Training samples: prefix-stable in n, noise rescales the same draw, y on the curve when sigma = 0.
+{
+  const buf = makeDrawBuffer(640);
+  fillWave(buf, waveStages({ wiggles: 4, roughness: 1.5, stages: 1, seed: 1 }, seeded));
+  const a = curveSamples(buf, 8, 0, seeded(3)), b = curveSamples(buf, 64, 0, seeded(3));
+  check(a.x.every((x, i) => x === b.x[i]) && a.y.every((y, i) => y === b.y[i]), "samples: n=8 is a prefix of n=64 for one seed");
+  check(a.y.every((y, i) => Math.abs(y - valueAt(buf, get(a.x, i) / INPUT_SCALE)) < 1e-12), "samples: with sigma 0, y = f(x)");
+  const n1 = curveSamples(buf, 64, 0.1, seeded(3)), n2 = curveSamples(buf, 64, 0.3, seeded(3));
+  check(n1.y.every((y, i) => Math.abs((get(n2.y, i) - get(b.y, i)) - 3 * (y - get(b.y, i))) < 1e-12), "samples: noise 0.3 is exactly 3x the noise-0.1 draw");
+  const s8 = spiral(8, 0.2, seeded(4)), s64 = spiral(64, 0.2, seeded(4));
+  check(s8.x.every((x, i) => x === s64.x[i]) && s64.y.reduce((n, y) => n + y, 0) === 32, "spiral: n=8 is a prefix of n=64, classes alternate (32/32)");
+}
+
 // Training sanity: the defaults the widget ships with do what the prose will claim.
 function train(net: Mlp, task: Task, batch: Batch, steps: number, lr: number): { before: number; after: number; accuracy: number | null } {
   const opt = makeAdam(net);
@@ -96,17 +143,17 @@ function bestLineMse(b: Batch): number {
   return mse / b.n;
 }
 {
-  const buf = makeDrawBuffer(160);
-  fillExample(buf);
-  const data = drawSamples(buf);
+  const buf = makeDrawBuffer(640);
+  fillWave(buf, waveStages({ wiggles: 4, roughness: 1.5, stages: 1, seed: 2 }, seeded));
+  const data = curveSamples(buf, 128, 0, seeded(1));
   const tanh = train(initMlp([1, 8, 8, 1], "tanh", seeded(1)), "regression", data, 1500, 0.03);
-  check(tanh.after < tanh.before / 20, `draw, tanh 2x8: MSE ${tanh.before.toFixed(4)} -> ${tanh.after.toFixed(4)} in 1500 steps at lr 0.03`);
+  check(tanh.after < tanh.before / 20, `wave K=4, tanh 2x8: MSE ${tanh.before.toFixed(4)} -> ${tanh.after.toFixed(4)} in 1500 steps at lr 0.03`);
   const linear = train(initMlp([1, 8, 8, 8, 1], "linear", seeded(1)), "regression", data, 1500, 0.03);
   const line = bestLineMse(data);
-  check(Math.abs(linear.after - line) < 1e-3, `draw, linear 3x8: MSE ${linear.after.toFixed(4)}, the best straight line's is ${line.toFixed(4)}`);
-  const points = spiral(100, 0.15, seeded(3));
+  check(Math.abs(linear.after - line) < 1e-3, `wave K=4, linear 3x8: MSE ${linear.after.toFixed(4)}, the best straight line's is ${line.toFixed(4)}`);
+  const points = spiral(200, 0.15, seeded(3));
   for (const activation of ["tanh", "relu"] as const) {
     const s = train(initMlp([2, 8, 8, 8, 1], activation, seeded(2)), "binary", points, 3000, 0.03);
-    check((s.accuracy ?? 0) > 0.9, `spiral, ${activation} 3x8: accuracy ${((s.accuracy ?? 0) * 100).toFixed(1)}%, loss ${s.after.toFixed(3)} in 3000 steps`);
+    check((s.accuracy ?? 0) > 0.9, `spiral (200 points), ${activation} 3x8: accuracy ${((s.accuracy ?? 0) * 100).toFixed(1)}%, loss ${s.after.toFixed(3)} in 3000 steps`);
   }
 }
