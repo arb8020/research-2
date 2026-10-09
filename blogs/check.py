@@ -89,6 +89,7 @@ class Block:
     name: str
     source: str
     line: int
+    file: str = ""  # file=<path>: a workspace cell or given view (build_page.py), not run by this file
 
 
 @dataclass(frozen=True)
@@ -112,14 +113,16 @@ def parse(text: str) -> list[Block]:
     for m in FENCE.finditer(text):
         lang, info, source = m.group(1), m.group(2).split(), m.group(3)
         line = text.count("\n", 0, m.start()) + 1
-        role, name = "", ""
+        role, name, file = "", "", ""
         for item in info:
             key, _, value = item.partition("=")
             if key in ROLES:
                 assert not role, f"line {line}: block has two roles: {info}"
                 role, name = key, value
+            elif key == "file":
+                file = value
         if role:
-            blocks.append(Block(lang, role, name, source, line))
+            blocks.append(Block(lang, role, name, source, line, file))
     return blocks
 
 
@@ -318,6 +321,7 @@ def main() -> None:
     args = ap.parse_args()
 
     blocks = parse(args.chapter.read_text())
+    assert not any(b.file for b in blocks), f"{args.chapter} is a workspace chapter (file= cells): its checks run in the workspace (run_checks)"
     order = cell_order(blocks)
     targets = [args.cell] if args.cell else order
     for t in targets:

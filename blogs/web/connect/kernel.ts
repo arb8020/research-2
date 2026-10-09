@@ -6,12 +6,18 @@
 //   interrupt()                        -> Promise<void>        Jupyter interrupt (a running cell ends with KeyboardInterrupt)
 //   kernelState()                      -> KernelState          "off" until connected
 //   onKernelState(listener)            -> unsubscribe          called on every change
+//   runJob(id, argv, cwd, onOutput)    -> Promise<JobResult>   a background subprocess (jobs.py): the kernel is free
+//                                                              as soon as it starts; output streams until it exits
+//   killJob(id)                        -> Promise<void>        SIGTERM to the job's process group
+//   kernelAddress()                    -> KernelAddress | undefined  for the Contents API (connect/contents.ts)
 //
 // Every bundle on a page gets its own copy of this module (esbuild bundles page.ts and each embed separately), so
 // the one live kernel lives in a window slot: whichever copy runs first creates it, every copy uses it.
 //
 // Wire: Jupyter Server REST + the kernel websocket (protocol 5.3). The token goes in the query string: a browser
 // can't set headers on a WebSocket, and query-only auth keeps fetches simple (no CORS preflight).
+
+import JOBS_PY from "./jobs.py";
 
 export interface KernelAddress {
   url: string;
@@ -22,6 +28,12 @@ export type RunResult =
   | { status: "ok" }
   | { status: "error"; ename: string; evalue: string; traceback: string } // a Python exception (ANSI stripped)
   | { status: "aborted"; reason: string }; // never ran or never finished: not connected, connection lost, kernel died
+
+// A background job ends with its exit code (negative: killed by that signal), or it never started (the launching
+// cell raised), or the page lost it (socket dropped, kernel restarted: the process may still be running).
+export type JobResult = { status: "exited"; exit: number } | Exclude<RunResult, { status: "ok" }>;
+
+const JOB_MIME = "application/vnd.blogs.job+json"; // jobs.py's end-of-job marker
 
 // off: no session. attaching: finding/starting the kernel. idle/busy: ready (busy = a runCode is in flight).
 // lost: the kernel stopped answering; session.ts decides whether the session is gone.
@@ -59,7 +71,7 @@ type Handler = (msg: Msg | Gone) => void;
 
 class Kernel {
   state: KernelState = "off";
-  private address: KernelAddress | undefined;
+  address: KernelAddress | undefined; // read by kernelAddress() (the Contents API needs the same URL + token)
   private id: string | undefined;
   private ws: WebSocket | undefined;
   private keepalive: ReturnType<typeof setInterval> | undefined;
@@ -221,6 +233,52 @@ class Kernel {
     });
   }
 
+  // A job: one execute_request starts the subprocess (installing jobs.py first if this kernel lacks it). Unlike
+  // run(), the handler outlives the reply: the job's output keeps arriving under this request's msg_id until the
+  // JOB_MIME marker. The kernel counts as busy only until the reply (the job itself doesn't occupy it).
+  job(id: string, argv: string[], cwd: string, onOutput: (text: string) => void): Promise<JobResult> {
+    if (this.state !== "idle" && this.state !== "busy") return Promise.resolve({ status: "aborted", reason: "not connected" });
+    const code = `if "_blogs_jobs" not in globals():\n    exec(${JSON.stringify(JOBS_PY)})\n_blogs_jobs.start(${JSON.stringify(id)}, ${JSON.stringify(argv)}, ${JSON.stringify(cwd)})`;
+    this.running += 1;
+    this.set("busy");
+    let replied = false;
+    const done = (): void => {
+      if (replied) return;
+      replied = true;
+      this.running -= 1;
+      if (this.running === 0 && this.state === "busy") this.set("idle");
+    };
+    return new Promise<JobResult>((resolve) => {
+      let msgId: string;
+      try {
+        msgId = this.send("execute_request", { code, silent: false, store_history: false, user_expressions: {}, allow_stdin: false, stop_on_error: false });
+      } catch {
+        done();
+        resolve({ status: "aborted", reason: "the connection to the kernel is closed" });
+        return;
+      }
+      const finish = (result: JobResult): void => {
+        done();
+        this.pending.delete(msgId);
+        resolve(result);
+      };
+      this.pending.set(msgId, (msg) => {
+        if ("gone" in msg) { finish({ status: "aborted", reason: msg.gone }); return; }
+        const c = msg.content;
+        if (msg.type === "stream") onOutput(text(c, "text"));
+        else if (msg.type === "display_data" && isRecord(c["data"]) && isRecord(c["data"][JOB_MIME])) {
+          const marker = c["data"][JOB_MIME];
+          if (typeof marker["exit"] !== "number") throw new Error(`kernel: job marker without an exit code: ${JSON.stringify(marker)}`);
+          finish({ status: "exited", exit: marker["exit"] });
+        } else if (msg.type === "execute_reply") {
+          const reply = parseReply(c);
+          if (reply.status !== "ok") finish(reply); // the job never started
+          else done();
+        }
+      });
+    });
+  }
+
   async interrupt(): Promise<void> {
     if (this.id === undefined) return;
     const res = await fetch(this.api(`/api/kernels/${this.id}/interrupt`), { method: "POST" });
@@ -246,6 +304,13 @@ const kernel: Kernel = (window.blogsConnectKernel ??= new Kernel());
 export const runCode = (code: string, onStdout: (text: string) => void, onStderr: (text: string) => void = onStdout): Promise<RunResult> =>
   kernel.run(code, onStdout, onStderr);
 export const interrupt = (): Promise<void> => kernel.interrupt();
+export const runJob = (id: string, argv: string[], cwd: string, onOutput: (text: string) => void): Promise<JobResult> =>
+  kernel.job(id, argv, cwd, onOutput);
+export async function killJob(id: string): Promise<void> {
+  const result = await kernel.run(`_blogs_jobs.kill(${JSON.stringify(id)})`, () => undefined, () => undefined);
+  if (result.status !== "ok") throw new Error(`kill ${id}: ${result.status === "error" ? `${result.ename}: ${result.evalue}` : result.reason}`);
+}
+export const kernelAddress = (): KernelAddress | undefined => kernel.address;
 export const kernelState = (): KernelState => kernel.state;
 export const onKernelState = (listener: (state: KernelState) => void): (() => void) => kernel.subscribe(listener);
 

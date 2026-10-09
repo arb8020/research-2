@@ -10,9 +10,15 @@ run `npm ci` there once).
 
 cell=X     -> <code-cell> editor prefilled with the stub, Run button, output pane
 given      -> collapsed, read-only code (the reader calls into it, so they can read it)
+```K cell=X file=F, on a <!-- page: workspace=chNN --> page -> <ws-cell>: a whole-file editor over the reader's
+                      workspace file F (ws.py in their sandbox); the fence body is optional and, if there, must equal F at
+                      chNN/start (ref.py). Its check=X fence is one shell command (run_checks chNN X), run by ws.py check
+```K given file=F (workspace page) -> read-only view of F at chNN/start; output lines naming F link to it
 ```python scratch -> <scratch-cell>: editable, Run executes on the Connect session's kernel; no checks, no gating
 <!-- page: connect --> on its own line -> this page has the header Connect control (gateway: --gateway-url);
-                      a page with scratch cells must have it
+                      a page with scratch cells or workspace cells must have it
+<!-- page: workspace=chNN --> -> the page's file= cells are chapter chNN of the reference (engine/ref/chNN); the page
+                      ships ws.py and the chapter's start bundle (ref.bundle) for the sandbox
 solution=X, check=X, budget=X -> not in the page; the session runs them
 <!-- ... --> on its own line -> a muted "todo" note
 <!-- wip: ... --> on its own line -> a visible "under construction" banner (🚧 + the text), for readers
@@ -25,6 +31,7 @@ solution=X, check=X, budget=X -> not in the page; the session runs them
 from __future__ import annotations
 
 import argparse
+import functools
 import html
 import re
 import shutil
@@ -41,11 +48,74 @@ from markdown_it.utils import EnvType, OptionsDict
 import build_web
 import embeds
 import links
-from check import HIDDEN, ROLES, cell_order, parse
+import ref
+from check import HIDDEN, ROLES, Block, cell_order, parse
 
 HERE = Path(__file__).parent
 PAGE_FLAG = re.compile(r"^<!--\s*page:\s*(\S+)\s*-->\s*$", re.MULTILINE)
-PAGE_FLAGS = ("connect",)
+PAGE_FLAGS = ("connect", "workspace")
+CHECK_COMMAND = re.compile(r"[\w./=-]+(?: [\w./=-]+)*")  # ws.py splits it on spaces: no quoting
+
+
+class Workspace(NamedTuple):
+    """A workspace chapter's reference: its start tree, its cells (checks/chNN.json) and their check commands."""
+
+    chapter: str
+    start: ref.Tree
+    solution: ref.Tree
+    cells: list[ref.Cell]
+    checks: dict[str, str]  # cell name -> the check fence's command
+
+
+@functools.cache
+def workspace_of(chapter: Path) -> Workspace | None:
+    """The chapter's <!-- page: workspace=chNN --> reference, or None for an ordinary page."""
+    text = chapter.read_text()
+    flags = [f for f in PAGE_FLAG.findall(text) if f.startswith("workspace=")]
+    if not flags:
+        return None
+    assert len(flags) == 1, f"{chapter}: more than one workspace flag {flags}"
+    name = flags[0].removeprefix("workspace=")
+    start = ref.materialize(name, "start")
+    checks: dict[str, str] = {}
+    for b in parse(text):
+        if b.role == "check":
+            command = b.source.strip()
+            assert CHECK_COMMAND.fullmatch(command), f"line {b.line}: check={b.name} must be one command without quoting, got {b.source!r}"
+            checks[b.name] = command
+    return Workspace(name, start, ref.materialize(name, "solution"), ref.cells(start, name), checks)
+
+
+def workspace_file(ws: Workspace | None, b: Block, body: str) -> str:
+    """F's text at chNN/start; a non-empty fence body must equal it (the author sees the code; the build keeps it true)."""
+    assert ws is not None, f"line {b.line}: file={b.file} needs <!-- page: workspace=chNN -->"
+    assert b.file in ws.start, f"line {b.line}: {b.file} is not in {ws.chapter}/start (files: {sorted(ws.start)})"
+    text = ws.start[b.file].data.decode()
+    if body.strip():
+        assert body == text, f"line {b.line}: this fence's body differs from {b.file} at {ws.chapter}/start; empty it, or fix ref/"
+    if b.role == "cell":
+        owned = {c.name: c.file for c in ws.cells}
+        assert owned.get(b.name) == b.file, f"line {b.line}: cell={b.name} file={b.file}, but checks/{ws.chapter}.json says {owned.get(b.name)}"
+        assert b.name in ws.checks, f"line {b.line}: cell={b.name} has no check={b.name} fence"
+    return text
+
+
+def render_workspace_fence(chapter: Path, b: Block, preview: bool) -> str:
+    """```K cell=X file=F -> <ws-cell>; ```K given file=F -> a read-only view of F. Both show F at chNN/start."""
+    assert b.role in ("cell", "given"), f"line {b.line}: file= goes on cell=X or given fences, not {b.role or 'a plain one'}"
+    ws = workspace_of(chapter)
+    text = html.escape(workspace_file(ws, b, b.source))
+    assert ws is not None  # workspace_file asserted it
+    file = html.escape(b.file)
+    if b.role == "cell" and not preview:
+        return (f'<ws-cell name="{b.name}" data-file="{file}" data-lang="{b.lang}" data-chapter="{ws.chapter}" '
+                f'data-check="{html.escape(ws.checks[b.name])}" data-not-typeset><pre>{text}</pre></ws-cell>\n')
+    what = f"{b.name} cell · read-only here" if b.role == "cell" else "given · read-only"
+    # A link card (preview) must not claim the file: output links would jump into the card instead of the page.
+    claim = "" if preview else f' data-file="{file}"'
+    return (f'<figure class="excerpt" data-not-typeset><div class="cell-head"><span>{file} · {b.lang}</span>'
+            f'<span class="excerpt-src">{what}</span></div>'
+            f'<code-view data-lang="{b.lang}"{claim} data-label="{file} ({what})"><pre>{text}</pre></code-view></figure>\n')
 
 
 def render_excerpt(chapter: Path, path: str, lang: str, body: str, line: int) -> str:
@@ -109,6 +179,11 @@ def markdown(chapter: Path, kinds: dict[str, embeds.Embed], preview: bool) -> Ma
         if excerpt := [v for k, _, v in (i.partition("=") for i in info) if k == "excerpt"]:
             return render_excerpt(chapter, excerpt[0], lang, tokens[idx].content, line)
         role, name = next(((k, v) for k, _, v in (i.partition("=") for i in info) if k in ROLES), ("", ""))
+        file = next((v for k, _, v in (i.partition("=") for i in info) if k == "file"), "")
+        if file:
+            return render_workspace_fence(chapter, Block(lang, role, name, tokens[idx].content, line, file), preview)
+        if role == "check" and workspace_of(chapter) is not None:
+            return ""  # a workspace check's command rides on its ws-cell (data-check)
         src = html.escape(tokens[idx].content)
         if "scratch" in info:
             assert not role, f"line {line}: a scratch block can't also be {role}={name}"
@@ -134,7 +209,7 @@ def markdown(chapter: Path, kinds: dict[str, embeds.Embed], preview: bool) -> Ma
     def html_block(tokens: Sequence[Token], idx: int, opts: OptionsDict, env: EnvType) -> str:
         content = tokens[idx].content
         if flag := PAGE_FLAG.fullmatch(content.strip()):
-            assert flag[1] in PAGE_FLAGS, f"<!-- page: {flag[1]} -->: page flags are {PAGE_FLAGS}"
+            assert flag[1].partition("=")[0] in PAGE_FLAGS, f"<!-- page: {flag[1]} -->: page flags are {PAGE_FLAGS}"
             return ""
         if wip := re.fullmatch(r"\s*<!--\s*wip:\s*(.*?)\s*-->\s*", content, re.DOTALL):
             span = tokens[idx].map
@@ -212,15 +287,24 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
     for name in env_names:
         body = re.sub(rf"(<p>)?<{name}-play>\s*</{name}-play>(</p>)?", f'<env-play cell="{name}" data-not-typeset></env-play>', body)
 
+    ws = workspace_of(chapter)
     rendered = re.findall(r'<code-cell name="(\w+)"', body)
-    assert rendered == cell_order(blocks), f"markdown-it found cells {rendered}, check.py found {cell_order(blocks)}"
+    session_cells = [b.name for b in blocks if b.role == "cell" and not b.file]
+    assert rendered == session_cells, f"markdown-it found cells {rendered}, check.py found {cell_order(blocks)}"
+    ws_cells = re.findall(r'<ws-cell name="(\w+)"', body)
+    if ws is not None:
+        assert ws_cells == [c.name for c in ws.cells], f"{chapter}: the page's workspace cells {ws_cells} differ from checks/{ws.chapter}.json {[c.name for c in ws.cells]}"
+        for c in ws.cells:
+            assert html.escape(ws.solution[c.file].data.decode()) not in body, f"the solution of {c.file} leaked into the page"
     for b in blocks:
-        if b.role in HIDDEN:
+        if b.role in HIDDEN and not (ws is not None and b.role == "check"):
             assert html.escape(b.source) not in body, f"{b.role}={b.name} (line {b.line}) leaked into the page"
 
-    connect = "connect" in PAGE_FLAG.findall(text)
+    flags = PAGE_FLAG.findall(text)
+    connect = "connect" in flags
     scratch = body.count("<scratch-cell")
     assert connect or not scratch, f"{chapter}: scratch cells need <!-- page: connect --> (nothing else can run them)"
+    assert connect or ws is None, f"{chapter}: workspace cells need <!-- page: connect --> (the workspace lives in the sandbox)"
     corner = f'<connect-pill data-gateway="{html.escape(gateway_url)}"></connect-pill>' if connect else ""
 
     title = re.search(r"^# (.+)$", text, re.MULTILINE)
@@ -233,6 +317,9 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
     (out / "index.html").write_text(page)
     for f in ("build/page.js", "build/settings.js", "page.css", "typeset.css", "play.html"):
         shutil.copy(HERE / "web" / f, out / Path(f).name)
+    if ws is not None:
+        shutil.copy(HERE / "ws.py", out / "ws.py")  # the page uploads both into the sandbox (web/workspace.ts)
+        ref.reader_bundle(ws.chapter, out / "ref.bundle")
 
     if envs:
         build_web.ensure_raylib()
@@ -240,7 +327,7 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
         for env in envs:
             build_web.build_play(next(b for b in blocks if b.role == "solution" and b.name == env.name), out, Path(tmp))
     links_out = len(re.findall("<page-link", body))
-    print(f"wrote {out / 'index.html'}: cells {rendered}, scratch {scratch}, connect {connect}, play widgets {sorted(env_names)}, embeds {sorted(used)}, "
+    print(f"wrote {out / 'index.html'}: cells {rendered}, workspace {ws.chapter if ws else None} cells {ws_cells}, scratch {scratch}, connect {connect}, play widgets {sorted(env_names)}, embeds {sorted(used)}, "
           f"links {links_out} (preview-only embeds {sorted(lazy)})")
 
 

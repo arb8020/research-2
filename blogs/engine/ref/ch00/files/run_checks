@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""run_checks <chapter> [cell]: a chapter's checks, one cell's or all of them, run in this tree. Exit 0 = pass.
+
+    ./run_checks ch00 ring      the ring cell's checks
+    ./run_checks ch00           every cell's, in order (the chapter check; a harbor task runs this)
+
+checks/<chapter>.json lists the cells in order, each with its file and its steps (argv lists run here; "{python}" is
+this interpreter). Output streams line by line so the page can show it as it comes and link `file:line`s.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+STEP_TIMEOUT_S = 60  # a toy check takes well under a second; a hang (an infinite loop) ends here
+MAX_OUTPUT_LINES = 2000  # per step; past this the step is killed (a runaway print loop)
+
+
+def say(t0: float, text: str) -> None:
+    print(f"[{time.monotonic() - t0:6.2f}s] {text}", flush=True)
+
+
+def copy_lines(proc: subprocess.Popen[str]) -> None:
+    assert proc.stdout is not None
+    for i, line in enumerate(proc.stdout):
+        if i == MAX_OUTPUT_LINES:
+            print(f"(stopped: more than {MAX_OUTPUT_LINES} lines of output)", flush=True)
+            proc.kill()
+            return
+        print(line, end="", flush=True)
+
+
+def run_step(argv: list[str]) -> int:
+    """One step, its stdout + stderr streamed as they come. Returns its exit code (negative = killed by a signal).
+
+    The step stays in this process group, so killing a check's group (the page's Stop) reaches it too."""
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    proc = subprocess.Popen(argv, cwd=HERE, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    pump = threading.Thread(target=copy_lines, args=(proc,), daemon=True)
+    pump.start()
+    try:
+        rc = proc.wait(timeout=STEP_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        rc = proc.wait()
+        print(f"(stopped: still running after {STEP_TIMEOUT_S}s: an infinite loop?)", flush=True)
+    pump.join()
+    return rc
+
+
+def main() -> int:
+    if len(sys.argv) not in (2, 3):
+        print(__doc__, file=sys.stderr)
+        return 2
+    chapter = sys.argv[1]
+    manifest = json.loads((HERE / "checks" / f"{chapter}.json").read_text())
+    names = [c["name"] for c in manifest["cells"]]
+    wanted = sys.argv[2] if len(sys.argv) == 3 else None
+    if wanted is not None and wanted not in names:
+        print(f"run_checks: {chapter} has no cell {wanted!r}; its cells are {names}", file=sys.stderr)
+        return 2
+    t0 = time.monotonic()
+    for cell in manifest["cells"]:
+        if wanted is not None and cell["name"] != wanted:
+            continue
+        for step in cell["steps"]:
+            argv = [sys.executable if a == "{python}" else a for a in step]
+            say(t0, f"{cell['name']}: {' '.join(step)}")
+            rc = run_step(argv)
+            if rc != 0:
+                say(t0, f"FAIL {chapter} {cell['name']}: `{' '.join(step)}` exited {rc}")
+                return 1
+    say(t0, f"PASS {chapter} {wanted or '(every cell)'}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

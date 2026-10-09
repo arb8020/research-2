@@ -1,0 +1,401 @@
+# sched.trace: requests arrive, steps run, decode progresses. check_trace replays it against sched_step.
+req 0 28 16
+push 0
+req 1 13 16
+push 1
+req 2 25 16
+push 2
+req 3 29 16
+push 3
+req 4 14 16
+push 4
+req 5 2 16
+push 5
+req 6 9 16
+push 6
+req 7 17 16
+push 7
+req 8 16 16
+push 8
+req 9 13 16
+push 9
+req 10 30 16
+push 10
+req 11 26 16
+push 11
+req 12 27 16
+push 12
+req 13 10 16
+push 13
+req 14 16 16
+push 14
+req 15 12 16
+push 15
+req 16 19 16
+push 16
+req 17 29 16
+push 17
+req 18 30 16
+push 18
+req 19 7 16
+push 19
+req 20 17 16
+push 20
+req 21 5 16
+push 21
+req 22 10 16
+push 22
+req 23 5 16
+push 23
+req 24 25 16
+push 24
+req 25 4 16
+push 25
+req 26 20 16
+push 26
+req 27 26 16
+push 27
+req 28 9 16
+push 28
+req 29 30 16
+push 29
+req 30 18 16
+push 30
+req 31 23 16
+push 31
+req 32 26 16
+push 32
+req 33 20 16
+push 33
+req 34 29 16
+push 34
+req 35 5 16
+push 35
+req 36 10 16
+push 36
+req 37 4 16
+push 37
+req 38 24 16
+push 38
+req 39 3 16
+push 39
+step 62 -> 0:28 1:13
+done 0
+done 1
+step 51 -> 2:25
+done 2
+step 29 -> 3:29
+done 3
+step 38 -> 4:14 5:2 6:9
+done 4
+done 5
+done 6
+step 43 -> 7:17 8:16
+done 7
+done 8
+step 14 -> 9:13
+done 9
+step 30 -> 10:30
+done 10
+step 35 -> 11:26
+done 11
+step 28 -> 12:27
+done 12
+step 47 -> 13:10 14:16 15:12
+done 13
+done 14
+done 15
+step 48 -> 16:19 17:29
+done 16
+done 17
+step 21 -> 
+step 43 -> 18:30 19:7
+done 18
+done 19
+step 38 -> 20:17 21:5 22:10 23:5
+done 20
+done 21
+done 22
+done 23
+step 36 -> 24:25 25:4
+done 24
+done 25
+step 63 -> 26:20 27:26 28:9
+done 26
+done 27
+done 28
+step 41 -> 29:30
+done 29
+step 24 -> 30:18
+done 30
+step 11 -> 
+step 59 -> 31:23 32:26
+done 31
+done 32
+step 43 -> 33:20
+done 33
+step 8 -> 
+step 13 -> 
+step 54 -> 34:29 35:5 36:10 37:4
+done 34
+done 35
+done 36
+done 37
+step 61 -> 38:24 39:3 0:1 1:1 2:1 3:1 4:1 5:1 6:1 7:1 8:1 9:1 10:1 11:1 12:1 13:1 14:1 15:1 16:1 17:1 18:1 19:1 20:1 21:1 22:1 23:1 24:1 25:1 26:1 27:1 28:1 29:1 30:1 31:1 32:1 33:1
+done 38
+done 39
+done 0
+done 1
+done 2
+done 3
+done 4
+done 5
+done 6
+done 7
+done 8
+done 9
+done 10
+done 11
+done 12
+done 13
+done 14
+done 15
+done 16
+done 17
+done 18
+done 19
+done 20
+done 21
+done 22
+done 23
+done 24
+done 25
+done 26
+done 27
+done 28
+done 29
+done 30
+done 31
+done 32
+done 33
+step 33 -> 34:1 35:1 36:1 37:1 38:1 39:1 0:1 1:1 2:1 3:1 4:1 5:1 6:1 7:1 8:1 9:1 10:1 11:1 12:1 13:1 14:1 15:1 16:1 17:1 18:1 19:1 20:1 21:1 22:1 23:1 24:1 25:1 26:1
+done 34
+done 35
+done 36
+done 37
+done 38
+done 39
+done 0
+done 1
+done 2
+done 3
+done 4
+done 5
+done 6
+done 7
+done 8
+done 9
+done 10
+done 11
+done 12
+done 13
+done 14
+done 15
+done 16
+done 17
+done 18
+done 19
+done 20
+done 21
+done 22
+done 23
+done 24
+done 25
+done 26
+step 53 -> 27:1 28:1 29:1 30:1 31:1 32:1 33:1 34:1 35:1 36:1 37:1 38:1 39:1 0:1 1:1 2:1 3:1 4:1 5:1 6:1 7:1 8:1 9:1 10:1 11:1 12:1 13:1 14:1 15:1 16:1 17:1 18:1 19:1 20:1 21:1 22:1 23:1 24:1 25:1 26:1
+done 27
+done 28
+done 29
+done 30
+done 31
+done 32
+done 33
+done 34
+done 35
+done 36
+done 37
+done 38
+done 39
+done 0
+done 1
+done 2
+done 3
+done 4
+done 5
+done 6
+done 7
+done 8
+done 9
+done 10
+done 11
+done 12
+done 13
+done 14
+done 15
+done 16
+done 17
+done 18
+done 19
+done 20
+done 21
+done 22
+done 23
+done 24
+done 25
+done 26
+step 60 -> 27:1 28:1 29:1 30:1 31:1 32:1 33:1 34:1 35:1 36:1 37:1 38:1 39:1 0:1 1:1 2:1 3:1 4:1 5:1 6:1 7:1 8:1 9:1 10:1 11:1 12:1 13:1 14:1 15:1 16:1 17:1 18:1 19:1 20:1 21:1 22:1 23:1 24:1 25:1 26:1
+done 27
+done 28
+done 29
+done 30
+done 31
+done 32
+done 33
+done 34
+done 35
+done 36
+done 37
+done 38
+done 39
+done 0
+done 1
+done 2
+done 3
+done 4
+done 5
+done 6
+done 7
+done 8
+done 9
+done 10
+done 11
+done 12
+done 13
+done 14
+done 15
+done 16
+done 17
+done 18
+done 19
+done 20
+done 21
+done 22
+done 23
+done 24
+done 25
+done 26
+step 58 -> 27:1 28:1 29:1 30:1 31:1 32:1 33:1 34:1 35:1 36:1 37:1 38:1 39:1 0:1 1:1 2:1 3:1 4:1 5:1 6:1 7:1 8:1 9:1 10:1 11:1 12:1 13:1 14:1 15:1 16:1 17:1 18:1 19:1 20:1 21:1 22:1 23:1 24:1 25:1 26:1
+done 27
+done 28
+done 29
+done 30
+done 31
+done 32
+done 33
+done 34
+done 35
+done 36
+done 37
+done 38
+done 39
+done 0
+done 1
+done 2
+done 3
+done 4
+done 5
+done 6
+done 7
+done 8
+done 9
+done 10
+done 11
+done 12
+done 13
+done 14
+done 15
+done 16
+done 17
+done 18
+done 19
+done 20
+done 21
+done 22
+done 23
+done 24
+done 25
+done 26
+step 50 -> 27:1 28:1 29:1 30:1 31:1 32:1 33:1 34:1 35:1 36:1 37:1 38:1 39:1 0:1 1:1 2:1 3:1 4:1 5:1 6:1 7:1 8:1 9:1 10:1 11:1 12:1 13:1 14:1 15:1 16:1 17:1 18:1 19:1 20:1 21:1 22:1 23:1 24:1 25:1 26:1
+done 27
+done 28
+done 29
+done 30
+done 31
+done 32
+done 33
+done 34
+done 35
+done 36
+done 37
+done 38
+done 39
+done 0
+done 1
+done 2
+done 3
+done 4
+done 5
+done 6
+done 7
+done 8
+done 9
+done 10
+done 11
+done 12
+done 13
+done 14
+done 15
+done 16
+done 17
+done 18
+done 19
+done 20
+done 21
+done 22
+done 23
+done 24
+done 25
+done 26
+step 48 -> 27:1 28:1 29:1 30:1 31:1 32:1 33:1 34:1 35:1 36:1 37:1 38:1 39:1 0:1 1:1 2:1 3:1 4:1 5:1 6:1 7:1 8:1 9:1 10:1 11:1 12:1 13:1 14:1 15:1 16:1 17:1 18:1 19:1 20:1 21:1 22:1 23:1 24:1 25:1 26:1
+done 27
+done 28
+done 29
+done 30
+done 31
+done 32
+done 33
+done 34
+done 35
+done 36
+done 37
+done 38
+done 39
+done 0
+done 1
+done 2
+done 3
+done 4
+done 5
+done 6
+done 7
+done 8
