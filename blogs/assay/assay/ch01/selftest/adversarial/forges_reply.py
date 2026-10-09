@@ -8,7 +8,7 @@ import pickle
 
 from torch import Tensor
 
-import harness.isolate
+import assay.ch01.child
 
 
 class RunsCodeWhenUnpickled:
@@ -16,20 +16,19 @@ class RunsCodeWhenUnpickled:
         return (os.system, ("echo PWNED: the parent unpickled a child reply",))
 
 
-def _forged_send(conn: object, header: dict, tensors: dict) -> None:
-    conn.send_bytes(pickle.dumps(RunsCodeWhenUnpickled()))  # type: ignore[attr-defined]
-    conn.send_bytes(b"")  # type: ignore[attr-defined]
+def _forged_send(fd: int, header: dict, blobs: dict) -> None:
+    os.write(fd, pickle.dumps(RunsCodeWhenUnpickled()))
 
 
-_original_send = harness.isolate._send
+_original_send = assay.ch01.child._send
 
 
-def _send_ready_then_forge(conn: object, header: dict, tensors: dict) -> None:
+def _send_ready_then_forge(fd: int, header: dict, blobs: dict) -> None:
     sender = _original_send if header.get("kind") == "ready" else _forged_send
-    sender(conn, header, tensors)
+    sender(fd, header, blobs)
 
 
-harness.isolate._send = _send_ready_then_forge
+assay.ch01.child._send = _send_ready_then_forge
 
 
 def layer_norm(x: Tensor, weight: Tensor, bias: Tensor, eps: float) -> Tensor:

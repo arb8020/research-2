@@ -1,5 +1,5 @@
 """The case generator: an op's named dims x its scalar values x its dtypes -> a list of `Case`s,
-and a `Case` + a seeded `torch.Generator` -> concrete inputs.
+and a `Case` + a seeded `torch.Generator` -> concrete inputs. A model op lists its cases itself (`@op.cases`).
 
 Shapes come from the reference's own annotations (`x: Float[Tensor, "rows hidden"]`, popcorn
 style, via jaxtyping); sizes come from the op's `dims=` -- explicit edge values per dim (1,
@@ -8,7 +8,7 @@ past `FULL_PRODUCT_LIMIT` cases it is a pairwise covering array (every pair of v
 every two axes appears in some case) plus the all-smallest and all-largest corners.
 
 Every case owns its seed (crc32 of op name + case label), so a case is reproducible on its own:
-`run_checks ch1 layer_norm` and a failing case re-run give the same tensors.
+`run_checks ch01 --op layer_norm` and a failing case re-run give the same tensors.
 """
 
 from __future__ import annotations
@@ -24,12 +24,10 @@ from typing import Any
 import jaxtyping
 import torch
 
-from harness.registry import Op
+from assay.ch01.registry import Op
+from assay.ch01.tensors import SHORT
 
 FULL_PRODUCT_LIMIT = 64  # past this many cases, cover pairs instead of the full product
-
-DTYPE_NAMES = {torch.float64: "fp64", torch.float32: "fp32", torch.float16: "fp16",
-               torch.bfloat16: "bf16"}
 
 
 @dataclass(frozen=True)
@@ -40,15 +38,27 @@ class Case:
     scalars: tuple[tuple[str, float], ...]
     dtype: torch.dtype
     seed: int
+    prompt: str = ""  # model cases: which prompt
 
     def label(self) -> str:
-        """`rows=3 hidden=7 eps=1e-05 fp32` -- what a verdict line and record print."""
-        parts = [f"{n}={v}" for n, v in self.sizes] + [f"{n}={v:g}" for n, v in self.scalars]
-        return " ".join([*parts, DTYPE_NAMES[self.dtype]])
+        """`rows=3 hidden=7 eps=1e-05` -- the shape part of a verdict's case (the dtype is its own field)."""
+        parts = [f"prompt={self.prompt}"] if self.prompt else []
+        parts += [f"{n}={v}" for n, v in self.sizes] + [f"{n}={v:g}" for n, v in self.scalars]
+        return " ".join(parts)
+
+    @property
+    def dtype_name(self) -> str:
+        return SHORT[self.dtype]
+
+    def to_json(self) -> dict:
+        return {"sizes": dict(self.sizes), "scalars": dict(self.scalars), "dtype": self.dtype_name,
+                "seed": self.seed, "prompt": self.prompt}
 
 
 def sweep(declared: Op) -> list[Case]:
     """Every case the op is checked on, in a fixed order."""
+    if declared.cases_fn is not None:
+        return declared.cases_fn()
     _assert_dims_match(declared)
     plan = declared.sweep
     axes: list[tuple[Any, ...]] = [*plan.dims.values(), *plan.scalars.values(), plan.dtypes]
@@ -63,9 +73,9 @@ def sweep(declared: Op) -> list[Case]:
         sizes = tuple(zip(dim_names, picked[:len(dim_names)], strict=True))
         scalars = tuple(zip(scalar_names, picked[len(dim_names):-1], strict=True))
         unseeded = Case(sizes, scalars, picked[-1], 0)
-        seed = zlib.crc32(f"{declared.name}|{unseeded.label()}".encode())
+        seed = zlib.crc32(f"{declared.name}|{unseeded.label()} {unseeded.dtype_name}".encode())
         cases.append(Case(sizes, scalars, picked[-1], seed))
-    assert len({case.label() for case in cases}) == len(cases), "sweep produced duplicate cases"
+    assert len({(c.label(), c.dtype) for c in cases}) == len(cases), "sweep produced duplicate cases"
     return cases
 
 
