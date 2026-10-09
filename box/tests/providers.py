@@ -14,7 +14,7 @@ from box.store import DirStore, Store
 
 IMAGE = "python:3.13-slim"  # any image with bash + python3 is a box image
 SCALE = {"local": 1.0, "modal": 10.0, "runpod": 30.0}  # runpod: ~30 s boot comes out of box.deadline
-PURPOSE = {"box.purpose": "reader-path-dev"}  # every test machine carries it, so a sweep finds strays
+PURPOSE = {"box.purpose": os.environ.get("BOX_TEST_PURPOSE", "reader-path-dev")}  # every test machine carries it, so a sweep finds strays
 MAX_BACKSTOP_S = 900  # a test machine whose supervisor fails is still gone (and unbilled) after 15 min
 
 
@@ -30,7 +30,9 @@ def _make(name: str, base: Path) -> Provider:
     if name == "modal":
         from box.providers.modal import Modal, ModalToken
 
-        return Modal(token=ModalToken.from_config(), region="us")  # unpinned, Modal has placed an L4 in Tokyo (~330 s boot, ~390 ms/exec)
+        profile = os.environ.get("BOX_MODAL_PROFILE")  # a workspace pinned by name; else the active profile
+        token = ModalToken.from_profile(profile) if profile else ModalToken.from_config()
+        return Modal(token=token, region="us")  # unpinned, Modal has placed an L4 in Tokyo (~330 s boot, ~390 ms/exec)
     if name == "runpod":
         from box.providers.runpod import RunPod
 

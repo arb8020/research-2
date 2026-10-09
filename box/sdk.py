@@ -40,6 +40,7 @@ import sys
 import tarfile
 import threading
 import time
+import zlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
@@ -237,7 +238,8 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
         "--ports", ",".join(map(str, ports)),
         *(["--record", RECORD_PATH, *(["--record-sync"] if record.sync_writes else [])] if record else []),
     ]  # fmt: skip
-    boot = "import base64,os; exec(base64.b64decode(os.environ['BOX_SUPERVISOR']))"
+    # zlib: Modal caps an env value at 32 KiB, which the supervisor's base64 passed (12 KiB compressed)
+    boot = "import base64,os,zlib; exec(zlib.decompress(base64.b64decode(os.environ['BOX_SUPERVISOR'])))"
     entrypoint = ["bash", "-c", f'exec python3 -c {shlex.quote(boot)} --root "$BOX_ROOT" {shlex.join(args)}']
     # TODO(handoff): LABEL_DEADLINE is stamped before the machine boots, but the supervisor's clock
     # starts at boot, so a slow boot (an unpinned Modal L4 took ~6 min) makes the label early by the
@@ -248,7 +250,7 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     # supervisor an absolute deadline), which changes what deadline_s means: the author's call.
     machine = provider.launch(
         gpu=gpu, image=image, entrypoint=entrypoint,
-        env={**(env or {}), "BOX_SUPERVISOR": base64.b64encode(SUPERVISOR.read_bytes()).decode()},
+        env={**(env or {}), "BOX_SUPERVISOR": base64.b64encode(zlib.compress(SUPERVISOR.read_bytes(), 9)).decode()},
         labels={**(labels or {}), LABEL_BY: "box", LABEL_SESSION: session_id,
                 LABEL_DEADLINE: str(int(time.time() + deadline_s))},
         timeout_s=deadline_s + 600,  # the provider's own backstop, past the supervisor's deadline
