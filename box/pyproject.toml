@@ -34,3 +34,5 @@ research = { path = "..", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# archive/ is a record, not maintained: never collected, even by `pytest .` (the rest are pytest's defaults).
+norecursedirs = ["archive", "*.egg", ".*", "_darcs", "build", "CVS", "dist", "node_modules", "venv", "{arch}"]
