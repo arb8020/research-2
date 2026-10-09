@@ -41,13 +41,14 @@ const runKeys: Extension = Prec.highest(keymap.of(["Shift-Enter", "Mod-Enter"].m
   return false;
 } }))));
 
-export const look = (label: string): Extension[] => [
+// The look alone (font, token colours, a label): for an editor that is only read, e.g. a cell's reference.
+export const readingLook = (label: string): Extension[] => [
   monoFont,
-  tabCompletion,
-  runKeys,
   syntaxHighlighting(classHighlighter),
   EditorView.contentAttributes.of({ "aria-label": label }),
 ];
+
+export const look = (label: string): Extension[] => [...readingLook(label), tabCompletion, runKeys];
 
 // One vim switch for every editor on the page, remembered per reader.
 const vimMode = new Compartment();

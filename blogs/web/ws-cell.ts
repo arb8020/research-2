@@ -4,14 +4,16 @@
 // highlighted, in a bounded height, with a toggle to show the whole file; a missing marker only costs that (the cell
 // shows the top of the file and says so). Run saves the file, then `workspace.py check` runs the cell's cmd as a
 // background job; its JSON lines render as a verdict table (check-output.ts). No gating: every cell can run.
+// A region cell also has a "reference" toggle: a read-only editor under its own, showing that region of the chapter's
+// solution (the build puts it in a <template class="reference">). It never touches the reader's doc.
 import { basicSetup } from "codemirror";
 import type { EditorView } from "codemirror";
 import { Decoration, EditorView as View, ViewPlugin } from "@codemirror/view";
 import type { DecorationSet, ViewUpdate } from "@codemirror/view";
-import { RangeSetBuilder } from "@codemirror/state";
+import { EditorState, RangeSetBuilder } from "@codemirror/state";
 import type { Extension, Text } from "@codemirror/state";
 import { attr, must } from "./dom";
-import { look, registerEditor, setVim, syntax, vimEnabled, vimExtension } from "./editor";
+import { look, readingLook, registerEditor, setVim, syntax, vimEnabled, vimExtension } from "./editor";
 import { kernelState, onKernelState } from "./connect/kernel";
 import type { JobResult } from "./connect/kernel";
 import { currentPhase, onPhase } from "./connect/session";
@@ -74,6 +76,7 @@ class WorkspaceCell extends HTMLElement {
   private job: string | undefined; // the running check's job id
   private queued = false; // Run pressed before the sandbox was ready: runs once it is
   private expanded = false;
+  referenceView: EditorView | undefined; // made on the first "reference" press (tests read it, like `.view`)
   private verdict: Verdict | undefined;
   private loadError: string | undefined;
 
@@ -88,15 +91,19 @@ class WorkspaceCell extends HTMLElement {
     const ops = this.getAttribute("data-ops") ?? "";
     const start = must(this, "pre", HTMLPreElement).textContent;
     const region = this.region;
+    const refText = this.querySelector<HTMLTemplateElement>("template.reference")?.content.textContent ?? undefined;
     this.innerHTML = `
       <div class="cell-head"><span>${this.name} · ${this.file}${ops ? ` · ${ops}` : ""}</span>
         <span class="cell-status"></span><button class="connect-to-run" type="button">Connect to run</button>
         <button class="expand" type="button" aria-pressed="false"${region === null ? " hidden" : ""}>whole file</button>
+        <button class="show-reference" type="button" aria-pressed="false" aria-expanded="false" aria-controls="${this.name}-reference"${refText === undefined ? " hidden" : ""}>reference</button>
         <button class="vim-toggle" aria-pressed="${String(vimEnabled())}">vim</button><button class="run">Run</button></div>
       <p class="cell-note" hidden></p>
       <div class="cell-conflict" role="alert" hidden><span></span>
         <button type="button" class="use-browser">Use this browser's draft</button><button type="button" class="keep-workspace">Keep the sandbox's</button></div>
       <div class="cell-editor${region === null ? "" : " bounded"}"></div>
+      <div class="cell-reference" id="${this.name}-reference" hidden>
+        <div class="cell-reference-head">reference: ${this.name} (read-only)</div></div>
       <div class="cell-out" tabindex="0" aria-label="${this.name} output" hidden></div>`;
     this.doc = WorkspaceFile.of(this.chapter, this.file, start);
     this.view = this.doc.view([
@@ -111,6 +118,7 @@ class WorkspaceCell extends HTMLElement {
     must(this, ".connect-to-run", HTMLButtonElement).onclick = () => { document.dispatchEvent(new Event("connect:open")); };
     must(this, ".run", HTMLButtonElement).onclick = () => { void this.runOrStop(); };
     must(this, ".expand", HTMLButtonElement).onclick = () => { this.expanded = !this.expanded; this.fit(); };
+    must(this, ".show-reference", HTMLButtonElement).onclick = () => { this.toggleReference(lang, refText ?? ""); };
     must(this, ".use-browser", HTMLButtonElement).onclick = () => { this.doc.resolve(true); };
     must(this, ".keep-workspace", HTMLButtonElement).onclick = () => { this.doc.resolve(false); };
     this.doc.onChange(() => { this.note(); this.gate(); });
@@ -123,6 +131,21 @@ class WorkspaceCell extends HTMLElement {
     if (kernelState() === "idle" || kernelState() === "busy") this.ensureLoaded();
     this.fit();
     this.gate();
+  }
+
+  // Show/hide the solution's region in its own read-only editor (copyable; the reader's doc is never touched).
+  private toggleReference(lang: string, text: string): void {
+    const box = must(this, ".cell-reference", HTMLDivElement);
+    const button = must(this, ".show-reference", HTMLButtonElement);
+    if (this.referenceView === undefined) {
+      this.referenceView = new View({ parent: box, state: EditorState.create({ doc: text, extensions: [
+        basicSetup, syntax(lang), readingLook(`reference: ${this.name} (read-only)`), View.lineWrapping, EditorState.readOnly.of(true),
+      ] }) });
+      this.referenceView.scrollDOM.tabIndex = 0;
+    }
+    box.hidden = !box.hidden;
+    button.setAttribute("aria-pressed", String(!box.hidden));
+    button.setAttribute("aria-expanded", String(!box.hidden));
   }
 
   private span(): Span | undefined {

@@ -22,6 +22,8 @@ given      -> collapsed, read-only code (the reader calls into it, so they can r
                       ships _blogs/ (workspace.py + the trusted check code + MANIFEST.sha256, ref.stage_trusted) and
                       the chapter's start bundle (ref.bundle) for the sandbox
 solution=X, check=X, budget=X -> not in the page; the session runs them
+workspace solutions (ref/chNN/files) -> only each region cell's own region, in a <template class="reference"> inside
+                      that <ws-cell> (the cell's "reference" toggle shows it read-only); never the whole file
 <!-- ... --> on its own line -> a muted "todo" note
 <!-- wip: ... --> on its own line -> a visible "under construction" banner (🚧 + the text), for readers
 <X-play></X-play>, X a C cell -> <env-play cell=X>, the wasm play widget (reference env until X passes)
@@ -102,6 +104,23 @@ def workspace_file(ws: Workspace | None, b: Block, body: str) -> str:
     return text
 
 
+def region_text(tree: ref.Tree, file: str, region: str) -> str | None:
+    """The lines strictly between `# region: <region>` and its `# endregion` in file, or None if a marker is missing."""
+    text = tree[file].data.decode()
+    span = ref.region_span(text, region)
+    return None if span is None else "\n".join(text.split("\n")[span[0] : span[1] - 1])
+
+
+def solution_region(ws: Workspace, c: ref.Cell) -> str:
+    """Cell c's region of the solution: what its "reference" toggle shows."""
+    assert c.region is not None, f"cell {c.name} has no region"
+    assert c.file in ws.solution, f"cell {c.name}: {c.file} is not in {ws.chapter}/solution"
+    found = region_text(ws.solution, c.file, c.region)
+    assert found is not None, (f"cell {c.name}: {ws.chapter}/solution's {c.file} has no `# region: {c.region}` ... `# endregion` "
+                               f"(the reference toggle shows that region); add the markers in engine/ref/{ws.chapter}/files/{c.file}")
+    return found
+
+
 def render_workspace_fence(chapter: Path, b: Block, preview: bool) -> str:
     """```K cell=X file=F -> <ws-cell>; ```K given file=F -> a read-only view of F. Both show F at chNN/start."""
     assert b.role in ("cell", "given"), f"line {b.line}: file= goes on cell=X or given fences, not {b.role or 'a plain one'}"
@@ -112,9 +131,11 @@ def render_workspace_fence(chapter: Path, b: Block, preview: bool) -> str:
     if b.role == "cell" and not preview:
         c = next(c for c in ws.cells if c.name == b.name)
         region = f' data-region="{html.escape(c.region)}"' if c.region else ""
+        # The cell's "reference" toggle: its region of the solution, in a <template> (inert, not shown until asked).
+        reference = f'<template class="reference">{html.escape(solution_region(ws, c))}</template>' if c.region else ""
         return (f'<ws-cell name="{b.name}" data-file="{file}" data-lang="{b.lang}" data-chapter="{ws.chapter}"{region} '
                 f'data-ops="{html.escape(" ".join(c.ops))}" data-trusted="{trusted_sha()}" data-not-typeset>'
-                f'<pre>{text}</pre></ws-cell>\n')
+                f'<pre>{text}</pre>{reference}</ws-cell>\n')
     what = f"{b.name} cell · read-only here" if b.role == "cell" else "given · read-only"
     # A link card (preview) must not claim the file: output links would jump into the card instead of the page.
     claim = "" if preview else f' data-file="{file}"'
@@ -297,8 +318,18 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
     ws_cells = re.findall(r'<ws-cell name="(\w+)"', body)
     if ws is not None:
         assert ws_cells == [c.name for c in ws.cells], f"{chapter}: the page's workspace cells {ws_cells} differ from checks/{ws.chapter}.json {[c.name for c in ws.cells]}"
+        # The solution is never in the page, except each cell's own region of it inside that cell's reference payload.
+        payloads = re.findall(r'<ws-cell name="(\w+)"[^>]*>(?:(?!</ws-cell>).)*?<template class="reference">(.*?)</template>', body, re.DOTALL)
+        outside = re.sub(r'<template class="reference">.*?</template>', "", body, flags=re.DOTALL)
         for c in ws.cells:
             assert html.escape(ws.solution[c.file].data.decode()) not in body, f"the solution of {c.file} leaked into the page"
+            if c.region is None:
+                continue
+            want = html.escape(solution_region(ws, c))
+            assert payloads.count((c.name, want)) == 1, f"cell {c.name}: its reference payload is not its solution region"
+            if want != html.escape(region_text(ws.start, c.file, c.region) or ""):  # a region the reader starts with solved is no secret
+                assert want not in outside, f"cell {c.name}: its solution region leaked into the page outside its reference"
+                assert sum(want in p for _, p in payloads) == 1, f"cell {c.name}: its solution region is in another cell's reference"
     for b in blocks:
         if b.role in HIDDEN:
             assert html.escape(b.source) not in body, f"{b.role}={b.name} (line {b.line}) leaked into the page"
