@@ -8,7 +8,7 @@ import threading
 import time
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 from box.sdk import Endpoint, Gone
 
@@ -30,6 +30,8 @@ class Proxy:
         upstream = urlsplit(endpoint.url)
         if upstream.scheme not in ("http", "https"):
             raise ValueError(f"proxy: {endpoint.url}: not http(s)")
+        if upstream.hostname is None:
+            raise ValueError(f"proxy: {endpoint.url}: no host")
         assert every_s > 0, every_s
         self.endpoint = endpoint
         self._on_use, self._every_s = on_use, every_s
@@ -116,8 +118,10 @@ class Proxy:
             (self._sockets.add if add else self._sockets.discard)(sock)
 
 
-def _handler(proxy: Proxy, upstream: object) -> type[BaseHTTPRequestHandler]:  # MUST KILL: upstream typed `object`, so three uses needed type: ignore[attr-defined]; type it urllib.parse.SplitResult
+def _handler(proxy: Proxy, upstream: SplitResult) -> type[BaseHTTPRequestHandler]:
     connection = http.client.HTTPSConnection if upstream.scheme == "https" else http.client.HTTPConnection
+    host = upstream.hostname
+    assert host is not None, upstream
 
     class Forward(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.0"
@@ -133,7 +137,7 @@ def _handler(proxy: Proxy, upstream: object) -> type[BaseHTTPRequestHandler]:  #
             if not proxy._begin():
                 self.send_error(503, f"box proxy: {MAX_INFLIGHT} requests already in flight")
                 return
-            conn = connection(upstream.hostname, upstream.port, timeout=UPSTREAM_TIMEOUT_S)
+            conn = connection(host, upstream.port, timeout=UPSTREAM_TIMEOUT_S)
             answered = False
             try:
                 proxy._track(self.connection, add=True)
