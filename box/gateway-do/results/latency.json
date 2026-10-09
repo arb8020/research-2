@@ -1,0 +1,71 @@
+{
+  "run": "latency",
+  "provider": "modal",
+  "started": 1791531334.5634649,
+  "seconds": 24,
+  "variants": {
+    "A": {
+      "url": "http://localhost:8780",
+      "session": "s-56687b8fabb6",
+      "gpu_seen": "Tesla T4",
+      "connect_s": 5.6,
+      "first_cell_s": 3.74,
+      "cell_rtt_ms_p50": 78.627,
+      "cell_rtt_ms_p90": 81.795,
+      "end_s": 2.1,
+      "end": {
+        "code": 200,
+        "reason": "stopped"
+      },
+      "modal_usd": 0.0039
+    },
+    "B": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/b",
+      "session": "s-c14cb40e877e",
+      "gpu_seen": "Tesla T4",
+      "connect_s": 7.1,
+      "first_cell_s": 6.08,
+      "cell_rtt_ms_p50": 89.198,
+      "cell_rtt_ms_p90": 94.734,
+      "end_s": 2.3,
+      "end": {
+        "code": 200,
+        "reason": "stopped"
+      },
+      "modal_usd": 0.0045
+    },
+    "C": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/c",
+      "session": "s-31d5f9fd5907",
+      "gpu_seen": "Tesla T4",
+      "connect_s": 7.6,
+      "first_cell_s": 5.04,
+      "cell_rtt_ms_p50": 80.875,
+      "cell_rtt_ms_p90": 84.524,
+      "end_s": 2.4,
+      "end": {
+        "code": 200,
+        "reason": "stopped"
+      },
+      "modal_usd": 0.0045
+    }
+  },
+  "sessions": [
+    [
+      "A",
+      "T4",
+      23.7
+    ],
+    [
+      "B",
+      "T4",
+      27.3
+    ],
+    [
+      "C",
+      "T4",
+      27.5
+    ]
+  ],
+  "note": "B and C rerun 2 min after A: their first try hit the Worker before the fresh quick tunnels resolved on Cloudflare's side (scripts/up.sh now waits for that)"
+}

@@ -1,0 +1,256 @@
+{
+  "run": "live",
+  "provider": "modal",
+  "started": 1791531523.330168,
+  "seconds": 110,
+  "variants": {
+    "A": {
+      "url": "http://localhost:8780",
+      "session": "s-4b6768216a89",
+      "connect_cpu_s": 3.7,
+      "clock_offset_s": -0.036,
+      "two_tabs": {
+        "both_saw_all": true,
+        "same_order": true,
+        "lat_ms_p50": [
+          1473.076,
+          1490.135
+        ],
+        "lat_ms_max": [
+          2377.953,
+          2395.061
+        ]
+      },
+      "reattach": {
+        "resume_code": 200,
+        "resume_first_event_ms": 406,
+        "resume_gap_lines": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "resume_repeats": 0,
+        "resume_all_gap_ms": 406,
+        "reload_replayed": {
+          "two": 20,
+          "gap": 5
+        },
+        "reload_full_replay_ms": 361,
+        "get_ms_p50": 404.607
+      },
+      "machine_dies": {
+        "reader_saw": [
+          {
+            "after_s": 10.2,
+            "kind": "status",
+            "what": {
+              "state": "ended",
+              "gpu": null,
+              "started_at": 1791531523.0,
+              "deadline": 1791532723.0,
+              "reason": "machine_lost"
+            }
+          }
+        ],
+        "run_lines_before_kill": 4,
+        "get_after": {
+          "code": 200,
+          "status": {
+            "state": "ended",
+            "gpu": null,
+            "started_at": 1791531523.0,
+            "deadline": 1791532723.0,
+            "reason": "machine_lost"
+          }
+        },
+        "fresh_tab": {
+          "code": 200,
+          "run_lines_replayed": 8,
+          "events": 69
+        }
+      },
+      "recovery": {
+        "new_session": "s-b81ba93b3167",
+        "connect_s": 3.2,
+        "end": "stopped"
+      },
+      "modal_usd": 0.0006
+    },
+    "B": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/b",
+      "session": "s-d7472811d799",
+      "connect_cpu_s": 7.3,
+      "clock_offset_s": 0.179,
+      "two_tabs": {
+        "both_saw_all": true,
+        "same_order": true,
+        "lat_ms_p50": [
+          460.642,
+          460.526
+        ],
+        "lat_ms_max": [
+          592.643,
+          592.55
+        ]
+      },
+      "reattach": {
+        "resume_code": 200,
+        "resume_first_event_ms": 68,
+        "resume_gap_lines": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "resume_repeats": 0,
+        "resume_all_gap_ms": 68,
+        "reload_replayed": {
+          "two": 20,
+          "gap": 5
+        },
+        "reload_full_replay_ms": 49,
+        "get_ms_p50": 49.742
+      },
+      "machine_dies": {
+        "reader_saw": [
+          {
+            "after_s": 22.5,
+            "kind": "status",
+            "what": {
+              "state": "ended",
+              "gpu": null,
+              "started_at": 1791531527.6142275,
+              "deadline": 1791532723.574,
+              "reason": "machine_lost"
+            }
+          }
+        ],
+        "run_lines_before_kill": 4,
+        "get_after": {
+          "code": 200,
+          "status": {
+            "state": "ended",
+            "gpu": null,
+            "started_at": 1791531527.6142275,
+            "deadline": 1791532723.574,
+            "reason": "machine_lost"
+          }
+        },
+        "fresh_tab": {
+          "code": 200,
+          "run_lines_replayed": 4,
+          "events": 67
+        }
+      },
+      "recovery": {
+        "new_session": "s-c11d644d6f53",
+        "connect_s": 4.8,
+        "end": "stopped"
+      },
+      "modal_usd": 0.0008
+    },
+    "C": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/c",
+      "session": "s-5d30c71ed688",
+      "connect_cpu_s": 6.5,
+      "clock_offset_s": -0.051,
+      "two_tabs": {
+        "both_saw_all": true,
+        "same_order": true,
+        "lat_ms_p50": [
+          210.017,
+          210.128
+        ],
+        "lat_ms_max": [
+          359.055,
+          359.1
+        ]
+      },
+      "reattach": {
+        "resume_code": 200,
+        "resume_first_event_ms": 63,
+        "resume_gap_lines": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "resume_repeats": 0,
+        "resume_all_gap_ms": 63,
+        "reload_replayed": {
+          "two": 20,
+          "gap": 5
+        },
+        "reload_full_replay_ms": 53,
+        "get_ms_p50": 622.257
+      },
+      "machine_dies": {
+        "reader_saw": [
+          {
+            "after_s": 20.0,
+            "kind": "step",
+            "what": "no word from the machine for 20 s: it may be gone (the relay knows: GET /sessions/{id})"
+          }
+        ],
+        "run_lines_before_kill": 4,
+        "get_after": {
+          "code": 200,
+          "status": {
+            "state": "ended",
+            "gpu": null,
+            "started_at": 1791531523.0,
+            "deadline": 1791532723.0,
+            "reason": "machine_lost"
+          }
+        },
+        "fresh_tab": {
+          "code": 200,
+          "run_lines_replayed": 4,
+          "events": 67
+        }
+      },
+      "recovery": {
+        "new_session": "s-33df60d7c76e",
+        "connect_s": 6.1,
+        "end": "stopped"
+      },
+      "modal_usd": 0.0017
+    }
+  },
+  "sessions": [
+    [
+      "A",
+      null,
+      36.7
+    ],
+    [
+      "A",
+      null,
+      4.8
+    ],
+    [
+      "B",
+      null,
+      45.1
+    ],
+    [
+      "B",
+      null,
+      7.5
+    ],
+    [
+      "C",
+      null,
+      101.7
+    ],
+    [
+      "C",
+      null,
+      8.7
+    ]
+  ]
+}

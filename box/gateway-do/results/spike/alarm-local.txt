@@ -1,0 +1,9 @@
+ok: armed deadline in 2000 ms on alarm-1791524515776 (http://localhost:8797)
+ok: status ended, reason=deadline, observed 9 ms after deadline
+gateway step: deadline reached (alarm fired, late by 4 ms)
+ok: armed deadline in 5000 ms on alarm-1791524517853 (http://localhost:8797)
+ok: status ended, reason=deadline, observed 7 ms after deadline
+gateway step: deadline reached (alarm fired, late by 1 ms)
+data: {"t":1791524526617,"kind":"status","status":{"state":"booting","gpu":null,"started_at":1791524526617,"deadline":1791524530599}}
+data: {"t":1791524534364,"kind":"step","source":"gateway","text":"deadline reached (alarm fired, late by 3765 ms)"}
+data: {"t":1791524534364,"kind":"status","status":{"state":"ended","gpu":null,"started_at":1791524526617,"deadline":1791524530599,"reason":"deadline"}}
