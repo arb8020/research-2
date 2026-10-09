@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "build": "esbuild settings.ts --bundle --format=iife --minify --outfile=build/settings.js && esbuild page.ts --bundle --format=esm --minify --outfile=build/page.js",
-    "lint": "tsc --noEmit && eslint --max-warnings=0 . && cd .. && uv run ruff check"
+    "lint": "tsc --noEmit && eslint --max-warnings=0 . && cd .. && uv run ruff check",
+    "build:nn-fit": "esbuild settings.ts --bundle --format=iife --minify --outfile=build/settings.js && esbuild embeds/nn-fit/nn-fit.ts --bundle --format=esm --minify --sourcemap --outfile=build/nn-fit.js",
+    "test:nn-fit": "esbuild embeds/nn-fit/mlp.test.ts --bundle --platform=node --format=esm --log-level=warning --outfile=build/nn-fit.test.mjs && node build/nn-fit.test.mjs"
   },
   "dependencies": {
     "@codemirror/lang-cpp": "6.0.3",
