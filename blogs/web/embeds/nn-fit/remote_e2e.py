@@ -2,12 +2,16 @@
 (connect_dev.py, its kernel a local Jupyter with torch, CPU), then train <nn-fit> remotely on it.
 
     uv run --with playwright python web/embeds/nn-fit/remote_e2e.py
+    uv run --with playwright python web/embeds/nn-fit/remote_e2e.py --gateway http://localhost:8790   # a running
+        gateway instead (the real relay, box/gateway/relay.py); token from MODAL_TOKEN_ID / MODAL_TOKEN_SECRET; T4
 
 Builds dl/neural-nets.md, starts connect_dev.py (with torch added to its env, so the kernel can import it) and a
 static server for dist/, then drives the page through the real Connect UI and kernel client (web/connect/).
 Writes screenshots and a video to .evidence/nn-fit-remote/ (gitignored). Exits 1 on the first failed check.
 """
 
+import argparse
+import os
 import shutil
 import socket
 import subprocess
@@ -26,6 +30,17 @@ CONNECT_SECONDS = 120  # the fake boot, then a local Jupyter Server and kernel
 RUN_SECONDS = 2.0  # how long the Stop case lets a remote run train
 FAKE_TOKEN = ("ak-nn-fit-remote-e2e", "as-nn-fit-remote-e2e")  # connect_dev.py boots any id starting "ak-"
 STATS = "document.querySelector('nn-fit').stats"
+FAKE_DEVICE = "cpu (remote)"  # connect_dev.py's kernel: torch on this computer's CPU
+GPU_DEVICE = "cuda · Tesla T4"  # a real gateway: a Modal T4
+GATEWAY_CONNECT_SECONDS = 600  # a real gateway: a workspace's first connect builds the image (~90 s seen)
+
+
+class Run:
+    """What differs between the fake gateway and a real one: the token, how long Connect takes, where it trains."""
+
+    token: tuple[str, str] = FAKE_TOKEN
+    connect_seconds: float = CONNECT_SECONDS
+    device: str = FAKE_DEVICE
 
 
 def check(ok: bool, message: str) -> None:
@@ -59,11 +74,11 @@ def wait_for_http(url: str, proc: subprocess.Popen, seconds: float) -> None:
 def connect(page: Page) -> None:
     """Connect through the header pill, as a reader would: token, GPU, go; wait for the kernel."""
     page.locator(".connect-pill").click()
-    page.fill("input[name=token-id]", FAKE_TOKEN[0])
-    page.fill("input[name=token-secret]", FAKE_TOKEN[1])
+    page.fill("input[name=token-id]", Run.token[0])
+    page.fill("input[name=token-secret]", Run.token[1])
     page.select_option("select[name=gpu]", "T4")
     page.locator(".connect-go").click()
-    page.wait_for_selector("connect-pill[data-phase=connected]", timeout=CONNECT_SECONDS * 1000)
+    page.wait_for_selector("connect-pill[data-phase=connected]", timeout=Run.connect_seconds * 1000)
     page.keyboard.press("Escape")
 
 
@@ -85,7 +100,7 @@ def curve_run(page: Page) -> None:
     before = page.evaluate(STATS)
     page.select_option(nn(page, "select.backend"), "remote")
     page.click(nn(page, "button.train"))
-    page.wait_for_function(f"{STATS}.steps > 0 && {STATS}.device.startsWith('cpu')", timeout=60_000)
+    page.wait_for_function(f"{STATS}.steps > 0 && {STATS}.device === {Run.device!r}", timeout=60_000)
     check(is_disabled(page.locator(nn(page, "fieldset.network"))), "remote run: the network controls are disabled while it trains")
     page.wait_for_timeout(RUN_SECONDS * 1000)
     mid = page.evaluate(STATS)
@@ -93,13 +108,13 @@ def curve_run(page: Page) -> None:
     page.click(nn(page, "button.train"))  # Stop -> kernel interrupt
     after = stopped(page)
     print(f"  wave: loss {before['loss']:.3g} -> {mid['loss']:.3g} (step {mid['steps']}) -> {after['loss']:.3g} at step {after['steps']} on {after['device']}")
-    check(mid["device"] == "cpu (remote)", f"remote run: reports where it ran ({mid['device']!r})")
+    check(mid["device"] == Run.device, f"remote run: reports where it ran ({mid['device']!r})")
     check(after["loss"] < before["loss"] / 10, "remote run: the loss fell by 10x or more")
     check(after["steps"] >= mid["steps"] and after["device"] == mid["device"], "stop: the final state is from the remote run")
     status = page.locator("nn-fit [role=status]").text_content() or ""
     check("Remote run stopped: stopped" in status, f"stop: announced ({status!r})")
     text = page.locator(nn(page, ".usage")).text_content() or ""
-    check("on cpu (remote)" in text, f"readout names the backend ({text!r})")
+    check(f"on {Run.device}" in text, f"readout names the backend ({text!r})")
     page.locator("nn-fit").screenshot(path=EVIDENCE / "wave-remote-stopped.png")
 
     # Back in the browser, training continues from the remote's weights (not from scratch).
@@ -146,6 +161,9 @@ def disconnect_mid_run(page: Page) -> None:
     check(end["steps"] == 0 and end["device"] == "this browser", "disconnect mid-run: the weights are left as they were")
     option = page.locator(nn(page, "select.backend option[value=remote]"))
     check(is_disabled(option) and (option.text_content() or "") == "remote (Connect first)", "disconnected: remote is offered only when connected")
+    # The kernel can drop before the gateway has answered POST /end (a real one closes the machine first, ~2 s):
+    # the fallback follows the session's phase, so wait for it rather than sample it.
+    page.wait_for_function(f"{STATS}.backend === 'browser'", timeout=30_000)
     check(page.evaluate(STATS)["backend"] == "browser", "disconnected: the widget falls back to the browser")
     page.locator("nn-fit").screenshot(path=EVIDENCE / "disconnected-mid-run.png")
 
@@ -183,21 +201,33 @@ def drive(page_url: str) -> None:
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--gateway", help="a running gateway's URL (default: start connect_dev.py)")
+    args = ap.parse_args()
     shutil.rmtree(EVIDENCE, ignore_errors=True)
     EVIDENCE.mkdir(parents=True)
     subprocess.run(["uv", "run", "build_page.py", "dl/neural-nets.md"], cwd=BLOGS, check=True, stdout=subprocess.DEVNULL)
-    gport, sport = free_port(), free_port()
-    log = (EVIDENCE / "connect_dev.log").open("wb")
-    gateway = subprocess.Popen(["uv", "run", "--with", "torch", "connect_dev.py", "--port", str(gport), "--boot-delay", "0.2"],
-                               cwd=BLOGS, stdout=log, stderr=log)  # fmt: skip
+    sport = free_port()
+    procs = []
+    if args.gateway:
+        Run.token, Run.connect_seconds, Run.device = (os.environ["MODAL_TOKEN_ID"], os.environ["MODAL_TOKEN_SECRET"]), GATEWAY_CONNECT_SECONDS, GPU_DEVICE
+        gateway_url = args.gateway.rstrip("/")
+    else:
+        gport = free_port()
+        log = (EVIDENCE / "connect_dev.log").open("wb")
+        procs.append(subprocess.Popen(["uv", "run", "--with", "torch", "connect_dev.py", "--port", str(gport), "--boot-delay", "0.2"],
+                                      cwd=BLOGS, stdout=log, stderr=log))  # fmt: skip
+        gateway_url = f"http://127.0.0.1:{gport}"
     static = subprocess.Popen([sys.executable, "-m", "http.server", str(sport), "-d", str(BLOGS / "dist")],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # fmt: skip
+    procs.append(static)
     try:
-        wait_for_http(f"http://127.0.0.1:{gport}/sessions/none", gateway, SERVER_START_SECONDS)
+        if not args.gateway:
+            wait_for_http(f"{gateway_url}/sessions/none", procs[0], SERVER_START_SECONDS)
         wait_for_http(f"http://127.0.0.1:{sport}/neural-nets/", static, SERVER_START_SECONDS)
-        drive(f"http://127.0.0.1:{sport}/neural-nets/?gateway=http://127.0.0.1:{gport}")
+        drive(f"http://127.0.0.1:{sport}/neural-nets/?gateway={gateway_url}")
     finally:
-        for proc in (gateway, static):
+        for proc in procs:
             proc.terminate()
             proc.wait(timeout=20)
 
