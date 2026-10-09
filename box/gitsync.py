@@ -75,9 +75,9 @@ git -C "$T" update-ref --no-deref HEAD "$NEW" "$cur"
 
 
 def sync(machine: Machine, repo: Path, *, paths: tuple[str, ...], force: bool, keep: str, touch: str) -> Synced:  # noqa: PLR0913  # MUST KILL: touch= (the session's activity file) rides on the probe exec, a session concern inside gitsync; let the caller prepend its own command
-    top = Path(git(repo, "rev-parse", "--show-toplevel"))
+    top = toplevel(repo)
     origin = f"{ORIGIN}{top}"
-    where = {"W": machine.work, "G": f"{machine.work}/{STORE}", "T": f"{machine.work}/{top.name}", "WT": top.name}
+    where = {"W": machine.work, "G": f"{machine.work}/{STORE}", "T": tree_path(machine.work, top), "WT": top.name}
     rc, out, err = machine.exec(assign({**where, **EXIT_CODES, "TOUCH": touch}) + PROBE)
     if rc == NO_GIT:
         raise RuntimeError(err.strip())
@@ -112,6 +112,14 @@ def sync(machine: Machine, repo: Path, *, paths: tuple[str, ...], force: bool, k
         raise RuntimeError(f"{machine.id}: box sync apply exited {rc}: {err.strip()}")
     git(top, "update-ref", f"{keep}/{top.name}", new)
     return Synced(new, where["T"], len(data))
+
+
+def toplevel(repo: Path) -> Path:
+    return Path(git(repo, "rev-parse", "--show-toplevel"))
+
+
+def tree_path(work: str, top: Path) -> str:
+    return f"{work}/{top.name}"
 
 
 def snapshot(top: Path, paths: tuple[str, ...]) -> str:

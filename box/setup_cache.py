@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from box.gitsync import toplevel
+
 if TYPE_CHECKING:
     from box.sdk import Machine
     from box.store import Store
@@ -56,14 +58,8 @@ class SetupRecord:
     timings: dict[str, float] = field(default_factory=dict)
 
 
-def top(repo: Path) -> Path:
-    from box.gitsync import git
-
-    return Path(git(repo, "rev-parse", "--show-toplevel"))
-
-
 def setup_key(spec: SetupSpec, *, provider: str, image: str | None) -> str:
-    root = top(spec.repo)
+    root = toplevel(spec.repo)
     h = hashlib.sha256()
     for part in (KEY_VERSION, provider, image or ""):
         h.update(part.encode() + b"\0")
