@@ -16,6 +16,7 @@ Everything goes through files under ROOT (no sockets), so a client only needs th
     ROOT/jobs/<id>/stderr       /
     ROOT/jobs/<id>/status.json  supervisor writes it: {state, reason, exit_code, hook_exit_code, started, ended}
     ROOT/jobs/<id>/kill         client wrote it: kill the job (its hook runs), the session goes on
+    ROOT/jobs/<id>/code/<wt>    client writes it before spec.json: the commit each synced worktree is at
     ROOT/services/<id>/...      a service: spec.json {cmd, env}, then as a job (no hook, no max duration)
     ROOT/watch                  a log follower (its tail, each beat) or job waiter (each poll) touches it (the machine lingers for it)
     ROOT/activity               mtime = when the session was last used. The supervisor touches it at start, when a job
@@ -53,6 +54,7 @@ there every FLUSH_S (sooner past FLUSH_BYTES of new output), so it outlives the 
     DIR/heartbeat.json          every flush: {at, ttl_s}; older than ttl_s, the recorder has stopped
     DIR/jobs/<id>/spec.json     \\ as under ROOT (env: names only), copied when they change;
     DIR/jobs/<id>/status.json   /  services the same, under DIR/services/<id>
+    DIR/jobs/<id>/code/<wt>     as under ROOT: the commit each synced worktree was at when the job was queued
     DIR/jobs/<id>/<stream>.<n>.<end>  closed chunks of new output, n = 1, 2, ... per job across both
                                 streams; end = the stream's bytes up to the chunk's last (a reader
                                 resuming at a byte offset skips chunks without reading them)
@@ -511,6 +513,8 @@ class Recorder:
 
     def flush_job(self, job_dir: Path, *, final: bool) -> None:
         job = f"{job_dir.parent.name}/{job_dir.name}"
+        for code in sorted((job_dir / "code").glob("*")):  # written before spec.json (sdk Session._start), never after
+            self.copy(f"{job}/code/{code.name}", code.read_bytes())
         if (job_dir / "spec.json").exists():
             self.copy(f"{job}/spec.json", recorded_spec((job_dir / "spec.json").read_bytes()))
         status = (job_dir / "status.json").read_bytes() if (job_dir / "status.json").exists() else None  # before the output
