@@ -7,8 +7,9 @@ export interface Token {
   secret: string;
 }
 
-// "lease": the session length ran out. "deadline" is the same thing from relays older than the lease (still accepted).
-export const ENDED_REASONS = ["stopped", "lease", "deadline", "idle", "lease_lost", "boot_failed", "machine_lost"] as const;
+// The contract's reasons, exactly. "lease": the session length ran out. "stopped": POST /end, from this tab or
+// another, or the session released from outside (the relay says box's "released" as "stopped").
+export const ENDED_REASONS = ["stopped", "lease", "idle", "boot_failed", "machine_lost"] as const;
 export type EndedReason = (typeof ENDED_REASONS)[number];
 
 // Session length (POST /sessions lease_s): the gateway accepts 60..43200 s and caps extends at start + 12 h.
@@ -16,12 +17,12 @@ export const LEASE_MIN_S = 60;
 export const LEASE_MAX_S = 12 * 3600;
 
 // leaseUntil: when the session ends unless extended (unix s). ceiling: the latest an extend can push it to
-// (start + 12 h); undefined from a relay older than the lease, which can't extend.
+// (start + 12 h). Both required: a status without them is from a gateway older than the lease, and an error.
 interface Times {
   gpu: string | null;
   startedAt: number;
   leaseUntil: number;
-  ceiling: number | undefined;
+  ceiling: number;
 }
 export type Status =
   | ({ state: "booting" } & Times)
@@ -43,13 +44,11 @@ const isReason = (x: unknown): x is EndedReason => ENDED_REASONS.some((r) => r =
 
 export function parseStatus(raw: unknown): Status {
   if (!isRecord(raw)) return fail("a status object", raw);
-  const { state, gpu, started_at: startedAt, deadline, ceiling } = raw;
-  // An older relay has no lease_until; its deadline means the same thing (when the session ends).
-  const leaseUntil = raw["lease_until"] ?? deadline;
-  if ((gpu !== null && typeof gpu !== "string") || typeof startedAt !== "number" || typeof leaseUntil !== "number") {
-    return fail("status {gpu: string | null, started_at: number, lease_until (or deadline): number}", raw);
-  }
-  if (ceiling !== undefined && (typeof ceiling !== "number" || ceiling < startedAt)) return fail("status ceiling: a unix time after started_at", raw);
+  const { state, gpu, started_at: startedAt, lease_until: leaseUntil, ceiling } = raw;
+  if ((gpu !== null && typeof gpu !== "string") || typeof startedAt !== "number") return fail("status {gpu: string | null, started_at: number}", raw);
+  // No fallback to the old "deadline": a gateway without the lease is one this page doesn't speak to.
+  if (typeof leaseUntil !== "number" || typeof ceiling !== "number") return fail("status {lease_until: number, ceiling: number} (a gateway with session leases)", raw);
+  if (ceiling < startedAt) return fail("status ceiling: a unix time after started_at", raw);
   const base = { gpu, startedAt, leaseUntil, ceiling };
   if (state === "booting") return { state, ...base };
   if (state === "running") {
@@ -120,10 +119,23 @@ export async function extendSession(gateway: string, id: string, token: Token, u
   return isRecord(body) ? parseStatus(body["status"]) : fail("{status}", body);
 }
 
-// SSE subscription; EventSource resumes with Last-Event-ID by itself. Returns close().
-export function subscribe(gateway: string, id: string, token: Token, onEvent: (e: GatewayEvent) => void, onBroken: () => void): () => void {
+// SSE subscription; EventSource resumes with Last-Event-ID by itself. Returns close(). onBadEvent: an event this
+// page can't parse (a GatewayError); the stream is closed first, since what follows can't be trusted either.
+export function subscribe(
+  gateway: string, id: string, token: Token, onEvent: (e: GatewayEvent) => void, onBroken: () => void, onBadEvent: (e: GatewayError) => void,
+): () => void {
   const source = new EventSource(`${gateway}/sessions/${encodeURIComponent(id)}/events?token=${encodeURIComponent(auth(token))}`);
-  source.onmessage = (m) => { onEvent(parseEvent(JSON.parse(String(m.data)))); };
+  source.onmessage = (m) => {
+    let event: GatewayEvent;
+    try {
+      event = parseEvent(JSON.parse(String(m.data)));
+    } catch (e) {
+      source.close();
+      onBadEvent(e instanceof GatewayError ? e : new GatewayError(`gateway: an event that is not JSON: ${String(m.data).slice(0, 300)}`, { cause: e }));
+      return;
+    }
+    onEvent(event);
+  };
   source.onerror = () => { if (source.readyState === EventSource.CLOSED) onBroken(); }; // CONNECTING = it retries itself
   return () => { source.close(); };
 }

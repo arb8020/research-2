@@ -15,7 +15,7 @@ import { attach, detach, onKernelState } from "./kernel";
 export type Phase =
   | { kind: "disconnected"; failure: string | undefined }
   | { kind: "connecting"; gpu: string | null; step: string }
-  | { kind: "connected"; id: string; gpu: string | null; startedAt: number; leaseUntil: number; ceiling: number | undefined };
+  | { kind: "connected"; id: string; gpu: string | null; startedAt: number; leaseUntil: number; ceiling: number };
 
 export interface LogLine {
   t: number; // unix seconds
@@ -37,11 +37,10 @@ const MAX_LOG = 2000; // lines kept for the drawer; older ones are dropped (it s
 const REATTACH_GAP_MS = 10_000;
 
 const REASONS: Record<EndedReason, string | undefined> = {
-  stopped: undefined,
+  // Only seen when this tab didn't end it (its own Disconnect stops listening first): another tab, or box release.
+  stopped: "the session was stopped outside this page (another tab, or released)",
   lease: "the session length ran out (Connect again to keep going)",
-  deadline: "the session reached its time limit",
   idle: "the session was idle too long and was stopped",
-  lease_lost: "the session lost its lease (another tab or the gateway ended it)",
   boot_failed: "the machine failed to start (see Details)",
   machine_lost: "the machine went away",
 };
@@ -163,7 +162,7 @@ export async function resume(): Promise<void> {
 
 function follow(stored: Stored, token: Token, status: Status): void {
   live?.close();
-  const close = subscribe(gateway(), stored.session_id, token, receive, () => { void recheck(); });
+  const close = subscribe(gateway(), stored.session_id, token, receive, () => { void recheck(); }, (e) => { end(undefined, e.message); });
   live = { stored, token, close };
   apply(status);
 }
@@ -171,7 +170,7 @@ function follow(stored: Stored, token: Token, status: Status): void {
 function receive(event: GatewayEvent): void {
   if (event.kind === "status") {
     const s = event.status;
-    const failed = s.state === "ended" && s.reason !== "stopped";
+    const failed = s.state === "ended";
     append({ t: event.t, source: "gateway", kind: failed ? "error" : "step", text: `status: ${s.state}${s.state === "ended" ? ` (${s.reason})` : ""}` });
     apply(event.status);
     return;
@@ -229,6 +228,7 @@ export async function extend(until: number): Promise<void> {
   const current = live;
   if (current === undefined || phase.kind !== "connected") throw new Error(`extend() while ${phase.kind}`);
   const status = await extendSession(gateway(), current.stored.session_id, current.token, until);
+  if (status.state === "ended") { note("extend: the session had already ended"); apply(status); return; }
   const clamped = status.leaseUntil < until ? " (capped at 12 h after the start)" : "";
   note(`lease extended: asked until ${new Date(until * 1000).toLocaleTimeString()}, now ends ${new Date(status.leaseUntil * 1000).toLocaleTimeString()}${clamped}`);
   apply(status);
@@ -237,6 +237,9 @@ export async function extend(until: number): Promise<void> {
 export async function disconnect(): Promise<void> {
   const current = live;
   if (current === undefined) { end(undefined, undefined); return; }
+  // Stop listening first: the "ended (stopped)" this causes must not read as stopped from elsewhere.
+  live = undefined;
+  current.close();
   note(`ending session ${current.stored.session_id}`);
   try {
     await endSession(gateway(), current.stored.session_id, current.token);
