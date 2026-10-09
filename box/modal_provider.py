@@ -112,9 +112,10 @@ class Modal:
             raise LookupError(f"modal provider: {machine_id} was not launched by box (no {LABEL_BY}=box tag)")
         return ModalMachine(sandbox, tags)
 
-    def list(self) -> list[ModalMachine]:
+    def list(self, labels: dict[str, str] | None = None) -> list[ModalMachine]:
         """Running sandboxes only: Modal's list drops a sandbox once it has ended."""
-        found = modal.Sandbox.list(app_id=self.app.app_id, tags={LABEL_BY: "box"}, client=self.client)
+        tags = {**(labels or {}), LABEL_BY: "box"}
+        found = modal.Sandbox.list(app_id=self.app.app_id, tags=tags, client=self.client)
         return [ModalMachine(s, s.get_tags()) for s in found]
 
 

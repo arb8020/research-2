@@ -175,7 +175,8 @@ class RunPod:
             raise LookupError(f"runpod: no pod {machine_id} launched by box")
         return RunPodMachine(self, pod)
 
-    def list(self) -> list[RunPodMachine]:
+    def list(self, labels: dict[str, str] | None = None) -> list[RunPodMachine]:
+        want = (labels or {}).items()
         pods, cursor = [], None
         while True:
             page = self.api("GET", "/pods" + (f"?cursor={cursor}" if cursor else "")) or {}
@@ -183,7 +184,7 @@ class RunPod:
             cursor = (page.get("pagination") or {}).get("nextCursor")
             if not cursor:
                 break
-        return [RunPodMachine(self, p) for p in pods if _ours(p) and p["status"] != "TERMINATED"]
+        return [RunPodMachine(self, p) for p in pods if _ours(p) and p["status"] != "TERMINATED" and want <= _labels(p).items()]
 
 
 class RunPodMachine:

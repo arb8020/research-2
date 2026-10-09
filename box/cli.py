@@ -4,11 +4,11 @@ themselves.
 
     box run [--gpu L4] [--image REF] [--put LOCAL:REMOTE]... [--get REMOTE:LOCAL]... [--on-exit CMD]
             [--timeout S] [--detach] -- <cmd>
-    box logs <id> [-f]     the session's latest job's output; exits with its exit code once it ends
-    box who                running sessions box launched
-    box kill <id>          end a session: kill its job, let its hook run, terminate the machine
-    box gc [--yes]         sessions past their deadline (their supervisor should have ended them)
-    box gpus [--sync]      GPU names (--gpu takes these), provider ids, $/hr
+    box logs <session> [-f]  the session's latest job's output; exits with its exit code once it ends
+    box who                  running sessions box launched: session id, machine id, user, time left
+    box kill <session>       end a session: kill its job, let its hook run, terminate the machine
+    box gc [--yes]           sessions past their deadline (their supervisor should have ended them)
+    box gpus [--sync]        GPU names (--gpu takes these), provider ids, $/hr
 
 Every command takes --provider (modal by default; runpod; local for a machine on this computer).
 """
@@ -96,7 +96,7 @@ def cmd_who(a: argparse.Namespace) -> int:
     print(f"{len(machines)} running")
     for m in machines:
         left = (int(m.labels.get("box.deadline", 0)) - time.time()) / 60
-        print(f"{m.id}  {m.labels.get('box.user', '?')}  {left:.0f} min left\n    {m.labels.get('box.cmd', '')}")
+        print(f"{m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  {m.labels.get('box.user', '?')}  {left:.0f} min left\n    {m.labels.get('box.cmd', '')}")
     return 0
 
 
@@ -114,7 +114,7 @@ def cmd_kill(a: argparse.Namespace) -> int:
 def cmd_gc(a: argparse.Namespace) -> int:
     late = [m for m in make_provider(a.provider).list() if time.time() > int(m.labels["box.deadline"]) + GC_MARGIN_S]
     for m in late:
-        print(f"  {m.id}  past its deadline by {(time.time() - int(m.labels['box.deadline'])) / 3600:.1f} h")
+        print(f"  {m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  past its deadline by {(time.time() - int(m.labels['box.deadline'])) / 3600:.1f} h")
         if a.yes:
             m.terminate()
     print(f"box gc: {len(late)} past deadline; {'terminated' if a.yes else 'nothing done (--yes terminates)'}")
