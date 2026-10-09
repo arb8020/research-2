@@ -480,7 +480,7 @@ def drive_cells(d: Drive) -> None:
 
 
 def drive_embeds(d: Drive) -> None:
-    d.expect(d.pages("embeds") == 0, "carousel, env-play (reference) and nn-fit (browser) work")
+    d.expect(d.pages("embeds") == 0, "carousel, env-play (per session state) and nn-fit (browser) work")
 
 
 def drive_links(d: Drive) -> None:
