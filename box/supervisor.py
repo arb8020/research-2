@@ -289,13 +289,17 @@ def run_job(root: Path, job_dir: Path, tick: Callable[[], None]) -> None:
     reason = reason or "exited"
 
     status.update(state="hook" if spec.get("on_exit") else "done", reason=reason, exit_code=code, ended=time.time())
-    put(job_dir / "status.json", json.dumps(status).encode())
-    if spec.get("on_exit"):
-        env = {**spec["env"], "BOX_EXIT_CODE": str(code), "BOX_REASON": reason}
-        timeout = max(0.0, min(budget, read_lease(root)["ceiling"] - time.time()))
-        status["hook_exit_code"] = run_hook(spec["on_exit"], env, job_dir, timeout)
-        status["state"] = "done"
+    if not spec.get("on_exit"):
         put(job_dir / "status.json", json.dumps(status).encode())
+        return
+    env = {**spec["env"], "BOX_EXIT_CODE": str(code), "BOX_REASON": reason}
+    timeout = max(0.0, min(budget, read_lease(root)["ceiling"] - time.time()))
+    hook = spawn(spec["on_exit"], env, job_dir, stdout=job_dir / "hook.stdout", stderr=job_dir / "hook.stderr")
+    status["hook_pgid"] = hook.pid
+    put(job_dir / "status.json", json.dumps(status).encode())
+    status["hook_exit_code"] = wait_hook(hook, timeout)
+    status["state"] = "done"
+    put(job_dir / "status.json", json.dumps(status).encode())
 
 
 def spawn(cmd: str, env: dict[str, str], job_dir: Path, *, stdout: Path, stderr: Path) -> subprocess.Popen:
@@ -324,8 +328,7 @@ def kill_group(child: subprocess.Popen) -> None:
             continue
 
 
-def run_hook(cmd: str, env: dict[str, str], job_dir: Path, timeout: float) -> int | None:
-    hook = spawn(cmd, env, job_dir, stdout=job_dir / "hook.stdout", stderr=job_dir / "hook.stderr")
+def wait_hook(hook: subprocess.Popen, timeout: float) -> int | None:
     try:
         return hook.wait(timeout=timeout)
     except subprocess.TimeoutExpired:

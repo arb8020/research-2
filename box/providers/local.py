@@ -186,8 +186,9 @@ class LocalMachine:
         live = {int(row[0]) for row in rows if not row[1].startswith("Z")}
         return not groups & live
 
-    def _groups(self) -> list[int]:  # MUST KILL: misses hook process groups (a hook runs in a session of its own and its pgid is never recorded), so terminate() can leave a hook running; record the hook's pgid
-        jobs = [json.loads(status.read_text()).get("pgid") for status in Path(self.root).glob("*/*/status.json")]
+    def _groups(self) -> list[int]:
+        statuses = [json.loads(status.read_text()) for status in Path(self.root).glob("*/*/status.json")]
+        jobs = [status.get(key) for status in statuses for key in ("pgid", "hook_pgid")]
         return [int((self.dir / "pid").read_text()), *(pgid for pgid in jobs if pgid is not None)]
 
 
