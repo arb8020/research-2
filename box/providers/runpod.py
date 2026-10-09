@@ -13,7 +13,7 @@ from pathlib import Path
 import requests
 
 from box import gpus
-from box.providers.pump import JOIN_S, Pumped, kill_pid_file, pipe_reader, with_pid_file
+from box.providers.pump import JOIN_S, Pumped, kill_pid_file, pipe_readers, with_pid_file
 from box.sdk import LABEL_BY, LABEL_NAME, LABEL_SESSION, Dropped, Endpoint, Gone, NameTaken, Refused
 from box.store import Mount
 
@@ -255,7 +255,7 @@ class RunPodMachine:
             proc.stdin.flush()
 
         return Pumped(
-            [pipe_reader("stdout", proc.stdout), pipe_reader("stderr", proc.stderr)], kill=kill, wait=wait,
+            pipe_readers(proc), kill=kill, wait=wait,
             timeout_s=timeout_s, quiet_s=quiet_s, label=self.id, send=write if pty else None,
         )
 

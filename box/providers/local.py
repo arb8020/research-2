@@ -12,7 +12,7 @@ import subprocess
 import termios
 from pathlib import Path
 
-from box.providers.pump import JOIN_S, Pty, Pumped, pipe_reader
+from box.providers.pump import JOIN_S, Pty, Pumped, pipe_readers
 from box.sdk import LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken, Refused
 from box.store import DirStore, Mount
 
@@ -124,7 +124,7 @@ class LocalMachine:
                 ["bash", "-c", cmd], cwd=self.dir, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 start_new_session=True,
             )  # fmt: skip
-            terminal, readers, send = None, [pipe_reader("stdout", proc.stdout), pipe_reader("stderr", proc.stderr)], None
+            terminal, readers, send = None, pipe_readers(proc), None
 
         def kill() -> None:
             _killpg(proc.pid)
