@@ -17,8 +17,10 @@ gpu=None rents a CPU pod (2 vCPU), the cheapest machine RunPod has.
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import os
+import secrets
 import shlex
 import subprocess
 import time
@@ -27,6 +29,7 @@ from pathlib import Path
 import requests
 
 from box import gpus
+from box.providers.pump import JOIN_S, Pumped, kill_pid_file, pipe_reader, with_pid_file
 from box.sdk import LABEL_BY, LABEL_SESSION, Endpoint, Gone
 from box.store import Mount
 
@@ -242,6 +245,35 @@ class RunPodMachine:
     def exec(self, cmd: str) -> tuple[int, str, str]:
         done = self._ssh(cmd)
         return done.returncode, done.stdout.decode(errors="replace"), done.stderr.decode(errors="replace")
+
+    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None) -> Pumped:
+        """cmd over its own ssh session (the pod's multiplexed connection), read as it arrives. ssh's
+        own failure (exit 255) is Gone if the pod is gone, else a dropped connection (ConnectionError).
+        Killing ssh closes the channel, which reaches the command only when it next writes, so close()
+        also kills it by the pid it noted. Not seen live yet."""
+        if (d := self._direct) is None:
+            d = self._direct = self._pod()["ssh"]["direct"]
+        pid_file = f"/tmp/box-stream-{secrets.token_hex(6)}.pid"
+        argv = ["ssh", *SSH_OPTS, "-p", str(d["port"]), f"{d['username']}@{d['host']}", with_pid_file(cmd, pid_file)]
+        proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        def kill() -> None:
+            proc.kill()
+            proc.wait(JOIN_S)
+            with contextlib.suppress(Gone, TimeoutError):
+                self._ssh(kill_pid_file(pid_file), retries=0)
+
+        def wait() -> int:
+            rc = proc.wait(JOIN_S)
+            if rc == 255:
+                self._pod()  # Gone if the pod went away
+                raise ConnectionError(f"runpod: {self.id}: ssh dropped under a stream of `{cmd[:80]}`")
+            return rc
+
+        return Pumped(
+            [pipe_reader("stdout", proc.stdout), pipe_reader("stderr", proc.stderr)], kill=kill, wait=wait,
+            timeout_s=timeout_s, quiet_s=quiet_s, label=self.id,
+        )  # fmt: skip
 
     def write(self, path: str, data: bytes) -> None:
         p = shlex.quote(path)

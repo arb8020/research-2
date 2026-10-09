@@ -73,8 +73,14 @@ def create(gw: str, **extra: object) -> str:
     return body["session_id"]
 
 
-def events(gw: str, sid: str, until: str, last_id: str | None = None, timeout_s: float = 120) -> list[tuple[str, dict]]:
-    """(id, event) from the SSE stream until a status event in state `until` (inclusive)."""
+def events(gw: str, sid: str, until: str, last_id: str | None = None, timeout_s: float = 120, *, on_event: bool = False) -> list[tuple[str, dict]] | Iterator[tuple[str, dict]]:
+    """(id, event) from the SSE stream until a status event in state `until` (inclusive): a list, or
+    with on_event, each one as it arrives."""
+    got = stream_events(gw, sid, until, last_id, timeout_s)
+    return got if on_event else list(got)
+
+
+def stream_events(gw: str, sid: str, until: str, last_id: str | None, timeout_s: float) -> Iterator[tuple[str, dict]]:
     headers = {"Last-Event-ID": last_id} if last_id else {}
     req = urllib.request.Request(f"{gw}/sessions/{sid}/events?token={AUTH}", headers=headers)
     got, event_id = [], None
@@ -89,9 +95,17 @@ def events(gw: str, sid: str, until: str, last_id: str | None = None, timeout_s:
             elif line.startswith("data: "):
                 event = json.loads(line[6:])
                 got.append((event_id, event))
+                yield event_id, event
                 if event["kind"] == "status" and event["status"]["state"] == until:
-                    return got
+                    return
     raise AssertionError(f"stream closed before a {until} status: {got}")
+
+
+def eventually(predicate: Callable[[], bool], timeout_s: float) -> None:
+    give_up = time.monotonic() + timeout_s
+    while not predicate():
+        assert time.monotonic() < give_up, "timed out"
+        time.sleep(0.002)
 
 
 def status(gw: str, sid: str) -> tuple[int, dict]:
@@ -283,23 +297,47 @@ def wait_running(gw: str, sid: str) -> None:
         time.sleep(0.5)
 
 
-def test_an_idle_event_stream_asks_the_machine_twice_a_poll(tmp_path: Path) -> None:
+def test_an_idle_event_stream_asks_the_provider_nothing(tmp_path: Path) -> None:
     calls: list[float] = []
     server = relay_on(tmp_path, lambda token: relay.Access(Counted(Local(tmp_path / "machines"), calls), DirStore(tmp_path / "records")))
     gw = f"http://127.0.0.1:{server.server_address[1]}"
     sid = create(gw)
     wait_running(gw, sid)
-    stream = threading.Thread(target=events, args=(gw, sid, "ended"), daemon=True)
-    stream.start()  # replays the boot from memory, then follows the machine
-    time.sleep(2 * relay.STREAM_POLL_S)  # past its first poll (which also finds the job, the tunnel)
+    stream = threading.Thread(target=events, args=(gw, sid, "ended"))
+    stream.start()  # replays the boot from memory, then opens one log stream on the machine
+    time.sleep(2.0)  # past opening it (it also finds the job)
     window_from = time.monotonic()
-    time.sleep(3 * relay.STREAM_POLL_S)
+    time.sleep(5.0)
     in_window = [t for t in calls if t >= window_from]
     call(f"{gw}/sessions/{sid}/end", "POST", headers={"X-Box-Token": AUTH})
     stream.join(timeout=60)
     server.shutdown()
     server.server_close()
-    assert len(in_window) <= 2 * 4, f"{len(in_window)} calls in 3 polls"  # the session's status + one read of the log, per poll (4 polls fit)
+    assert not stream.is_alive()
+    assert in_window == [], f"{len(in_window)} provider calls in 5 s of an idle stream"  # the old poll: 2 every 2 s
+
+
+def test_a_log_line_reaches_the_event_stream_well_under_a_second_after_it_is_written(make_relay: Callable[..., str], tmp_path: Path) -> None:
+    gw = make_relay()
+    sid = create(gw)
+    wait_running(gw, sid)
+    jupyter = sdk.attach(Local(tmp_path / "machines"), sid).services()[0]
+    arrived: dict[str, float] = {}  # log line -> when the stream delivered it
+    stream = threading.Thread(target=lambda: [arrived.setdefault(e.get("text", ""), time.monotonic()) for _, e in events(gw, sid, "ended", on_event=True)])
+    stream.start()
+    time.sleep(2.0)  # the stream has caught up with Jupyter's log and waits for more
+    latencies = []
+    for i in range(5):
+        marker = f"marker-{i}"
+        written = time.monotonic()
+        with open(f"{jupyter.dir}/stderr", "a") as f:  # where Jupyter writes its log
+            f.write(marker + "\n")
+        eventually(lambda: marker in arrived, timeout_s=5)  # noqa: B023
+        latencies.append(arrived[marker] - written)
+    call(f"{gw}/sessions/{sid}/end", "POST", headers={"X-Box-Token": AUTH})
+    stream.join(timeout=60)
+    print(f"log line -> SSE latency (s): {[round(x, 3) for x in latencies]}")
+    assert max(latencies) < 0.5, latencies  # the old poll: up to STREAM_POLL_S (2 s), ~1.5 s typical on Modal
 
 
 class Vanishing(Counted):

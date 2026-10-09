@@ -15,7 +15,7 @@ import pytest
 from box import sdk
 from box.sdk import Ended, Ending, Provider, Running
 from box.store import Store
-from box.supervisor import CHUNK_BYTES, HEARTBEAT_TTL_S
+from box.supervisor import CHUNK_BYTES, FLUSH_S, HEARTBEAT_TTL_S
 from box.tests import providers
 from box.tests.test_sdk import JOB_S, eventually, gone
 
@@ -146,3 +146,15 @@ def test_a_session_never_recorded_is_not_found(provider: Provider, store: Store)
         sdk.attach(provider, "s-000000000000", record=store)
     with pytest.raises(ValueError, match="not a session id"):
         sdk.read_record(store, "../etc")
+
+
+def test_following_a_machine_that_dies_ends_from_the_record(launch: Callable, provider: Provider, store: Store, scale: float) -> None:
+    s = launch(ceiling_s=600, record=store)
+    job = s.run("echo before; sleep 999", max_duration_s=600)
+    follow = job.logs(follow=True)
+    assert next(follow).text == "before\n"
+    time.sleep(2 * FLUSH_S)  # recorded
+    providers.kill_supervisor(s.machine)  # no ended.json: the machine is gone without a word
+    assert list(follow) == []  # the stream says Gone; the record has nothing past the cursor; the follow ends
+    assert s.status() == Ended("machine_lost")
+    s.machine.terminate()
