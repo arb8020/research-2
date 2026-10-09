@@ -37,6 +37,10 @@
     box.attach(provider, session_id=s.id, record=store).wait()   # works after the machine is gone too
     job.logs(after=chunk.end)                # resumes where a reader left off, live or from the record
     r = box.read_record(store, s.id)         # Record: no machine, no provider needed
+    r.setup, r.syncs(), r.job_code(job.id)   # which snapshot it booted from; what code each sync sent and each job ran
+
+    spec = SetupSpec(repo=Path.cwd(), script=".box/setup", lockfiles=("uv.lock",))   # box/setup_cache.py
+    s = box.launch(provider, image=IMAGE, record=store, setup=spec)   # run once and snapshotted; synced on top
 
 A provider only rents raw machines (Machine: exec, stream, write, read, terminate, gone, expose,
 shell_argv). Everything else is
@@ -73,6 +77,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar, get_args
 
 from box.gitsync import Synced
+from box.setup_cache import SetupRecord, SetupSpec, parse_setup_record
 from box.store import Mount, Store
 from box.supervisor import HEARTBEAT_TTL_S, KINDS, MAX_CEILING_S, MAX_SERVICES, TAIL_FRAME_BYTES, TAIL_MAX_S, utf8_cut
 
@@ -108,6 +113,8 @@ FOLLOW_QUIET_S = 10.0  # a follow stream with no frame this long (the tail beats
 FOLLOW_TRIES = 5  # reconnects in a row with no frame in between; then the error is the caller's
 FOLLOW_BACKOFF_S = 1.0  # before reconnect n: n times this
 TAIL_ERR_BYTES = 4096  # the end of a tail's own stderr kept, to say why it failed
+SETUP_BOOT_TIMEOUT_S = 900.0  # create(setup=): the supervisor must be up within this to sync and set up (launch's default)
+SETUP_FAIL_TAIL = 4000  # chars of a failed setup's output its error carries
 
 
 class Gone(Exception):
@@ -237,6 +244,11 @@ class NameTaken(Exception):
     Colab a check before launch, so two creates racing can both win (each provider says why)."""
 
 
+class SetupFailed(RuntimeError):
+    """create(setup=): the setup (or resume) script did not exit 0. The session is closed; nothing
+    was snapshotted or remembered."""
+
+
 class NotGone(TimeoutError):
     """close() terminated the machine, but the provider never said it was gone: it may still run
     (and bill). Never reported as a success: whoever sees this must look (box who, the console)."""
@@ -322,7 +334,7 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     provider: Provider, *, lease_s: float | None = None, ceiling_s: float = CEILING_S, gpu: str | None = None,
     image: str | None = None, env: dict[str, str] | None = None, labels: dict[str, str] | None = None,
     idle_timeout_s: float = 0.0, ports: tuple[int, ...] = (), record: Store | None = None, session_id: str | None = None,
-    name: str | None = None,
+    name: str | None = None, setup: SetupSpec | None = None,
 ) -> Session:  # fmt: skip
     """Rent a machine whose supervisor ends the session at min(lease, ceiling) (or sooner: idle,
     stop, release). lease_s (default: ceiling_s) and ceiling_s count from now, and are parsed here,
@@ -344,7 +356,25 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     record: the supervisor records status, jobs, the lease, and output into it, under
     record_prefix(id), so status() and wait() still answer after the machine is gone, and
     read_record() reads it. session_id: one from new_session_id(), for a caller that must name the
-    session before launch returns (a relay answers the browser at once, while the machine boots)."""
+    session before launch returns (a relay answers the browser at once, while the machine boots).
+    setup: prepare the machine for a repo (box/setup_cache.py): then create returns only once it is
+    up, synced, set up (or booted from the setup's snapshot) and resumed, and SetupFailed if the
+    script fails (the session closed)."""
+    kw = {"lease_s": lease_s, "ceiling_s": ceiling_s, "gpu": gpu, "labels": labels, "idle_timeout_s": idle_timeout_s,
+          "ports": ports, "record": record, "session_id": session_id, "name": name}  # fmt: skip
+    if setup is not None:
+        return _create_set_up(provider, setup, image=image, env=env or {}, **kw)
+    return _create(provider, image=image, env=env, **kw)
+
+
+def _create(  # noqa: PLR0913 (create's knobs, plus how its root starts)
+    provider: Provider, *, lease_s: float | None, ceiling_s: float, gpu: str | None, image: str | None,
+    env: dict[str, str] | None, labels: dict[str, str] | None, idle_timeout_s: float, ports: tuple[int, ...],
+    record: Store | None, session_id: str | None, name: str | None, fresh_root: bool = False,
+) -> Session:  # fmt: skip
+    """create() without setup. fresh_root: the image is a snapshot of another session's machine, whose
+    supervisor files (ROOT: up, ended.json, jobs) are in it: the boot clears them first, all but the
+    record's mount point (a store mounted there now, not the snapshot's)."""
     session_id = new_session_id() if session_id is None else session_id
     if not SESSION_ID.fullmatch(session_id):
         raise ValueError(f"session_id {session_id!r} is not one new_session_id() makes")
@@ -372,7 +402,8 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     ]  # fmt: skip
     # the supervisor is installed as a file (ROOT/supervisor.py), so a later exec can run its `lease` command
     install = "import base64,os,zlib; open(os.environ['BOX_ROOT'] + '/supervisor.py', 'wb').write(zlib.decompress(base64.b64decode(os.environ['BOX_SUPERVISOR'])))"
-    boot = f'mkdir -p "$BOX_ROOT" && python3 -c {shlex.quote(install)} && exec python3 "$BOX_ROOT/supervisor.py" --root "$BOX_ROOT" {shlex.join(args)}'
+    clear = f'find "$BOX_ROOT" -mindepth 1 -maxdepth 1 ! -name {RECORD_PATH} -exec rm -rf {{}} + && ' if fresh_root else ""
+    boot = f'mkdir -p "$BOX_ROOT" && {clear}python3 -c {shlex.quote(install)} && exec python3 "$BOX_ROOT/supervisor.py" --root "$BOX_ROOT" {shlex.join(args)}'
     backstop_s = int(lease.ceiling - time.time()) + BACKSTOP_MARGIN_S  # from the ceiling, not from boot
     assert backstop_s > BACKSTOP_MARGIN_S, backstop_s
     machine = provider.launch(
@@ -392,6 +423,61 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
             machine.terminate()
             raise
     return Session(machine, record=record)
+
+
+def _create_set_up(provider: Provider, spec: SetupSpec, *, image: str | None, env: dict[str, str], **kw: Any) -> Session:
+    """create(setup=spec): the layers of box/setup_cache.py, in one session.
+
+        key = setup_key(spec, provider, image)
+        hit  (cached, fresh, not rebuild):  _create(image=snapshot, fresh_root)  -> wait_up -> sync (the diff)
+        miss:                               _create(image=base)                   -> wait_up -> sync (all of it)
+                                            -> setup job (no env) -> snapshot -> remember key
+        both: resume job (with env) -> sessions/<id>/setup.json
+    A snapshot the provider no longer has (deleted, past its ttl: LookupError at launch) is a miss."""
+    from box import setup_cache as sc
+
+    record: Store | None = kw["record"]
+    snaps = isinstance(provider, sc.Snapshotter)
+    if snaps and record is None:  # a key -> snapshot map must outlive the machine; the record store is where box keeps that
+        raise ValueError(f"{provider.name} provider snapshots its setup: pass record= (the store that remembers which snapshot a key is)")
+    key = sc.setup_key(spec, provider=provider.name, image=image)
+    cached = None
+    if snaps and not spec.rebuild:
+        cached = sc.lookup(record, key, now=time.time(), max_age_s=spec.max_age_s)  # type: ignore[arg-type] (checked above)
+    session = None
+    if cached is not None:
+        try:
+            session = _create(provider, image=cached.image, env=env, fresh_root=True, **kw)
+        except LookupError as e:
+            print(f"box: setup {key[:12]}: snapshot {cached.image} is gone ({e}); setting up again", file=sys.stderr)
+            cached = None
+    if session is None:
+        session = _create(provider, image=image, env=env, **kw)
+    try:
+        session.wait_up(SETUP_BOOT_TIMEOUT_S)
+        synced = session.sync(spec.repo, paths=spec.paths)
+        setup_job, made, built_at = None, cached.image if cached else None, cached.built_at if cached else None
+        if cached is None:
+            setup_job = session._run_to_end(sc.script_cmd(synced.path, spec.script, unset=list(env)), spec.max_duration_s, "setup")
+            if snaps:
+                made = provider.snapshot(session.machine, ttl_s=int(spec.max_age_s + sc.SNAPSHOT_TTL_MARGIN_S))  # type: ignore[attr-defined]
+                built_at = time.time()
+                sc.remember(record, sc.Cached(key, made, built_at, session.id, synced.commit))  # type: ignore[arg-type]
+        resume_job = None
+        if spec.resume is not None:  # every boot, with the session's env: fresh credentials, services
+            resume_job = session._run_to_end(sc.script_cmd(synced.path, spec.resume, unset=[]), spec.max_duration_s, "resume")
+        if record is not None:
+            prepared = SetupRecord(key=key, hit=cached is not None, image=made, base=image or "", built_at=built_at,
+                                   setup_job=setup_job, resume_job=resume_job)  # fmt: skip
+            record.put(f"{record_prefix(session.id)}/setup.json", sc.setup_record_json(prepared))
+    except BaseException:
+        try:  # a session nobody gets back must not idle to its ceiling
+            session.close()
+        except Exception:  # noqa: BLE001 (the setup's error is the one to raise; this one is printed)
+            print(f"box: {session.id}: closing after a failed setup failed too; terminating", file=sys.stderr)
+            session.machine.terminate()
+        raise
+    return session
 
 
 def supervisor_env() -> str:
@@ -664,11 +750,17 @@ class Session:
         they are on disk now (committed or not), plus untracked ones under paths (repo-relative).
         Incremental: sends only the objects the machine lacks (pack_bytes 0 when nothing changed).
         Refuses (gitsync.Drift) if a tracked file there changed since the last sync, unless force.
-        Needs git on the machine. A sync is use: it touches ROOT/activity (in its first exec)."""
+        Needs git on the machine. A sync is use: it touches ROOT/activity (in its first exec). With a
+        record, each sync's commit goes into it (Record.syncs): the commit is a local object, kept
+        from gc by keep's ref, so `git show <commit>` here answers what was sent."""
         from box import gitsync
 
         keep = f"refs/box/{self.name or self.id}"  # a local ref per session, so local gc keeps what was sent
-        return gitsync.sync(self.machine, Path(repo), paths=paths, force=force, keep=keep, touch=self._path("activity"))
+        synced = gitsync.sync(self.machine, Path(repo), paths=paths, force=force, keep=keep, touch=self._path("activity"))
+        if self.record is not None:  # "what code was on it" outlives the machine: each sync, by when it was made
+            entry = {"commit": synced.commit, "path": synced.path, "pack_bytes": synced.pack_bytes, "local": str(Path(repo).resolve()), "at": time.time()}
+            self.record.put(f"{record_prefix(self.id)}/syncs/{time.time_ns()}.json", json.dumps(entry).encode())
+        return synced
 
     def touch(self) -> None:
         """Mark the session used now: its idle timeout counts from the last touch (or job end)."""
@@ -740,6 +832,15 @@ class Session:
         spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "max_duration_s": max_duration_s, "env": env or {}}
         return self._start(Job(self, new_job_id(), "jobs"), spec)
 
+    def _run_to_end(self, cmd: str, max_duration_s: float, what: str) -> str:
+        """Run cmd as a job and wait for it; its id. SetupFailed (with its output's end) unless it exited 0."""
+        job = self.run(cmd, max_duration_s=max_duration_s)
+        ending = job.wait()
+        if ending != Ending("exited", 0):
+            out = "".join(chunk.text for chunk in job.logs())[-SETUP_FAIL_TAIL:]
+            raise SetupFailed(f"{self.id}: {what} ({cmd}) ended {ending.reason}, exit {ending.exit_code}:\n{out}")
+        return job.id
+
     def serve(self, cmd: str, *, env: dict[str, str] | None = None) -> Job:
         """Start cmd (bash) as a service: a long-lived server (e.g. behind an exposed port) that
         starts at once beside the job queue, is not work for idleness (connections to the ports
@@ -757,10 +858,16 @@ class Session:
         return running
 
     def _start(self, job: Job, spec: dict) -> Job:
-        """Write job's spec where the supervisor picks it up: atomically, never half a spec."""
+        """Write job's spec where the supervisor picks it up: atomically, never half a spec. In the same
+        exec, before the spec appears: <job>/code/<worktree> = the commit each synced worktree is at
+        now (the record keeps it: "what code did this job run" outlives the machine). The machine's
+        own HEADs, not this Session's last sync: another process may have synced since."""
         tmp = self._path(f"{job.kind}/{job.id}.spec.tmp")
         self.machine.write(tmp, json.dumps(spec).encode())
-        self._check(f"mkdir -p {job.dir} && mv {tmp} {job.dir}/spec.json")
+        work, code = shlex.quote(self.machine.work), shlex.quote(f"{job.dir}/code")
+        heads = (f'for t in {work}/*/; do if [ -e "$t.git" ] && h=$(git -C "$t" rev-parse HEAD 2>/dev/null); '
+                 f'then mkdir -p {code} && echo "$h" > {code}/"$(basename "$t")"; fi; done; ')  # fmt: skip
+        self._check(f"{heads}mkdir -p {job.dir} && mv {tmp} {job.dir}/spec.json")
         return job
 
     def put(self, local: str | Path, remote: str, ignore: tuple[str, ...] = ()) -> None:
@@ -1152,6 +1259,7 @@ class Record:
     ended: Ended | None  # None: no end recorded (yet)
     heartbeat: Heartbeat | None
     receipt: Receipt | None  # None: nobody closed it (yet), or it ended on its own (lease, idle)
+    setup: SetupRecord | None = None  # create(setup=): how its machine was prepared (box/setup_cache.py)
 
     @property
     def session_id(self) -> str:
@@ -1173,6 +1281,17 @@ class Record:
         released it, from where, when). Empty if none was recorded."""
         raw = _parse_if_present(self.store, f"{record_prefix(self.session_id)}/lease-audit.json", json.loads)
         return [LeaseChange(e["op"], float(e["until"]), float(e["at"]), str(e["host"]), int(e["pid"]), int(e["n"])) for e in raw or []]
+
+    def syncs(self) -> list[dict]:
+        """Every sync of the session, oldest first: {commit, path, pack_bytes, local, at}."""
+        prefix = f"{record_prefix(self.session_id)}/syncs/"
+        return [json.loads(self.store.get(key)) for key in sorted(self.store.list(prefix), key=lambda k: int(k[len(prefix) :].split(".")[0]))]
+
+    def job_code(self, job_id: str, kind: str = "jobs") -> dict[str, str]:
+        """{worktree dir name: commit} the machine's synced worktrees were at when the job was queued
+        (Session._start); empty if none was synced."""
+        prefix = f"{record_prefix(self.session_id)}/{kind}/{job_id}/code/"
+        return {key[len(prefix) :]: self.store.get(key).decode().strip() for key in self.store.list(prefix)}
 
     def jobs(self, kind: str = "jobs") -> list[str]:
         """Every job id recorded (kind="services": every service's), oldest first."""
@@ -1234,6 +1353,7 @@ def read_record(store: Store, session_id: str) -> Record:
         ended=_parse_if_present(store, f"{prefix}/ended.json", parse_ended),
         heartbeat=_parse_if_present(store, f"{prefix}/heartbeat.json", parse_heartbeat),
         receipt=_parse_if_present(store, f"{prefix}/receipt.json", parse_receipt),
+        setup=_parse_if_present(store, f"{prefix}/setup.json", parse_setup_record),
     )  # fmt: skip
 
 

@@ -3,7 +3,7 @@
 It exists so the SDK and the supervisor can be run and tested end to end without a cloud: same
 entrypoint, same files, same exec, and like a cloud machine, nothing is reachable (Gone) once the
 supervisor has exited. What it cannot be is a separate computer: `gpu` and `image`
-are refused, and on macOS (no PR_SET_PDEATHSIG) a job outlives a supervisor killed with SIGKILL.
+are refused (but for its own snapshots: snapshot()), and on macOS (no PR_SET_PDEATHSIG) a job outlives a supervisor killed with SIGKILL.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import json
 import os
 import secrets
 import shlex
+import shutil
 import signal
 import subprocess
 import termios
@@ -24,6 +25,7 @@ from box.sdk import LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken
 from box.store import DirStore, Mount
 
 BASE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local"
+SNAPSHOT = "local-snapshot:"  # an image ref of this provider's own: a copy of a machine's work dir (snapshot())
 
 
 class Local:
@@ -39,8 +41,11 @@ class Local:
         """mounts: DirStores only, as symlinks (a local machine shares this computer's disk)."""
         del timeout_s  # the supervisor's ceiling is the only clock here; a VM provider enforces this
         del ports  # every port of this computer is reachable (expose): nothing to declare
-        if gpu or image:
+        if gpu or (image and not image.startswith(SNAPSHOT)):
             raise NotImplementedError(f"local provider: no gpu/image (got gpu={gpu!r}, image={image!r})")
+        snapshot = self.base / "snapshots" / image.removeprefix(SNAPSHOT) if image else None
+        if snapshot is not None and not snapshot.is_dir():
+            raise LookupError(f"local provider: no snapshot {image!r}")
         if foreign := [m.store.uri for m in mounts if not isinstance(m.store, DirStore)]:
             raise ValueError(f"local provider: mounts only a DirStore (got {foreign})")
         self.base.mkdir(parents=True, exist_ok=True)
@@ -51,11 +56,15 @@ class Local:
             fcntl.flock(lock, fcntl.LOCK_EX)  # released when the file closes
             if LABEL_NAME in labels and self.list({LABEL_NAME: labels[LABEL_NAME]}):
                 raise NameTaken(f"local provider: a live machine is named {labels[LABEL_NAME]!r}")
-            return self._launch(entrypoint, env, labels, mounts)
+            return self._launch(entrypoint, env, labels, mounts, snapshot)
 
-    def _launch(self, entrypoint: list[str], env: dict[str, str], labels: dict[str, str], mounts: list[Mount]) -> LocalMachine:
+    def _launch(  # noqa: PLR0913
+        self, entrypoint: list[str], env: dict[str, str], labels: dict[str, str], mounts: list[Mount], snapshot: Path | None,
+    ) -> LocalMachine:  # fmt: skip
         m = LocalMachine(self.base / f"local-{secrets.token_hex(4)}")
         m.dir.mkdir(parents=True)
+        if snapshot is not None:
+            restore(snapshot, Path(m.work))
         for mount in mounts:
             link = Path(m.root, mount.path)
             link.parent.mkdir(parents=True, exist_ok=True)
@@ -82,6 +91,15 @@ class Local:
 
     def close(self) -> None:
         """Holds nothing open: its machines are directories and processes, reachable after."""
+
+    def snapshot(self, machine: LocalMachine, *, ttl_s: int) -> str:
+        """A copy of the machine's work dir (synced code, its git store, what a setup wrote there):
+        all of a local machine that is its own, since the rest is this computer's. Kept until
+        deleted by hand (ttl_s is a cloud's storage concern, not this disk's)."""
+        del ttl_s
+        snapshot_id = secrets.token_hex(6)
+        shutil.copytree(machine.work, self.base / "snapshots" / snapshot_id, symlinks=True)
+        return SNAPSHOT + snapshot_id
 
 
 class LocalMachine:
@@ -201,6 +219,17 @@ class LocalMachine:
         and service's (status.json's pgid, from when it started; a hook's group is not recorded)."""
         jobs = [json.loads(status.read_text()).get("pgid") for status in Path(self.root).glob("*/*/status.json")]
         return [int((self.dir / "pid").read_text()), *(pgid for pgid in jobs if pgid is not None)]
+
+
+def restore(snapshot: Path, work: Path) -> None:
+    """snapshot's copy of a work dir into work. A synced worktree's .git names its git store by
+    absolute path (the old machine's), so each is repaired to point at this one's: on a cloud the
+    paths are the same on every machine and a snapshot needs no repair."""
+    shutil.copytree(snapshot, work, symlinks=True)
+    store = work / ".box.git"
+    trees = [str(dot.parent) for dot in work.glob("*/.git")]
+    if trees:
+        subprocess.run(["git", "--git-dir", str(store), "worktree", "repair", *trees], check=True, capture_output=True)
 
 
 def _take_terminal() -> None:

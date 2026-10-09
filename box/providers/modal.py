@@ -57,6 +57,8 @@ CALL_TIMEOUT_S = 60.0  # every later call (a healthy exec is 20-400 ms)
 CREATE_TIMEOUT_S = 3600.0  # Sandbox.create, which builds the image first (a Dockerfile with CUDA builds for many minutes)
 POLL_S = 0.5  # how often _ends asks a sandbox mid-shutdown whether it has finished
 MODAL_TOML = Path.home() / ".modal.toml"  # where `modal token set` keeps profiles
+SNAPSHOT = "modal-snapshot:"  # an image ref of this provider's own: a filesystem snapshot's image id (snapshot())
+SNAPSHOT_TIMEOUT_S = 900.0  # Sandbox.snapshot_filesystem: a few MB took 0.6 s (2026-10-09); GBs of deps take longer
 
 
 @dataclass(frozen=True)
@@ -238,10 +240,14 @@ class Modal:
         if timeout_s > MAX_TIMEOUT_S:  # refused, not clamped: a clamped backstop would end the sandbox before the session's ceiling
             raise ValueError(f"modal provider: timeout_s={timeout_s} past Modal's {MAX_TIMEOUT_S} s cap (a ceiling over {MAX_TIMEOUT_S - 600} s)")
         stores: list[ModalVolumeStore] = [m.store for m in mounts]  # type: ignore[misc] (checked above)
-        modal_image, modal_gpu_ = resolve_image(image), modal_gpu(gpu)
+        snapshot = image.removeprefix(SNAPSHOT) if image and image.startswith(SNAPSHOT) else None
+        modal_image, modal_gpu_ = None if snapshot else resolve_image(image), modal_gpu(gpu)
 
         async def create() -> modal.Sandbox:
             client = await self.client()
+            nonlocal modal_image
+            if snapshot is not None:  # lazy: looked up by Sandbox.create (NotFoundError there if Modal no longer has it)
+                modal_image = modal.Image.from_id(snapshot, client=client)
             volumes = {path: modal.Volume.from_name(v, create_if_missing=True, client=client) for path, v in self.volumes.items()}
             for m, store in zip(mounts, stores, strict=True):
                 volumes[f"{ROOT}/{m.path}"] = (await store.volume()).with_mount_options(sub_path=f"/{m.prefix}")
@@ -255,7 +261,25 @@ class Modal:
             sandbox = self._call(create, timeout_s=CREATE_TIMEOUT_S)
         except modal.exception.AlreadyExistsError as e:
             raise NameTaken(f"modal provider: a running sandbox in app {APP!r} is named {labels[LABEL_NAME]!r}") from e
+        except modal.exception.NotFoundError as e:
+            if snapshot is None:
+                raise
+            raise LookupError(f"modal provider: no snapshot image {snapshot} (past its ttl, or deleted): {e}") from e
         return ModalMachine(self, sandbox, labels, booting=True)
+
+    def snapshot(self, machine: ModalMachine, *, ttl_s: int) -> str:
+        """Sandbox.snapshot_filesystem: an Image of the sandbox's root filesystem as it is now (only
+        the files changed from its image are stored), which launch(image=) boots another sandbox
+        from. Not in it: mounted Volumes (the record), processes, env. Modal deletes it ttl_s after,
+        so a snapshot nobody refreshes costs no storage for long (seen live 2026-10-09: the
+        snapshot's own call took 0.6 s for a small setup; Image.from_id on an unknown id is
+        NotFoundError at Sandbox.create)."""
+
+        async def snap() -> str:
+            image = await machine.sandbox.snapshot_filesystem.aio(timeout=int(SNAPSHOT_TIMEOUT_S), ttl=ttl_s)
+            return image.object_id
+
+        return SNAPSHOT + self._call(snap, timeout_s=SNAPSHOT_TIMEOUT_S + CALL_TIMEOUT_S)
 
     def get(self, machine_id: str) -> ModalMachine:
         async def lookup() -> tuple[modal.Sandbox, dict[str, str]]:
