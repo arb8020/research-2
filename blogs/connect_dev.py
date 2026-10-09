@@ -4,7 +4,7 @@
 # ///
 """A fake Connect gateway for UI work: box/CONTRACT-gateway.md with no cloud. Not the real relay.
 
-    uv run connect_dev.py [--port 8790] [--boot-delay 0.6] [--deadline 3600]
+    uv run connect_dev.py [--port 8790] [--boot-delay 0.6] [--deadline 3600] [--root DIR] [--persist DIR]
 
 POST /sessions emits a few gateway/machine "step" events with delays, then starts a local Jupyter Server
 (this script's env has jupyter_server + ipykernel) and reports it as the session's kernel. Its stderr becomes
@@ -14,6 +14,11 @@ Token: any {id, secret} whose id starts with "ak-" boots; any other id fails wit
 the "checking your Modal token" step (to see the failure UI). The session's token must come back on every
 call (X-Box-Token: id:secret, or ?token= on /events, which EventSource can't set headers for).
 The real relay (variant A over box) slots in at the same URL.
+
+Workspace pages (ws.py): --root DIR makes Jupyter's root_dir (and the kernel's cwd) a directory that outlives the
+session, so a reload or a new session finds the same workspace; without it each session gets a temp dir, removed
+at its end. --persist DIR is what the sandbox sees as $BLOGS_WS_PERSIST: where ws.py keeps the workspace bundle
+(on Modal, a Volume). A fresh --root with the same --persist is a new sandbox restoring from the bundle.
 """
 
 from __future__ import annotations
@@ -75,7 +80,8 @@ class Session:
     kernel: dict[str, str] | None = None
     events: list[dict[str, Any]] = field(default_factory=list)
     proc: subprocess.Popen[bytes] | None = None
-    root: Path | None = None  # Jupyter's root_dir, removed at the end
+    root: Path | None = None  # Jupyter's root_dir
+    owns_root: bool = False  # a temp root this session made (removed at the end); a --root dir is kept
     changed: threading.Condition = field(default_factory=threading.Condition)
 
     def status(self) -> dict[str, Any]:
@@ -106,7 +112,7 @@ class Session:
                 self.proc.wait(5)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
-        if self.root is not None:
+        if self.root is not None and self.owns_root:
             shutil.rmtree(self.root, ignore_errors=True)
         self.step("gateway", f"session ended ({reason})")
         self.emit("status", status=self.status())
@@ -122,8 +128,19 @@ def free_port() -> int:
         return int(s.getsockname()[1])
 
 
-def boot(session: Session, shim_dir: Path, delay: float) -> None:
+@dataclass(frozen=True)
+class Machine:
+    """What every fake sandbox gets: the nvidia-smi shim, the boot pacing, and the workspace dirs (None: temp, none)."""
+
+    shim_dir: Path
+    delay: float
+    root: Path | None
+    persist: Path | None
+
+
+def boot(session: Session, machine: Machine) -> None:
     """The fake machine's life: steps, a real Jupyter Server, then running until ended or past its deadline."""
+    delay = machine.delay
     session.step("gateway", "checking your Modal token")
     time.sleep(delay)
     if not session.token.startswith("ak-"):
@@ -135,13 +152,16 @@ def boot(session: Session, shim_dir: Path, delay: float) -> None:
     session.step("machine", "booting image blogs-kernel (cached)")
     time.sleep(delay)
     port, jtoken = free_port(), secrets.token_hex(16)
-    env = {**os.environ, "PATH": f"{shim_dir}{os.pathsep}{os.environ['PATH']}", "JUPYTER_TOKEN": jtoken}
-    session.root = root = Path(tempfile.mkdtemp(prefix=f"connect-dev-{session.id}-"))
-    session.step("machine", f"starting Jupyter Server on :{port}")
+    env = {**os.environ, "PATH": f"{machine.shim_dir}{os.pathsep}{os.environ['PATH']}", "JUPYTER_TOKEN": jtoken}
+    if machine.persist is not None:
+        env["BLOGS_WS_PERSIST"] = str(machine.persist)
+    session.owns_root = machine.root is None
+    session.root = root = machine.root or Path(tempfile.mkdtemp(prefix=f"connect-dev-{session.id}-"))
+    session.step("machine", f"starting Jupyter Server on :{port} (root {root})")
     session.proc = subprocess.Popen(
         [sys.executable, "-m", "jupyter_server", "--no-browser", f"--port={port}", "--ip=127.0.0.1",
          f"--ServerApp.root_dir={root}", "--ServerApp.allow_origin=*", "--ServerApp.disable_check_xsrf=True"],
-        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        env=env, cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,  # cwd: kernels start in the server's cwd
     )  # fmt: skip
     threading.Thread(target=pipe_logs, args=(session,), daemon=True).start()
     url = f"http://127.0.0.1:{port}"
@@ -197,8 +217,7 @@ def next_batch(session: Session, sent: int) -> list[dict[str, Any]] | None:
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "connect-dev/0"
-    shim_dir: Path
-    boot_delay: float
+    machine: Machine
     deadline_s: float
 
     def log_message(self, fmt: str, *args: Any) -> None:
@@ -269,7 +288,7 @@ class Handler(BaseHTTPRequestHandler):
             session = Session(f"fake-{secrets.token_hex(4)}", f"{tid}:{tsecret}", gpu, now, now + self.deadline_s)
             SESSIONS[session.id] = session
         session.emit("status", status=session.status())
-        threading.Thread(target=boot, args=(session, self.shim_dir, self.boot_delay), daemon=True).start()
+        threading.Thread(target=boot, args=(session, self.machine), daemon=True).start()
         self.reply(202, {"session_id": session.id, "status": session.status()})
 
     def do_GET(self) -> None:
@@ -313,13 +332,20 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8790)
     ap.add_argument("--boot-delay", type=float, default=0.6, help="seconds between fake boot steps")
     ap.add_argument("--deadline", type=float, default=3600, help="session lifetime in seconds")
+    ap.add_argument("--root", type=Path, help="Jupyter's root_dir for every session, kept after it (default: a temp dir per session)")
+    ap.add_argument("--persist", type=Path, help="$BLOGS_WS_PERSIST in the sandbox: where ws.py keeps the workspace bundle")
     args = ap.parse_args()
+    for d in (args.root, args.persist):
+        if d is not None:
+            d.mkdir(parents=True, exist_ok=True)
 
     shim_dir = Path(tempfile.mkdtemp(prefix="connect-dev-shim-"))
     smi = shim_dir / "nvidia-smi"
     smi.write_text(FAKE_SMI)
     smi.chmod(0o755)
-    Handler.shim_dir, Handler.boot_delay, Handler.deadline_s = shim_dir, args.boot_delay, args.deadline
+    root = args.root.resolve() if args.root else None
+    persist = args.persist.resolve() if args.persist else None
+    Handler.machine, Handler.deadline_s = Machine(shim_dir, args.boot_delay, root, persist), args.deadline
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.daemon_threads = True
     signal.signal(signal.SIGTERM, stop)  # `kill` and uv (which forwards TERM, not a non-tty INT) end sessions too
