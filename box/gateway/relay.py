@@ -12,8 +12,12 @@ per request. What it keeps:
 - while a session boots (POST /sessions returns 202 at once; the boot runs on a thread): its progress
   ("step" events), in memory, and dropped BOOT_RECORD_S after the boot ends. Rebuildable: after it is
   dropped, the machine answers instead.
-- the reader's token only for the length of one request, or of the boot thread. A boot record keeps a
-  digest of it, to check the caller of GET/events is the one who booted it.
+- the reader's token inside the Modal client it makes for that reader (a gRPC channel), reused across
+  requests and closed once idle for CLIENT_IDLE_S or when MAX_CLIENTS readers' clients are open (the
+  least recently used first). A boot record keeps a digest of it, to check the caller of GET/events
+  is the one who booted it.
+
+A Relay owns all of that (boots and their threads, event streams, clients); Handler is HTTP only.
 
     POST /sessions                {provider, token, gpu, labels}  -> 202 {session_id, status}
     GET  /sessions/{id}           X-Box-Token: id:secret          -> {session_id, status} | 404
@@ -42,11 +46,12 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, BinaryIO
 from urllib.parse import parse_qs, quote, urlsplit
 
 from box import sdk
@@ -69,6 +74,8 @@ JUPYTER_READY_S = 3 * 60  # Jupyter answering, after the supervisor is up
 BOOT_RECORD_S = 10 * 60  # how long a finished boot's steps stay replayable from memory
 MAX_BOOTS = 16  # boot records held at once (booting + recently finished); more is 429
 MAX_STREAMS = 32  # open event streams; more is 429
+MAX_CLIENTS = 64  # readers' Modal clients open at once; past it the least recently used idle one closes, and if all are in use, 429
+CLIENT_IDLE_S = 10 * 60  # a reader's client unused this long is closed (and its token dropped)
 MAX_BODY = 8 * 1024
 MAX_LABELS = 8
 MAX_BOOT_EVENTS = 1000  # a boot's own steps + Jupyter's startup log; past this, lines are counted, not kept
@@ -86,10 +93,12 @@ LOCAL_ORIGIN = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 
 @dataclass(frozen=True)
 class Access:
-    """What a reader's token reaches: machines, and the store their sessions are recorded in."""
+    """What a reader's token reaches: machines, and the store their sessions are recorded in.
+    close: what it holds open (Modal's client); nothing for the local provider."""
 
     provider: sdk.Provider
     record: Store
+    close: Callable[[], None] = lambda: None
 
 
 @dataclass(frozen=True)
@@ -153,6 +162,12 @@ class Boot:
     def step(self, source: str, text: str) -> None:
         self.emit("step", source=source, text=text)
 
+    def cancel(self) -> None:
+        """POST /end (or the relay closing): the boot thread ends the session at its next step."""
+        with self.changed:
+            self.cancelled = True
+            self.changed.notify_all()
+
     def finish(self, status: dict[str, Any]) -> None:
         if self.dropped:
             self.step("gateway", f"({self.dropped} more boot log lines not kept)")
@@ -162,13 +177,12 @@ class Boot:
             self.changed.notify_all()
 
 
-BOOTS: dict[str, Boot] = {}
-BOOTS_LOCK = threading.Lock()
-STREAMS = threading.BoundedSemaphore(MAX_STREAMS)
-
-
 class BadRequest(Exception):
     """The caller sent something this API does not take (400)."""
+
+
+class Busy(Exception):
+    """This relay is at one of its limits (boots, streams, readers' clients): 429, try again later."""
 
 
 # ---- parsing the browser's input (a boundary) ----
@@ -262,12 +276,6 @@ def jupyter_ready(kernel: dict[str, str]) -> bool:
         return False
 
 
-def attach(cfg: Config, token: ModalToken, sid: str) -> sdk.Session:
-    """The session, live or (machine gone) from its record. LookupError (404) if neither knows it."""
-    access = cfg.access(token)
-    return sdk.attach(access.provider, sid, record=access.record)
-
-
 def the_kernel_job(s: sdk.Session) -> sdk.Job | None:
     """The session's Jupyter service: its first job (with --push, the forwarder is the second).
     None before the boot has started it."""
@@ -307,13 +315,12 @@ def jupyter_cmd(cfg: Config, port: int, origin: str) -> str:
     ])  # fmt: skip
 
 
-def boot(cfg: Config, rec: Boot, req: CreateRequest, origin: str) -> None:
-    """Launch, start Jupyter, wait until it answers, release. The token lives on this stack only."""
+def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str) -> None:
+    """Launch, start Jupyter, wait until it answers, release."""
     t0 = time.monotonic()
     session: sdk.Session | None = None
     try:
         rec.step("gateway", "checking your Modal token")
-        access = cfg.access(req.token)
         access.provider.list({sdk.LABEL_SESSION: rec.session_id})  # the first authenticated call: a bad token fails here
         port = cfg.port()
         rec.step("gateway", f"creating sandbox: gpu {rec.gpu or 'none'} (a workspace's first connect builds the image: minutes)")
@@ -406,13 +413,274 @@ def log_lines(job: sdk.Job, after: sdk.LogCursor) -> Iterator[tuple[str, str, sd
             yield chunk.stream, line.rstrip("\n"), (out, err)
 
 
+# ---- the relay: boots, streams, readers' clients ----
+
+
+@dataclass
+class Held:
+    access: Access
+    users: int = 0
+    last_used: float = field(default_factory=time.monotonic)
+
+
+class Accesses:
+    """Each reader's Access (on Modal: a client, a gRPC channel), reused across that reader's
+    requests, keyed by the token's digest. Bounded: at most `limit` open; past it the least recently
+    used idle one is closed, and if none is idle, Busy. One unused for CLIENT_IDLE_S is closed at
+    the next use of any. An Access in use is never closed under its user."""
+
+    def __init__(self, make: Callable[[ModalToken], Access], limit: int) -> None:
+        self._make = make
+        self._limit = limit
+        self._held: OrderedDict[str, Held] = OrderedDict()  # least recently used first
+        self._lock = threading.Lock()
+
+    @contextlib.contextmanager
+    def use(self, token: ModalToken) -> Iterator[Access]:
+        key = digest(token)
+        with self._lock:
+            evicted = self._evict(keep=key)
+            held = self._held.get(key)
+            if held is None and len(self._held) < self._limit:
+                held = self._held[key] = Held(self._make(token))
+            if held is not None:
+                held.users += 1
+                self._held.move_to_end(key)
+        for h in evicted:
+            h.access.close()
+        if held is None:
+            raise Busy(f"{self._limit} readers' clients in use on this relay")
+        try:
+            yield held.access
+        finally:
+            with self._lock:
+                held.users -= 1
+                held.last_used = time.monotonic()
+
+    def _evict(self, keep: str) -> list[Held]:
+        """Under _lock: take out the idle ones unused past CLIENT_IDLE_S, and if keep needs room,
+        the least recently used idle one."""
+        now = time.monotonic()
+        idle = [k for k, h in self._held.items() if h.users == 0 and k != keep]
+        expired = [k for k in idle if now - self._held[k].last_used > CLIENT_IDLE_S]
+        full = keep not in self._held and len(self._held) - len(expired) >= self._limit
+        room = [k for k in idle if k not in expired][:1] if full else []
+        return [self._held.pop(k) for k in expired + room]
+
+    def close(self) -> None:
+        with self._lock:
+            held = list(self._held.values())
+            self._held.clear()
+        for h in held:
+            assert h.users == 0, "an Access closed while in use"
+            h.access.close()
+
+
+class Relay:
+    """The contract's operations, HTTP aside (Handler is that). Owns its boots (records and
+    threads), its open event streams (at most MAX_STREAMS), and its readers' clients (Accesses).
+    close() ends all of it: in-flight boots are cancelled (their sessions end, as POST /end would)
+    and joined, streams told to stop and waited for, clients closed. A booted session is not the
+    relay's: it outlives the relay (idle, deadline, or POST /end on any relay end it)."""
+
+    def __init__(self, cfg: Config) -> None:
+        self.cfg = cfg
+        self._accesses = Accesses(cfg.access, MAX_CLIENTS)
+        self._boots: dict[str, Boot] = {}
+        self._threads: dict[str, threading.Thread] = {}
+        self._streams = 0
+        self._changed = threading.Condition()  # guards _boots, _threads, _streams
+        self._closing = threading.Event()
+
+    def create(self, req: CreateRequest, origin: str) -> dict[str, Any]:
+        """Start a boot on its own thread; returns the session's first (booting) status at once."""
+        now = time.time()
+        sid = sdk.new_session_id()
+        push = None if self.cfg.push is None else functools.partial(self.cfg.push.send, sid)
+        rec = Boot(sid, digest(req.token), req.gpu, now, now + self.cfg.deadline_s, push=push)
+        thread = threading.Thread(target=self._boot, args=(rec, req, origin), name=f"boot-{sid}")
+        with self._changed:
+            self._forget_old_boots()
+            if len(self._boots) >= MAX_BOOTS:
+                raise Busy(f"{MAX_BOOTS} sessions booting or just booted on this relay; try again in a minute")
+            rec.emit("status", status=wire("booting", req.gpu, rec.created_at, rec.deadline_at))  # before anyone can find it
+            self._boots[sid] = rec
+            self._threads[sid] = thread
+        thread.start()
+        return {"session_id": sid, "status": rec.status}
+
+    def get(self, sid: str, token: ModalToken) -> dict[str, Any]:
+        rec = self._boot_of(sid, token)
+        if rec is not None and (rec.ended_at is None or rec.status["state"] == "ended"):
+            return rec.status  # booting, or a failed boot: no machine to ask
+        with self._accesses.use(token) as access:
+            return machine_status(self.cfg, attach(access, sid), token, ready=False)
+
+    def end(self, sid: str, token: ModalToken) -> dict[str, Any]:
+        rec = self._boot_of(sid, token)
+        if rec is not None and rec.ended_at is None:
+            rec.cancel()  # the boot thread ends it at its next step (launch itself can't be interrupted)
+        with self._accesses.use(token) as access:
+            try:
+                s = attach(access, sid)
+            except LookupError:
+                if rec is None:
+                    raise
+                return wire("ended", rec.gpu, rec.created_at, rec.deadline_at, reason="stopped")
+            s.close(timeout_s=CLOSE_TIMEOUT_S)
+            status = machine_status(self.cfg, s, token, ready=False)
+        if status["state"] != "ended":  # close() terminated it, but the provider still answers for it
+            raise RuntimeError(f"{sid}: still {status['state']} after close")
+        return status
+
+    def events(self, sid: str, token: ModalToken, last_id: str, start: Callable[[], Sse]) -> None:
+        """SSE: the boot's events from memory (ids b<n>), then the machine's (ids o<out>.<err>, the
+        Jupyter log's cursor): its log, live or from the record, and its status whenever that
+        changes. Ends after an ended status, or when the relay closes. Last-Event-ID resumes either
+        part. start() opens the stream (sends the headers): before it, LookupError (404) or Busy (429)."""
+        rec = self._boot_of(sid, token)
+        with self._accesses.use(token) as access, self._stream_slot():
+            session = attach(access, sid) if rec is None else None  # 404 before the stream starts, as GET
+            sse = start()
+            boot_from = int(last_id[1:]) + 1 if re.fullmatch(r"b\d+", last_id) else 0
+            cursor = tuple(map(int, last_id[1:].split("."))) if re.fullmatch(r"o\d+\.\d+", last_id) else None
+            last_status = None
+            if rec is not None and cursor is None:
+                last_status = replay_boot(sse, rec, boot_from, self._closing)
+                if last_status is None or last_status["state"] == "ended":
+                    return
+                cursor = rec.log_cursor
+            follow_machine(self.cfg, sse, session or attach(access, sid), token, cursor or (0, 0), last_status, self._closing)
+
+    def close(self) -> None:
+        self._closing.set()
+        with self._changed:
+            boots, threads = list(self._boots.values()), list(self._threads.values())
+        for rec in boots:
+            rec.cancel()  # wakes a stream waiting on it too
+        for thread in threads:
+            thread.join()
+        with self._changed:
+            while self._streams:
+                self._changed.wait()
+        self._accesses.close()
+
+    def _boot(self, rec: Boot, req: CreateRequest, origin: str) -> None:
+        try:
+            with self._accesses.use(req.token) as access:
+                boot(self.cfg, access, rec, req, origin)
+        except Busy as e:
+            rec.step("gateway", f"boot failed: {e}")
+            rec.finish(wire("ended", rec.gpu, rec.created_at, rec.deadline_at, reason="boot_failed"))
+
+    @contextlib.contextmanager
+    def _stream_slot(self) -> Iterator[None]:
+        with self._changed:
+            if self._streams >= MAX_STREAMS:
+                raise Busy(f"{MAX_STREAMS} event streams open on this relay")
+            self._streams += 1
+        try:
+            yield
+        finally:
+            with self._changed:
+                self._streams -= 1
+                self._changed.notify_all()
+
+    def _boot_of(self, sid: str, token: ModalToken) -> Boot | None:
+        """This relay's boot record for sid, if it has one and the caller's token booted it."""
+        with self._changed:
+            rec = self._boots.get(sid)
+        if rec is None or not hmac.compare_digest(rec.token_digest, digest(token)):
+            return None
+        return rec
+
+    def _forget_old_boots(self) -> None:
+        """Under _changed: drop boot records BOOT_RECORD_S after their boot ended (the machine answers now)."""
+        now = time.monotonic()
+        for sid in [sid for sid, r in self._boots.items() if r.ended_at is not None and now - r.ended_at > BOOT_RECORD_S]:
+            del self._boots[sid]
+            self._threads.pop(sid).join()  # it has finished: ended_at is its last act
+
+
+def attach(access: Access, sid: str) -> sdk.Session:
+    """The session, live or (machine gone) from its record. LookupError (404) if neither knows it."""
+    return sdk.attach(access.provider, sid, record=access.record)
+
+
+@dataclass
+class Sse:
+    """An open text/event-stream."""
+
+    wfile: BinaryIO
+    sent: int = 0
+    last_write: float = field(default_factory=time.monotonic)
+
+    def send(self, event_id: str, event: dict[str, Any]) -> None:
+        self.wfile.write(f"id: {event_id}\ndata: {json.dumps(event)}\n\n".encode())
+        self.wfile.flush()
+        self.sent += 1
+        self.last_write = time.monotonic()
+
+    def ping(self) -> None:
+        if time.monotonic() - self.last_write >= SSE_PING_S:
+            self.wfile.write(b": ping\n\n")
+            self.wfile.flush()
+            self.last_write = time.monotonic()
+
+
+def replay_boot(sse: Sse, rec: Boot, start: int, closing: threading.Event) -> dict[str, Any] | None:
+    """The boot's events from index start, live until the boot ends. Returns its last status
+    (None if the relay closed first)."""
+    i = start
+    while not closing.is_set():
+        with rec.changed:
+            if i >= len(rec.events) and rec.ended_at is None:
+                rec.changed.wait(SSE_PING_S)
+            batch, over = rec.events[i:], rec.ended_at is not None
+        for event in batch:
+            sse.send(f"b{i}", event)
+            i += 1
+        if over and i >= len(rec.events):
+            return rec.status
+        sse.ping()
+    return None
+
+
+def follow_machine(  # noqa: PLR0913 (the stream, the session, where the reader is; each one thing)
+    cfg: Config, sse: Sse, s: sdk.Session, token: ModalToken, cursor: sdk.LogCursor, last: dict[str, Any] | None, closing: threading.Event,
+) -> None:  # fmt: skip
+    """The machine's word until it ends: Jupyter's log (live, or from the record once the machine
+    is gone), and its status when it changes. Bounded by the session's deadline (plus the
+    provider's backstop), like Session.wait(), or the relay closing."""
+    job = None
+    ready = last is not None and last["state"] == "running"
+    while not closing.is_set():
+        status = machine_status(cfg, s, token, ready=ready)  # before the log: once ended, the log read next is all of it
+        ready = status["state"] == "running"
+        job = job or the_kernel_job(s)  # None only while a boot (on some relay) has yet to start Jupyter
+        for stream, text, end in log_lines(job, cursor) if job else ():
+            sse.send(f"o{end[0]}.{end[1]}", {"t": time.time(), "kind": "log", "source": "machine", "stream": stream, "text": text})
+            cursor = end
+        if status != last:
+            sse.send(f"o{cursor[0]}.{cursor[1]}", {"t": time.time(), "kind": "status", "status": status})
+            last = status
+        if status["state"] == "ended":
+            return
+        with contextlib.suppress(TimeoutError):
+            s.wait(timeout_s=STREAM_POLL_S)  # keeps the machine lingering for us, so we read why it ended
+        sse.ping()
+
+
 # ---- HTTP ----
 
 
 class Handler(BaseHTTPRequestHandler):
+    """HTTP in and out: routes, parses the browser's input, maps errors to codes, one wide log line
+    per request. Everything else is the server's Relay."""
+
     server_version = "box-relay/0"
     protocol_version = "HTTP/1.1"
-    cfg: Config
+    server: Server
 
     def log_message(self, fmt: str, *args: Any) -> None:
         pass  # one wide line per request instead (wide()); never a query string (tokens)
@@ -424,7 +692,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def cors(self) -> None:
         origin = self.headers.get("Origin", "")
-        if self.cfg.origins.fullmatch(origin):
+        if self.server.relay.cfg.origins.fullmatch(origin):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Box-Token, Last-Event-ID")
@@ -458,184 +726,74 @@ class Handler(BaseHTTPRequestHandler):
         parts = [p for p in url.path.split("/") if p]
         route = (self.command, len(parts), parts[2] if len(parts) == 3 else None)
         sid = parts[1] if len(parts) >= 2 and parts[0] == "sessions" else None
+        relay = self.server.relay
         try:
             if route == ("POST", 1, None) and parts == ["sessions"]:
-                code, body = self.create()
+                code, body = 202, relay.create(*self.create_request())
             elif sid is not None and route == ("GET", 2, None):
-                code, body = self.get(sid, parse_token(self.headers.get("X-Box-Token", "")))
+                code, body = 200, {"session_id": sid, "status": relay.get(sid, parse_token(self.headers.get("X-Box-Token", "")))}
             elif sid is not None and route == ("POST", 3, "end"):
-                code, body = self.end(sid, parse_token(self.headers.get("X-Box-Token", "")))
+                code, body = 200, {"session_id": sid, "status": relay.end(sid, parse_token(self.headers.get("X-Box-Token", "")))}
             elif sid is not None and route == ("GET", 3, "events"):
-                token = parse_token((parse_qs(url.query).get("token") or [""])[0])
-                self.wide(200, t0, session=sid, sent=self.events(sid, token))
+                self.events(t0, sid, parse_token((parse_qs(url.query).get("token") or [""])[0]))
                 return
             else:
                 code, body = 404, {"error": f"no route {self.command} {url.path}"}
-        except BadRequest as e:
-            code, body = 400, {"error": str(e)}
-        except LookupError as e:
-            code, body = 404, {"error": str(e)}
-        except Exception as e:  # noqa: BLE001 (the page shows the reason; the wide line has it too)
-            code, body = 502, {"error": f"{type(e).__name__}: {e}"}
+        except Exception as e:  # noqa: BLE001 (every failure is an answer; error_code says which)
+            code = error_code(e)
+            body = {"error": f"{type(e).__name__}: {e}" if code == 502 else str(e)}
         self.reply(code, body)
         self.wide(code, t0, session=sid or body.get("session_id"), **({"error": body["error"]} if "error" in body else {}))
 
-    def create(self) -> tuple[int, dict[str, Any]]:
-        length = int(self.headers.get("Content-Length", "0"))
-        if length > MAX_BODY:
+    def create_request(self) -> tuple[CreateRequest, str]:
+        raw = self.headers.get("Content-Length", "0")
+        if not raw.isdigit():  # also refuses a negative one
+            raise BadRequest(f"Content-Length {raw!r} is not a byte count")
+        if int(raw) > MAX_BODY:
             raise BadRequest(f"body over {MAX_BODY} bytes")
-        req = parse_create(self.rfile.read(length), self.cfg.gpus)
+        req = parse_create(self.rfile.read(int(raw)), self.server.relay.cfg.gpus)
         origin = self.headers.get("Origin", "")
-        if origin and not self.cfg.origins.fullmatch(origin):
+        if origin and not self.server.relay.cfg.origins.fullmatch(origin):
             raise BadRequest(f"origin {origin!r} is not one this relay serves")
-        now = time.time()
-        sid = sdk.new_session_id()
-        push = None if self.cfg.push is None else functools.partial(self.cfg.push.send, sid)
-        rec = Boot(sid, digest(req.token), req.gpu, now, now + self.cfg.deadline_s, push=push)
-        with BOOTS_LOCK:
-            forget_old_boots()
-            if len(BOOTS) >= MAX_BOOTS:
-                return 429, {"error": f"{MAX_BOOTS} sessions booting or just booted on this relay; try again in a minute"}
-            BOOTS[rec.session_id] = rec
-        rec.emit("status", status=wire("booting", req.gpu, rec.created_at, rec.deadline_at))
-        threading.Thread(target=boot, args=(self.cfg, rec, req, origin), daemon=True, name=f"boot-{rec.session_id}").start()
-        return 202, {"session_id": rec.session_id, "status": rec.status}
+        return req, origin
 
-    def get(self, sid: str, token: ModalToken) -> tuple[int, dict[str, Any]]:
-        rec = booting(sid, token)
-        if rec is not None and rec.ended_at is None:
-            return 200, {"session_id": sid, "status": rec.status}
-        if rec is not None and rec.status is not None and rec.status["state"] == "ended":
-            return 200, {"session_id": sid, "status": rec.status}  # a failed boot: no machine to ask
-        s = attach(self.cfg, token, sid)
-        return 200, {"session_id": sid, "status": machine_status(self.cfg, s, token, ready=False)}
+    def events(self, t0: float, sid: str, token: ModalToken) -> None:
+        sse = Sse(self.wfile)
+        started = threading.Event()
 
-    def end(self, sid: str, token: ModalToken) -> tuple[int, dict[str, Any]]:
-        rec = booting(sid, token)
-        if rec is not None and rec.ended_at is None:
-            rec.cancelled = True  # the boot thread ends it at its next step (launch itself can't be interrupted)
-        try:
-            s = attach(self.cfg, token, sid)
-        except LookupError:
-            if rec is None:
-                raise
-            return 200, {"session_id": sid, "status": wire("ended", rec.gpu, rec.created_at, rec.deadline_at, reason="stopped")}
-        s.close(timeout_s=CLOSE_TIMEOUT_S)
-        status = machine_status(self.cfg, s, token, ready=False)
-        if status["state"] != "ended":  # close() terminated it, but the provider still answers for it
-            raise RuntimeError(f"{sid}: still {status['state']} after close")
-        return 200, {"session_id": sid, "status": status}
-
-    # -- the event stream --
-
-    def events(self, sid: str, token: ModalToken) -> int:
-        """SSE: the boot's events from memory (ids b<n>), then the machine's (ids o<out>.<err>, the
-        Jupyter log's cursor): its log, live or from the record, and its status whenever that
-        changes. Ends after an ended status. Last-Event-ID resumes either part. Returns how many
-        events it sent."""
-        rec = booting(sid, token)
-        if rec is None:
-            attach(self.cfg, token, sid)  # 404 before the stream starts, as GET /sessions/{id}
-        if not STREAMS.acquire(blocking=False):
-            self.reply(429, {"error": f"{MAX_STREAMS} event streams open on this relay"})
-            return 0
-        try:
+        def start() -> Sse:
             self.send_response(200)
             self.cors()
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
-            stream = Stream(self, 0)
-            last = self.headers.get("Last-Event-ID", "")
-            boot_from = int(last[1:]) + 1 if re.fullmatch(r"b\d+", last) else 0
-            cursor = tuple(map(int, last[1:].split("."))) if re.fullmatch(r"o\d+\.\d+", last) else None
-            if rec is not None and cursor is None:
-                last_status = stream.replay_boot(rec, boot_from)
-                if last_status is None or last_status["state"] == "ended":
-                    return stream.sent
-                cursor = rec.log_cursor
-            else:
-                last_status = None
-            stream.follow_machine(self.cfg, attach(self.cfg, token, sid), token, cursor or (0, 0), last_status)
+            started.set()
+            return sse
+
+        try:
+            self.server.relay.events(sid, token, self.headers.get("Last-Event-ID", ""), start)
         except (BrokenPipeError, ConnectionResetError):
             pass  # the tab went away
-        except Exception as e:  # noqa: BLE001 (headers are sent: all that is left is to say so and close)
-            print(f"relay: event stream {sid} broke: {e!r}", file=sys.stderr)
-        finally:
-            STREAMS.release()
-        return stream.sent
-
-
-@dataclass
-class Stream:
-    handler: Handler
-    sent: int
-    last_write: float = field(default_factory=time.monotonic)
-
-    def send(self, event_id: str, event: dict[str, Any]) -> None:
-        self.handler.wfile.write(f"id: {event_id}\ndata: {json.dumps(event)}\n\n".encode())
-        self.handler.wfile.flush()
-        self.sent += 1
-        self.last_write = time.monotonic()
-
-    def ping(self) -> None:
-        if time.monotonic() - self.last_write >= SSE_PING_S:
-            self.handler.wfile.write(b": ping\n\n")
-            self.handler.wfile.flush()
-            self.last_write = time.monotonic()
-
-    def replay_boot(self, rec: Boot, start: int) -> dict[str, Any] | None:
-        """The boot's events from index start, live until the boot ends. Returns its last status."""
-        i = start
-        while True:
-            with rec.changed:
-                if i >= len(rec.events) and rec.ended_at is None:
-                    rec.changed.wait(SSE_PING_S)
-                batch, over = rec.events[i:], rec.ended_at is not None
-            for event in batch:
-                self.send(f"b{i}", event)
-                i += 1
-            if over and i >= len(rec.events):
-                return rec.status
-            self.ping()
-
-    def follow_machine(self, cfg: Config, s: sdk.Session, token: ModalToken, cursor: sdk.LogCursor, last: dict[str, Any] | None) -> None:
-        """The machine's word until it ends: Jupyter's log (live, or from the record once the
-        machine is gone), and its status when it changes. Bounded by the session's deadline (plus
-        the provider's backstop), like Session.wait()."""
-        job = None
-        ready = last is not None and last["state"] == "running"
-        while True:
-            status = machine_status(cfg, s, token, ready=ready)  # before the log: once ended, the log read next is all of it
-            ready = status["state"] == "running"
-            job = job or the_kernel_job(s)  # None only while a boot (on some relay) has yet to start Jupyter
-            for stream, text, end in log_lines(job, cursor) if job else ():
-                self.send(f"o{end[0]}.{end[1]}", {"t": time.time(), "kind": "log", "source": "machine", "stream": stream, "text": text})
-                cursor = end
-            if status != last:
-                self.send(f"o{cursor[0]}.{cursor[1]}", {"t": time.time(), "kind": "status", "status": status})
-                last = status
-            if status["state"] == "ended":
+        except Exception as e:  # noqa: BLE001 (before the stream: an answer; after: all that is left is to say so and close)
+            if not started.is_set():
+                self.reply(error_code(e), {"error": str(e)})
+                self.wide(error_code(e), t0, session=sid, error=str(e))
                 return
-            with contextlib.suppress(TimeoutError):
-                s.wait(timeout_s=STREAM_POLL_S)  # keeps the machine lingering for us, so we read why it ended
-            self.ping()
+            print(f"relay: event stream {sid} broke: {e!r}", file=sys.stderr)
+        self.wide(200, t0, session=sid, sent=sse.sent)
 
 
-def booting(sid: str, token: ModalToken) -> Boot | None:
-    """This relay's boot record for sid, if it has one and the caller's token booted it."""
-    with BOOTS_LOCK:
-        rec = BOOTS.get(sid)
-    if rec is None or not hmac.compare_digest(rec.token_digest, digest(token)):
-        return None
-    return rec
-
-
-def forget_old_boots() -> None:
-    """Under BOOTS_LOCK: drop boot records BOOT_RECORD_S after their boot ended (the machine answers now)."""
-    now = time.monotonic()
-    for sid in [sid for sid, r in BOOTS.items() if r.ended_at is not None and now - r.ended_at > BOOT_RECORD_S]:
-        del BOOTS[sid]
+def error_code(e: Exception) -> int:
+    """BadRequest 400, LookupError (no such session) 404, Busy 429, anything else (Modal, the machine) 502."""
+    match e:
+        case BadRequest():
+            return 400
+        case LookupError():
+            return 404
+        case Busy():
+            return 429
+        case _:
+            return 502
 
 
 # ---- main ----
@@ -645,7 +803,7 @@ def modal_access(token: ModalToken, region: str) -> Access:
     from box.modal_provider import Modal, ModalVolumeStore
 
     provider = Modal(token=token, region=region)
-    return Access(provider, ModalVolumeStore(RECORD_VOLUME, client=provider.client))
+    return Access(provider, ModalVolumeStore(RECORD_VOLUME, client=provider.client), close=provider.close)
 
 
 def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...], push: Push | None) -> Config:
@@ -656,7 +814,17 @@ def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...], push: Push
 
 
 class Server(ThreadingHTTPServer):
+    """The relay on 127.0.0.1:port. server_close() also closes its Relay (after shutdown())."""
+
     daemon_threads = True
+
+    def __init__(self, relay: Relay, port: int) -> None:
+        super().__init__(("127.0.0.1", port), Handler)
+        self.relay = relay
+
+    def server_close(self) -> None:
+        super().server_close()
+        self.relay.close()
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         if isinstance(sys.exc_info()[1], ConnectionError):
@@ -664,10 +832,8 @@ class Server(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
-def serve(cfg: Config, port: int) -> ThreadingHTTPServer:
-    handler = type("Handler", (Handler,), {"cfg": cfg})
-    server = Server(("127.0.0.1", port), handler)
-    return server
+def serve(cfg: Config, port: int) -> Server:
+    return Server(Relay(cfg), port)
 
 
 def label(raw: str) -> tuple[str, str]:
@@ -696,8 +862,9 @@ def main() -> None:
     server = serve(cfg, a.port)
     print(f"relay on http://localhost:{a.port} (modal, region {a.region}, gpus {list(gpus)}, labels {dict(a.label)}, "
           f"deadline {a.deadline_s} s, idle {a.idle_timeout_s} s, push {a.push})", flush=True)  # fmt: skip
-    with contextlib.suppress(KeyboardInterrupt):  # sessions outlive the relay: idle/deadline end them
+    with contextlib.suppress(KeyboardInterrupt):  # booted sessions outlive the relay: idle/deadline end them
         server.serve_forever()
+    server.server_close()  # in-flight boots end (cancelled), streams stop, readers' clients close
     if push is not None:
         push.close()
 
