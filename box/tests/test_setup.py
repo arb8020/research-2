@@ -79,7 +79,7 @@ def test_a_miss_runs_the_setup_snapshots_it_and_remembers_the_key(create: Callab
     assert cached is not None
     assert (cached.image, cached.built_by) == (prepared.image, s.id)
     assert cached.commit == sdk.read_record(store, s.id).syncs()[0]["commit"]  # the code the setup ran against
-    assert [j.id for j in s.jobs()] == [prepared.setup_job, prepared.resume_job]
+    assert {j.id for j in s.jobs()} == {prepared.setup_job, prepared.resume_job}  # job ids order by the second, not within one
 
 
 def test_a_hit_boots_from_the_snapshot_and_runs_no_setup(create: Callable, spec: SetupSpec, store: Store) -> None:
