@@ -3,12 +3,12 @@ a project. Projects with their own setup (robots/box_run.py, kelpie's remote run
 themselves.
 
     box run [--gpu L4] [--image REF] [--put LOCAL:REMOTE]... [--get REMOTE:LOCAL]... [--on-exit CMD]
-            [--timeout S] [--detach] -- <cmd>
-    box logs <id> [-f]     the session's latest job's output; exits with its exit code once it ends
-    box who                running sessions box launched
-    box kill <id>          end a session: kill its job, let its hook run, terminate the machine
-    box gc [--yes]         sessions past their deadline (their supervisor should have ended them)
-    box gpus [--sync]      GPU names (--gpu takes these), provider ids, $/hr
+            [--timeout S] [--region us] [--detach] -- <cmd>
+    box logs <session> [-f]  the session's latest job's output; exits with its exit code once it ends
+    box who                  running sessions box launched: session id, machine id, user, time left
+    box kill <session>       end a session: kill its job, let its hook run, terminate the machine
+    box gc [--yes]           sessions past their deadline (their supervisor should have ended them)
+    box gpus [--sync]        GPU names (--gpu takes these), provider ids, $/hr
 
 Every command takes --provider (modal by default; runpod; local for a machine on this computer).
 """
@@ -16,6 +16,8 @@ Every command takes --provider (modal by default; runpod; local for a machine on
 from __future__ import annotations
 
 import argparse
+import getpass
+import socket
 import sys
 import time
 
@@ -24,12 +26,13 @@ from box import gpus, sdk
 GC_MARGIN_S = 1800  # past box.deadline by this much, a supervisor has failed to end its machine
 
 
-def make_provider(name: str) -> sdk.Provider:
-    """The one place a provider is named. Imported on use: each pulls its own SDK."""
+def make_provider(name: str, region: str | None = None) -> sdk.Provider:
+    """The one place a provider is named, and where its credentials are read (the providers take
+    them as arguments). Imported on use: each pulls its own SDK. region: Modal only; None = anywhere."""
     if name == "modal":
-        from box.modal_provider import Modal
+        from box.modal_provider import Modal, ModalToken
 
-        return Modal()
+        return Modal(token=ModalToken.from_config(), region=region)
     if name == "runpod":
         from box.runpod_provider import RunPod
 
@@ -41,6 +44,11 @@ def make_provider(name: str) -> sdk.Provider:
     raise SystemExit(f"box: unknown provider {name!r}; known: modal, runpod, local")
 
 
+def user() -> str:
+    """user@host: the box.user label `box who` shows for a session launched from this computer."""
+    return f"{getpass.getuser()}@{socket.gethostname()}"
+
+
 def pairs(specs: list[str], what: str) -> list[tuple[str, str]]:
     for s in specs:
         if s.count(":") != 1:
@@ -50,8 +58,8 @@ def pairs(specs: list[str], what: str) -> list[tuple[str, str]]:
 
 def cmd_run(a: argparse.Namespace) -> int:
     cmd = " ".join(a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd) or "nvidia-smi"
-    provider = make_provider(a.provider)
-    kw = {"gpu": a.gpu, "image": a.image, "deadline_s": a.timeout, "labels": {"box.cmd": cmd[:200]}}
+    provider = make_provider(a.provider, a.region)
+    kw = {"gpu": a.gpu, "image": a.image, "deadline_s": a.timeout, "labels": {"box.cmd": cmd[:200], "box.user": user()}}
     if not a.detach:
         ending = sdk.run_job(provider, cmd, put=pairs(a.put, "put"), get=pairs(a.get, "get"), on_exit=a.on_exit, **kw)
         print(f"box: {ending.reason}, exit {ending.exit_code}", file=sys.stderr)
@@ -94,8 +102,8 @@ def cmd_who(a: argparse.Namespace) -> int:
     machines = make_provider(a.provider).list()
     print(f"{len(machines)} running")
     for m in machines:
-        left = (int(m.labels.get("box.deadline", 0)) - time.time()) / 60
-        print(f"{m.id}  {m.labels.get('box.user', '?')}  {left:.0f} min left\n    {m.labels.get('box.cmd', '')}")
+        left = (int(m.labels.get(sdk.LABEL_DEADLINE, 0)) - time.time()) / 60
+        print(f"{m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  {m.labels.get('box.user', '?')}  {left:.0f} min left\n    {m.labels.get('box.cmd', '')}")
     return 0
 
 
@@ -111,9 +119,9 @@ def cmd_kill(a: argparse.Namespace) -> int:
 
 
 def cmd_gc(a: argparse.Namespace) -> int:
-    late = [m for m in make_provider(a.provider).list() if time.time() > int(m.labels["box.deadline"]) + GC_MARGIN_S]
+    late = [m for m in make_provider(a.provider).list() if time.time() > int(m.labels[sdk.LABEL_DEADLINE]) + GC_MARGIN_S]
     for m in late:
-        print(f"  {m.id}  past its deadline by {(time.time() - int(m.labels['box.deadline'])) / 3600:.1f} h")
+        print(f"  {m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  past its deadline by {(time.time() - int(m.labels[sdk.LABEL_DEADLINE])) / 3600:.1f} h")
         if a.yes:
             m.terminate()
     print(f"box gc: {len(late)} past deadline; {'terminated' if a.yes else 'nothing done (--yes terminates)'}")
@@ -139,6 +147,7 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--get", action="append", default=[], help="REMOTE_DIR:LOCAL_DIR, copied home after (repeatable)")
     s.add_argument("--on-exit", default=None, help="bash run on the machine after cmd, however it ended")
     s.add_argument("--timeout", type=int, default=3600, help="seconds the machine may live")
+    s.add_argument("--region", default=None, help="modal: pin a region (e.g. us; billed at a premium); default anywhere")
     s.add_argument("--detach", action="store_true", help="print the id and return; the machine ends itself")
     s.add_argument("cmd", nargs=argparse.REMAINDER, help="-- command, run by bash")
     s.set_defaults(fn=cmd_run)

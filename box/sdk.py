@@ -7,6 +7,20 @@
         ending = job.wait()                  # Ending(reason="exited", exit_code=0, ...)
         s.get("/work/runs", "runs")
     # leaving the block ends the session: a running job is killed and its hook still runs
+    s.status()                               # Ended(reason="stopped")
+
+    s = box.attach(provider, session_id)     # from anywhere, by the session's own id
+    match s.status():                        # Booting() | Running(started_at, deadline_at) | Ended(reason)
+        case Running(): s.wait()             # -> Ended: the awaitable terminal state
+
+    with box.launch(provider, deadline_s=3600, ports=[8888]) as s:   # ports: declared at launch
+        s.run("jupyter server --port 8888 ...")
+        s.expose(8888)                       # Endpoint(url="https://...", headers={})
+
+    s = box.launch(provider, deadline_s=3600, record=store)   # the supervisor records into store (box/store.py)
+    box.attach(provider, s.id, record=store).wait()           # works after the machine is gone too
+    r = box.read_record(store, s.id)         # Record: no machine, no provider needed
+    for n, stream, text in r.logs(job_id, after=0): ...
 
 A provider only rents raw machines (Machine: exec, write, read, terminate). Everything else is
 here, built from those four calls and the supervisor (box/supervisor.py), which every machine
@@ -16,25 +30,33 @@ runs as its entrypoint and which talks to this file only through files under mac
 from __future__ import annotations
 
 import base64
-import getpass
+import contextlib
 import io
 import json
+import re
 import secrets
 import shlex
-import socket
 import sys
 import tarfile
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol, TypeVar, get_args
+
+from box.store import Mount, Store
 
 SUPERVISOR = Path(__file__).with_name("supervisor.py")
 LABEL_BY = "box.by"
+LABEL_SESSION = "box.session"  # the session's own id: a session is not its machine, even while 1:1
+LABEL_DEADLINE = "box.deadline"  # unix time the session ends by
+RESERVED = (LABEL_BY, LABEL_SESSION, LABEL_DEADLINE)  # launch stamps these; a caller's labels are the rest
 POLL_S = 0.5
+RECORD_PATH = "record"  # where a session's record is mounted on its machine, under the supervisor's root
+SESSION_ID = re.compile(r"s-[0-9a-f]{12}")  # new_session_id()'s shape
+T = TypeVar("T")
 
 
 class Gone(Exception):
@@ -53,17 +75,58 @@ class Machine(Protocol):
     def write(self, path: str, data: bytes) -> None: ...
     def read(self, path: str) -> bytes: ...  # FileNotFoundError if absent
     def terminate(self) -> None: ...  # hard stop, idempotent; no hooks run
+    def expose(self, port: int) -> Endpoint: ...  # ValueError unless port was declared at launch
 
 
 class Provider(Protocol):
     name: str
 
-    def launch(
+    def launch(  # noqa: PLR0913 (keyword-only: what a machine is made with)
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
-        labels: dict[str, str], timeout_s: int,
-    ) -> Machine: ...  # fmt: skip
+        labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
+    ) -> Machine: ...  # fmt: skip  # mounts: ValueError for a store this provider cannot mount
     def get(self, machine_id: str) -> Machine: ...  # LookupError if box did not launch it
-    def list(self) -> list[Machine]: ...  # live machines labelled LABEL_BY
+    def list(self, labels: dict[str, str] | None = None) -> list[Machine]: ...  # live machines labelled LABEL_BY and all of labels
+
+
+@dataclass(frozen=True)
+class Endpoint:
+    """A port on the machine, reachable from anywhere over HTTP(S), websockets included.
+    headers: what every request must carry. Empty when the url alone reaches the port, as on every
+    provider today: then whoever has the url does, and the service brings its own auth (Jupyter's
+    token). A token-gated provider route (Modal's connect token) would fill it."""
+
+    url: str  # no trailing slash; a request goes to url + path
+    headers: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Booting:
+    """The machine exists; its supervisor is not up yet (a session attached to mid-launch)."""
+
+
+@dataclass(frozen=True)
+class Running:
+    """The supervisor is up and the session has not ended. Unix times, by the machine's clock."""
+
+    started_at: float
+    deadline_at: float
+
+
+EndReason = Literal["stopped", "deadline", "idle", "lease_lost", "released", "machine_lost"]
+
+
+@dataclass(frozen=True)
+class Ended:
+    """Why a session ended. All but machine_lost are the supervisor's word (ROOT/ended.json).
+    machine_lost: the machine is gone and this Session never read ended.json, so either it died
+    (supervisor crash, provider loss, backstop timeout) or it ended and was gone before anyone read
+    why (Session.wait() and close() read it before letting go, so they never see this for an end)."""
+
+    reason: EndReason
+
+
+Status = Booting | Running | Ended
 
 
 @dataclass(frozen=True)
@@ -79,48 +142,102 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     provider: Provider, *, deadline_s: int, gpu: str | None = None, image: str | None = None,
     env: dict[str, str] | None = None, labels: dict[str, str] | None = None,
     lease_ttl_s: float = 60.0, idle_timeout_s: float = 0.0, boot_timeout_s: float = 900.0,
+    ports: tuple[int, ...] = (), record: Store | None = None, session_id: str | None = None,
 ) -> Session:  # fmt: skip
     """Rent a machine whose supervisor ends it by deadline_s (or sooner: lease lost, idle, stop).
     Returns once the supervisor is up; a machine that is not up in boot_timeout_s (image pull,
     a stuck host) is terminated here, since no supervisor exists yet to end it. The returned
-    Session holds the lease (heartbeats) until release() or close()."""
-    args = ["--deadline-s", str(deadline_s), "--lease-ttl-s", str(lease_ttl_s), "--idle-timeout-s", str(idle_timeout_s)]
+    Session holds the lease (heartbeats) until release() or close(). Its id is new (LABEL_SESSION),
+    not the machine's: attach() finds a session by it. labels are the caller's (who launched it,
+    for what, e.g. box.user, box.cmd); box stamps only RESERVED. ports: what Session.expose may
+    open later (Modal and RunPod route a port only if the machine was created with it). Idle: no
+    job running and no connection to any of ports, for idle_timeout_s (0: never idle).
+    record: the supervisor records status, jobs, and output into it, under record_prefix(id), so
+    status() and wait() still answer after the machine is gone, and read_record() reads it.
+    session_id: one from new_session_id(), for a caller that must name the session before launch
+    returns (a relay answers the browser at once, while the machine boots); fresh by default."""
+    session_id = new_session_id() if session_id is None else session_id
+    if not SESSION_ID.fullmatch(session_id):
+        raise ValueError(f"session_id {session_id!r} is not one new_session_id() makes")
+    if clash := sorted(set(labels or {}) & set(RESERVED)):
+        raise ValueError(f"labels {clash} are box's own (launch stamps them)")
+    args = [
+        "--deadline-s", str(deadline_s), "--lease-ttl-s", str(lease_ttl_s), "--idle-timeout-s", str(idle_timeout_s),
+        "--ports", ",".join(map(str, ports)),
+        *(["--record", RECORD_PATH, *(["--record-sync"] if record.sync_writes else [])] if record else []),
+    ]  # fmt: skip
     boot = "import base64,os; exec(base64.b64decode(os.environ['BOX_SUPERVISOR']))"
     entrypoint = ["bash", "-c", f'exec python3 -c {shlex.quote(boot)} --root "$BOX_ROOT" {shlex.join(args)}']
-    # TODO(handoff): box.deadline is stamped before the machine boots, but the supervisor's clock
-    # starts at boot, so a slow boot (an unpinned Modal L4 took ~6 min) makes the label early.
-    # `box who`/`box gc` read it (gc has a 30 min margin). Stamp it after boot (provider tag update)?
+    # TODO(handoff): LABEL_DEADLINE is stamped before the machine boots, but the supervisor's clock
+    # starts at boot, so a slow boot (an unpinned Modal L4 took ~6 min) makes the label early by the
+    # boot time. Only `box who`/`box gc` still read it (gc's 30 min margin covers the default 15 min
+    # boot_timeout_s); the SDK reads the supervisor's own deadline (session.json). Same skew: the
+    # provider backstop (timeout_s) also starts at create, so a boot over 600 s leaves it before
+    # the supervisor's deadline. Fixing both means deadline_s counts from launch (pass the
+    # supervisor an absolute deadline), which changes what deadline_s means: the author's call.
     machine = provider.launch(
         gpu=gpu, image=image, entrypoint=entrypoint,
         env={**(env or {}), "BOX_SUPERVISOR": base64.b64encode(SUPERVISOR.read_bytes()).decode()},
-        labels={**(labels or {}), LABEL_BY: "box", "box.user": f"{getpass.getuser()}@{socket.gethostname()}",
-                "box.deadline": str(int(time.time() + deadline_s))},
+        labels={**(labels or {}), LABEL_BY: "box", LABEL_SESSION: session_id,
+                LABEL_DEADLINE: str(int(time.time() + deadline_s))},
         timeout_s=deadline_s + 600,  # the provider's own backstop, past the supervisor's deadline
+        ports=list(ports), mounts=[Mount(record, record_prefix(session_id), RECORD_PATH)] if record else [],
     )  # fmt: skip
-    session = Session(machine)
-    give_up = time.monotonic() + boot_timeout_s
-    while not session._exists("lease"):  # the supervisor's first act
-        if time.monotonic() > give_up:
-            machine.terminate()
-            raise TimeoutError(f"{machine.id}: supervisor not up after {boot_timeout_s:.0f} s; terminated")
-        time.sleep(POLL_S)
+    session = Session(machine, record=record)
+    try:  # nothing else ends a machine whose supervisor is not up: every failure here terminates it
+        if record:
+            launched = {"machine_id": machine.id, "provider": provider.name, "labels": machine.labels, "at": time.time()}
+            record.put(f"{record_prefix(session_id)}/launch.json", json.dumps(launched).encode())
+        give_up = time.monotonic() + boot_timeout_s
+        while not session._exists("lease"):  # the supervisor's first act
+            if time.monotonic() > give_up:
+                raise TimeoutError(f"{machine.id}: supervisor not up after {boot_timeout_s:.0f} s; terminated")
+            time.sleep(POLL_S)
+    except BaseException:
+        machine.terminate()
+        raise
     session.hold(lease_ttl_s / 4)
     return session
 
 
-def attach(provider: Provider, machine_id: str) -> Session:
-    """A session launched elsewhere (another process, a detached run). Does not hold its lease."""
-    return Session(provider.get(machine_id))
+def new_session_id() -> str:
+    return f"s-{secrets.token_hex(6)}"
+
+
+def attach(provider: Provider, session_id: str, record: Store | None = None) -> Session:
+    """A session launched elsewhere (another process, a detached run). Does not hold its lease.
+    Without record: while its machine lives; LookupError if no live machine carries that id. With
+    the store it was launched with: also after its machine is gone (status() and wait() answer from
+    the record, every machine call raises Gone; read the output with read_record)."""
+    found = provider.list({LABEL_SESSION: session_id})
+    if len(found) > 1:
+        raise LookupError(f"{provider.name} provider: {len(found)} live machines for session {session_id}")
+    if found:
+        return Session(found[0], record=record)
+    if record is None:
+        raise LookupError(f"{provider.name} provider: no live machine for session {session_id}")
+    recorded = read_record(record, session_id)  # LookupError if it was never recorded there
+    return Session(Lost(recorded.machine_id, recorded.labels), record=record)
+
+
+def record_prefix(session_id: str) -> str:
+    """Where a session's record lives in its store."""
+    if not SESSION_ID.fullmatch(session_id):
+        raise ValueError(f"not a session id: {session_id!r}")
+    return f"sessions/{session_id}"
 
 
 @dataclass
 class Session:
     machine: Machine
+    record: Store | None = None  # where its supervisor records it (launch's record), if anywhere
     _holding: threading.Event | None = field(default=None, repr=False)
+    _running: Running | None = field(default=None, repr=False)  # session.json: fixed once written
+    _ended: Ended | None = field(default=None, repr=False)  # terminal: once known, it stays
 
     @property
     def id(self) -> str:
-        return self.machine.id
+        return self.machine.labels[LABEL_SESSION]
 
     def __enter__(self) -> Session:
         return self
@@ -150,27 +267,68 @@ class Session:
         self._touch("released")
 
     def close(self, timeout_s: float = 900.0) -> None:
-        """End the session: kill any running job, let its hook run, then terminate the machine."""
+        """End the session: kill any running job, let its hook run, then terminate the machine.
+        Waits up to timeout_s for the supervisor to say it ended (status() then has why)."""
         self._stop_holding()
-        try:  # the machine may end as soon as the supervisor exits (Modal: the entrypoint is the sandbox)
-            if self.ended() is None:
-                self.machine.exec(f"touch {self._path('stop')}")
-            give_up = time.monotonic() + timeout_s
-            while time.monotonic() < give_up and not self._exists("ended.json"):
-                time.sleep(POLL_S)
-        except Gone:
-            pass
+        if not isinstance(self.status(), Ended):  # mkdir: a booting supervisor ends at once on stop
+            with contextlib.suppress(Gone):  # it may end as soon as the supervisor exits
+                self.machine.exec(f"mkdir -p {self.machine.root} && touch {self._path('watch')} {self._path('stop')}")
+            with contextlib.suppress(TimeoutError):
+                self.wait(timeout_s)
         self.machine.terminate()
 
-    def run(self, cmd: str, *, on_exit: str | None = None, hook_budget_s: float = 300.0, env: dict[str, str] | None = None) -> Job:
+    def expose(self, port: int) -> Endpoint:
+        """Where to reach `port` on the machine (one of launch's ports) from anywhere. Something
+        must listen there (e.g. a job); until it does, requests fail (Modal: 502)."""
+        return self.machine.expose(port)
+
+    def status(self) -> Status:
+        """Booting, Running, or Ended (and why), from the supervisor's files; once the machine is
+        gone, from its record (see Record.status). Ended is final: once this Session has seen it,
+        it answers without asking the machine."""
+        if self._ended is not None:
+            return self._ended
+        try:
+            self._ended = self._read_ended()
+            if self._ended is None and self._running is None:
+                self._running = parse_running(self.machine.read(self._path("session.json")))
+        except FileNotFoundError:
+            return Booting()
+        except Gone:
+            return self._status_when_gone()
+        return self._ended or self._running
+
+    def wait(self, timeout_s: float | None = None) -> Ended:
+        """Block until the session ends; returns why. While waiting it keeps the machine lingering
+        (ROOT/watch), so the supervisor's reason is read before the machine goes. Bounded without
+        timeout_s too: by the session's deadline (or its machine's loss). TimeoutError past timeout_s."""
+        give_up = None if timeout_s is None else time.monotonic() + timeout_s
+        while not (self._watch() or isinstance(status := self.status(), Ended)):  # watch first: no gap to end in
+            if give_up is not None and time.monotonic() > give_up:
+                raise TimeoutError(f"{self.id}: still {status} after {timeout_s:.0f} s")
+            time.sleep(POLL_S)
+        return status
+
+    def run(
+        self, cmd: str, *, on_exit: str | None = None, hook_budget_s: float = 300.0, env: dict[str, str] | None = None,
+        service: bool = False,
+    ) -> Job:  # fmt: skip
         """Queue cmd (bash). Jobs run one at a time, in order. on_exit (bash) runs after it ends
         however it ended, with BOX_EXIT_CODE, BOX_REASON, BOX_JOB_DIR set, within hook_budget_s;
-        the job is killed hook_budget_s before the session's deadline to leave the hook that time."""
-        left = int(self.machine.labels["box.deadline"]) - time.time()
+        the job is killed hook_budget_s before the session's deadline to leave the hook that time.
+        service=True: a long-lived server (e.g. behind an exposed port) that starts at once beside
+        the queue, is not work for idleness (connections to the ports are), keeps a released
+        session alive, has no hook, and is killed when the session ends. Its Job reads the same."""
+        running = self.status()
+        if not isinstance(running, Running):
+            raise RuntimeError(f"{self.id}: cannot run a job on a session that is {running}")
+        if service and on_exit:
+            raise ValueError("a service has no on_exit hook (it ends with the session)")
+        left = running.deadline_at - time.time()
         if on_exit and hook_budget_s >= left:
             raise ValueError(f"hook_budget_s={hook_budget_s} does not fit in the session's {left:.0f} s left")
         job = Job(self, f"{int(time.time())}-{secrets.token_hex(3)}")
-        spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "env": env or {}}
+        spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "env": env or {}, "service": service}
         tmp = self._path(f"jobs/{job.id}.spec.tmp")
         self.machine.write(tmp, json.dumps(spec).encode())
         self._check(f"mkdir -p {job.dir} && mv {tmp} {job.dir}/spec.json")  # atomic: never half a spec
@@ -201,12 +359,25 @@ class Session:
         out = self._check(f"ls {self._path('jobs')}")
         return [Job(self, name) for name in sorted(out.split()) if not name.endswith(".tmp")]
 
-    def ended(self) -> str | None:
-        """Why the session ended, or None while it lasts."""
+    def _read_ended(self) -> Ended | None:
+        """ended.json's reason; None while the session lasts. Gone once the machine is."""
         try:
-            return json.loads(self.machine.read(self._path("ended.json")))["reason"]
+            return parse_ended(self.machine.read(self._path("ended.json")))
         except FileNotFoundError:
             return None
+
+    def _status_when_gone(self) -> Status:
+        """No record: machine_lost. Else the record's word, which can still be Running for up to its
+        heartbeat's TTL (the record of the end may still be landing); wait() waits that out."""
+        status = Ended("machine_lost") if self.record is None else read_record(self.record, self.id).status(machine_gone=True, now=time.time())
+        if isinstance(status, Ended):
+            self._ended = status
+        return status
+
+    def _watch(self) -> None:
+        """Tell the supervisor someone is reading, so the machine lingers for us after it ends."""
+        with contextlib.suppress(Gone):  # then the next status() says machine_lost
+            self.machine.exec(f"touch {self._path('watch')}")
 
     def _stop_holding(self) -> None:
         if self._holding is not None:
@@ -250,25 +421,23 @@ class Job:
     # TODO(handoff): every poll here and in logs(follow) is 2-3 execs (~100 ms each on Modal, an ssh
     # round trip on RunPod). One exec returning status + both log tails would cut that to one.
     def wait(self) -> Ending:
-        while not (self._watch() or self.done()):
+        while not (self.session._watch() or self.done()):
             time.sleep(POLL_S)
         s = self.status() or {}
         return Ending(s["reason"], s["exit_code"], s.get("hook_exit_code"))
-
-    def _watch(self) -> None:
-        """Tell the supervisor someone is reading, so the machine lingers for us after it ends."""
-        self.session.machine.exec(f"touch {self.session._path('watch')}")
 
     def kill(self) -> None:
         """Kill this job (its whole process group); its hook runs; the session goes on."""
         self.session._touch(f"jobs/{self.id}/kill")
 
-    def logs(self, *, follow: bool = False) -> Iterator[tuple[str, str]]:
-        """(stream, text) chunks of the job's output from its start; follow=True until it is done."""
-        offsets = {"stdout": 0, "stderr": 0}
+    def logs(self, *, follow: bool = False, start: tuple[int, int] = (0, 0)) -> Iterator[tuple[str, str]]:
+        """(stream, text) chunks of the job's output from byte offsets start (stdout, stderr), the
+        job's start by default; follow=True until it is done. A reader that resumes (a reconnecting
+        browser) passes the bytes it has already seen, so it never re-reads them."""
+        offsets = {"stdout": start[0], "stderr": start[1]}
         while True:
             if follow:
-                self._watch()
+                self.session._watch()
             finished = self.done()  # read before the logs, so nothing written before "done" is missed
             for stream in offsets:
                 rc, text, _ = self.session.machine.exec(f"tail -c +{offsets[stream] + 1} {self.dir}/{stream} 2>/dev/null")
@@ -298,6 +467,143 @@ def run_job(
         for remote, local in get:
             s.get(remote, local)
     return ending
+
+
+@dataclass(frozen=True)
+class Lost:
+    """The machine of a session found only in its record (attach): gone, so every call is Gone."""
+
+    id: str
+    labels: dict[str, str]
+    root: str = ""  # nothing is under it
+
+    def exec(self, cmd: str) -> tuple[int, str, str]:
+        raise Gone(f"{self.id}: gone (known from its record)")
+
+    def write(self, path: str, data: bytes) -> None:
+        raise Gone(f"{self.id}: gone (known from its record)")
+
+    def read(self, path: str) -> bytes:
+        raise Gone(f"{self.id}: gone (known from its record)")
+
+    def expose(self, port: int) -> Endpoint:
+        raise Gone(f"{self.id}: gone (known from its record)")
+
+    def terminate(self) -> None:
+        """Already gone: nothing to do."""
+
+
+@dataclass(frozen=True)
+class Heartbeat:
+    """The recorder's last word: at (unix time, the machine's clock); stale past ttl_s."""
+
+    at: float
+    ttl_s: float
+
+
+@dataclass(frozen=True)
+class Record:
+    """What a session's supervisor recorded into a store (launch's record), readable without its
+    machine or its provider. The session-level files are read once, by read_record; jobs and logs
+    are read when asked. Layout: box/supervisor.py's docstring, plus launch.json from launch."""
+
+    store: Store
+    machine_id: str
+    labels: dict[str, str]  # the machine's, as launch gave them (LABEL_SESSION included)
+    running: Running | None  # None: the supervisor never came up
+    ended: Ended | None  # None: no end recorded (yet)
+    heartbeat: Heartbeat | None
+
+    @property
+    def session_id(self) -> str:
+        return self.labels[LABEL_SESSION]
+
+    def status(self, *, machine_gone: bool, now: float) -> Status:
+        """The recorded end if there is one. Else, while the machine lives, Running (or Booting).
+        Once the provider says it is gone: still Running while the heartbeat is fresh (a store
+        can land the record's last writes after the machine ends, as a Modal Volume commits on
+        its own), then machine_lost: it died without a word, or its word never reached the store."""
+        if self.ended is not None:
+            return self.ended
+        landing = self.heartbeat is not None and now - self.heartbeat.at < self.heartbeat.ttl_s
+        if machine_gone and not landing:
+            return Ended("machine_lost")
+        return self.running or Booting()
+
+    def jobs(self) -> list[str]:
+        """Every job id recorded, oldest first."""
+        prefix = f"{record_prefix(self.session_id)}/jobs/"
+        return sorted({key[len(prefix) :].split("/", 1)[0] for key in self.store.list(prefix)})
+
+    def job_status(self, job_id: str) -> dict | None:
+        """The job's status.json as last recorded (with all its output, once "done"); None if
+        none was (it never started, or started after the last flush)."""
+        try:
+            return json.loads(self.store.get(f"{record_prefix(self.session_id)}/jobs/{job_id}/status.json"))
+        except FileNotFoundError:
+            return None
+
+    def logs(self, job_id: str, after: int = 0) -> Iterator[tuple[int, str, str]]:
+        """(chunk number, stream, text) for each recorded chunk of the job's output numbered past
+        `after`, in order: pass the last number seen to read on. Output that is not UTF-8 is
+        decoded with replacement characters."""
+        prefix = f"{record_prefix(self.session_id)}/jobs/{job_id}/"
+        chunks = sorted(parse_chunk(key[len(prefix) :]) + (key,) for key in self.store.list(prefix) if CHUNK.fullmatch(key[len(prefix) :]))
+        for n, stream, key in chunks:
+            if n > after:
+                yield n, stream, self.store.get(key).decode(errors="replace")
+
+
+CHUNK = re.compile(r"(stdout|stderr)\.(\d+)")  # a chunk's name in the record (box/supervisor.py)
+
+
+def parse_chunk(name: str) -> tuple[int, str]:
+    stream, n = CHUNK.fullmatch(name).groups()
+    return int(n), stream
+
+
+def read_record(store: Store, session_id: str) -> Record:
+    """The session's record in store. LookupError if launch never recorded it there."""
+    prefix = record_prefix(session_id)
+    try:
+        launched = json.loads(store.get(f"{prefix}/launch.json"))
+    except FileNotFoundError as e:
+        raise LookupError(f"{store.uri}: no record of session {session_id}") from e
+    if launched["labels"].get(LABEL_SESSION) != session_id:
+        raise ValueError(f"{store.uri}: {prefix}/launch.json is for session {launched['labels'].get(LABEL_SESSION)!r}")
+    return Record(
+        store=store, machine_id=str(launched["machine_id"]), labels=dict(launched["labels"]),
+        running=_parse_if_present(store, f"{prefix}/session.json", parse_running),
+        ended=_parse_if_present(store, f"{prefix}/ended.json", parse_ended),
+        heartbeat=_parse_if_present(store, f"{prefix}/heartbeat.json", parse_heartbeat),
+    )  # fmt: skip
+
+
+def _parse_if_present(store: Store, key: str, parse: Callable[[bytes], T]) -> T | None:  # noqa: UP047 (requires-python 3.11: no PEP 695)
+    try:
+        raw = store.get(key)
+    except FileNotFoundError:
+        return None
+    return parse(raw)
+
+
+def parse_heartbeat(raw: bytes) -> Heartbeat:
+    d = json.loads(raw)
+    return Heartbeat(at=float(d["at"]), ttl_s=float(d["ttl_s"]))
+
+
+def parse_running(raw: bytes) -> Running:
+    """session.json, as the supervisor wrote it."""
+    d = json.loads(raw)
+    return Running(started_at=float(d["started_at"]), deadline_at=float(d["deadline_at"]))
+
+
+def parse_ended(raw: bytes) -> Ended:
+    """ended.json, as the supervisor wrote it: its reason must be one box knows."""
+    reason = json.loads(raw)["reason"]
+    if reason not in get_args(EndReason) or reason == "machine_lost":
+        raise ValueError(f"ended.json: unknown end reason {reason!r}")
+    return Ended(reason)
 
 
 def ignored(rel: str, ignore: tuple[str, ...]) -> bool:

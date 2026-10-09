@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from box import sdk
+from box.cli import user
 
 from kelpie_http.dev.local import KELPIE, xgrammar_submodule_sha
 
@@ -125,9 +126,9 @@ def job_cmd(where: Where, *, submodule_sha: str, models: list[str], timeout: int
 def make_provider(name: str, volume: str) -> sdk.Provider:
     """modal: the volume at /data. local: no volume (it tests the wiring, not the GPU)."""
     if name == "modal":
-        from box.modal_provider import Modal
+        from box.modal_provider import Modal, ModalToken
 
-        return Modal(volumes={DATA: volume})
+        return Modal(token=ModalToken.from_config(), region=None, volumes={DATA: volume})  # unpinned, as before
     if name == "local":
         from box.local_provider import Local
 
@@ -146,6 +147,7 @@ def start(a: argparse.Namespace, cmd: str) -> tuple[sdk.Session, sdk.Job]:
         deadline_s=a.timeout + GRACE_S,
         labels={
             "box.cmd": cmd[:200],
+            "box.user": user(),
             "kelpie.tree": str(KELPIE),
             "kelpie.volume": "" if local else a.volume,
         },

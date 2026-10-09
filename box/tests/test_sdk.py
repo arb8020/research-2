@@ -3,17 +3,23 @@ would see, and none names a provider: `pytest --provider modal` runs the same ca
 
 from __future__ import annotations
 
+import shlex
+import socket
+import ssl
 import subprocess
 import sys
 import textwrap
 import time
+import urllib.error
+import urllib.request
 from collections.abc import Callable
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
 from box import sdk
-from box.sdk import Ending, Provider
+from box.sdk import Ended, Ending, Provider, Running
 from box.tests import providers
 
 
@@ -21,32 +27,49 @@ from box.tests import providers
 # CPU; runpod: minutes, pods boot in 1-2 min). Plan: local stays the inner loop, live is a merge
 # gate; run live with pytest -n (each test owns its machine); share one machine across the tests
 # that don't end their session. The runpod suite has not been seen green on the current sdk.
-@pytest.fixture
-def name(request: pytest.FixtureRequest) -> str:
-    return request.config.getoption("--provider")
-
-
-@pytest.fixture
-def provider(name: str, tmp_path: Path) -> Provider:
-    return providers.make(name, tmp_path / "machines")
-
-
-@pytest.fixture
-def scale(name: str) -> float:
-    return providers.SCALE[name]
-
-
-@pytest.fixture
-def launch(provider: Provider, name: str) -> Callable[..., sdk.Session]:
-    return lambda **kw: sdk.launch(provider, **providers.launch_kw(name), **kw)
-
-
 def output(job: sdk.Job) -> str:
     return "".join(text for stream, text in job.logs() if stream == "stdout")
 
 
 def gone(provider: Provider, s: sdk.Session) -> bool:
-    return s.id not in {m.id for m in provider.list()}
+    return s.machine.id not in {m.id for m in provider.list()}
+
+
+def free_port() -> int:
+    """A port nothing on this computer listens on (the local provider shares its network)."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def fetch(endpoint: sdk.Endpoint) -> str | None:
+    """GET endpoint's root; None until something answers 200 there."""
+    try:
+        with urllib.request.urlopen(urllib.request.Request(endpoint.url + "/", headers=endpoint.headers), timeout=10) as r:
+            return r.read().decode()
+    except (urllib.error.URLError, ConnectionError, TimeoutError):
+        return None
+
+
+def connect(endpoint: sdk.Endpoint) -> socket.socket:
+    """A TCP connection to endpoint (TLS for https) that has sent a request and stays open."""
+    url = urlsplit(endpoint.url)
+    raw = socket.create_connection((url.hostname, url.port or (443 if url.scheme == "https" else 80)), timeout=10)
+    conn = ssl.create_default_context().wrap_socket(raw, server_hostname=url.hostname) if url.scheme == "https" else raw
+    conn.sendall(f"GET / HTTP/1.1\r\nHost: {url.hostname}\r\n\r\n".encode())
+    return conn
+
+
+# Accepts connections on PORT and holds them open (never answers) for LIFE s: a client that stays.
+HOLD = """
+import socket, time
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("0.0.0.0", {port})); s.listen(); s.settimeout(1)
+held, end = [], time.time() + {life}
+while time.time() < end:
+    try: held.append(s.accept()[0])
+    except TimeoutError: pass
+"""
 
 
 def eventually(predicate: Callable[[], bool], timeout_s: float = 10.0) -> None:
@@ -96,7 +119,7 @@ def test_deadline_kills_the_job_in_time_for_its_hook_then_ends_the_box(launch: C
     s = launch(deadline_s=int(3 * scale))
     job = s.run("sleep 999", on_exit="echo $BOX_REASON > $BOX_JOB_DIR/hook", hook_budget_s=1 * scale)
     assert job.wait() == Ending("deadline", -15, hook_exit_code=0)
-    assert s.ended() == "deadline"  # still readable: the machine lingers while its holder heartbeats
+    assert s.status() == Ended("deadline")  # still readable: the machine lingers while its holder heartbeats
     assert s.machine.read(f"{job.dir}/hook").decode() == "deadline\n"
     s.close()
     assert gone(provider, s)
@@ -135,9 +158,9 @@ def test_a_vanished_client_loses_the_lease_and_the_box_ends(name: str, provider:
         import time; time.sleep(999)
     """)
     proc = subprocess.Popen([sys.executable, "-c", client], stdout=subprocess.PIPE, text=True)
-    machine_id = proc.stdout.readline().strip()
+    session_id = proc.stdout.readline().strip()
     proc.kill()  # SIGKILL: no cleanup, no goodbye
-    s = sdk.attach(provider, machine_id)
+    s = sdk.attach(provider, session_id)
     eventually(lambda: gone(provider, s), timeout_s=20 * scale)
 
 
@@ -154,9 +177,79 @@ def test_another_process_can_attach_and_read_logs_and_status(launch: Callable, p
         first = s.run("echo hello; echo oops >&2")
         first.wait()
         again = sdk.attach(provider, s.id)
-        assert s.id in {m.id for m in provider.list()}
+        assert s.machine.id in {m.id for m in provider.list()}
         logs = list(sdk.Job(again, first.id).logs())  # a job id is all another process needs
     assert ("stdout", "hello\n") in logs and ("stderr", "oops\n") in logs
+
+
+def test_a_session_has_its_own_id_and_attach_finds_it_by_that(launch: Callable, provider: Provider) -> None:
+    with launch(deadline_s=600) as s, launch(deadline_s=600) as other:
+        assert s.id != s.machine.id
+        assert sdk.attach(provider, s.id).machine.id == s.machine.id
+        assert sdk.attach(provider, other.id).machine.id == other.machine.id
+        with pytest.raises(LookupError):
+            sdk.attach(provider, "s-000000000000")
+
+
+def test_labels_are_the_callers_and_box_stamps_only_its_own(launch: Callable, provider: Provider) -> None:
+    with launch(deadline_s=600, labels={"box.user": "reader-7@relay"}) as s:
+        assert [m.id for m in provider.list({"box.user": "reader-7@relay"})] == [s.machine.id]
+    with pytest.raises(ValueError, match="box's own"):
+        launch(deadline_s=600, labels={sdk.LABEL_SESSION: "s-mine"})
+
+
+def test_a_session_is_running_until_it_ends_and_then_says_why(launch: Callable) -> None:
+    s = launch(deadline_s=600)
+    running = s.status()
+    assert isinstance(running, Running)
+    assert running.deadline_at - running.started_at == 600
+    s.run("sleep 2")  # wait() starts watching well before the session can end
+    s.release()  # ends itself once no job is left
+    assert s.wait() == Ended("released")
+    assert s.status() == Ended("released")  # final: the machine is gone, the answer is not
+    s.close()
+
+
+def test_a_closed_session_was_stopped(launch: Callable) -> None:
+    with launch(deadline_s=600) as s:
+        s.run("sleep 999")
+    assert s.status() == Ended("stopped")
+
+
+def test_a_machine_gone_without_a_word_is_machine_lost(launch: Callable) -> None:
+    s = launch(deadline_s=600)
+    s.machine.terminate()  # the provider's hard stop: no supervisor gets to write why
+    assert s.wait() == Ended("machine_lost")
+    s.close()
+
+
+def test_waiting_on_a_session_is_bounded(launch: Callable) -> None:
+    with launch(deadline_s=600) as s, pytest.raises(TimeoutError):
+        s.wait(timeout_s=1)
+
+
+def test_a_port_declared_at_launch_is_reachable_through_expose(launch: Callable, scale: float) -> None:
+    port = free_port()
+    with launch(deadline_s=600, ports=(port,)) as s:
+        s.run(f"mkdir -p www && echo hello from the box > www/index.html && exec python3 -m http.server {port} --directory www")
+        endpoint = s.expose(port)
+        eventually(lambda: fetch(endpoint) == "hello from the box\n", timeout_s=30 * scale)
+        with pytest.raises(ValueError, match="not declared"):
+            s.expose(port + 1)
+
+
+def test_an_open_connection_to_an_exposed_port_is_not_idle(launch: Callable, scale: float) -> None:
+    port, idle_s = free_port(), 3 * scale
+    s = launch(deadline_s=600, idle_timeout_s=idle_s, ports=(port,))
+    hold = HOLD.format(port=port, life=int(10 * idle_s))
+    s.machine.exec(f"nohup python3 -c {shlex.quote(hold)} >/dev/null 2>&1 &")  # not a job: a job is never idle
+    eventually(lambda: s.machine.exec(f"python3 -c 'import socket; socket.create_connection((\"127.0.0.1\", {port}), 1)'")[0] == 0)
+    conn = connect(s.expose(port))
+    time.sleep(2 * idle_s)  # no job all along: only the connection keeps it from idling
+    assert isinstance(s.status(), Running)
+    conn.close()
+    assert s.wait(timeout_s=10 * idle_s) == Ended("idle")
+    s.close()
 
 
 def test_run_job_is_launch_put_run_get_close(name: str, provider: Provider, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
@@ -185,3 +278,49 @@ def test_following_a_released_session_sees_its_last_line_and_exit(launch: Callab
     assert "".join(t for _, t in follower.logs(follow=True)) == "last\n"
     assert follower.wait() == Ending("exited", 4)  # still readable: the machine lingers while we read
     eventually(lambda: gone(provider, s), timeout_s=60)
+
+
+def test_a_service_runs_beside_the_queue_and_is_not_work_for_idleness(launch: Callable, scale: float) -> None:
+    port, idle_s = free_port(), 3 * scale
+    s = launch(deadline_s=600, idle_timeout_s=idle_s, ports=(port,))
+    server = s.run(f"exec python3 -m http.server {port}", service=True)
+    job = s.run("echo queued after a service")  # the service never holds the queue up
+    assert job.wait() == Ending("exited", 0)
+    eventually(lambda: fetch(s.expose(port)) is not None, timeout_s=30 * scale)
+    assert (server.status() or {}).get("state") == "running"
+    assert s.wait(timeout_s=20 * idle_s) == Ended("idle")  # nobody connected: idle, though the server still ran
+    assert server.wait() == Ending("idle", -15)  # killed (SIGTERM) when the session ended
+    s.close()
+
+
+def test_a_released_session_lives_while_its_service_does(launch: Callable, provider: Provider, scale: float) -> None:
+    s = launch(deadline_s=600, lease_ttl_s=2 * scale)
+    server = s.run("sleep 999", service=True)
+    eventually(lambda: (server.status() or {}).get("state") == "running", timeout_s=30 * scale)
+    s.release()
+    time.sleep(3 * scale)  # past the lease TTL: released, and a service is something left
+    assert isinstance(s.status(), Running)
+    server.kill()
+    assert server.wait().reason == "killed"
+    eventually(lambda: gone(provider, s), timeout_s=20 * scale)  # nothing left: ends as released
+
+
+def test_a_service_has_no_hook(launch: Callable) -> None:
+    with launch(deadline_s=600) as s, pytest.raises(ValueError, match="no on_exit"):
+        s.run("sleep 1", service=True, on_exit="true")
+
+
+def test_logs_resume_from_byte_offsets(launch: Callable) -> None:
+    with launch(deadline_s=600) as s:
+        job = s.run("printf 'héllo\\n'; printf 'oops\\n' >&2")
+        job.wait()
+        assert list(job.logs(start=(len("hé".encode()), 2))) == [("stdout", "llo\n"), ("stderr", "ps\n")]
+
+
+def test_a_caller_can_name_the_session_before_launch_returns(launch: Callable, provider: Provider) -> None:
+    session_id = sdk.new_session_id()
+    with launch(deadline_s=600, session_id=session_id) as s:
+        assert s.id == session_id
+        assert sdk.attach(provider, session_id).machine.id == s.machine.id
+    with pytest.raises(ValueError, match="new_session_id"):
+        launch(deadline_s=600, session_id="mine")
