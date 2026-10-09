@@ -1,11 +1,3 @@
-"""The local provider: a "machine" is a directory on this computer with the supervisor running in it.
-
-It exists so the SDK and the supervisor can be run and tested end to end without a cloud: same
-entrypoint, same files, same exec, and like a cloud machine, nothing is reachable (Gone) once the
-supervisor has exited. What it cannot be is a separate computer: `gpu` and `image`
-are refused (but for its own snapshots: snapshot()), and on macOS (no PR_SET_PDEATHSIG) a job outlives a supervisor killed with SIGKILL.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -25,7 +17,7 @@ from box.sdk import LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken
 from box.store import DirStore, Mount
 
 BASE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local"
-SNAPSHOT = "local-snapshot:"  # an image ref of this provider's own: a copy of a machine's work dir (snapshot())
+SNAPSHOT = "local-snapshot:"
 
 
 class Local:
@@ -34,13 +26,12 @@ class Local:
     def __init__(self, base: Path = BASE) -> None:
         self.base = base
 
-    def launch(  # noqa: PLR0913 (keyword-only: what a machine is made with)
+    def launch(  # noqa: PLR0913
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
         labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
     ) -> LocalMachine:  # fmt: skip
-        """mounts: DirStores only, as symlinks (a local machine shares this computer's disk)."""
-        del timeout_s  # the supervisor's ceiling is the only clock here; a VM provider enforces this
-        del ports  # every port of this computer is reachable (expose): nothing to declare
+        del timeout_s
+        del ports
         if gpu or (image and not image.startswith(SNAPSHOT)):
             raise NotImplementedError(f"local provider: no gpu/image (got gpu={gpu!r}, image={image!r})")
         snapshot = self.base / "snapshots" / image.removeprefix(SNAPSHOT) if image else None
@@ -49,11 +40,8 @@ class Local:
         if foreign := [m.store.uri for m in mounts if not isinstance(m.store, DirStore)]:
             raise ValueError(f"local provider: mounts only a DirStore (got {foreign})")
         self.base.mkdir(parents=True, exist_ok=True)
-        # A name is unique among live machines, race-free on this computer: the check and the launch
-        # happen under one lock, and a launched machine is live (its labels and pid written) before it
-        # is released. Not across computers: local machines are this computer's alone.
         with (self.base / "names.lock").open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)  # released when the file closes
+            fcntl.flock(lock, fcntl.LOCK_EX)
             if LABEL_NAME in labels and self.list({LABEL_NAME: labels[LABEL_NAME]}):
                 raise NameTaken(f"local provider: a live machine is named {labels[LABEL_NAME]!r}")
             return self._launch(entrypoint, env, labels, mounts, snapshot)
@@ -90,12 +78,9 @@ class Local:
         return [m for m in found if m.alive() and want.items() <= m.labels.items()]
 
     def close(self) -> None:
-        """Holds nothing open: its machines are directories and processes, reachable after."""
+        pass
 
     def snapshot(self, machine: LocalMachine, *, ttl_s: int) -> str:
-        """A copy of the machine's work dir (synced code, its git store, what a setup wrote there):
-        all of a local machine that is its own, since the rest is this computer's. Kept until
-        deleted by hand (ttl_s is a cloud's storage concern, not this disk's)."""
         del ttl_s
         snapshot_id = secrets.token_hex(6)
         shutil.copytree(machine.work, self.base / "snapshots" / snapshot_id, symlinks=True)
@@ -119,12 +104,6 @@ class LocalMachine:
         return done.returncode, done.stdout, done.stderr
 
     def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Pumped:
-        """cmd's output as it arrives: two pipes, a reader thread each; or, pty=True, a new pty that
-        is its controlling terminal (b"\x03" written to it is a SIGINT to its foreground group, as
-        on a cloud machine's pty), one reader. Its own process group, so a close kills all of it.
-        Gone, while it runs too, once the supervisor has exited (nothing on this computer ends the
-        command with it, as a cloud machine's end does). rc: a signal's death is the shell's 128+N,
-        as Modal and ssh report it."""
         self._check_alive()
         if pty:
             master, slave = os.openpty()
@@ -137,7 +116,7 @@ class LocalMachine:
                 os.close(master)
                 raise
             finally:
-                os.close(slave)  # the child holds it now: the master reads its end once the child side closes
+                os.close(slave)
             terminal = Pty(master)
             readers, send = [terminal.reader()], terminal.send
         else:
@@ -150,11 +129,12 @@ class LocalMachine:
         def kill() -> None:
             _killpg(proc.pid)
             if terminal is not None:
-                terminal.stop.set()  # a process outside the group (setsid) may still hold the terminal
+                terminal.stop.set()
             proc.wait(JOIN_S)
 
         def wait() -> int:
             rc = proc.wait(JOIN_S)
+            # Popen reports a signal death as -N; Modal and ssh report 128+N
             return rc if rc >= 0 else 128 - rc
 
         return Pumped(
@@ -162,7 +142,6 @@ class LocalMachine:
         )  # fmt: skip
 
     def shell_argv(self, cmd: str) -> list[str]:
-        """bash here, in the machine's directory: this computer is the machine."""
         self._check_alive()
         return ["bash", "-c", f"cd {shlex.quote(str(self.dir))} || exit 1; {cmd}"]
 
@@ -176,18 +155,14 @@ class LocalMachine:
         return Path(path).read_bytes()
 
     def expose(self, port: int) -> Endpoint:
-        """This computer's own port, declared or not: a local machine shares its network, so there
-        is nothing to gate and no headers either way."""
         self._check_alive()
         return Endpoint(f"http://127.0.0.1:{port}")
 
     def _check_alive(self) -> None:
-        """Like a real machine: once its supervisor has exited, it and its files are gone."""
         if not self.alive():
             raise Gone(self.id)
 
     def alive(self) -> bool:
-        """The supervisor is running (a zombie, exited but not yet reaped by its parent, is not)."""
         try:
             pid = (self.dir / "pid").read_text()
         except FileNotFoundError:
@@ -199,41 +174,33 @@ class LocalMachine:
         return isinstance(other, LocalMachine) and other.dir == self.dir
 
     def terminate(self) -> None:
-        """Like a VM's terminate: every process on the machine dies, no hooks run."""
         for pgid in self._groups():
             _killpg(pgid)
 
     def gone(self) -> bool:
-        """No live process (a zombie is dead) in the supervisor's process group or any job's or
-        service's: what a VM's "terminated" is here. Not alive(): a supervisor SIGKILLed on macOS
-        leaves its job running (no PDEATHSIG), and that machine is not gone until terminate()."""
+        # macOS has no PR_SET_PDEATHSIG: jobs outlive a SIGKILLed supervisor, so alive() is not gone()
         groups = set(self._groups())
-        assert groups, self.id  # the supervisor's own, at least
+        assert groups, self.id
         listing = subprocess.run(["ps", "-A", "-o", "pgid=,stat="], capture_output=True, text=True, check=True).stdout
         rows = [line.split() for line in listing.splitlines() if line.strip()]
         live = {int(row[0]) for row in rows if not row[1].startswith("Z")}
         return not groups & live
 
-    def _groups(self) -> list[int]:
-        """The supervisor's process group (its pid: launched in a session of its own), then every job's
-        and service's (status.json's pgid, from when it started; a hook's group is not recorded)."""
+    def _groups(self) -> list[int]:  # MUST KILL: misses hook process groups (a hook runs in a session of its own and its pgid is never recorded), so terminate() can leave a hook running; record the hook's pgid
         jobs = [json.loads(status.read_text()).get("pgid") for status in Path(self.root).glob("*/*/status.json")]
         return [int((self.dir / "pid").read_text()), *(pgid for pgid in jobs if pgid is not None)]
 
 
 def restore(snapshot: Path, work: Path) -> None:
-    """snapshot's copy of a work dir into work. A synced worktree's .git names its git store by
-    absolute path (the old machine's), so each is repaired to point at this one's: on a cloud the
-    paths are the same on every machine and a snapshot needs no repair."""
     shutil.copytree(snapshot, work, symlinks=True)
     store = work / ".box.git"
+    # a linked worktree's .git file holds its git store's absolute path
     trees = [str(dot.parent) for dot in work.glob("*/.git")]
     if trees:
         subprocess.run(["git", "--git-dir", str(store), "worktree", "repair", *trees], check=True, capture_output=True)
 
 
 def _take_terminal() -> None:
-    """In the child, after setsid (start_new_session): make stdin (the pty) its controlling terminal."""
     fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
 

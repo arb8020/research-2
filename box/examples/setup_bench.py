@@ -1,15 +1,3 @@
-"""Cold (setup + snapshot) vs warm (boot from the snapshot) to "ready to run a job", on Modal.
-
-    uv run python examples/setup_bench.py synthetic --cold 3 --warm 3   # pip installs + a file, python:3.13
-    uv run python examples/setup_bench.py kelpie --cold 2 --warm 3      # kelpie/.box/setup on kelpie's base image
-
-Ready = create(setup=spec) returned: up, synced, set up or booted from the snapshot, resumed. Each
-session runs one check job to prove it (the setup's installs are there), then is closed (receipt). A cold run is rebuild=True, so
-each one really runs the setup; the warm runs after them hit the last one's snapshot. Between
-runs the bench edits one tracked file, so every warm sync has a diff to send (pack_bytes).
-Prints one JSON line per run, then medians. Machines are labelled box.purpose=lease-dev-setup.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -29,7 +17,7 @@ from box.setup_cache import SetupSpec
 PURPOSE = {"box.purpose": "lease-dev-setup"}
 PROFILE = "arb8020"
 STORE = "box-sessions"
-TOP = Path(__file__).resolve().parents[2]  # the research repo's worktree: kelpie lives in it
+TOP = Path(__file__).resolve().parents[2]
 SYNTHETIC_SETUP = """set -euo pipefail
 python3 -m pip install -q --root-user-action=ignore uv
 uv pip install --system -q -r requirements.txt
@@ -43,7 +31,6 @@ def git(cwd: Path, *args: str) -> str:
 
 
 def synthetic_repo(root: Path) -> SetupSpec:
-    """A small repo: .box/setup pip-installs a few packages and writes a file."""
     (root / ".box").mkdir(parents=True)
     (root / ".box" / "setup").write_text(SYNTHETIC_SETUP)
     (root / ".box" / "resume").write_text(SYNTHETIC_RESUME)
@@ -67,7 +54,7 @@ def one(provider: Modal, store: ModalVolumeStore, spec: SetupSpec, *, image: str
     s = sdk.create(provider, image=image, ceiling_s=ceiling_s, record=store, labels=PURPOSE, setup=dataclasses.replace(spec, rebuild=cold))
     ready_s = time.monotonic() - began
     try:
-        job = s.run(check, max_duration_s=300)  # proof the machine is ready: what the setup installed is there
+        job = s.run(check, max_duration_s=300)
         ending = job.wait()
         checked = "".join(c.text for c in job.logs()).strip()
         assert ending == sdk.Ending("exited", 0), (ending, checked)
@@ -103,7 +90,7 @@ def main() -> None:
             spec, image, ceiling_s, edit = kelpie_spec(), str(TOP / "kelpie" / "oci" / "Dockerfile"), 2 * 3600, TOP / "kelpie" / ".box" / "bench-edit"
             check = ". /opt/kelpie/env.sh && python3 -c 'import torch, transformers, triton; print(\"torch\", torch.__version__)' && ls -l $KELPIE_LIB"
         for i, cold in enumerate([True] * a.cold + [False] * a.warm):
-            edit.write_text(f"bench edit {i} {time.time()}\n")  # a diff for this run's sync
+            edit.write_text(f"bench edit {i} {time.time()}\n")
             if a.which == "kelpie" and i == 0:
                 print(f"note: {edit} is untracked; it rides in paths", flush=True)
             if a.which == "kelpie":

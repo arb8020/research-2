@@ -1,15 +1,3 @@
-"""Durable storage a session outlives its machine in. A Store is bytes under keys ("a/b/c"), with
-object semantics: put replaces a whole key, nothing appends. A machine reaches a store only
-through a Mount (a provider makes part of the store a directory on the machine); everything off
-the machine (the SDK, a reader after the machine is gone) goes through get/list/put.
-
-    store = DirStore(Path("~/.cache/box/records").expanduser())       # local provider, tests
-    store = ModalVolumeStore("box-sessions", provider=modal)          # box/providers/modal.py
-    box.launch(provider, ..., record=store)                           # its first user: sessions/<id>/
-
-Stdlib only, like the supervisor: nothing here talks to a cloud.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -18,28 +6,22 @@ from typing import Protocol
 
 
 class Store(Protocol):
-    uri: str  # where it is, for messages: "dir:///...", "modal-volume://box-sessions"
-    sync_writes: bool  # a writer on a machine must run `sync <mount path>` for its writes to land
+    uri: str
+    sync_writes: bool  # MUST KILL: a protocol bool only so the supervisor knows to shell out `sync`; let the store or its Mount own its commit step
 
-    def get(self, key: str) -> bytes: ...  # FileNotFoundError if absent
-    def list(self, prefix: str) -> list[str]: ...  # every key under prefix ("a/" -> "a/b", "a/c/d"), sorted
-    def put(self, key: str, data: bytes) -> None: ...  # whole object, replacing any
+    def get(self, key: str) -> bytes: ...
+    def list(self, prefix: str) -> list[str]: ...
+    def put(self, key: str, data: bytes) -> None: ...
 
 
 @dataclass(frozen=True)
 class Mount:
-    """prefix of store, as a directory at path on the machine (relative to its supervisor's root).
-    Read-write: its first user (the session record) writes; read-only and copy-in modes wait for a
-    user (code mounts)."""
-
     store: Store
-    prefix: str  # "sessions/s-ab12": no leading or trailing slash
-    path: str  # "record": relative, so it lands under the machine's root on every provider
+    prefix: str
+    path: str
 
 
 class DirStore:
-    """A directory on this computer. Keys are relative paths; put is atomic (tmp + rename)."""
-
     sync_writes = False
 
     def __init__(self, root: Path) -> None:
@@ -64,7 +46,6 @@ class DirStore:
         tmp.replace(path)
 
     def dir(self, prefix: str) -> Path:
-        """Where prefix lives on this computer (created): what a local machine mounts."""
         path = self._path(prefix)
         path.mkdir(parents=True, exist_ok=True)
         return path
