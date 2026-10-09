@@ -177,3 +177,13 @@ def test_after_the_machine_is_gone_the_record_answers_with_why_and_the_log(make_
     logged = [e["text"] for _, e in after if e["kind"] == "log"]
     assert [e["text"] for _, e in boot if e["kind"] == "log"] == logged[: len([1 for _, e in boot if e["kind"] == "log"])]
     assert any("Jupyter Server" in line for line in logged), logged
+
+
+def test_a_stream_that_saw_the_boot_does_not_repeat_its_log_from_the_record(make_relay: Callable[..., str]) -> None:
+    gw = make_relay()
+    sid = create(gw)
+    events(gw, sid, "running")
+    call(f"{gw}/sessions/{sid}/end", "POST", headers={"X-Box-Token": AUTH})
+    again = events(gw, sid, "ended")  # the boot from memory, then the record
+    lines = [e["text"] for _, e in again if e["kind"] == "log"]
+    assert lines and len(lines) == len(set(lines)), lines
