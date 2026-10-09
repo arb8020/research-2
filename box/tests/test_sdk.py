@@ -168,6 +168,13 @@ def test_a_session_has_its_own_id_and_attach_finds_it_by_that(launch: Callable, 
             sdk.attach(provider, "s-000000000000")
 
 
+def test_labels_are_the_callers_and_box_stamps_only_its_own(launch: Callable, provider: Provider) -> None:
+    with launch(deadline_s=600, labels={"box.user": "reader-7@relay"}) as s:
+        assert [m.id for m in provider.list({"box.user": "reader-7@relay"})] == [s.machine.id]
+    with pytest.raises(ValueError, match="box's own"):
+        launch(deadline_s=600, labels={sdk.LABEL_SESSION: "s-mine"})
+
+
 def test_run_job_is_launch_put_run_get_close(name: str, provider: Provider, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     src = tmp_path / "src"
     src.mkdir()

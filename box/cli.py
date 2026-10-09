@@ -16,6 +16,8 @@ Every command takes --provider (modal by default; runpod; local for a machine on
 from __future__ import annotations
 
 import argparse
+import getpass
+import socket
 import sys
 import time
 
@@ -42,6 +44,11 @@ def make_provider(name: str) -> sdk.Provider:
     raise SystemExit(f"box: unknown provider {name!r}; known: modal, runpod, local")
 
 
+def user() -> str:
+    """user@host: the box.user label `box who` shows for a session launched from this computer."""
+    return f"{getpass.getuser()}@{socket.gethostname()}"
+
+
 def pairs(specs: list[str], what: str) -> list[tuple[str, str]]:
     for s in specs:
         if s.count(":") != 1:
@@ -52,7 +59,7 @@ def pairs(specs: list[str], what: str) -> list[tuple[str, str]]:
 def cmd_run(a: argparse.Namespace) -> int:
     cmd = " ".join(a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd) or "nvidia-smi"
     provider = make_provider(a.provider)
-    kw = {"gpu": a.gpu, "image": a.image, "deadline_s": a.timeout, "labels": {"box.cmd": cmd[:200]}}
+    kw = {"gpu": a.gpu, "image": a.image, "deadline_s": a.timeout, "labels": {"box.cmd": cmd[:200], "box.user": user()}}
     if not a.detach:
         ending = sdk.run_job(provider, cmd, put=pairs(a.put, "put"), get=pairs(a.get, "get"), on_exit=a.on_exit, **kw)
         print(f"box: {ending.reason}, exit {ending.exit_code}", file=sys.stderr)
@@ -95,7 +102,7 @@ def cmd_who(a: argparse.Namespace) -> int:
     machines = make_provider(a.provider).list()
     print(f"{len(machines)} running")
     for m in machines:
-        left = (int(m.labels.get("box.deadline", 0)) - time.time()) / 60
+        left = (int(m.labels.get(sdk.LABEL_DEADLINE, 0)) - time.time()) / 60
         print(f"{m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  {m.labels.get('box.user', '?')}  {left:.0f} min left\n    {m.labels.get('box.cmd', '')}")
     return 0
 
@@ -112,9 +119,9 @@ def cmd_kill(a: argparse.Namespace) -> int:
 
 
 def cmd_gc(a: argparse.Namespace) -> int:
-    late = [m for m in make_provider(a.provider).list() if time.time() > int(m.labels["box.deadline"]) + GC_MARGIN_S]
+    late = [m for m in make_provider(a.provider).list() if time.time() > int(m.labels[sdk.LABEL_DEADLINE]) + GC_MARGIN_S]
     for m in late:
-        print(f"  {m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  past its deadline by {(time.time() - int(m.labels['box.deadline'])) / 3600:.1f} h")
+        print(f"  {m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  past its deadline by {(time.time() - int(m.labels[sdk.LABEL_DEADLINE])) / 3600:.1f} h")
         if a.yes:
             m.terminate()
     print(f"box gc: {len(late)} past deadline; {'terminated' if a.yes else 'nothing done (--yes terminates)'}")

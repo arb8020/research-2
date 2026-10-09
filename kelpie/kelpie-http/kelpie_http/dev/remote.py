@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from box import sdk
+from box.cli import user
 
 from kelpie_http.dev.local import KELPIE, xgrammar_submodule_sha
 
@@ -146,6 +147,7 @@ def start(a: argparse.Namespace, cmd: str) -> tuple[sdk.Session, sdk.Job]:
         deadline_s=a.timeout + GRACE_S,
         labels={
             "box.cmd": cmd[:200],
+            "box.user": user(),
             "kelpie.tree": str(KELPIE),
             "kelpie.volume": "" if local else a.volume,
         },

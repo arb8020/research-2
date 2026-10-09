@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 from box import sdk
-from box.cli import make_provider
+from box.cli import make_provider, user
 
 ROOT = Path(__file__).resolve().parent.parent  # the checkout whose code is uploaded
 REMOTE = "/workspace/research"
@@ -79,7 +79,7 @@ def main() -> int:
 
     s = sdk.launch(
         make_provider(a.provider), gpu=None if local else a.gpu, image=None if local else IMAGE,
-        deadline_s=a.timeout, labels={"box.cmd": cmd[:200], "box.tree": str(ROOT)},
+        deadline_s=a.timeout, labels={"box.cmd": cmd[:200], "box.tree": str(ROOT), "box.user": user()},
     )  # fmt: skip
     if a.detach:
         for d in ("robots", "observe"):
