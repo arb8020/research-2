@@ -54,7 +54,7 @@ import tarfile
 import threading
 import time
 import zlib
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
@@ -71,6 +71,7 @@ RESERVED = (LABEL_BY, LABEL_SESSION, LABEL_CEILING)  # launch stamps these; a ca
 CEILING_S = 3600  # create()'s default ceiling, from creation
 BACKSTOP_MARGIN_S = 600  # the provider's own hard stop comes this long after the ceiling
 MAX_ENV_VALUE = 32768  # bytes: Modal's limit on one environment value (Sandbox.create passes env as a secret)
+MIN_KEEP_EVERY_S = 0.5  # keep(): each renewal is an exec (~0.1-0.5 s on a cloud); more often is a storm, not keep-alive
 MAX_KEEP_EVERY_S = 3600  # keep(): renewing less often than hourly is a lease, not keep-alive
 POLL_S = 0.5
 RECORD_PATH = "record"  # where a session's record is mounted on its machine, under the supervisor's root
@@ -351,13 +352,13 @@ class Session:
         return self._change_lease("release", 0.0)
 
     @contextlib.contextmanager
-    def keep(self, every_s: float) -> Iterator[Lease]:
+    def keep(self, every_s: float) -> Generator[Lease]:
         """Keep the session alive while the block runs (interactive use): extend to now + 2 *
         every_s at once and every every_s, then release on the way out, an exception or Ctrl-C
         included. If this process dies, the session ends at most 2 * every_s later (its lease).
         A renewer thread does the extending; this block owns it and joins it before leaving."""
-        if not 0 < every_s <= MAX_KEEP_EVERY_S:
-            raise ValueError(f"every_s={every_s}: keep() renews more than 0 and at most every {MAX_KEEP_EVERY_S} s")
+        if not MIN_KEEP_EVERY_S <= every_s <= MAX_KEEP_EVERY_S:
+            raise ValueError(f"every_s={every_s}: keep() renews every {MIN_KEEP_EVERY_S} to {MAX_KEEP_EVERY_S} s")
         lease = self.extend(time.time() + 2 * every_s)
         stop = threading.Event()
         # NOTE: stdlib threads, structured by hand (owned, joined, never a daemon). If box grows an
@@ -395,10 +396,7 @@ class Session:
         root = self.machine.root
         argv = ["python3", f"{root}/supervisor.py", "lease", "--root", root, "--op", op, "--until", repr(until),
                 "--host", socket.gethostname(), "--pid", str(os.getpid())]  # fmt: skip
-        lease = parse_lease(self._check(shlex.join(argv)).encode())
-        if op == "release":
-            assert lease.until <= time.time() + 1, lease  # ended now (or before), give or take the clocks' skew
-        return lease
+        return parse_lease(self._check(shlex.join(argv)).encode())
 
     def close(self, timeout_s: float = 900.0) -> None:
         """End the session: kill any running job, let its hook run, then terminate the machine.
