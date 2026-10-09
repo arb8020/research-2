@@ -659,10 +659,18 @@ def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...]) -> Config:
     )  # fmt: skip
 
 
+class Server(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        if isinstance(sys.exc_info()[1], ConnectionError):
+            return  # a browser closing a kept-alive connection between requests: not an error
+        super().handle_error(request, client_address)
+
+
 def serve(cfg: Config, port: int) -> ThreadingHTTPServer:
     handler = type("Handler", (Handler,), {"cfg": cfg})
-    server = ThreadingHTTPServer(("127.0.0.1", port), handler)
-    server.daemon_threads = True
+    server = Server(("127.0.0.1", port), handler)
     return server
 
 
