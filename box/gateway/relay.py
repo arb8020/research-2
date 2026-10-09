@@ -238,9 +238,7 @@ def wire(state: str, gpu: str | None, started_at: float, deadline: float, **extr
 
 def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: bool) -> dict[str, Any]:
     """What the machine says, in the contract's words. ready: Jupyter is known to answer (else it
-    is probed: running means the kernel is reachable, not just the supervisor up). A session whose
-    Jupyter is done is ended, though its supervisor may not have written why yet: the kernel the
-    page used is gone, and nothing starts another."""
+    is probed: running means the kernel is reachable, not just the supervisor up)."""
     labels = s.machine.labels
     gpu = labels.get(LABEL_GPU) or None
     deadline = float(labels[sdk.LABEL_DEADLINE])
@@ -249,17 +247,31 @@ def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: boo
     match s.status():
         case Booting():
             return wire("booting", gpu, time.time(), deadline)
-        case Running(started_at=started_at, deadline_at=deadline_at):
-            kernel = {"url": s.expose(int(labels[LABEL_PORT])).url, "token": kernel_token(token, s.id)}
-            if ready or jupyter_ready(kernel):
-                return wire("running", gpu, started_at, deadline_at, kernel=kernel)
-            jupyter = kernel_service(s)
-            match Queued() if jupyter is None else jupyter.status():
-                case Done(ending=ending):  # the session's reason, or Jupyter's own end (then the session's is "released")
-                    return ended(reason=REASONS.get(ending.reason, REASONS["released"]))
-            return wire("booting", gpu, started_at, deadline_at)
+        case Running() as running:
+            try:
+                return running_status(s, token, running, ready=ready, gpu=gpu, ended=ended)
+            except sdk.Gone:  # it went after status() said Running; a machine gone is gone for good
+                gone = s.status()
+                assert isinstance(gone, Ended), f"{s.id}: {gone} once its machine is gone"
+                return ended(reason=REASONS[gone.reason])
         case Ended(reason=reason):
             return ended(reason=REASONS[reason])
+
+
+def running_status(  # noqa: PLR0913 (the session, what the supervisor said, how to say ended)
+    s: sdk.Session, token: ModalToken, running: Running, *, ready: bool, gpu: str | None, ended: Callable[..., dict[str, Any]],
+) -> dict[str, Any]:  # fmt: skip
+    """A session whose supervisor runs: running once Jupyter answers; ended if Jupyter is done,
+    though the supervisor may not have written why yet (the kernel the page used is gone, and
+    nothing starts another); else still booting. Gone if the machine goes meanwhile."""
+    kernel = {"url": s.expose(int(s.machine.labels[LABEL_PORT])).url, "token": kernel_token(token, s.id)}
+    if ready or jupyter_ready(kernel):
+        return wire("running", gpu, running.started_at, running.deadline_at, kernel=kernel)
+    jupyter = kernel_service(s)
+    match Queued() if jupyter is None else jupyter.status():
+        case Done(ending=ending):  # the session's reason, or Jupyter's own end (then the session's is "released")
+            return ended(reason=REASONS.get(ending.reason, REASONS["released"]))
+    return wire("booting", gpu, running.started_at, running.deadline_at)
 
 
 def jupyter_ready(kernel: dict[str, str]) -> bool:
