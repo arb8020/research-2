@@ -29,9 +29,22 @@ const tabCompletion: Extension = [
   } }])),
 ];
 
+// Shift-Enter / Mod-Enter run the cell this editor belongs to (Jupyter's keys): press its Run button, the nearest
+// one up the DOM. Only when it says "Run" and is enabled, so a repeat press never turns into Stop or Cancel.
+const runKeys: Extension = Prec.highest(keymap.of(["Shift-Enter", "Mod-Enter"].map((key) => ({ key, run: (view) => {
+  for (let el = view.dom.parentElement; el !== null; el = el.parentElement) {
+    const button = el.querySelector<HTMLButtonElement>("button.run");
+    if (button === null) continue;
+    if (!button.disabled && button.textContent.trim() === "Run") button.click();
+    return true;
+  }
+  return false;
+} }))));
+
 export const look = (label: string): Extension[] => [
   monoFont,
   tabCompletion,
+  runKeys,
   syntaxHighlighting(classHighlighter),
   EditorView.contentAttributes.of({ "aria-label": label }),
 ];
