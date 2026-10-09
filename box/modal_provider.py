@@ -5,7 +5,10 @@ by itself (no BOX_ON_SHUTDOWN needed), and its files go with it. Sandbox.create'
 Modal's hard backstop past the supervisor's deadline (Modal caps it at 24 h). labels are sandbox
 tags; list()/get() only see sandboxes tagged box.by=box under the "box" app.
 
-    Modal(volumes={"/data": "kelpie-a1"})   # {mount path: Modal volume name}, created if missing
+Credentials are an argument, never looked up here: every Modal call goes through a client built
+from the token the caller passes (the CLI reads ~/.modal.toml with ModalToken.from_config).
+
+    Modal(token=ModalToken.from_config(), volumes={"/data": "kelpie-a1"})  # volumes: {mount path: name}, created if missing
 """
 
 from __future__ import annotations
@@ -13,9 +16,11 @@ from __future__ import annotations
 import contextlib
 import threading
 import time
+import tomllib
 from collections.abc import Callable
 from concurrent.futures import Future
 from concurrent.futures import TimeoutError as FutureTimeout
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypeVar
 
@@ -36,23 +41,54 @@ T = TypeVar("T")
 ENDING_S = 10.0  # how long a sandbox mid-shutdown takes to report it has ended
 BOOT_TIMEOUT_S = 900.0  # the first call after create: Modal schedules the sandbox (an L4 took 330 s unpinned)
 CALL_TIMEOUT_S = 60.0  # every later call (a healthy exec is 20-400 ms)
+MODAL_TOML = Path.home() / ".modal.toml"  # where `modal token set` keeps profiles
+
+
+@dataclass(frozen=True)
+class ModalToken:
+    """A Modal API token: id "ak-...", secret "as-..." (modal.com -> Settings -> API tokens).
+    It acts as its owner in that whole workspace (Modal has no sandbox-only scope). Never printed."""
+
+    id: str = field(repr=False)
+    secret: str = field(repr=False)
+
+    @classmethod
+    def from_config(cls, path: Path = MODAL_TOML) -> ModalToken:
+        """The profile marked `active = true` in Modal's config file (what `modal profile activate`
+        sets). Exactly one must be active: picking one for the caller would pick a workspace."""
+        profiles = tomllib.loads(path.read_text())
+        active = [name for name, p in profiles.items() if isinstance(p, dict) and p.get("active") is True]
+        if len(active) != 1:
+            raise ValueError(f"{path}: {len(active)} active profiles {active}; want exactly one (`modal profile activate`)")
+        profile = profiles[active[0]]
+        if not (isinstance(profile.get("token_id"), str) and isinstance(profile.get("token_secret"), str)):
+            raise ValueError(f"{path}: profile {active[0]!r} has no token_id/token_secret")
+        return cls(profile["token_id"], profile["token_secret"])
 
 
 class Modal:
     name = "modal"
 
-    def __init__(self, volumes: dict[str, str] | None = None, *, region: str | None = None) -> None:
+    def __init__(self, *, token: ModalToken, volumes: dict[str, str] | None = None, region: str | None = None) -> None:
         """region (e.g. "us"): None lets Modal place the sandbox anywhere, which once put an L4 in
         ap-northeast: ~330 s to start, ~390 ms per exec from California (vs 5 s / 66 ms in "us").
         Modal bills a region-pinned sandbox at a premium."""
+        self.token = token
         self.volumes = dict(volumes or {})
         self.region = region
+        self._client: modal.Client | None = None
         self._app: modal.App | None = None
 
     @property
+    def client(self) -> modal.Client:
+        if self._client is None:  # opens a connection; not at construction, so Modal(...) is free
+            self._client = modal.Client.from_credentials(self.token.id, self.token.secret)
+        return self._client
+
+    @property
     def app(self) -> modal.App:
-        if self._app is None:  # a network call; not at construction, so Modal() is free
-            self._app = modal.App.lookup(APP, create_if_missing=True)
+        if self._app is None:  # a network call, like client
+            self._app = modal.App.lookup(APP, client=self.client, create_if_missing=True)
         return self._app
 
     def launch(
@@ -61,14 +97,14 @@ class Modal:
     ) -> ModalMachine:  # fmt: skip
         sandbox = modal.Sandbox.create(
             *entrypoint, app=self.app, image=resolve_image(image), gpu=modal_gpu(gpu), region=self.region,
-            env={**env, "BOX_ROOT": ROOT}, tags=labels, timeout=min(timeout_s, MAX_TIMEOUT_S),
-            volumes={path: modal.Volume.from_name(v, create_if_missing=True) for path, v in self.volumes.items()},
+            env={**env, "BOX_ROOT": ROOT}, tags=labels, timeout=min(timeout_s, MAX_TIMEOUT_S), client=self.client,
+            volumes={path: modal.Volume.from_name(v, create_if_missing=True, client=self.client) for path, v in self.volumes.items()},
         )  # fmt: skip
         return ModalMachine(sandbox, labels, booting=True)
 
     def get(self, machine_id: str) -> ModalMachine:
         try:
-            sandbox = modal.Sandbox.from_id(machine_id)
+            sandbox = modal.Sandbox.from_id(machine_id, client=self.client)
             tags = sandbox.get_tags()
         except (modal.exception.NotFoundError, modal.exception.InvalidError) as e:
             raise LookupError(f"modal provider: no sandbox {machine_id}: {e}") from e
@@ -78,7 +114,7 @@ class Modal:
 
     def list(self) -> list[ModalMachine]:
         """Running sandboxes only: Modal's list drops a sandbox once it has ended."""
-        found = modal.Sandbox.list(app_id=self.app.app_id, tags={LABEL_BY: "box"})
+        found = modal.Sandbox.list(app_id=self.app.app_id, tags={LABEL_BY: "box"}, client=self.client)
         return [ModalMachine(s, s.get_tags()) for s in found]
 
 

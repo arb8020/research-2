@@ -25,11 +25,12 @@ GC_MARGIN_S = 1800  # past box.deadline by this much, a supervisor has failed to
 
 
 def make_provider(name: str) -> sdk.Provider:
-    """The one place a provider is named. Imported on use: each pulls its own SDK."""
+    """The one place a provider is named, and where its credentials are read (the providers take
+    them as arguments). Imported on use: each pulls its own SDK."""
     if name == "modal":
-        from box.modal_provider import Modal
+        from box.modal_provider import Modal, ModalToken
 
-        return Modal()
+        return Modal(token=ModalToken.from_config())
     if name == "runpod":
         from box.runpod_provider import RunPod
 
