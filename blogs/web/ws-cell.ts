@@ -6,7 +6,7 @@
 // background job; its JSON lines render as a verdict table (check-output.ts). No gating: every cell can run.
 import { basicSetup } from "codemirror";
 import type { EditorView } from "codemirror";
-import { Decoration, ViewPlugin } from "@codemirror/view";
+import { Decoration, EditorView as View, ViewPlugin } from "@codemirror/view";
 import type { DecorationSet, ViewUpdate } from "@codemirror/view";
 import { RangeSetBuilder } from "@codemirror/state";
 import type { Extension, Text } from "@codemirror/state";
@@ -101,6 +101,7 @@ class WorkspaceCell extends HTMLElement {
     this.doc = WorkspaceFile.of(this.chapter, this.file, start);
     this.view = this.doc.view([
       vimExtension(), basicSetup, syntax(lang), look(`${this.name}: ${this.file} (${lang})`),
+      View.lineWrapping, // never a sideways scroll: a reader's long line wraps; shipped code is held to 80 columns
       region === null ? [] : regionHighlight(region),
     ], this, (line) => this.holds(line));
     must(this, ".cell-editor", HTMLDivElement).append(this.view.dom);
