@@ -128,9 +128,9 @@ def cmd_who(a: argparse.Namespace) -> int:
     print(f"{len(machines)} running")
     for m in machines:
         ceiling = float(m.labels.get(sdk.LABEL_CEILING, 0))
-        status = sdk.attach(provider, m.labels[sdk.LABEL_SESSION]).status() if sdk.LABEL_SESSION in m.labels else None
+        status = sdk.Session(m).status()  # one exec each
         lease = f"lease {(status.lease.until - time.time()) / 60:.0f} min" if isinstance(status, sdk.Running) else type(status).__name__.lower()
-        print(f"{m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  {m.labels.get('box.user', '?')}  {lease}, ceiling {(ceiling - time.time()) / 60:.0f} min\n    {m.labels.get('box.cmd', '')}")
+        print(f"{m.labels[sdk.LABEL_SESSION]}  {m.id}  {m.labels.get('box.user', '?')}  {lease}, ceiling {(ceiling - time.time()) / 60:.0f} min\n    {m.labels.get('box.cmd', '')}")
     return 0
 
 
