@@ -92,9 +92,13 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     args = ["--deadline-s", str(deadline_s), "--lease-ttl-s", str(lease_ttl_s), "--idle-timeout-s", str(idle_timeout_s)]
     boot = "import base64,os; exec(base64.b64decode(os.environ['BOX_SUPERVISOR']))"
     entrypoint = ["bash", "-c", f'exec python3 -c {shlex.quote(boot)} --root "$BOX_ROOT" {shlex.join(args)}']
-    # TODO(handoff): box.deadline is stamped before the machine boots, but the supervisor's clock
-    # starts at boot, so a slow boot (an unpinned Modal L4 took ~6 min) makes the label early.
-    # `box who`/`box gc` read it (gc has a 30 min margin). Stamp it after boot (provider tag update)?
+    # TODO(handoff): LABEL_DEADLINE is stamped before the machine boots, but the supervisor's clock
+    # starts at boot, so a slow boot (an unpinned Modal L4 took ~6 min) makes the label early by the
+    # boot time. Only `box who`/`box gc` still read it (gc's 30 min margin covers the default 15 min
+    # boot_timeout_s); the SDK reads the supervisor's own deadline (session.json). Same skew: the
+    # provider backstop (timeout_s) also starts at create, so a boot over 600 s leaves it before
+    # the supervisor's deadline. Fixing both means deadline_s counts from launch (pass the
+    # supervisor an absolute deadline), which changes what deadline_s means: the author's call.
     machine = provider.launch(
         gpu=gpu, image=image, entrypoint=entrypoint,
         env={**(env or {}), "BOX_SUPERVISOR": base64.b64encode(SUPERVISOR.read_bytes()).decode()},
@@ -126,6 +130,7 @@ def attach(provider: Provider, session_id: str) -> Session:
 class Session:
     machine: Machine
     _holding: threading.Event | None = field(default=None, repr=False)
+    _session_json: dict | None = field(default=None, repr=False)  # the supervisor's, read once
 
     @property
     def id(self) -> str:
@@ -175,7 +180,7 @@ class Session:
         """Queue cmd (bash). Jobs run one at a time, in order. on_exit (bash) runs after it ends
         however it ended, with BOX_EXIT_CODE, BOX_REASON, BOX_JOB_DIR set, within hook_budget_s;
         the job is killed hook_budget_s before the session's deadline to leave the hook that time."""
-        left = int(self.machine.labels[LABEL_DEADLINE]) - time.time()
+        left = self._started()["deadline_at"] - time.time()
         if on_exit and hook_budget_s >= left:
             raise ValueError(f"hook_budget_s={hook_budget_s} does not fit in the session's {left:.0f} s left")
         job = Job(self, f"{int(time.time())}-{secrets.token_hex(3)}")
@@ -216,6 +221,12 @@ class Session:
             return json.loads(self.machine.read(self._path("ended.json")))["reason"]
         except FileNotFoundError:
             return None
+
+    def _started(self) -> dict:
+        """The supervisor's session.json: {started_at, deadline_at}, fixed for the session's life."""
+        if self._session_json is None:
+            self._session_json = json.loads(self.machine.read(self._path("session.json")))
+        return self._session_json
 
     def _stop_holding(self) -> None:
         if self._holding is not None:

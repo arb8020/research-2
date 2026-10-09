@@ -128,7 +128,7 @@ def make_provider(name: str, volume: str) -> sdk.Provider:
     if name == "modal":
         from box.modal_provider import Modal, ModalToken
 
-        return Modal(token=ModalToken.from_config(), volumes={DATA: volume})
+        return Modal(token=ModalToken.from_config(), region=None, volumes={DATA: volume})  # unpinned, as before
     if name == "local":
         from box.local_provider import Local
 

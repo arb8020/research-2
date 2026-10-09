@@ -3,7 +3,7 @@ a project. Projects with their own setup (robots/box_run.py, kelpie's remote run
 themselves.
 
     box run [--gpu L4] [--image REF] [--put LOCAL:REMOTE]... [--get REMOTE:LOCAL]... [--on-exit CMD]
-            [--timeout S] [--detach] -- <cmd>
+            [--timeout S] [--region us] [--detach] -- <cmd>
     box logs <session> [-f]  the session's latest job's output; exits with its exit code once it ends
     box who                  running sessions box launched: session id, machine id, user, time left
     box kill <session>       end a session: kill its job, let its hook run, terminate the machine
@@ -26,13 +26,13 @@ from box import gpus, sdk
 GC_MARGIN_S = 1800  # past box.deadline by this much, a supervisor has failed to end its machine
 
 
-def make_provider(name: str) -> sdk.Provider:
+def make_provider(name: str, region: str | None = None) -> sdk.Provider:
     """The one place a provider is named, and where its credentials are read (the providers take
-    them as arguments). Imported on use: each pulls its own SDK."""
+    them as arguments). Imported on use: each pulls its own SDK. region: Modal only; None = anywhere."""
     if name == "modal":
         from box.modal_provider import Modal, ModalToken
 
-        return Modal(token=ModalToken.from_config())
+        return Modal(token=ModalToken.from_config(), region=region)
     if name == "runpod":
         from box.runpod_provider import RunPod
 
@@ -58,7 +58,7 @@ def pairs(specs: list[str], what: str) -> list[tuple[str, str]]:
 
 def cmd_run(a: argparse.Namespace) -> int:
     cmd = " ".join(a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd) or "nvidia-smi"
-    provider = make_provider(a.provider)
+    provider = make_provider(a.provider, a.region)
     kw = {"gpu": a.gpu, "image": a.image, "deadline_s": a.timeout, "labels": {"box.cmd": cmd[:200], "box.user": user()}}
     if not a.detach:
         ending = sdk.run_job(provider, cmd, put=pairs(a.put, "put"), get=pairs(a.get, "get"), on_exit=a.on_exit, **kw)
@@ -147,6 +147,7 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--get", action="append", default=[], help="REMOTE_DIR:LOCAL_DIR, copied home after (repeatable)")
     s.add_argument("--on-exit", default=None, help="bash run on the machine after cmd, however it ended")
     s.add_argument("--timeout", type=int, default=3600, help="seconds the machine may live")
+    s.add_argument("--region", default=None, help="modal: pin a region (e.g. us; billed at a premium); default anywhere")
     s.add_argument("--detach", action="store_true", help="print the id and return; the machine ends itself")
     s.add_argument("cmd", nargs=argparse.REMAINDER, help="-- command, run by bash")
     s.set_defaults(fn=cmd_run)

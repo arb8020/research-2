@@ -30,8 +30,6 @@ from box import gpus
 from box.sdk import LABEL_BY, Gone
 
 APP = "box"
-# TODO(handoff): region. Unpinned, Modal placed L4s in Tokyo (~330-375 s to start, ~390 ms/exec);
-# tests pin region="us" (providers.py). Pinned regions cost more (amount not checked). Default it?
 # TODO(handoff): T below is a TypeVar (ruff UP047); left for the generics/TypeVar decision.
 # TODO(handoff): calls after the first are bounded at 60 s; a large put/get tar could exceed that.
 ROOT = "/box"
@@ -69,10 +67,10 @@ class ModalToken:
 class Modal:
     name = "modal"
 
-    def __init__(self, *, token: ModalToken, volumes: dict[str, str] | None = None, region: str | None = None) -> None:
-        """region (e.g. "us"): None lets Modal place the sandbox anywhere, which once put an L4 in
-        ap-northeast: ~330 s to start, ~390 ms per exec from California (vs 5 s / 66 ms in "us").
-        Modal bills a region-pinned sandbox at a premium."""
+    def __init__(self, *, token: ModalToken, region: str | None, volumes: dict[str, str] | None = None) -> None:
+        """region (e.g. "us"), no default: every caller chooses. None lets Modal place the sandbox
+        anywhere, which once put an L4 in ap-northeast: ~330 s to start, ~390 ms per exec from
+        California (vs 5 s / 66 ms in "us"). Modal bills a region-pinned sandbox at a premium."""
         self.token = token
         self.volumes = dict(volumes or {})
         self.region = region
