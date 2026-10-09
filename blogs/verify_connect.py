@@ -8,6 +8,8 @@ Builds dl/neural-nets.md and serves dist/ itself. The story (recorded as connect
 a bad token fails with a reason (not recorded); then paste a token, pick T4, connect with the Details drawer open,
 run the nvidia-smi scratch cell, Stop a long cell, reload (the session and its kernel carry over, no new POST),
 Disconnect, Sign out. Also: phone width, dark mode, and axe on the connected page with the panel and drawer open.
+Lease (screenshots in .evidence/lease/): a custom session length is capped at 12 h and reaches POST /sessions as lease_s,
+the pill counts down, Extend pushes the lease and is clamped at the ceiling, and (fake only) a run-out lease says so.
 """
 
 from __future__ import annotations
@@ -15,19 +17,23 @@ from __future__ import annotations
 import argparse
 import functools
 import glob
+import json
 import os
+import re
 import shutil
 import subprocess
 import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.request import urlopen
+from typing import Any
+from urllib.request import Request, urlopen
 
 from playwright.sync_api import Browser, BrowserContext, Page, expect, sync_playwright
 
 HERE = Path(__file__).parent
 OUT = HERE / ".evidence" / "verify_connect"
+LEASE_OUT = HERE / ".evidence" / "lease"
 CHROME = sorted(glob.glob(os.path.expanduser(
     "~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")))[-1]  # fmt: skip
 AXE = "https://cdn.jsdelivr.net/npm/axe-core@4.10.2/axe.min.js"
@@ -59,6 +65,13 @@ def start_fake(port: int) -> subprocess.Popen[bytes]:
             time.sleep(0.5)
     proc.kill()
     raise RuntimeError(f"connect_dev.py never answered on :{port} (see {OUT / 'connect_dev.log'})")
+
+
+def gateway_call(gateway: str, path: str, token: tuple[str, str], method: str = "GET") -> dict[str, Any]:
+    req = Request(f"{gateway}{path}", method=method, headers={"X-Box-Token": f"{token[0]}:{token[1]}"})
+    with urlopen(req, timeout=10) as r:
+        body: dict[str, Any] = json.load(r)
+    return body
 
 
 def paste(page: Page, code: str) -> None:
@@ -98,8 +111,8 @@ def story(context: BrowserContext, url: str, token: tuple[str, str], gateway: st
     page = context.new_page()
     errors: list[str] = []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    posts: list[str] = []
-    page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.rstrip("/").endswith("/sessions") else None)
+    posts: list[dict[str, Any]] = []
+    page.on("request", lambda r: posts.append(r.post_data_json) if r.method == "POST" and r.url.rstrip("/").endswith("/sessions") else None)
     page.goto(url)
     expect(page.locator(".connect-label")).to_have_text("Connect")
     page.locator("scratch-cell").scroll_into_view_if_needed()
@@ -124,7 +137,8 @@ def story(context: BrowserContext, url: str, token: tuple[str, str], gateway: st
     page.wait_for_timeout(700)
     page.screenshot(path=OUT / "3-connecting-drawer.png")
     page.wait_for_selector("connect-pill[data-phase=connected]", timeout=600_000)
-    expect(page.locator(".connect-label")).to_have_text("T4 · <1m")
+    assert posts[0]["lease_s"] == 5400, f"default session length should be 90 min, sent {posts[0]!r}"
+    expect(page.locator(".connect-label")).to_have_text(re.compile(r"^T4 · 1h (29|30)m left$"))
     page.wait_for_timeout(500)
     page.screenshot(path=OUT / "4-connected-drawer.png")
     steps = page.locator(".drawer-log li").count()
@@ -174,6 +188,111 @@ def story(context: BrowserContext, url: str, token: tuple[str, str], gateway: st
     return page
 
 
+def lease(browser: Browser, url: str, token: tuple[str, str], gateway: str, fake: bool) -> None:
+    """Session length: custom 150 min (721 is refused), the countdown, Extend +1 h, then +4 h until clamped at the ceiling."""
+    context = browser.new_context(viewport={"width": 1100, "height": 760}, device_scale_factor=2)
+    context.add_init_script(f"localStorage.setItem('connect.token.modal', JSON.stringify({{id: '{token[0]}', secret: '{token[1]}'}}))")
+    page = context.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    sid = lease_connect(page, url, token, gateway)
+    lease_extend(page, sid, token, gateway)
+    if fake:
+        gateway_call(gateway, f"/dev/sessions/{sid}/expire", token, method="POST")
+        page.wait_for_selector("connect-pill[data-phase=disconnected][data-failed]", timeout=30_000)
+        open_menu(page)
+        failure = page.locator(".connect-failure").inner_text()
+        assert "session length ran out" in failure, failure
+        assert gateway_call(gateway, f"/sessions/{sid}", token)["status"]["reason"] == "lease"
+        page.screenshot(path=LEASE_OUT / "6-lease-ended.png")
+        print(f"  lease ran out: {failure!r}")
+    else:
+        open_menu(page)
+        page.locator(".connect-end").click()
+        page.wait_for_selector("connect-pill[data-phase=disconnected]")
+    assert not errors, errors
+    context.close()
+
+
+def lease_connect(page: Page, url: str, token: tuple[str, str], gateway: str) -> str:
+    """The panel's session length: 90 min by default, 721 min refused, custom 150 min sent as lease_s. Returns the session id."""
+    creates: list[str] = []
+    page.on("request", lambda r: creates.append(r.url) if r.method == "POST" and r.url.rstrip("/").endswith("/sessions") else None)
+    page.goto(url)
+    open_menu(page)
+    expect(page.locator("select[name=length]")).to_have_value("5400")
+    expect(page.locator(".connect-ends")).to_contain_text("Ends at")
+    page.screenshot(path=LEASE_OUT / "1-panel-default.png")
+
+    # More than 12 h can't be sent: the form refuses 721 minutes.
+    page.select_option("select[name=length]", "custom")
+    page.fill("input[name=length-min]", "721")
+    expect(page.locator(".connect-ends")).to_contain_text("12 h at most")
+    page.locator(".connect-go").click()
+    page.wait_for_timeout(300)
+    assert not creates and page.locator("input[name=length-min]:invalid").count() == 1, "721 min was sent or not flagged"
+
+    page.fill("input[name=length-min]", "150")
+    expected = page.evaluate("[0, 60].map(d => new Date((Date.now() / 1000 + 9000 + d) * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hour12: false}))")
+    hint = page.locator(".connect-ends").inner_text()
+    assert any(f"Ends at {e}" in hint for e in expected), f"end-time hint {hint!r}, expected one of {expected}"
+    page.screenshot(path=LEASE_OUT / "2-panel-custom.png")
+    with page.expect_request(lambda r: r.method == "POST" and r.url.rstrip("/").endswith("/sessions")) as created:
+        page.locator(".connect-go").click()
+    sent = created.value.post_data_json
+    assert sent["lease_s"] == 9000, sent
+    page.wait_for_selector("connect-pill[data-phase=connected]", timeout=600_000)
+    expect(page.locator(".connect-label")).to_have_text(re.compile(r"^T4 · 2h (29|30)m left$"))
+    sid = page.evaluate("JSON.parse(localStorage.getItem('connect.session')).session_id")
+    status = gateway_call(gateway, f"/sessions/{sid}", token)["status"]
+    assert round(status["lease_until"] - status["started_at"]) == 9000, status
+    print(f"  lease: custom 150 min sent as lease_s=9000, hint {hint!r}, pill {page.locator('.connect-label').inner_text()!r}")
+    return str(sid)
+
+
+def lease_extend(page: Page, sid: str, token: tuple[str, str], gateway: str) -> None:
+    """Extend +1 h, then +4 h until the gateway clamps the lease at its ceiling (start + 12 h)."""
+    open_menu(page)
+    expect(page.locator(".connect-lease")).to_contain_text(re.compile(r"2h (29|30)m left"))
+    page.screenshot(path=LEASE_OUT / "3-menu.png")
+    page.locator(".connect-extend-open").click()
+    page.select_option("select[name=extend-by]", "3600")
+    page.screenshot(path=LEASE_OUT / "4-menu-extend.png")
+    extends: list[dict[str, Any]] = []
+
+    def extend_once() -> dict[str, Any]:
+        with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/extend")) as response:
+            page.locator(".connect-extend-go").click()
+        assert response.value.ok, response.value.text()
+        extends.append(response.value.request.post_data_json)
+        expect(page.locator(".connect-extend-result")).to_contain_text("Now ends")
+        got: dict[str, Any] = gateway_call(gateway, f"/sessions/{sid}", token)["status"]
+        return got
+
+    extended = extend_once()
+    assert round(extended["lease_until"] - extended["started_at"]) == 9000 + 3600, extended
+    assert abs(extends[0]["until"] - extended["lease_until"]) < 1, (extends, extended)
+    expect(page.locator(".connect-label")).to_have_text(re.compile(r"^T4 · 3h (29|30)m left$"))
+    expect(page.locator(".connect-lease")).to_contain_text(re.compile(r"3h (29|30)m left"))
+    print(f"  extend +1 h: lease now {round((extended['lease_until'] - extended['started_at']) / 60)} min after start")
+
+    # +4 h, +4 h, +4 h: the third asks past the ceiling (start + 12 h) and is clamped to it.
+    for _ in range(3):
+        if page.locator(".connect-extend").is_hidden():
+            page.locator(".connect-extend-open").click()
+        page.select_option("select[name=extend-by]", str(4 * 3600))
+        clamped = extend_once()
+    assert extends[-1]["until"] > clamped["ceiling"], f"the last extend should have asked past the ceiling: {extends[-1]} vs {clamped}"
+    assert clamped["lease_until"] == clamped["ceiling"] == clamped["started_at"] + 12 * 3600, clamped
+    expect(page.locator(".connect-extend-result")).to_contain_text("the 12 h limit")
+    expect(page.locator(".connect-lease")).to_contain_text("at the 12 h limit")
+    expect(page.locator(".connect-extend-open")).to_be_disabled()
+    expect(page.locator(".connect-label")).to_have_text(re.compile(r"^T4 · 11h (59|60)m left$"))
+    page.screenshot(path=LEASE_OUT / "5-menu-at-ceiling.png")
+    print(f"  extend clamped: asked {extends[-1]['until'] - clamped['started_at']:.0f} s after start, got the ceiling (43200 s)")
+    page.keyboard.press("Escape")
+
+
 def wind_down(page: Page) -> None:
     open_menu(page)
     page.screenshot(path=OUT / "8-menu.png")
@@ -208,6 +327,7 @@ def phone_and_dark(browser: Browser, url: str, token: tuple[str, str]) -> None:
     assert overflow <= 0, f"phone: page scrolls sideways by {overflow}px"
     page.screenshot(path=OUT / "phone-connected-dark.png")
     page.locator(".connect-pill").click()
+    page.screenshot(path=LEASE_OUT / "phone-menu-dark.png")
     page.locator(".connect-menu .connect-details").click()
     page.wait_for_timeout(400)
     page.screenshot(path=OUT / "phone-drawer-dark.png")
@@ -264,7 +384,9 @@ def main() -> None:
     args = ap.parse_args()
 
     shutil.rmtree(OUT, ignore_errors=True)
+    shutil.rmtree(LEASE_OUT, ignore_errors=True)
     (OUT / "video").mkdir(parents=True)
+    LEASE_OUT.mkdir(parents=True)
     subprocess.run(["uv", "run", "build_page.py", "dl/neural-nets.md"], cwd=HERE, check=True, stdout=subprocess.DEVNULL)
     fake = None if args.gateway else start_fake(args.gateway_port)
     gateway = args.gateway or f"http://localhost:{args.gateway_port}"
@@ -286,6 +408,7 @@ def main() -> None:
             assert video is not None
             webm = OUT / "connect.webm"
             Path(video.path()).rename(webm)
+            lease(browser, url, token, gateway, fake is not None)
             phone_and_dark(browser, url, token)
             axe(browser, url, token)
             browser.close()
@@ -298,6 +421,7 @@ def main() -> None:
         subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", webm, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", OUT / "connect.mp4"], check=True)
     shutil.rmtree(OUT / "video", ignore_errors=True)
     print(f"ok: {OUT}/ ({', '.join(sorted(p.name for p in OUT.iterdir()))})")
+    print(f"ok: {LEASE_OUT}/ ({', '.join(sorted(p.name for p in LEASE_OUT.iterdir()))})")
 
 
 if __name__ == "__main__":
