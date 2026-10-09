@@ -47,7 +47,7 @@ from pathlib import Path
 from typing import Literal, Protocol, TypeVar, get_args
 
 from box.store import Mount, Store
-from box.supervisor import HEARTBEAT_TTL_S, MAX_SERVICES
+from box.supervisor import HEARTBEAT_TTL_S, MAX_SERVICES, utf8_cut
 
 SUPERVISOR = Path(__file__).with_name("supervisor.py")
 LABEL_BY = "box.by"
@@ -60,6 +60,7 @@ SESSION_ID = re.compile(r"s-[0-9a-f]{12}")  # new_session_id()'s shape
 T = TypeVar("T")
 STREAMS = ("stdout", "stderr")
 LogCursor = tuple[int, int]  # bytes of (stdout, stderr) a reader has had: where it resumes, live or from the record
+MAX_LOG_READ = 4 * 1024 * 1024  # bytes of one stream one exec brings back; more is read by the next
 
 
 class Gone(Exception):
@@ -238,6 +239,7 @@ class Session:
     _holding: threading.Event | None = field(default=None, repr=False)
     _running: Running | None = field(default=None, repr=False)  # session.json: fixed once written
     _ended: Ended | None = field(default=None, repr=False)  # terminal: once known, it stays
+    _endpoints: dict[int, Endpoint] = field(default_factory=dict, repr=False)  # fixed for the machine's life
 
     @property
     def id(self) -> str:
@@ -283,8 +285,11 @@ class Session:
 
     def expose(self, port: int) -> Endpoint:
         """Where to reach `port` on the machine (one of launch's ports) from anywhere. Something
-        must listen there (e.g. a job); until it does, requests fail (Modal: 502)."""
-        return self.machine.expose(port)
+        must listen there (e.g. a job); until it does, requests fail (Modal: 502). Asked of the
+        provider once per Session: a port's endpoint is fixed for its machine's life."""
+        if port not in self._endpoints:
+            self._endpoints[port] = self.machine.expose(port)
+        return self._endpoints[port]
 
     def status(self) -> Status:
         """Booting, Running, or Ended (and why), from the supervisor's files. Once the machine is
@@ -436,13 +441,11 @@ class Job:
     def done(self) -> bool:
         return (self.status() or {}).get("state") == "done"
 
-    # TODO(handoff): every poll here and in logs(follow) is 2-3 execs (~100 ms each on Modal, an ssh
-    # round trip on RunPod). One exec returning status + both log tails would cut that to one.
     def wait(self) -> Ending:
-        while not (self.session._watch() or self.done()):
+        """Block until the job is done (its hook too); how it ended. One exec per poll."""
+        while (status := self._read_live(None, watch=True).status) is None or status["state"] != "done":
             time.sleep(POLL_S)
-        s = self.status() or {}
-        return Ending(s["reason"], s["exit_code"], s.get("hook_exit_code"))
+        return Ending(status["reason"], status["exit_code"], status.get("hook_exit_code"))
 
     def kill(self) -> None:
         """Kill this job (its whole process group); its hook runs; the session goes on."""
@@ -452,14 +455,11 @@ class Job:
         """The job's output past `after` (the job's start by default); follow=True until it is done.
         A reader that resumes (a reconnecting browser) passes the last chunk's end, so it never
         re-reads a byte. Once the machine is gone, from the session's record (with follow, once the
-        record has the session's end, so it is all of the output there will be)."""
+        record has the session's end, so it is all of the output there will be). One exec per poll."""
         cursor = after
         while True:
             try:
-                if follow:
-                    self.session._watch()
-                finished = self.done()  # read before the logs, so nothing written before "done" is missed
-                chunks = self._tails(cursor)
+                read = self._read_live(cursor, watch=follow)
             except Gone:
                 if self.session.record is None:
                     raise
@@ -467,22 +467,64 @@ class Job:
                     self.session.wait()
                 yield from read_record(self.session.record, self.session.id).logs(self.id, after=cursor)
                 return
-            for chunk in chunks:
+            for chunk in read.chunks:
                 cursor = chunk.end
                 yield chunk
-            if finished or not follow:
+            if read.more:
+                continue
+            if read.done or not follow:
                 return
             time.sleep(POLL_S)
 
-    def _tails(self, after: LogCursor) -> list[LogChunk]:
-        """Each stream's output past after, stdout first; each chunk's end counts the ones before it."""
-        out, err = after
-        rc, text, _ = self.session.machine.exec(f"tail -c +{out + 1} {self.dir}/stdout 2>/dev/null")
-        stdout = LogChunk("stdout", text, (out + len(text.encode()), err)) if rc == 0 and text else None
-        out = stdout.end[0] if stdout else out
-        rc, text, _ = self.session.machine.exec(f"tail -c +{err + 1} {self.dir}/stderr 2>/dev/null")
-        stderr = LogChunk("stderr", text, (out, err + len(text.encode()))) if rc == 0 and text else None
-        return [c for c in (stdout, stderr) if c is not None]
+    def read(self, after: LogCursor, *, watch: bool = False) -> JobRead:
+        """One look at the job in one exec: its status, then its output past after (so a "done"
+        status comes with all of it, unless more). watch: also keep the machine lingering after
+        the session ends, as a follower does (ROOT/watch). Once the machine is gone, from the
+        session's record: as much as has landed (all of it once Session.status() says Ended)."""
+        try:
+            return self._read_live(after, watch=watch)
+        except Gone:
+            if self.session.record is None:
+                raise
+            record = read_record(self.session.record, self.session.id)
+            return JobRead(record.job_status(self.id), list(record.logs(self.id, after=after)))
+
+    def _read_live(self, after: LogCursor | None, *, watch: bool) -> JobRead:
+        """status.json, then (after given) each stream past after, each file one base64 line, so
+        the bytes and the cursor are exact. A UTF-8 character cut by the read waits for the next
+        one, unless the job is done (then the output is whole: it is decoded as it is)."""
+        files = [("status.json", 0), *([] if after is None else zip(STREAMS, after, strict=True))]
+        reads = [f"{{ tail -c +{offset + 1} {name} 2>/dev/null | head -c {MAX_LOG_READ} | base64; }} | tr -d '\\n'; echo" for name, offset in files]
+        out = self.session._check("; ".join([*([f"touch {self.session._path('watch')}"] if watch else []), f"cd {self.dir} || exit 1", *reads]))
+        lines = out.split("\n")
+        if len(lines) != len(files) + 1 or lines[-1]:
+            raise RuntimeError(f"{self.id}: reading the job gave {len(lines) - 1} lines for {len(files)} files")
+        raw = [base64.b64decode(line) for line in lines[:-1]]
+        status = json.loads(raw[0]) if raw[0] else None
+        done = status is not None and status["state"] == "done"
+        chunks, cursor, more = [], after, False
+        for i, data in enumerate(raw[1:]):
+            full = len(data) == MAX_LOG_READ
+            more = more or full
+            cut = len(data) if done and not full else utf8_cut(data)
+            if cut:
+                cursor = (cursor[0] + cut, cursor[1]) if i == 0 else (cursor[0], cursor[1] + cut)
+                chunks.append(LogChunk(STREAMS[i], data[:cut].decode(errors="replace"), cursor))
+        return JobRead(status, chunks, more)
+
+
+@dataclass(frozen=True)
+class JobRead:
+    """One look at a job (Job.read): its status.json (None while it waits its turn) and its output
+    past a cursor. more: some stream had over MAX_LOG_READ new bytes: read on from the last chunk."""
+
+    status: dict | None
+    chunks: list[LogChunk]
+    more: bool = False
+
+    @property
+    def done(self) -> bool:
+        return self.status is not None and self.status["state"] == "done"
 
 
 @dataclass(frozen=True)

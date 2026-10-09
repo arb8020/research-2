@@ -79,7 +79,7 @@ CLIENT_IDLE_S = 10 * 60  # a reader's client unused this long is closed (and its
 MAX_BODY = 8 * 1024
 MAX_LABELS = 8
 MAX_BOOT_EVENTS = 1000  # a boot's own steps + Jupyter's startup log; past this, lines are counted, not kept
-STREAM_POLL_S = 2.0  # how often an event stream asks the machine (each ask: ~4 provider calls)
+STREAM_POLL_S = 2.0  # how often an event stream asks the machine (once Jupyter answers, 2 provider calls: the session's status, the log)
 SSE_PING_S = 15.0
 PROBE_TIMEOUT_S = 5.0
 CLOSE_TIMEOUT_S = 60.0
@@ -383,9 +383,9 @@ def wait_for_jupyter(rec: Boot, job: sdk.Job, kernel: dict[str, str]) -> None:
     """Until Jupyter answers; its log goes to the boot's events meanwhile. Raises if it exits first."""
     give_up = time.monotonic() + JUPYTER_READY_S
     while not jupyter_ready(kernel):
-        forward_logs(rec, job)
-        if job.done():
-            raise RuntimeError(f"Jupyter Server exited: {job.status()}")
+        read = forward_logs(rec, job)
+        if read.done:
+            raise RuntimeError(f"Jupyter Server exited: {read.status}")
         if rec.cancelled:
             raise Cancelled
         if time.monotonic() > give_up:
@@ -394,17 +394,19 @@ def wait_for_jupyter(rec: Boot, job: sdk.Job, kernel: dict[str, str]) -> None:
     forward_logs(rec, job)
 
 
-def forward_logs(rec: Boot, job: sdk.Job) -> None:
-    for stream, text, cursor in log_lines(job, rec.log_cursor):
+def forward_logs(rec: Boot, job: sdk.Job) -> sdk.JobRead:
+    """Jupyter's new output into the boot's events; returns what was read (its status too)."""
+    read = job.read(rec.log_cursor)
+    for stream, text, cursor in log_lines(read.chunks, rec.log_cursor):
         rec.emit("log", source="machine", stream=stream, text=text)
         rec.log_cursor = cursor
+    return read
 
 
-def log_lines(job: sdk.Job, after: sdk.LogCursor) -> Iterator[tuple[str, str, sdk.LogCursor]]:
-    """The job's output past `after` (live, or from the record once the machine is gone), a line
-    per item, with the cursor just past it."""
+def log_lines(chunks: list[sdk.LogChunk], after: sdk.LogCursor) -> Iterator[tuple[str, str, sdk.LogCursor]]:
+    """Chunks of output read past `after`, a line per item, with the cursor just past it."""
     out, err = after
-    for chunk in job.logs(after=after):
+    for chunk in chunks:
         for line in chunk.text.splitlines(keepends=True):
             if chunk.stream == "stdout":
                 out += len(line.encode())
@@ -658,16 +660,19 @@ def follow_machine(  # noqa: PLR0913 (the stream, the session, where the reader 
         status = machine_status(cfg, s, token, ready=ready)  # before the log: once ended, the log read next is all of it
         ready = status["state"] == "running"
         job = job or the_kernel_job(s)  # None only while a boot (on some relay) has yet to start Jupyter
-        for stream, text, end in log_lines(job, cursor) if job else ():
+        # watch: the machine lingers for us after the session ends, so the next poll reads why
+        read = job.read(cursor, watch=True) if job else sdk.JobRead(None, [])
+        for stream, text, end in log_lines(read.chunks, cursor):
             sse.send(f"o{end[0]}.{end[1]}", {"t": time.time(), "kind": "log", "source": "machine", "stream": stream, "text": text})
             cursor = end
         if status != last:
             sse.send(f"o{cursor[0]}.{cursor[1]}", {"t": time.time(), "kind": "status", "status": status})
             last = status
+        if read.more:
+            continue  # more log than one read brings: no wait, and not done until it is all sent
         if status["state"] == "ended":
             return
-        with contextlib.suppress(TimeoutError):
-            s.wait(timeout_s=STREAM_POLL_S)  # keeps the machine lingering for us, so we read why it ended
+        closing.wait(STREAM_POLL_S)
         sse.ping()
 
 
