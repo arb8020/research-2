@@ -12,7 +12,7 @@ math reasoning language models
 
 but what exactly is reinforcement learning? 
 
-reinforcement learning is about teaching `agents` to behave in `environments` by giving them `rewards`. its pretty similar to learning by trial and error, or like pavlov's conditioning experiments. 
+reinforcement learning is about teaching `agents` to behave in `environments` by giving them `rewards`. its pretty similar to learning by trial and error, or like skinner's operant conditioning experiments. 
 
 [make an excalidraw to put here]
 
@@ -26,7 +26,18 @@ let's look at a very simple environment below, roughly a simplified flappy bird 
 
 <flappy-play></flappy-play>
 
-<!-- write prose here: the trainer hands your env these arrays, one Agent per player -->
+this 2d flappy environment is simple enough that the game logic won't get in the way, so its a good place for us to learn about how to make fast environments in C.
+
+reinforcement learning makes its own data, and deep learning is very data hungry. most RL (outside of LLM RL) is done with relatively small networks, so the speed at which we can take a step in the environment is often the limiting factor. 
+
+we'd also like to be able to parallelize/vectorize the environments. each training step will have some batch size, and if we can run environments in parallel instead of sequentially that's a huge speedup. 
+
+vectorizing is also really useful because reinforcement learning can be quite sensitive to `hyperparameters`, the settings that parameterize the training algorithm. this includes stuff like learning rate, model depth/width, batch sizing, etc. since we have so many hyperparameters, its critical that any given training run wraps up quickly so we can try something else. 
+
+if we follow their interface, [PufferLib](https://github.com/PufferAI/PufferLib) is a great RL library that takes environments of a specific interface conducive to vectorizsation and runs thousands of copies in parallel resulting in millions of steps per second for training. this makes iterating on environments and searching hyperparameters very fast. 
+
+in order to do this, pufferlib provides us with arrays for each agent, being `observations`, `actions`, `rewards` and `terminals` that are already allocated, and the loop that steps through these. <> and it expects us to <>
+
 
 ```c cell=flappy
 #include <stdlib.h>
