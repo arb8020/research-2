@@ -1,5 +1,17 @@
 # Handoff: blogs/ interactive RL series (2026-10-08)
 
+## Open threads (2026-10-09)
+- **In flight.**
+  - `<nn-fit>` as a normal embed + a `<!-- wip: ... -->` under-construction banner, placed at "believe in neural networks" with `file=01-flappy-nnfit.nnfit`. Branch `blogs/nnfit-embed` (worktree `worktrees/blogs-nnfit-embed`), awaiting the author's review before merging here.
+  - Research on Alignment Forum / LessWrong hover previews (input to the link preview design).
+- **Next in this session: links between pages.** `[[page#heading]]`, hover preview, click navigates; the target declares its default preview and the linking page can override. Notes and open questions: `notes/research/links.md`.
+- **Split into their own sessions:**
+  - box / interactive GPU sessions across Modal, RunPod, Colab, SF autoresearch and the browser relay: `box/NOTES-sessions.md` (branch `notes/sessions-2026-10-09`).
+  - kelpie as an explainer series: `kelpie/NOTES-slices.md` (same branch).
+  - In-page agent panel (highlight -> comment -> Claude/Codex, proofs in prose or LaTeX): `notes/research/infra/agent-panel.md`.
+- **Tomorrow:** prose (Next session 1).
+- **Still queued:** Modal runtime (4); page work = drafts survive reload, show-solution button, small fixes (5); check.py split (6); `cell=policy` (7).
+
 Branch `blogs/flappy`, worktree `worktrees/blogs-flappy`. The page-builder spike is merged in.
 
 ## Next session
@@ -21,7 +33,7 @@ Branch `blogs/flappy`, worktree `worktrees/blogs-flappy`. The page-builder spike
 7. **`cell=policy`.** Prose slots before it: "can something autonomous play this?" and "a policy network". Order policy -> sample -> logprob -> loss -> train, checks already written. The author drives, Claude asks one line at a time.
 
 ## State at end of session (2026-10-08 night)
-- Worktrees: `blogs-flappy` (main line), `blogs-nnfit` (to integrate), `blogs-modal` (spike, keep). Merged and removable: `blogs-build-split`, `blogs-lint`, `blogs-result`, `blogs-carousel` (worktrees + branches).
+- Worktrees: `blogs-flappy` (main line), `blogs-nnfit` (to integrate), `blogs-modal` (spike, keep). `blogs-build-split`, `blogs-lint`, `blogs-result`, `blogs-carousel` were merged and deleted (worktrees + branches) on 2026-10-09.
 - tmux: `blogs` (`./dev.sh`: session :8787 + page :8010; the :8010 pane died once and was restarted), `blogs-nnfit` (demo :8060). Stop with `tmux kill-session -t <name>`.
 - The pre-commit hook is a symlink into `worktrees/blogs-flappy/blogs/pre-commit`; relink if that worktree is removed. New worktrees need `npm ci` in `blogs/web` before committing under `blogs/`.
 - Untracked: `play.py` (throwaway).
@@ -32,13 +44,13 @@ Branch `blogs/flappy`, worktree `worktrees/blogs-flappy`. The page-builder spike
 - `blogs/carousel` merged: 8-slide "cool things RL has done" carousel, the first embed (`web/embeds/carousel/`, discovered by `embeds.py`; a fence named after the kind becomes the embed; bad keys fail the build). Move 37 uses a short unofficial clip (`JNrXgpSEEIE`, licence line says so); OpenAI Five Finals game 2 (`-FoZAM9xqS4`). openai.com 403s automated checks, so OpenAI slides were verified via Wayback.
 - Carousel slides moved to `rl/01-flappy-highlights.carousel` (fence `file=`; any embed can take its data from a file next to the chapter).
 - `dev.sh`: builds the page, runs session :8787 + static :8010 in tmux `blogs`. `verify_page.py` screenshots go to gitignored `.evidence/`.
-- `blogs/build-split` merged (971adeba). One conflict in `build_page.py` (kept data-not-typeset/data-lang markup + `HIDDEN`); `verify_page.py` inject point moved to `// increment env by a tick`. check.py, --stub, mutants.sh, build_web.py --diff and verify_page.py all pass. The build-split worktree/branch can be removed.
+- `blogs/build-split` merged (971adeba). One conflict in `build_page.py` (kept data-not-typeset/data-lang markup + `HIDDEN`); `verify_page.py` inject point moved to `// increment env by a tick`. check.py, --stub, mutants.sh, build_web.py --diff and verify_page.py all pass.
 - **Decided: the reference play wasm (compiled from `solution=flappy`) shipping to readers is fine;** flappy is simple.
 - `notes/research/media/` deleted (not needed).
 
 ## Page (2026-10-08)
 - Prose uses shadcn's `typeset.css` (vendored verbatim, MIT, `web/typeset.css`), driven by `--font-body --font-mono --size --leading --flow --measure`. Cells, the widget and todo boxes opt out with `data-not-typeset`.
-- `web/settings.js` holds the corner controls. Light/dark is Lea Verou's two-state toggle (`~/dotfiles/docs/raw/frontend/raw/lea_verou_dark_mode_toggles.md`). The Aa panel (theme classic/paper, fonts, size, leading, flow, measure, Shuffle, Reset) is open to readers on purpose, with no dev/reader split for now. Settings are saved in localStorage and applied before first paint.
+- `web/settings.ts` holds the corner controls. Light/dark is Lea Verou's two-state toggle (`~/dotfiles/docs/raw/frontend/raw/lea_verou_dark_mode_toggles.md`). The Aa panel (theme classic/paper, fonts, size, leading, flow, measure, Shuffle, Reset) is open to readers on purpose, with no dev/reader split for now. Settings are saved in localStorage and applied before first paint.
 - `page.css` tokens are scheme x theme. `paper` is ported from `observe/dashboard/src/theme.css` (obol's skin). A shared personal tokens/components library (shadcn registry) is deferred, with a comment at the top of `page.css`.
 - The editor has CSS-variable syntax colours (`.tok-*`) and a per-page vim toggle (`@replit/codemirror-vim`). Locked cells disable Run only. Arrow keys don't scroll the page from the play iframe.
 - `uv run --with playwright a11y.py`: axe lint over every theme x scheme. All four are clean.
