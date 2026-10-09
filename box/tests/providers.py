@@ -123,6 +123,8 @@ class Tested:
     def __init__(self, inner: Provider) -> None:
         self.inner = inner
         self.name = inner.name
+        if hasattr(inner, "snapshot"):  # a capability is seen statically (setup_cache.Snapshotter), not via __getattr__
+            self.snapshot = inner.snapshot
 
     def launch(self, *, labels: dict[str, str], timeout_s: int, **kw: object) -> Machine:
         return self.inner.launch(labels={**labels, **PURPOSE}, timeout_s=min(timeout_s, MAX_BACKSTOP_S), **kw)
