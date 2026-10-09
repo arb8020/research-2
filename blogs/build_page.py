@@ -59,7 +59,16 @@ def main() -> None:
             used.add(lang)
             span = tokens[idx].map
             assert span is not None, f"markdown-it gave the {lang} fence no line numbers"
-            return embed.render(tokens[idx].content, span[0] + 2)
+            files = [v for k, _, v in (i.partition("=") for i in info) if k == "file"]
+            if not files:
+                return embed.render(tokens[idx].content, span[0] + 2)
+            assert not tokens[idx].content.strip(), f"line {span[0] + 1}: a {lang} fence with file= must be empty"
+            data = args.chapter.parent / files[0]
+            assert data.is_file(), f"line {span[0] + 1}: {lang} file={files[0]} not found next to the chapter"
+            try:
+                return embed.render(data.read_text(), 1)
+            except AssertionError as e:
+                raise AssertionError(f"{data}: {e}") from e
         role, name = next(((k, v) for k, _, v in (i.partition("=") for i in info) if k in ROLES), ("", ""))
         src = html.escape(tokens[idx].content)
         if role == "cell":
