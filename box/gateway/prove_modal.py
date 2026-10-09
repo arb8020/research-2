@@ -111,12 +111,29 @@ def nn_fit_local(program: Path) -> dict:
     return steps_per_s(json_lines(done.stdout))
 
 
+def hold(kernel: dict, sid: str, tok: dict, hold_s: float) -> dict:
+    """An open (quiet) kernel websocket keeps the session past its idle timeout; once closed, the session
+    ends idle. Asks the machine through the SDK (exec), never through the tunnel, which would count as use."""
+    from box import sdk
+    from box.modal_provider import Modal, ModalToken
+
+    s = sdk.attach(Modal(token=ModalToken(tok["id"], tok["secret"]), region="us"), sid)
+    url = kernel_client.api(kernel, f"/api/kernels/{kernel_client.kernel_id(kernel)}/channels").replace("http", "ws", 1)
+    with kernel_client.connect(url, open_timeout=60):
+        time.sleep(hold_s)
+        held = s.status()
+    closed = time.monotonic()
+    ended = s.wait(timeout_s=hold_s + 600)
+    return {"held_s": hold_s, "status_while_held": type(held).__name__, "ended": ended.reason, "close_to_end_s": round(time.monotonic() - closed, 1)}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--gateway", default="http://localhost:8790")
-    ap.add_argument("--gpu", default="T4")
+    ap.add_argument("--gpu", default="T4", type=lambda g: None if g == "none" else g, help="T4, or none (CPU)")
     ap.add_argument("--attach", help="a running session id: skip connect")
     ap.add_argument("--keep", action="store_true", help="leave the session running")
+    ap.add_argument("--hold-s", type=float, help="keep-alive check: hold a kernel websocket open this long, then close it and time the idle end")
     ap.add_argument("--nn-fit", type=Path, help="remote_train.py (blogs/web/embeds/nn-fit)")
     ap.add_argument("--out", type=Path, default=Path(".evidence/prove_modal.json"))
     a = ap.parse_args()
@@ -139,19 +156,23 @@ def main() -> None:
     assert status["state"] == "running", status
     kernel = status["kernel"]
     try:
-        smi = [kernel_client.run(kernel, "!nvidia-smi") for _ in range(3)]
-        print(smi[0].stdout, flush=True)
-        assert smi[0].status == "ok" and a.gpu in smi[0].stdout, smi[0]
-        summary["nvidia_smi_cell_s"] = [round(o.seconds, 2) for o in smi]  # the first includes starting the kernel
+        if a.gpu is not None:
+            smi = [kernel_client.run(kernel, "!nvidia-smi") for _ in range(3)]
+            print(smi[0].stdout, flush=True)
+            assert smi[0].status == "ok" and a.gpu in smi[0].stdout, smi[0]
+            summary["nvidia_smi_cell_s"] = [round(o.seconds, 2) for o in smi]  # the first includes starting the kernel
         echo = [kernel_client.run(kernel, "print(1)") for _ in range(3)]
         summary["trivial_cell_s"] = [round(o.seconds, 3) for o in echo]
-        if a.nn_fit:
+        if a.hold_s:
+            summary["hold"] = hold(kernel, sid, tok, a.hold_s)
+            print(f"hold: {summary['hold']}", flush=True)
+        elif a.nn_fit:
             summary["nn_fit_remote"] = nn_fit_remote(kernel, a.nn_fit)
             print(f"nn-fit remote: {summary['nn_fit_remote']}", flush=True)
             summary["nn_fit_local"] = nn_fit_local(a.nn_fit)
             print(f"nn-fit local:  {summary['nn_fit_local']}", flush=True)
     finally:
-        if not a.keep:
+        if not (a.keep or a.hold_s):  # a hold ends by itself (idle)
             summary["end"] = call(f"{a.gateway}/sessions/{sid}/end", auth, "POST")["status"]
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(summary, indent=2))

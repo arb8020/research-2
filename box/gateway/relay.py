@@ -598,12 +598,12 @@ def forget_old_boots() -> None:
 # ---- main ----
 
 
-def modal_config(gpus: tuple[str | None, ...], labels: dict[str, str], region: str) -> Config:
+def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...]) -> Config:
     from box.modal_provider import Modal
 
     return Config(
-        provider=lambda token: Modal(token=token, region=region), image=KERNEL_IMAGE, gpus=gpus, labels=labels,
-        origins=re.compile(LOCAL_ORIGIN),
+        provider=lambda token: Modal(token=token, region=a.region), image=KERNEL_IMAGE, gpus=gpus, labels=dict(a.label),
+        origins=re.compile(LOCAL_ORIGIN), deadline_s=a.deadline_s, idle_timeout_s=a.idle_timeout_s,
     )  # fmt: skip
 
 
@@ -626,13 +626,17 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8790)
     ap.add_argument("--gpus", default="T4", help="comma-separated GPUs a reader may ask for (CPU, gpu null, always)")
     ap.add_argument("--region", default="us", help="Modal region for every session")
+    ap.add_argument("--deadline-s", type=int, default=DEADLINE_S, help="a session's lifetime (box adds a 600 s provider backstop)")
+    ap.add_argument("--idle-timeout-s", type=float, default=IDLE_TIMEOUT_S, help="no connection to Jupyter for this long ends a session")
     ap.add_argument("--label", type=label, action="append", default=[("box.purpose", "reader-path-dev")],
                     help="key=value stamped on every session (default box.purpose=reader-path-dev, for sweeps)")  # fmt: skip
     a = ap.parse_args()
     gpus = (None, *[g for g in a.gpus.split(",") if g])
-    cfg = modal_config(gpus, dict(a.label), a.region)
+    assert a.deadline_s + 600 <= 24 * 3600, "Modal caps a sandbox at 24 h"
+    cfg = modal_config(a, gpus)
     server = serve(cfg, a.port)
-    print(f"relay on http://localhost:{a.port} (modal, region {a.region}, gpus {list(gpus)}, labels {dict(a.label)})", flush=True)
+    print(f"relay on http://localhost:{a.port} (modal, region {a.region}, gpus {list(gpus)}, labels {dict(a.label)}, "
+          f"deadline {a.deadline_s} s, idle {a.idle_timeout_s} s)", flush=True)  # fmt: skip
     with contextlib.suppress(KeyboardInterrupt):  # sessions outlive the relay: idle/deadline end them
         server.serve_forever()
 
