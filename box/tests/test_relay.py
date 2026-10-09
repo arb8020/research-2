@@ -127,7 +127,7 @@ def test_the_relay_keeps_nothing_a_running_session_needs(make_relay: Callable[..
         assert status(g, sid) == (200, before)
     replay = events(other, sid, "running")
     assert [e["status"]["state"] for _, e in replay if e["kind"] == "status"] == ["running"]
-    assert all(i.startswith("m") for i, _ in replay)
+    assert all(i.startswith("o") for i, _ in replay)
     out = kernel_client.run(before["kernel"], "import os; print('pid', os.getpid())")
     assert out.status == "ok"
 
@@ -187,3 +187,16 @@ def test_a_stream_that_saw_the_boot_does_not_repeat_its_log_from_the_record(make
     again = events(gw, sid, "ended")  # the boot from memory, then the record
     lines = [e["text"] for _, e in again if e["kind"] == "log"]
     assert lines and len(lines) == len(set(lines)), lines
+
+
+def test_resuming_a_replay_from_the_record_sends_only_what_came_after(make_relay: Callable[..., str]) -> None:
+    gw = make_relay()
+    sid = create(gw)
+    events(gw, sid, "running")
+    call(f"{gw}/sessions/{sid}/end", "POST", headers={"X-Box-Token": AUTH})
+    replay = events(gw, sid, "ended")  # the boot from memory, then the machine's part: from the record
+    machine = [i for i, (event_id, e) in enumerate(replay) if e["kind"] == "log" and not event_id.startswith("b")]
+    assert len(machine) >= 2, replay  # Jupyter's shutdown lines
+    again = events(gw, sid, "ended", last_id=replay[machine[0]][0])
+    lines = lambda got: [(e["stream"], e["text"]) for _, e in got if e["kind"] == "log"]  # noqa: E731
+    assert lines(again) == lines(replay[machine[0] + 1 :])

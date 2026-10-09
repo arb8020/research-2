@@ -90,16 +90,16 @@ class Push:
             if done:
                 return
 
-    def forwarder_service(self, session_id: str, python: str, job_dir: str, offsets: tuple[int, int], status: dict, reasons: dict[str, str]) -> tuple[str, dict[str, str]]:
+    def forwarder_service(self, session_id: str, python: str, job_dir: str, after: tuple[int, int], status: dict, reasons: dict[str, str]) -> tuple[str, dict[str, str]]:
         """(cmd, env) of the forwarder service for a session whose Jupyter job is job_dir; it pushes
-        Jupyter's output from offsets on. status: the running status (its gpu/started_at/deadline go
+        Jupyter's output past after (bytes of stdout, stderr: an sdk.LogCursor). status: the running status (its gpu/started_at/deadline go
         into the ended one)."""
         boot = "import base64,os; exec(base64.b64decode(os.environ['BOX_FORWARDER']))"
         base = {k: status[k] for k in ("gpu", "started_at", "deadline")}
         env = {
             "BOX_FORWARDER": base64.b64encode(FORWARDER.read_bytes()).decode(), "BOX_PUSH_URL": self.url,
             "BOX_PUSH_SESSION": session_id, "BOX_PUSH_KEY": self.key(session_id), "BOX_PUSH_JOB": job_dir,
-            "BOX_PUSH_OFFSETS": f"{offsets[0]},{offsets[1]}", "BOX_PUSH_STATUS": json.dumps(base), "BOX_PUSH_REASONS": json.dumps(reasons),
+            "BOX_PUSH_OFFSETS": f"{after[0]},{after[1]}", "BOX_PUSH_STATUS": json.dumps(base), "BOX_PUSH_REASONS": json.dumps(reasons),
         }  # fmt: skip
         return f"exec {shlex.join([python, '-c', boot])}", env
 

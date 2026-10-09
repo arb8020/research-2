@@ -24,7 +24,7 @@ def store(name: str, provider: Provider, tmp_path: Path) -> Store:
 
 
 def recorded_output(record: sdk.Record, job_id: str, stream: str = "stdout") -> str:
-    return "".join(text for _, s, text in record.logs(job_id) if s == stream)
+    return "".join(c.text for c in record.logs(job_id) if c.stream == stream)
 
 
 def test_a_recorded_session_says_why_it_ended_after_its_machine_is_gone(launch: Callable, provider: Provider, store: Store) -> None:
@@ -41,6 +41,20 @@ def test_a_recorded_session_says_why_it_ended_after_its_machine_is_gone(launch: 
     assert (record.job_status(job.id)["state"], record.job_status(job.id)["exit_code"]) == ("done", 3)
     assert recorded_output(record, job.id) == "hello\n"
     assert recorded_output(record, job.id, "stderr") == "oops\n"
+
+
+def test_job_logs_read_on_from_the_record_with_the_same_cursor_once_the_machine_is_gone(launch: Callable, provider: Provider, store: Store) -> None:
+    with launch(deadline_s=600, record=store) as s:
+        job = s.run("echo one; echo two >&2; echo three")
+        job.wait()
+        first = next(job.logs())  # a reader that saw some of it live
+    assert (first.stream, first.text) == ("stdout", "one\nthree\n")
+    (again,) = sdk.attach(provider, s.id, record=store).jobs()  # the machine is gone: its record answers
+    assert again.id == job.id
+    rest = list(again.logs(after=(len("one\n"), 0), follow=True))
+    assert [(c.stream, c.text) for c in rest] == [("stdout", "three\n"), ("stderr", "two\n")]
+    assert rest[-1].end == (len("one\nthree\n"), len("two\n"))
+    assert list(again.logs(after=rest[-1].end)) == []
 
 
 def test_a_job_env_is_recorded_by_name_never_by_value(launch: Callable, store: Store) -> None:
@@ -87,7 +101,7 @@ def test_a_character_split_across_flushes_is_recorded_whole(launch: Callable, st
         job.wait()
     record = sdk.read_record(store, s.id)
     assert recorded_output(record, job.id) == "café\n"
-    assert all("\N{REPLACEMENT CHARACTER}" not in text for _, _, text in record.logs(job.id))
+    assert all("\N{REPLACEMENT CHARACTER}" not in c.text for c in record.logs(job.id))
 
 
 def test_output_past_a_chunk_is_recorded_in_order_and_never_dropped(launch: Callable, store: Store) -> None:
@@ -98,12 +112,11 @@ def test_output_past_a_chunk_is_recorded_in_order_and_never_dropped(launch: Call
     record = sdk.read_record(store, s.id)
     chunks = list(record.logs(job.id))
     assert len(chunks) >= 3
-    recorded = "".join(text for _, _, text in chunks)
+    recorded = "".join(c.text for c in chunks)
     expected = "".join(f"{i:07d}\n" for i in range(1, lines + 1))
     assert len(recorded) == len(expected)  # a short, readable failure first: no 12 MB diff
     assert recorded == expected
-    last_seen = chunks[0][0]
-    assert [n for n, _, _ in record.logs(job.id, after=last_seen)] == [n for n, _, _ in chunks[1:]]
+    assert list(record.logs(job.id, after=chunks[0].end)) == chunks[1:]
 
 
 def test_a_session_never_recorded_is_not_found(provider: Provider, store: Store) -> None:
