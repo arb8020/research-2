@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import io
 import os
 import queue
 import select
@@ -11,7 +12,6 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
-from typing import IO
 
 from box.sdk import Dropped, Gone, Refused
 
@@ -160,7 +160,13 @@ class Pumped:
                 continue
 
 
-def pipe_reader(name: str, pipe: IO[bytes]) -> Reader:  # MUST KILL: pipe typed IO[bytes] though read1 needs a buffered reader (was type: ignore[attr-defined]); type it io.BufferedReader
+def pipe_readers(proc: subprocess.Popen[bytes]) -> list[Reader]:
+    assert isinstance(proc.stdout, io.BufferedReader), proc.stdout
+    assert isinstance(proc.stderr, io.BufferedReader), proc.stderr
+    return [pipe_reader("stdout", proc.stdout), pipe_reader("stderr", proc.stderr)]
+
+
+def pipe_reader(name: str, pipe: io.BufferedReader) -> Reader:
     def read(emit: Emit) -> None:
         with pipe:
             while data := pipe.read1(READ_BYTES):
