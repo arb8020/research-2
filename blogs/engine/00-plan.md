@@ -1,245 +1,361 @@
 # inference engine: curriculum plan
 
-<!-- wip: plan only. headings, facts and prose placeholders; no prose yet -->
-
-<!-- write prose here: what the reader builds over the series, and that kelpie becomes this -->
-
-## architecture
-
-<!-- write prose here: the three processes and why the engine sits in the middle -->
-
-- three processes:
-  - frontend (Python): HTTP, chat templates, tokenizer
-  - engine (systems language): single-threaded loop; central scheduler
-  - worker(s) (Python, torch): `forward(plan) -> tokens`; one per device group
-- engine loop, each step: read ops -> plan -> send plan to workers -> receive tokens -> commit -> stream tokens
-- frontend <-> engine <-> worker(s)
-- the engine never touches CUDA
-- transport:
-  - first: JSON lines over a socketpair
-  - later (perf chapter): shared-memory ring
-- process setup: Heinrich pattern (spawn + socketpair + memfd)
-- engine language: Zig (tentative; C-style C++ considered)
-  - checks are language-agnostic (protocol / HTTP / trace text), so a reader may bring another systems language
-  - one blessed language gets stubs and solutions
-- model forward: reader-written Python (torch functional); kernel dispatch is a later perf chapter
-
-### scheduler core
-
-<!-- write prose here: why the scheduler is sans-IO and deterministic, and what that buys later -->
-
-- sans-IO and deterministic: `(state, ops) -> plan`; `commit(tokens)`
-- door-open rules:
-  - no clocks, randomness or thread timing in planning
-  - ops are an ordered log, applied at step boundaries
-  - the plan is a wire format, never pointers
-  - transport is swappable (shm local, TCP remote)
-- replay test, kept forever: two cores, same ops log -> identical plans
-- scheduling checks use greedy decoding
-
-## check boundaries
-
-<!-- write prose here: what a check is in this series, and why each one sits at a boundary the reader's code can be swapped across -->
-
-- `[HF]` vs the HuggingFace reference
-- `[HTTP]` black box over HTTP
-- `[proto]` the harness plays the other side of the wire protocol
-- `[trace]` text traces (kelpie-core/traces) fed to the scheduler as data
-- `[equiv]` feature on == feature off
-- `[budget]` perf threshold on fixed hardware
+<!-- wip: plan only. no prose yet -->
 
 ## chapters
 
-### 1. model forward
+### 0. DEFER: gpt2 in numpy, transformer intuition building (probably its own page)
 
-<!-- write prose here: chapter 1 intent -->
+### 1. model forward: gpt2
 
-- writes: Python torch functional forward + full-recompute generate
-- model / hardware: gpt2 -> qwen3-0.6b; CPU
-- checks:
-  - `[HF]` logits within tolerance on fixed prompts
-  - `[HF]` 32 greedy tokens identical
+motivation: get the forward pass working
 
-### 2. sampling
+desc:
+- torch functional forward + full-recompute `generate()`
 
-<!-- write prose here: chapter 2 intent -->
+check:
+- logits within tolerance of the HuggingFace reference on fixed prompts, fp32 on CPU (~1e-4 to 1e-3)
+- greedy tokens + top-k logprobs vs HuggingFace, vLLM-style: each step's tokens match, or each is in the other's top-k (robust to near-ties; also works in bf16 on GPU)
 
-- writes: temperature / top-k / top-p; per-request seed
-- checks:
-  - `[equiv]` temperature 0 == greedy
-  - same seed -> same tokens
-  - chi-square vs the reference distribution
+arch notes:
+- `forward` stays callable standalone from a script, no engine or HTTP needed (complaints.md #3)
+- CPU; gpt2 is the only model the laptop rule allows
+- checks: one suite per chapter behind `run_checks chN`; blog cells and harbor tasks both call it
+- checks are language-agnostic (HuggingFace refs, HTTP, protocol, trace text); C++ is the blessed language with stubs and solutions
 
-### 3. HTTP frontend
+### 2. sampling + tokenization
 
-<!-- write prose here: chapter 3 intent -->
+motivation: users dont read logits
 
-- writes: OpenAI `/v1/completions` + chat; SSE; disconnect
-- model: echo model, then the chapter 1 generate
-- checks:
-  - `[HTTP]` goldens for echo
-  - SSE framing
-  - disconnect stops work
+desc:
+- temperature / top-k / top-p / min-p; per-request seeding
+- tokenizer encode / decode
 
-### 4. engine process + worker
+check:
+- filtering, exact: masked + renormalized distribution == reference implementation on the same logits
+- draw, statistical: fixed seed, ~100k draws from a small known distribution, chi-square at a strict threshold (p < 1e-6)
+- temperature 0 == greedy; same seed -> same tokens
+- tokenizer: ids == HuggingFace tokenizer; decode(encode(text)) == text
 
-<!-- write prose here: chapter 4 intent -->
+arch notes:
+- sampling ends up in the worker (chapter 5); tokenization ends up in the frontend (chapter 3)
 
-- writes:
-  - engine owns the step loop
-  - worker = `forward(plan) -> tokens`
-  - frontend <-> engine: submit / cancel / token stream
-- checks:
-  - `[proto]` fake worker vs the reader's engine; fake engine vs the reader's worker
-  - `[HTTP]` end-to-end tokens == chapter 1
-  - killed worker -> clean error, not a hang
+### 3. HTTP frontend + chat template
 
-### 5. KV cache + streaming
+motivation: users want to hit a familiar API
 
-<!-- write prose here: chapter 5 intent -->
+desc:
+- `/v1/completions` and `/v1/chat/completions`, non-streaming
+- plain chat template (tools / thinking / harmony land with the model chapters that need them)
 
-- writes: single request, contiguous KV
-- checks:
-  - `[equiv]` incremental logits == full recompute
-  - `[budget]` decode step ~flat in prompt length
+check:
+- golden responses for the echo model over HTTP (completions + chat)
+- rendered chat prompt == HuggingFace `apply_chat_template`, token for token (catches double BOS, a missing generation prompt)
+- stop tokens end generation
 
-### 6. multi-rank (TP)
+arch notes:
+- this becomes the frontend process (Python): HTTP, chat template, tokenize; later incremental detokenize and stop strings
+- nothing with text ever reaches the engine; it sees token ids only
 
-<!-- write prose here: chapter 6 intent -->
+### 4. kv cache + streaming
 
-- writes: N workers, engine broadcasts the plan; weights sharded + all-reduce in forward
-- hardware: gloo on CPU for dev; A100-80GB:2 later
-- checks:
-  - `[equiv]` TP2 tokens == TP1
-  - `[proto]` dead rank detected cleanly
+motivation: reduce wasted work by the fwd pass
 
-### 7. multiple users: static batching
+desc:
+- KV cache (prefill / decode split), single request, contiguous
+- SSE streaming; incremental detokenize; client disconnect
 
-<!-- write prose here: chapter 7 intent -->
+check:
+- everything from before as usual
+- incremental logits == full recompute, every step
+- streamed tokens == non-streamed
+- decode step time ratio (long prompt / short prompt) << the same ratio for full recompute
+- detokenize cost per token stays flat as output grows (kelpie's is O(n²))
+- SSE framing valid (`data:` lines, `[DONE]`)
+- client disconnect mid-stream stops generation
 
-- writes: pad to a rectangle
-- checks:
-  - `[equiv]` each request's batched output == solo
-  - `[budget]` throughput > N sequential
+arch notes:
+- detokenize + stop strings live in the frontend; stop strings finish one step late (the frontend sends a cancel)
+- precedent: crucible task 01 was "kv-cache-streaming" with the same three checks
 
-### 8. continuous batching
+### 5. engine process + worker + static batching
 
-<!-- write prose here: chapter 8 intent -->
+motivation: multiple users against the endpoint
 
-- writes: admit / finish each step; per-slot KV; ragged forward; scheduler as a pure function
-- checks:
-  - `[trace]` basic traces
-  - `[equiv]` batched == solo
-  - `[budget]` beats static under staggered arrivals
+desc:
+- C++ engine process owns the step loop; Python worker = `forward(plan) -> tokens` + sampling
+- frontend <-> engine: submit / cancel / token stream
+- static batching: form a batch (wait for N or a timeout), pad to a rectangle
+- `given`: process spawn, socket framing, frame encode / decode, the frontend side of the protocol
+- reader writes: the engine loop, the plan (which KV slot + positions per request), the batching decision
 
-### 9. paged KV + block tables
+check:
+- harness plays a fake worker against the reader's engine over the protocol (plans well-formed, KV slots disjoint)
+- each request's output in a batch == its output alone (greedy)
+- 2 replica workers get the same plan and return identical tokens; a killed worker -> clean error, not a hang
+- throughput with N concurrent users > N x sequential
+- engine health from outside the process, from here on: fd count back to baseline after load, nothing in flight when idle, never crashed, low idle CPU
 
-<!-- write prose here: chapter 9 intent -->
+arch notes:
+- three processes: frontend (Python) <-> engine (C++) <-> worker(s) (Python, torch; one per device group)
+- engine loop, each step: read ops -> plan -> send plan to workers -> receive tokens -> commit -> stream token ids
+- transport: Heinrich pattern (spawn + socketpair + memfd); binary framing (`magic | version | type | len`, fixed-capacity arrays with counts)
+- the engine never touches CUDA and never imports Python; spawns workers before anything touches the GPU
+- language rules: `~/dotfiles/docs/raw/cstyle_cpp.md` (C++20, always-on `ASSERT`, one owner + one teardown, Linux only)
+- the engine takes a list of workers from the start (N = 1, plus the 2-replica check); multi-rank later only changes the worker
+- plan arrays have fixed maximum capacities with explicit counts (buckets later = pad the counts)
+- commit takes n tokens per request (always 1 until spec decode)
+- scheduling checks use greedy decoding (the seed comes from slot ids otherwise)
+- may split into two chapters later if too heavy
 
-- checks:
-  - `[trace]` block accounting (free count returns, no double owner)
-  - `[equiv]` paged == dense
-  - more concurrent requests in the same memory
+### 6. continuous batching
 
-### 10. admission + preemption
+motivation: static batching is obviously wasteful throughputwise
 
-<!-- write prose here: chapter 10 intent -->
+desc:
+- admit and finish requests every step; per-slot contiguous KV (`[max_slots, max_len]`); ragged forward
+- the scheduler as a pure function: (state, ops) -> plan; commit(tokens)
 
-- checks:
-  - `[trace]` kv_stall, preemption, reserve_*
-  - `[equiv]` under memory pressure, all finish == solo
+check:
+- text traces fed to the scheduler as data (basic traces)
+- each request's output == alone (greedy)
+- beats static under staggered arrivals; a short request isn't held hostage by a long one
+- concurrency capped by slot count (sets up chapter 7)
+- replay: two scheduler instances fed the same ops log -> identical plans (kept forever)
 
-### 11. chunked prefill
+arch notes:
+- scheduler core is sans-IO and deterministic:
+  - no clocks, randomness or thread timing in planning; time arrives on ops
+  - ops (submit / cancel / set knob) are an ordered log, applied at step boundaries
+- these keep multi-host open later (central-over-TCP or replicated), along with: the plan is a wire format, never pointers; transport is swappable (shm local, TCP remote)
+- continuous batching is scheduling; it works fine without paged KV (Orca)
 
-<!-- write prose here: chapter 11 intent -->
+### 7. paged KV
 
-- writes: per-step token budget
-- checks:
-  - `[trace]` chunked_prefill
-  - `[equiv]` chunked == unchunked
-  - `[budget]` inter-token latency bounded while a long prompt arrives
+motivation: memory is being wasted, enables more concurrency
 
-### 12. prefix cache
+desc:
+- block pool + free list + per-request block tables + slot mapping
+- attention reads KV through the block table (gather-based torch reference first)
 
-<!-- write prose here: chapter 12 intent -->
+check:
+- traces for block accounting: free count returns to full, no block has two owners
+- paged == contiguous
+- max concurrent requests in the same KV memory goes up vs chapter 6
 
-- checks:
-  - `[trace]` prefix_*
-  - `[equiv]` hit == miss
-  - `[budget]` TTFT drops on a shared prefix
+arch notes:
+- engine owns block ids, tables and slot mapping; the worker owns the KV tensor and never allocates
+- block 0 reserved as the null block (pad rows write there, chapter 12)
 
-### 13. cache groups / SWA + MoE
+### 8. kernel dispatch layer
 
-<!-- write prose here: chapter 13 intent -->
+motivation: we would like to vendor fast kernels
 
-- model: gpt-oss tiny config, then 20b
-- checks:
-  - `[HF]` gpt-oss
-  - `[trace]` window traces
-  - KV memory bounded by the window
+desc:
+- a dispatch layer in the worker: per op, pick an implementation (paged attention from Triton / vLLM / FlashInfer; fused RMSNorm)
 
-### 14. multimodal
+check:
+- make sure we can set a kernel and it launches
+- each dispatched kernel == the reference torch op (within tolerance); whole-model output unchanged
+- attention / step time improves over the gather reference
+- maybe: a little more complexity here with the triton cache / avoiding autotuning
 
-<!-- write prose here: chapter 14 intent -->
+arch notes:
+- worker-side only; kernel builds use torch's C++20, separate from the engine build
+- later chapters (SWA, MoE, spec decode) plug their kernels in here
 
-- model: smolvlm
-- writes: encoder in the worker; mm_hash folded into the prefix chain
-- checks:
-  - `[HF]`
-  - `[trace]` prefix_mm (same text, different image != hit)
+### 9. admission + preemption
 
-### 15. buckets, kernel dispatch, CUDA graphs
+motivation: too many users
 
-<!-- write prose here: chapter 15 intent -->
+desc:
+- admission: who starts this step (block availability, token budget, max running, reserve headroom)
+- preemption: out of blocks -> evict a running request (youngest), free its blocks, requeue at the front, recompute later
 
-- writes: buckets -> kernel dispatch -> CUDA graphs; plan transport JSON -> shm ring, measured
-- checks:
-  - `[equiv]` padded == unpadded
-  - `[budget]` step time
-  - graphs replay
+check:
+- traces: kv_stall, preemption, reserve_*
+- under memory pressure every request finishes, output == solo
+- all blocks free once idle
 
-### 16. structured output
+arch notes:
+- mechanism vs policy: the mechanism validates every policy decision; a bad policy is slow, never wrong
+- policy shape (struct of function pointers vs enum + switch) deferred; Python sets priority keys at submit, the engine sorts
+- a policy simulator (no GPU, cost-model worker) could live here
 
-<!-- write prose here: chapter 16 intent -->
+### 10. chunked prefill
 
-- writes: grammar masks
-- checks:
-  - 100% of outputs parse against the schema
-  - `[equiv]` permissive grammar == no grammar
+motivation: prefills slowing itl
 
-### 17. spec decode
+desc:
+- per-step token budget; long prompts split into chunks; prefill on top of existing KV
 
-<!-- write prose here: chapter 17 intent -->
+check:
+- traces: chunked_prefill
+- chunked == unchunked
+- inter-token latency bounded while a long prompt arrives
 
-- writes: n-gram drafter -> DFlash
-- checks:
-  - `[equiv]` greedy spec == no-spec
-  - `[budget]` acceptance, tok/s
+arch notes:
+- a partial chunk's sampled token is discarded
+- chunks aligned to blocks
 
-### 18. hybrid / recurrent state
+### 11. prefix cache
 
-<!-- write prose here: chapter 18 intent -->
+motivation: agentic coding/shared sys prompts
 
-- model: qwen3-next or kimi-linear
-- checks:
-  - `[trace]` state_*, per_seq_*
-  - `[HF]`
+desc:
+- hash token blocks (chain hash); refcounted shared blocks; LRU eviction of free cached blocks
 
-### 19. another backend
+check:
+- traces: prefix_*
+- hit == miss
+- time to first token drops on a shared prefix
 
-<!-- write prose here: chapter 19 intent -->
+arch notes:
+- the last prompt token is never matched (its logits are still needed)
+- interacts with preemption (prefix_preempt, prefix_resurrect)
 
-- writes: torch-xla worker (TPU / Trainium)
-- checks:
-  - every earlier check() passes with the worker swapped
+### 12. cuda graphs
+
+motivation: cuda graphs/replaying is better than eager
+
+desc:
+- buckets: a ladder of batch sizes; the engine pads every plan up to the nearest bucket; pad rows inert (write to the null block)
+- capture one CUDA graph per bucket in the worker; replay = copy inputs into fixed buffers + one launch
+- plan transport: socket frames -> shared-memory ring, measured
+
+check:
+- padded == unpadded; graph replay == eager
+- graphs actually replay (count replays vs eager fallbacks)
+- step time at small batch drops
+- per-step host time drops with the shm ring (bench: ~6.6 µs shm vs ~38 µs socket round trip)
+- low idle CPU once the ring spin-waits
+
+arch notes:
+- before multi-rank: ranks must capture in the same order
+- buckets also serve XLA (one compiled program per shape)
+- MoE host syncs block capture
+- shm ring rules (SPSC, release/acquire pairs, TSan): `cstyle_cpp.md`
+
+### 13. multi rank
+
+motivation: bigger models
+
+desc:
+- tensor parallelism: N workers, the engine broadcasts the plan, gathers rank 0's tokens
+- weights sharded with named axes; all-reduce inside the forward; KV heads split per rank
+
+check:
+- TP2 tokens == TP1
+- a dead rank is detected cleanly
+- the model doesn't fit on one GPU but runs on two
+
+arch notes:
+- central scheduler: no digests, agreement or heartbeat; ranks can't disagree
+- hardware: gloo on CPU for dev; `A100-80GB:2`
+- model must not need SWA (that's chapter 15): a dense ~70B at TP2
+- each worker inits its own CUDA + NCCL; rank 0's NCCL id travels over the control socket
+
+### 14. XLA/AMD/Apple (dealer's choice)
+
+motivation: heterogeneous backends
+
+desc:
+- a second worker kind against the same protocol
+
+check:
+- every earlier check passes with the worker swapped
+
+arch notes:
+- torch-xla is being replaced by TorchTPU (not public yet); vLLM's TPU path lowers through JAX (torchax). Options: TorchTPU once it ships, JAX / torchax, Trainium via Neuron, AMD ROCm, Apple MPS / MLX
+- Colab TPU (v5e-1 / v6e-1, single chip) via `box --provider colab` for testing; multi-device needs GCP
+- later chapters: CUDA required, other backends best-effort (checkbox per chapter)
+
+### 15. cache groups/slab model/swa
+
+motivation: gpt-oss
+
+desc:
+- per-group block tables; blocks that slide out of the window are freed; per-group block sizes; slab pool
+- MoE forward (gpt-oss)
+
+check:
+- gpt-oss vs HuggingFace (tiny config, then 20b)
+- traces: swa_window_prefix_cache, window_prefix_resume
+- KV memory bounded by the window
+
+arch notes:
+- windowed prefix-hit rule + cross-group fixpoint (kelpie retrofitted these a week later; keep them in this chapter)
+
+### 16. hybrid state and more models
+
+motivation: model archs (qwen3 next or kimi linear or nemotron mamba layers?)
+
+desc:
+- per-sequence recurrent state slots as another kind of cache group; checkpoints so the prefix cache still works
+
+check:
+- traces: state_*, per_seq_*
+- output vs HuggingFace
+
+arch notes:
+- generalizes chapter 15's cache groups
+
+### 17. spec decode/dflash
+
+motivation: goes even faster
+
+desc:
+- extra rows per request (1 + K drafts) inside the token budget; accept / reject; roll back rejected KV
+- DFlash: a learned drafter on gpt-oss-20b
+
+check:
+- greedy spec == no-spec (exact)
+- traces: extra_after_prefix_hit, extra_window_slide, extra_drop_before_preempt, extra_k3_per_*
+- acceptance rate, tok/s
+
+arch notes:
+- n-token commit already in place since chapter 5
+- graphs need decode-with-extras buckets
+- DFlash depends on chapters 12 (graphs) and 15 (gpt-oss)
+
+### 18. structured output
+
+motivation: grammar masks/tool calling
+
+desc:
+- grammar masks (xgrammar) applied before sampling; tool calling
+
+check:
+- 100% of outputs parse against the schema
+- permissive grammar == no grammar
+- step time with grammar requests vs without, same batch size
+
+arch notes:
+- grammar lives in the worker: fill the bitmask on CPU while the GPU runs the forward, apply before sampling, advance the matcher after
+- no xgrammar in the engine (it throws; no C API); the engine only sees a "grammar dead end" finish flag
+- the matcher must advance through accepted draft tokens (chapter 17)
+- multi-rank: only rank 0 samples and holds grammar state
+
+### 19. multimodal
+
+motivation: smolvlm
+
+desc:
+- image encoder in the worker; embeddings override inputs at the image positions
+
+check:
+- smolvlm vs HuggingFace
+- traces: prefix_mm (same text, different image != hit)
+
+arch notes:
+- the frontend fetches the image and computes `mm_hash`; the engine folds it into the prefix chain (kelpie's engine submits 0 today, a bug)
 
 ## open questions
 
-- multi-rank at chapter 6 vs right after chapter 4
-- split chapter 4 (engine split + two protocols + first Zig) into two
+- chapter 5: split into two if too heavy
 - chapter 1 model: gpt2 only, or move to qwen3-0.6b
-- an "after the core" section: async/overlap, KV quantization, batch invariance, benchmarking
-- engine language, final pick: Zig vs C-style C++
+- "after the core": async / overlap, KV quantization, batch invariance, benchmarking
+- scheduler policy shape (deferred)
 - multi-host TPU: central-over-TCP vs replicated (deferred; door kept open)
 
 ## sources
@@ -247,6 +363,7 @@
 - `kelpie/NOTES-slices.md`
 - `kelpie/docs/decisions/overlap-removed.md` (on branch `kelpie/core-compress`)
 - `kelpie-core/traces/`
+- `~/dotfiles/docs/raw/cstyle_cpp.md`
 - `~/dotfiles/docs/raw/how_to_test_matklad.md`
 - `~/dotfiles/docs/raw/heinrich_multiprocessing.md`
 - `~/work/crucible/crucible/other/inference_curriculum/ROADMAP.md` (2026-08-27)
