@@ -27,7 +27,10 @@ uv run session.py rl/01-flappy.md --timeout 20      # local session stand-in, :8
 python3 -m http.server 8010 -d dist                 # open localhost:8010/01-flappy/
 rm -rf .session && uv run --with playwright verify_page.py   # headless proof, screenshots/page-builder/
 uv run --with playwright a11y.py                    # axe accessibility lint, light + dark (page must be served)
+(cd web && npm ci)                                  # once: esbuild/tsc/eslint + codemirror (build_page.py bundles web/*.ts)
+(cd web && npm run lint)                            # tsc + eslint + ruff; blogs/pre-commit runs it (install line inside)
 ```
+verify_page.py and a11y.py take the page URL as an argument (default `http://localhost:8010/01-flappy/`).
 `play.py` is a throwaway terminal player.
 
 ## Decisions (made with the author)
