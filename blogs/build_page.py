@@ -46,9 +46,9 @@ def main() -> None:
         role, name = next(((k, v) for k, _, v in (i.partition("=") for i in info) if k in ROLES), ("", ""))
         src = html.escape(tokens[idx].content)
         if role == "cell":
-            return f'<code-cell name="{name}" data-lang="{lang}"><pre>{src}</pre></code-cell>\n'
+            return f'<code-cell name="{name}" data-lang="{lang}" data-not-typeset><pre>{src}</pre></code-cell>\n'
         if role == "given":
-            return (f'<details class="given"><summary>given code: runs before every cell</summary>'
+            return (f'<details class="given" data-not-typeset><summary>given code: runs before every cell</summary>'
                     f'<code-view data-lang="{lang}"><pre>{src}</pre></code-view></details>\n')
         if role in ("solution", "check"):
             return ""
@@ -57,14 +57,14 @@ def main() -> None:
     def html_block(tokens, idx, opts, env):
         content = tokens[idx].content
         if note := re.fullmatch(r"\s*<!--\s*(.*?)\s*-->\s*", content, re.DOTALL):
-            return f'<div class="todo" role="note">{html.escape(note[1])}</div>\n'
+            return f'<div class="todo" role="note" data-not-typeset>{html.escape(note[1])}</div>\n'
         return content
 
     rules["fence"] = fence
     rules["html_block"] = html_block
     body = md.render(text)
     for name in env_names:
-        body = re.sub(rf"(<p>)?<{name}-play>\s*</{name}-play>(</p>)?", f'<env-play cell="{name}"></env-play>', body)
+        body = re.sub(rf"(<p>)?<{name}-play>\s*</{name}-play>(</p>)?", f'<env-play cell="{name}" data-not-typeset></env-play>', body)
 
     rendered = re.findall(r'<code-cell name="(\w+)"', body)
     assert rendered == cell_order(blocks), f"markdown-it found cells {rendered}, check.py found {cell_order(blocks)}"
@@ -79,7 +79,7 @@ def main() -> None:
     for key, value in {"TITLE": html.escape(title[1] if title else out.name), "SESSION": args.session_url, "BODY": body}.items():
         page = page.replace("{{" + key + "}}", value)
     (out / "index.html").write_text(page)
-    for f in ("page.js", "page.css", "play.html"):
+    for f in ("page.js", "page.css", "typeset.css", "settings.js", "play.html"):
         shutil.copy(HERE / "web" / f, out / f)
 
     build_web.ensure_raylib()

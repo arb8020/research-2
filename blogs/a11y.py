@@ -1,4 +1,4 @@
-"""Accessibility lint for a built chapter page: axe-core in headless Chromium, light and dark.
+"""Accessibility lint for a built chapter page: axe-core in headless Chromium, every theme x light/dark.
 
     uv run --with playwright a11y.py [url]      # default http://localhost:8010/01-flappy/
 
@@ -13,8 +13,9 @@ AXE = "https://cdn.jsdelivr.net/npm/axe-core@4.10.2/axe.min.js"
 URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8010/01-flappy/"
 
 
-def audit(browser: Browser, scheme: str) -> list[dict]:
+def audit(browser: Browser, theme: str, scheme: str) -> list[dict]:
     page = browser.new_page(viewport={"width": 1000, "height": 800}, color_scheme=scheme)
+    page.add_init_script(f"localStorage.setItem('blogs.settings', JSON.stringify({{theme: '{theme}'}}))")
     page.goto(URL)
     page.locator(".cm-editor").first.wait_for()
     page.wait_for_timeout(1000)
@@ -39,9 +40,10 @@ def report(scheme: str, violations: list[dict]) -> None:
 with sync_playwright() as p:
     browser = p.chromium.launch()
     found = 0
-    for scheme in ("light", "dark"):
-        violations = audit(browser, scheme)
-        report(scheme, violations)
+    for theme in ("classic", "paper"):
+        for scheme in ("light", "dark"):
+            violations = audit(browser, theme, scheme)
+            report(f"{theme} {scheme}", violations)
         found += len(violations)
     browser.close()
 sys.exit(1 if found else 0)

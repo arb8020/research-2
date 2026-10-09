@@ -1,24 +1,73 @@
+/* Palette and type tokens. This file is their only writer; components use var(--x) and never a hex value.
+ * Later (deferred, 2026-10-08): this palette and the theme switch are candidates for a shared personal
+ * design-tokens file plus a component registry used across projects. Don't abstract until a second user.
+ *
+ * Two axes, set on <html> by settings.js:
+ *   data-scheme  light | dark | absent (absent = follow the OS; Lea Verou's two-state toggle)
+ *   data-theme   classic | paper   (surfaces only; syntax colours depend on the scheme alone)
+ */
+
+/* Scheme tokens, shared by every theme. All token colours are >= 4.5:1 on both themes' code backgrounds. */
 :root {
-  --bg: #fdfcf8; --fg: #1d1d1b; --muted: #6b6a64; --rule: #dedbd0; --code-bg: #f4f2ea;
-  --pass: #2f7d4a; --fail: #b3261e;
-  --gutter: #63625c; --active: #eae7dc; --select: #d8e2f0; --caret: #1d1d1b;
+  color-scheme: light;
+  --pass: #2f7d4a; --fail: #b3261e; --select: #d8e2f0;
   --tok-keyword: #7a2e8c; --tok-string: #8a3a10; --tok-comment: #5d655b; --tok-number: #1f5c99;
   --tok-type: #0b6a4a; --tok-meta: #7a4f12; --tok-def: #1d4f91; --tok-prop: #3b3b37;
+  /* classic surfaces (the default theme) */
+  --bg: #fdfcf8; --fg: #1d1d1b; --muted: #6b6a64; --rule: #dedbd0; --code-bg: #f4f2ea;
+  --gutter: #63625c; --active: #eae7dc; --caret: #1d1d1b;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #18181a; --fg: #e8e6df; --muted: #9a988f; --rule: #34342f; --code-bg: #222224;
-          --pass: #6cc28a; --fail: #f08a80;
-          --gutter: #9a988f; --active: #2c2c2f; --select: #3a4a63; --caret: #e8e6df;
-          --tok-keyword: #d7a6f2; --tok-string: #eaa77c; --tok-comment: #a2aaa0; --tok-number: #8fc6ff;
-          --tok-type: #7fd8ae; --tok-meta: #dcbc84; --tok-def: #a4c4ff; --tok-prop: #d4d2ca; }
+  :root:not([data-scheme="light"]) {
+    color-scheme: dark;
+    --pass: #6cc28a; --fail: #f08a80; --select: #3a4a63;
+    --tok-keyword: #d7a6f2; --tok-string: #eaa77c; --tok-comment: #a2aaa0; --tok-number: #8fc6ff;
+    --tok-type: #7fd8ae; --tok-meta: #dcbc84; --tok-def: #a4c4ff; --tok-prop: #d4d2ca;
+    --bg: #18181a; --fg: #e8e6df; --muted: #9a988f; --rule: #34342f; --code-bg: #222224;
+    --gutter: #9a988f; --active: #2c2c2f; --caret: #e8e6df;
+  }
 }
+:root[data-scheme="dark"] {
+  color-scheme: dark;
+  --pass: #6cc28a; --fail: #f08a80; --select: #3a4a63;
+  --tok-keyword: #d7a6f2; --tok-string: #eaa77c; --tok-comment: #a2aaa0; --tok-number: #8fc6ff;
+  --tok-type: #7fd8ae; --tok-meta: #dcbc84; --tok-def: #a4c4ff; --tok-prop: #d4d2ca;
+  --bg: #18181a; --fg: #e8e6df; --muted: #9a988f; --rule: #34342f; --code-bg: #222224;
+  --gutter: #9a988f; --active: #2c2c2f; --caret: #e8e6df;
+}
+
+/* paper: obol's skin via observe/dashboard/src/theme.css. Warm canvas, white surfaces, hairlines. */
+:root[data-theme="paper"] {
+  --bg: #f5f5f1; --fg: #252825; --muted: #63675f; --rule: #dedfd9; --code-bg: #fff;
+  --gutter: #63675f; --active: #f2f2ee; --caret: #252825; --pass: #24774f; --fail: #b8443f;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="paper"]:not([data-scheme="light"]) {
+    --bg: #1a1c19; --fg: #e8eae5; --muted: #9a9e96; --rule: #393c37; --code-bg: #242624;
+    --gutter: #9a9e96; --active: #2b2e2a; --caret: #e8eae5; --pass: #6dba8a; --fail: #e07670;
+  }
+}
+:root[data-theme="paper"][data-scheme="dark"] {
+  --bg: #1a1c19; --fg: #e8eae5; --muted: #9a9e96; --rule: #393c37; --code-bg: #242624;
+  --gutter: #9a9e96; --active: #2b2e2a; --caret: #e8eae5; --pass: #6dba8a; --fail: #e07670;
+}
+
+/* Typography. settings.js writes these on <html>; typeset.css reads its --typeset-* from them. */
+:root {
+  --font-body: Charter, "Iowan Old Style", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --size: 18px; --leading: 1.75; --flow: 1.25em; --measure: 80ch;
+}
+.typeset {
+  --typeset-font-body: var(--font-body); --typeset-font-heading: var(--font-body); --typeset-font-mono: var(--font-mono);
+  --typeset-size: var(--size); --typeset-leading: var(--leading); --typeset-flow: var(--flow);
+  --color-foreground: var(--fg); --color-muted-foreground: var(--muted); --color-border: var(--rule); --color-muted: var(--code-bg);
+}
+
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.65 Charter, "Iowan Old Style", Georgia, serif; }
-article { max-width: 760px; margin: 0 auto; padding: 48px 16px 120px; }
-h1 { font-size: 2rem; line-height: 1.2; }
-code, pre, .cell-head, .todo, summary, .play-caption { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-:not(pre) > code { font-size: 0.85em; background: var(--code-bg); padding: 0.1em 0.3em; border-radius: 3px; }
-pre { font-size: 13px; background: var(--code-bg); padding: 12px; overflow-x: auto; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+article { max-width: calc(var(--measure) + 32px); margin: 0 auto; padding: 48px 16px 120px; }
+.cell-head, .todo, summary, .play-caption { font-family: var(--font-mono); }
 
 .todo { margin: 1.4em 0; padding: 4px 10px; font-size: 12px; color: var(--muted); border: 1px dashed var(--rule); border-radius: 4px; }
 .todo::before { content: "todo: "; opacity: 0.7; }
@@ -30,7 +79,7 @@ code-cell { display: block; margin: 1.6em -16px; border: 1px solid var(--rule); 
 .run { font: inherit; padding: 3px 12px; border: 1px solid var(--rule); border-radius: 4px; background: var(--bg); color: var(--fg); cursor: pointer; }
 .run:disabled { opacity: 0.4; cursor: not-allowed; }
 .cm-editor { font-size: 13px; background: var(--code-bg); max-height: 520px; }
-.cm-scroller { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.cm-scroller { font-family: var(--font-mono); }
 .cm-editor .cm-content { caret-color: var(--caret); }
 .cm-editor .cm-cursor, .cm-editor .cm-fat-cursor { border-left-color: var(--caret); }
 .cm-editor .cm-gutters { background: var(--code-bg); color: var(--gutter); border-right: 1px solid var(--rule); }
@@ -60,3 +109,21 @@ details.given summary { padding: 6px 10px; font-size: 12px; color: var(--muted);
 env-play { display: block; margin: 1.6em 0; }
 env-play iframe { display: block; width: 480px; max-width: 100%; height: 240px; border: 0; border-radius: 4px; }
 .play-caption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* Corner controls: light/dark toggle and the Aa reading-settings panel (settings.js). */
+page-settings { position: fixed; top: 12px; right: 12px; z-index: 10; display: flex; gap: 6px; align-items: flex-start;
+                font-family: var(--font-mono); font-size: 12px; }
+.corner-button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--rule);
+                 border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; font-size: 13px; cursor: pointer; }
+.corner-button:hover, .corner-button[aria-expanded="true"] { background: var(--active); }
+.corner-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.corner-button.scheme svg path:only-child { fill: currentColor; stroke: none; }
+.settings-panel { position: absolute; top: 40px; right: 0; width: 240px; padding: 10px; display: grid; gap: 6px;
+                  background: var(--bg); color: var(--fg); border: 1px solid var(--rule); border-radius: 8px;
+                  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
+.settings-panel[hidden] { display: none; }
+.settings-panel label { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; color: var(--muted); }
+.settings-panel select { font: inherit; color: var(--fg); background: var(--code-bg); border: 1px solid var(--rule); border-radius: 4px; padding: 3px 4px; }
+.settings-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
+.settings-actions button { font: inherit; padding: 5px; border: 1px solid var(--rule); border-radius: 4px; background: var(--code-bg); color: var(--fg); cursor: pointer; }
+.settings-actions button:hover { background: var(--active); }
