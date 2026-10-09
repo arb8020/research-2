@@ -19,6 +19,7 @@ import pytest
 
 from box.gateway import kernel_client, relay
 from box.local_provider import Local
+from box.store import DirStore
 
 TOKEN = {"id": "ak-relay-test", "secret": "as-relay-test-secret"}
 AUTH = f"{TOKEN['id']}:{TOKEN['secret']}"
@@ -37,7 +38,7 @@ def make_relay(tmp_path: Path) -> Iterator[Callable[..., str]]:
 
     def make(idle_timeout_s: float = 300) -> str:
         cfg = relay.Config(
-            provider=lambda token: Local(tmp_path / "machines"), image=None, gpus=(None,), labels={"box.purpose": "relay-test"},
+            access=lambda token: relay.Access(Local(tmp_path / "machines"), DirStore(tmp_path / "records")), image=None, gpus=(None,), labels={"box.purpose": "relay-test"},
             origins=re.compile(relay.LOCAL_ORIGIN), python=sys.executable, ip="127.0.0.1", port=free_port,
             idle_timeout_s=idle_timeout_s,
         )  # fmt: skip
@@ -111,7 +112,8 @@ def test_connect_run_a_cell_end(make_relay: Callable[..., str]) -> None:
     assert (out.status, out.stdout) == ("ok", "42\n")
     code, body, _ = call(f"{gw}/sessions/{sid}/end", "POST", headers={"X-Box-Token": AUTH})
     assert (code, body["status"]["state"], body["status"]["reason"]) == (200, "ended", "stopped")
-    assert status(gw, sid)[0] == 404  # the machine is gone: the session is unknown
+    assert status(gw, sid) == (200, body["status"])  # the machine is gone: its record answers
+    assert status(gw, "s-000000000000")[0] == 404  # a session nobody recorded is unknown
 
 
 def test_the_relay_keeps_nothing_a_running_session_needs(make_relay: Callable[..., str]) -> None:
@@ -161,3 +163,27 @@ def test_a_session_nobody_uses_ends_idle(make_relay: Callable[..., str]) -> None
     sid = create(gw)
     got = events(gw, sid, "ended", timeout_s=60)  # the stream follows the machine until it ends
     assert got[-1][1]["status"]["reason"] == "idle"
+    assert status(gw, sid) == (200, got[-1][1]["status"])
+
+
+def test_after_the_machine_is_gone_the_record_answers_with_why_and_the_log(make_relay: Callable[..., str]) -> None:
+    gw = make_relay()
+    sid = create(gw)
+    boot = events(gw, sid, "running")
+    call(f"{gw}/sessions/{sid}/end", "POST", headers={"X-Box-Token": AUTH})
+    relay.BOOTS.clear()  # no memory of it here either
+    after = events(gw, sid, "ended")
+    assert after[-1][1]["status"]["reason"] == "stopped"
+    logged = [e["text"] for _, e in after if e["kind"] == "log"]
+    assert [e["text"] for _, e in boot if e["kind"] == "log"] == logged[: len([1 for _, e in boot if e["kind"] == "log"])]
+    assert any("Jupyter Server" in line for line in logged), logged
+
+
+def test_a_stream_that_saw_the_boot_does_not_repeat_its_log_from_the_record(make_relay: Callable[..., str]) -> None:
+    gw = make_relay()
+    sid = create(gw)
+    events(gw, sid, "running")
+    call(f"{gw}/sessions/{sid}/end", "POST", headers={"X-Box-Token": AUTH})
+    again = events(gw, sid, "ended")  # the boot from memory, then the record
+    lines = [e["text"] for _, e in again if e["kind"] == "log"]
+    assert lines and len(lines) == len(set(lines)), lines
