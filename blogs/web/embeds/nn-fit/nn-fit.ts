@@ -9,7 +9,7 @@ import { must } from "../../dom";
 import type { Activation, Adam, Batch, Mlp, Task } from "./mlp";
 import { ACTIVATIONS, evaluate, initMlp, makeAdam, paramCount, predictor, seeded, trainStep } from "./mlp";
 import type { DrawBuffer, Point } from "./datasets";
-import { INPUT_SCALE, columnX, drawSamples, fillExample, filledColumns, makeDrawBuffer, paintStroke, spiral } from "./datasets";
+import { INPUT_SCALE, columnX, describeGaps, drawSamples, fillExample, filledColumns, gaps, makeDrawBuffer, paintStroke, spiral } from "./datasets";
 
 export type Dataset = "draw" | "spiral";
 const DATASETS: readonly Dataset[] = ["draw", "spiral"];
@@ -21,6 +21,7 @@ export interface NnFitStats {
   readonly loss: number | null; // null with no data
   readonly accuracy: number | null; // spiral only
   readonly training: boolean; // the reader pressed Train (it may still be paused offscreen)
+  readonly ready: boolean; // Train is enabled: spiral, or a drawing that spans the whole x axis
 }
 
 // Judgement calls (see the report): full-batch Adam, a few steps per animation frame, 160 draw columns,
@@ -59,6 +60,8 @@ canvas { display: block; width: 100%; aspect-ratio: 2 / 1; background: var(--cod
 .stage.spiral canvas { aspect-ratio: 1 / 1; cursor: default; touch-action: auto; }
 .hint { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--muted); pointer-events: none; }
 .hint[hidden] { display: none; }
+.need { margin: 6px 0 0; color: var(--fg); text-wrap: pretty; }
+.need[hidden] { display: none; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; color: var(--muted); }
 .legend span::before { content: ""; display: inline-block; width: 14px; height: 0; margin-right: 6px; vertical-align: middle;
                        border-top: 2.5px solid var(--swatch); }
@@ -70,6 +73,8 @@ button { font: inherit; min-height: 30px; padding: 4px 12px; border: 1px solid v
          background: var(--bg); color: var(--fg); cursor: pointer; }
 button:hover { background: var(--active, var(--code-bg)); }
 button.train { min-width: 72px; border-color: var(--muted); }
+button[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+button[aria-disabled="true"]:hover { background: var(--bg); }
 button[hidden] { display: none; }
 .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 8px 24px; }
 .control { display: grid; grid-template-columns: 9.5em minmax(60px, 1fr) 3.5em; align-items: center; gap: 8px; color: var(--muted); white-space: nowrap; }
@@ -88,8 +93,9 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 const TEMPLATE = `
 <div class="stage">
   <canvas role="img"></canvas>
-  <p class="hint" aria-hidden="true">draw a function here</p>
+  <p class="hint" aria-hidden="true">draw a function here, edge to edge</p>
 </div>
+<p class="need" id="need"></p>
 <p class="legend">
   <span class="draw-only" style="--swatch: var(--fg)">your curve</span>
   <span class="draw-only" style="--swatch: var(--tok-number)">the network</span>
@@ -97,7 +103,7 @@ const TEMPLATE = `
   <span class="spiral-only square" style="--swatch: var(--tok-string)">class B</span>
 </p>
 <div class="buttons">
-  <button type="button" class="train">Train</button>
+  <button type="button" class="train" aria-describedby="need">Train</button>
   <button type="button" class="reset">Reset weights</button>
   <button type="button" class="example draw-only">Example curve</button>
   <button type="button" class="clear draw-only">Clear drawing</button>
@@ -152,6 +158,7 @@ export class NnFit extends HTMLElement {
   // Data.
   #drawing: DrawBuffer = makeDrawBuffer(COLUMNS);
   #drawBatch: Batch = drawSamples(this.#drawing);
+  #complete = false; // the drawing spans every column
   #spiral: Batch = spiral(SPIRAL_PER_CLASS, SPIRAL_NOISE, seeded(3));
   #stroke: { pointer: number; last: Point } | null = null;
 
@@ -178,6 +185,7 @@ export class NnFit extends HTMLElement {
       loss: result?.loss ?? null,
       accuracy: result?.accuracy ?? null,
       training: this.#training,
+      ready: this.#ready(),
     };
   }
 
@@ -241,18 +249,19 @@ export class NnFit extends HTMLElement {
     });
     on(this.#el("button.example", HTMLButtonElement), "click", () => {
       fillExample(this.#drawing);
-      this.#dataChanged();
       this.#announce("Example curve drawn.");
+      this.#dataChanged(); // may announce "Train is ready" over the line above
     });
     on(this.#el("button.clear", HTMLButtonElement), "click", () => {
       this.#drawing = makeDrawBuffer(COLUMNS);
-      this.#dataChanged();
       this.#announce("Drawing cleared.");
+      this.#dataChanged(); // announces the pause if training was running
     });
     const select = this.#el("select.dataset", HTMLSelectElement);
     on(select, "change", () => {
       if (!isDataset(select.value)) return;
       this.#dataset = select.value;
+      if (this.#training && !this.#ready()) this.#setTraining(false);
       this.#rebuildNet();
       this.#syncControls();
       this.#announce(select.value === "draw" ? "Draw a function on the plot." : "Spiral dataset: two classes.");
@@ -342,8 +351,21 @@ export class NnFit extends HTMLElement {
     this.#paint();
   }
 
+  // Training on the drawing needs it to span the whole x axis; this keeps Train's state in step.
+  #ready(): boolean {
+    return this.#dataset !== "draw" || this.#complete;
+  }
+
   #dataChanged(): void {
     this.#drawBatch = drawSamples(this.#drawing);
+    const was = this.#complete;
+    this.#complete = gaps(this.#drawing).length === 0;
+    if (this.#complete && !was && this.#dataset === "draw") this.#announce("The drawing spans the whole width. Train is ready.");
+    if (!this.#complete && this.#training && this.#dataset === "draw") {
+      this.#setTraining(false);
+      this.#announce("Paused: the drawing no longer spans the whole width.");
+    }
+    this.#syncControls();
     this.#paint();
   }
 
@@ -360,9 +382,17 @@ export class NnFit extends HTMLElement {
     this.#el("input.lr", HTMLInputElement).setAttribute("aria-valuetext", lr);
     const train = this.#el("button.train", HTMLButtonElement);
     train.textContent = this.#training ? "Pause" : "Train";
+    // aria-disabled rather than disabled: the button stays focusable, so a screen reader still reaches
+    // it and reads its description (the .need line) saying why it can't train yet.
+    const ready = this.#ready();
+    train.setAttribute("aria-disabled", String(!ready));
+    const need = this.#el(".need", HTMLParagraphElement);
+    need.hidden = ready;
+    need.textContent = ready ? "" : `Draw across the whole width to train. Missing: ${describeGaps(this.#drawing)}.`;
   }
 
   #setTraining(on: boolean): void {
+    if (on && !this.#ready()) return;
     this.#training = on;
     this.#syncControls();
     this.#announce(on ? "Training." : "Paused.");
@@ -389,7 +419,7 @@ export class NnFit extends HTMLElement {
 
   #tick(now: number): void {
     const batch = this.#batch();
-    if (batch.n > 0) {
+    if (batch.n > 0 && this.#ready()) {
       const task = this.#task();
       for (let i = 0; i < STEPS_PER_FRAME; i++) trainStep(this.#net, task, batch, this.#opt, this.#lr());
       this.#steps += STEPS_PER_FRAME;
@@ -473,6 +503,33 @@ export class NnFit extends HTMLElement {
     ctx.moveTo(0, py(0)); ctx.lineTo(w, py(0));
     ctx.moveTo(px(0), 0); ctx.lineTo(px(0), h);
     ctx.stroke();
+
+    // Undrawn x ranges: a hatched band plus a dashed baseline (pattern, not just colour).
+    ctx.save();
+    ctx.strokeStyle = c.muted;
+    for (const { from, to } of gaps(this.#drawing)) {
+      const x0 = (from / COLUMNS) * w;
+      const x1 = ((to + 1) / COLUMNS) * w;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x0, 0, x1 - x0, h);
+      ctx.clip();
+      ctx.globalAlpha = 0.3;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let d = x0 - h; d < x1; d += 8) { ctx.moveTo(d, h); ctx.lineTo(d + h, 0); }
+      ctx.stroke();
+      ctx.restore();
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(x0, py(0));
+      ctx.lineTo(x1, py(0));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
 
     // The reader's curve: one polyline per run of drawn columns, a dot for a lone column.
     ctx.lineJoin = "round";

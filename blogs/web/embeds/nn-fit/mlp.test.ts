@@ -2,7 +2,7 @@
 // Throws (exit 1) on the first failure; prints one line per check.
 import type { Activation, Batch, Mlp, Task } from "./mlp";
 import { ACTIVATIONS, evaluate, get, initMlp, lossAndGrad, makeAdam, seeded, trainStep } from "./mlp";
-import { columnAt, drawSamples, fillExample, filledColumns, makeDrawBuffer, paintStroke, spiral } from "./datasets";
+import { columnAt, describeGaps, drawSamples, fillExample, filledColumns, gaps, makeDrawBuffer, paintStroke, spiral } from "./datasets";
 
 function check(ok: boolean, message: string): void {
   if (!ok) throw new Error(`FAIL ${message}`);
@@ -65,6 +65,13 @@ for (const task of ["regression", "binary"] as const) {
   paintStroke(buf, null, { x: 0, y: 0.5 });
   check(get(buf, columnAt(100, 0)) === 0.5 && filledColumns(buf) === last - first + 1, "drawing over a column overwrites it");
   check(drawSamples(buf).n === filledColumns(buf), "one sample per drawn column");
+  check(describeGaps(buf) === "left edge to 4%, 96% to right edge" && gaps(buf).length === 2, `gaps at both edges: "${describeGaps(buf)}"`);
+  buf.fill(NaN, 40, 55);
+  check(describeGaps(buf) === "left edge to 4%, 40–55%, 96% to right edge", `gap in the middle: "${describeGaps(buf)}"`);
+  check(describeGaps(makeDrawBuffer(100)) === "everything", "empty buffer: everything is missing");
+  const full = makeDrawBuffer(100);
+  paintStroke(full, { x: -1, y: 0 }, { x: 1, y: 0 });
+  check(gaps(full).length === 0, "a stroke from edge to edge leaves no gaps");
 }
 
 // Training sanity: the defaults the widget ships with do what the prose will claim.
