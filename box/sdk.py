@@ -55,7 +55,7 @@ LABEL_DEADLINE = "box.deadline"  # unix time the session ends by
 RESERVED = (LABEL_BY, LABEL_SESSION, LABEL_DEADLINE)  # launch stamps these; a caller's labels are the rest
 POLL_S = 0.5
 RECORD_PATH = "record"  # where a session's record is mounted on its machine, under the supervisor's root
-SESSION_ID = re.compile(r"s-[0-9a-f]{12}")
+SESSION_ID = re.compile(r"s-[0-9a-f]{12}")  # new_session_id()'s shape
 T = TypeVar("T")
 
 
@@ -142,7 +142,7 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     provider: Provider, *, deadline_s: int, gpu: str | None = None, image: str | None = None,
     env: dict[str, str] | None = None, labels: dict[str, str] | None = None,
     lease_ttl_s: float = 60.0, idle_timeout_s: float = 0.0, boot_timeout_s: float = 900.0,
-    ports: tuple[int, ...] = (), record: Store | None = None,
+    ports: tuple[int, ...] = (), record: Store | None = None, session_id: str | None = None,
 ) -> Session:  # fmt: skip
     """Rent a machine whose supervisor ends it by deadline_s (or sooner: lease lost, idle, stop).
     Returns once the supervisor is up; a machine that is not up in boot_timeout_s (image pull,
@@ -153,7 +153,12 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     open later (Modal and RunPod route a port only if the machine was created with it). Idle: no
     job running and no connection to any of ports, for idle_timeout_s (0: never idle).
     record: the supervisor records status, jobs, and output into it, under record_prefix(id), so
-    status() and wait() still answer after the machine is gone, and read_record() reads it."""
+    status() and wait() still answer after the machine is gone, and read_record() reads it.
+    session_id: one from new_session_id(), for a caller that must name the session before launch
+    returns (a relay answers the browser at once, while the machine boots); fresh by default."""
+    session_id = new_session_id() if session_id is None else session_id
+    if not SESSION_ID.fullmatch(session_id):
+        raise ValueError(f"session_id {session_id!r} is not one new_session_id() makes")
     if clash := sorted(set(labels or {}) & set(RESERVED)):
         raise ValueError(f"labels {clash} are box's own (launch stamps them)")
     args = [
@@ -161,7 +166,6 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
         "--ports", ",".join(map(str, ports)),
         *(["--record", RECORD_PATH, *(["--record-sync"] if record.sync_writes else [])] if record else []),
     ]  # fmt: skip
-    session_id = f"s-{secrets.token_hex(6)}"
     boot = "import base64,os; exec(base64.b64decode(os.environ['BOX_SUPERVISOR']))"
     entrypoint = ["bash", "-c", f'exec python3 -c {shlex.quote(boot)} --root "$BOX_ROOT" {shlex.join(args)}']
     # TODO(handoff): LABEL_DEADLINE is stamped before the machine boots, but the supervisor's clock
@@ -194,6 +198,10 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
         raise
     session.hold(lease_ttl_s / 4)
     return session
+
+
+def new_session_id() -> str:
+    return f"s-{secrets.token_hex(6)}"
 
 
 def attach(provider: Provider, session_id: str, record: Store | None = None) -> Session:
