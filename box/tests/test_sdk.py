@@ -285,7 +285,7 @@ def test_following_a_released_session_sees_its_last_line_and_exit(launch: Callab
 def test_a_service_runs_beside_the_queue_and_is_not_work_for_idleness(launch: Callable, scale: float) -> None:
     port, idle_s = free_port(), 3 * scale
     s = launch(deadline_s=600, idle_timeout_s=idle_s, ports=(port,))
-    server = s.run(f"exec python3 -m http.server {port}", service=True)
+    server = s.serve(f"exec python3 -m http.server {port}")
     job = s.run("echo queued after a service")  # the service never holds the queue up
     assert job.wait() == Ending("exited", 0)
     eventually(lambda: fetch(s.expose(port)) is not None, timeout_s=30 * scale)
@@ -297,7 +297,7 @@ def test_a_service_runs_beside_the_queue_and_is_not_work_for_idleness(launch: Ca
 
 def test_a_released_session_lives_while_its_service_does(launch: Callable, provider: Provider, scale: float) -> None:
     s = launch(deadline_s=600, lease_ttl_s=2 * scale)
-    server = s.run("sleep 999", service=True)
+    server = s.serve("sleep 999")
     eventually(lambda: (server.status() or {}).get("state") == "running", timeout_s=30 * scale)
     s.release()
     time.sleep(3 * scale)  # past the lease TTL: released, and a service is something left
@@ -305,11 +305,6 @@ def test_a_released_session_lives_while_its_service_does(launch: Callable, provi
     server.kill()
     assert server.wait().reason == "killed"
     eventually(lambda: gone(provider, s), timeout_s=20 * scale)  # nothing left: ends as released
-
-
-def test_a_service_has_no_hook(launch: Callable) -> None:
-    with launch(deadline_s=600) as s, pytest.raises(ValueError, match="no on_exit"):
-        s.run("sleep 1", service=True, on_exit="true")
 
 
 def test_logs_resume_from_byte_offsets(launch: Callable) -> None:
@@ -332,13 +327,13 @@ def test_a_caller_can_name_the_session_before_launch_returns(launch: Callable, p
 def test_services_past_the_limit_are_refused_and_the_session_goes_on(launch: Callable, scale: float) -> None:
     with launch(deadline_s=600) as s:
         for _ in range(MAX_SERVICES):
-            s.run("sleep 999", service=True)
+            s.serve("sleep 999")
         with pytest.raises(ValueError, match="services"):
-            s.run("sleep 999", service=True)
+            s.serve("sleep 999")
         # a second client racing the first gets past that check: the supervisor refuses the spec, and lives
-        extra = sdk.Job(s, "9999999999-extra")
-        s.machine.write(f"{s.machine.root}/jobs/{extra.id}.spec.tmp", json.dumps({"cmd": "sleep 999", "service": True}).encode())
-        s.machine.exec(f"mkdir -p {extra.dir} && mv {s.machine.root}/jobs/{extra.id}.spec.tmp {extra.dir}/spec.json")
+        extra = sdk.Job(s, "9999999999-extra", "services")
+        s.machine.write(f"{s.machine.root}/services/{extra.id}.spec.tmp", json.dumps({"cmd": "sleep 999"}).encode())
+        s.machine.exec(f"mkdir -p {extra.dir} && mv {s.machine.root}/services/{extra.id}.spec.tmp {extra.dir}/spec.json")
         assert extra.wait() == Ending("refused", None)
         assert isinstance(s.status(), Running)
         assert s.run("echo after").wait() == Ending("exited", 0)
@@ -350,3 +345,11 @@ def test_a_character_split_across_reads_is_followed_whole(launch: Callable, scal
         chunks = list(job.logs(follow=True))
     assert "".join(c.text for c in chunks) == "café\n"
     assert chunks[-1].end == (len("café\n".encode()), 0)
+
+
+def test_a_session_lists_its_jobs_and_its_services_apart(launch: Callable) -> None:
+    with launch(deadline_s=600) as s:
+        server = s.serve("sleep 999")
+        job = s.run("echo queued")
+        job.wait()
+        assert ([j.id for j in s.jobs()], [j.id for j in s.services()]) == ([job.id], [server.id])

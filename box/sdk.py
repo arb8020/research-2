@@ -14,7 +14,7 @@
         case Running(): s.wait()             # -> Ended: the awaitable terminal state
 
     with box.launch(provider, deadline_s=3600, ports=[8888]) as s:   # ports: declared at launch
-        s.run("jupyter server --port 8888 ...")
+        s.serve("jupyter server --port 8888 ...")   # a service: beside the job queue, until the session ends
         s.expose(8888)                       # Endpoint(url="https://...", headers={})
 
     s = box.launch(provider, deadline_s=3600, record=store)   # the supervisor records into store (box/store.py)
@@ -47,7 +47,7 @@ from pathlib import Path
 from typing import Literal, Protocol, TypeVar, get_args
 
 from box.store import Mount, Store
-from box.supervisor import HEARTBEAT_TTL_S, MAX_SERVICES, utf8_cut
+from box.supervisor import HEARTBEAT_TTL_S, KINDS, MAX_SERVICES, utf8_cut
 
 SUPERVISOR = Path(__file__).with_name("supervisor.py")
 LABEL_BY = "box.by"
@@ -320,31 +320,37 @@ class Session:
             time.sleep(POLL_S)
         return status
 
-    def run(
-        self, cmd: str, *, on_exit: str | None = None, hook_budget_s: float = 300.0, env: dict[str, str] | None = None,
-        service: bool = False,
-    ) -> Job:  # fmt: skip
+    def run(self, cmd: str, *, on_exit: str | None = None, hook_budget_s: float = 300.0, env: dict[str, str] | None = None) -> Job:
         """Queue cmd (bash). Jobs run one at a time, in order. on_exit (bash) runs after it ends
         however it ended, with BOX_EXIT_CODE, BOX_REASON, BOX_JOB_DIR set, within hook_budget_s;
-        the job is killed hook_budget_s before the session's deadline to leave the hook that time.
-        service=True: a long-lived server (e.g. behind an exposed port) that starts at once beside
-        the queue, is not work for idleness (connections to the ports are), keeps a released
-        session alive, has no hook, and is killed when the session ends. Its Job reads the same."""
-        running = self.status()
-        if not isinstance(running, Running):
-            raise RuntimeError(f"{self.id}: cannot run a job on a session that is {running}")
-        if service and on_exit:
-            raise ValueError("a service has no on_exit hook (it ends with the session)")
-        if service and len(self._check(f"grep -l '\"service\": true' {self._path('jobs')}/*/spec.json || true").split()) >= MAX_SERVICES:
-            raise ValueError(f"{self.id}: a session runs at most {MAX_SERVICES} services")
+        the job is killed hook_budget_s before the session's deadline to leave the hook that time."""
+        running = self._running_now()
         left = running.deadline_at - time.time()
         if on_exit and hook_budget_s >= left:
             raise ValueError(f"hook_budget_s={hook_budget_s} does not fit in the session's {left:.0f} s left")
-        job = Job(self, f"{int(time.time())}-{secrets.token_hex(3)}")
-        spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "env": env or {}, "service": service}
-        tmp = self._path(f"jobs/{job.id}.spec.tmp")
+        return self._start(Job(self, new_job_id(), "jobs"), {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "env": env or {}})
+
+    def serve(self, cmd: str, *, env: dict[str, str] | None = None) -> Job:
+        """Start cmd (bash) as a service: a long-lived server (e.g. behind an exposed port) that
+        starts at once beside the job queue, is not work for idleness (connections to the ports
+        are), keeps a released session alive, has no hook, and is killed when the session ends.
+        At most MAX_SERVICES a session (ValueError past it). Its Job reads as a job's does."""
+        self._running_now()
+        if len([name for name in self._check(f"ls {self._path('services')}").split() if not name.endswith(".tmp")]) >= MAX_SERVICES:
+            raise ValueError(f"{self.id}: a session runs at most {MAX_SERVICES} services")
+        return self._start(Job(self, new_job_id(), "services"), {"cmd": cmd, "env": env or {}})
+
+    def _running_now(self) -> Running:
+        running = self.status()
+        if not isinstance(running, Running):
+            raise RuntimeError(f"{self.id}: cannot start anything on a session that is {running}")
+        return running
+
+    def _start(self, job: Job, spec: dict) -> Job:
+        """Write job's spec where the supervisor picks it up: atomically, never half a spec."""
+        tmp = self._path(f"{job.kind}/{job.id}.spec.tmp")
         self.machine.write(tmp, json.dumps(spec).encode())
-        self._check(f"mkdir -p {job.dir} && mv {tmp} {job.dir}/spec.json")  # atomic: never half a spec
+        self._check(f"mkdir -p {job.dir} && mv {tmp} {job.dir}/spec.json")
         return job
 
     def put(self, local: str | Path, remote: str, ignore: tuple[str, ...] = ()) -> None:
@@ -368,15 +374,22 @@ class Session:
             tar.extractall(local, filter="data")
 
     def jobs(self) -> list[Job]:
-        """Every job this session was given, oldest first (from any process); once the machine is
-        gone, every job its record has."""
+        """Every job this session was given (run), oldest first, from any process; once the
+        machine is gone, every one its record has."""
+        return self._listed("jobs")
+
+    def services(self) -> list[Job]:
+        """Every service this session was given (serve), oldest first; as jobs()."""
+        return self._listed("services")
+
+    def _listed(self, kind: str) -> list[Job]:
         try:
-            out = self._check(f"ls {self._path('jobs')}")
+            out = self._check(f"ls {self._path(kind)}")
         except Gone:
             if self.record is None:
                 raise
-            return [Job(self, job_id) for job_id in read_record(self.record, self.id).jobs()]
-        return [Job(self, name) for name in sorted(out.split()) if not name.endswith(".tmp")]
+            return [Job(self, job_id, kind) for job_id in read_record(self.record, self.id).jobs(kind)]
+        return [Job(self, name, kind) for name in sorted(out.split()) if not name.endswith(".tmp")]
 
     def _read_ended(self) -> Ended | None:
         """ended.json's reason; None while the session lasts. Gone once the machine is."""
@@ -422,14 +435,21 @@ class Session:
         return out
 
 
+def new_job_id() -> str:
+    return f"{int(time.time())}-{secrets.token_hex(3)}"  # sorts by when it was given
+
+
 @dataclass(frozen=True)
 class Job:
+    """A job (Session.run) or a service (Session.serve): same files, same reading."""
+
     session: Session
     id: str
+    kind: Literal["jobs", "services"] = "jobs"
 
     @property
     def dir(self) -> str:
-        return self.session._path(f"jobs/{self.id}")
+        return self.session._path(f"{self.kind}/{self.id}")
 
     def status(self) -> dict | None:
         """The supervisor's status.json, or None while the job waits its turn."""
@@ -449,7 +469,7 @@ class Job:
 
     def kill(self) -> None:
         """Kill this job (its whole process group); its hook runs; the session goes on."""
-        self.session._touch(f"jobs/{self.id}/kill")
+        self.session._touch(f"{self.kind}/{self.id}/kill")
 
     def logs(self, *, after: LogCursor = (0, 0), follow: bool = False) -> Iterator[LogChunk]:
         """The job's output past `after` (the job's start by default); follow=True until it is done.
@@ -465,7 +485,7 @@ class Job:
                     raise
                 if follow:
                     self.session.wait()
-                yield from read_record(self.session.record, self.session.id).logs(self.id, after=cursor)
+                yield from read_record(self.session.record, self.session.id).logs(self.id, after=cursor, kind=self.kind)
                 return
             for chunk in read.chunks:
                 cursor = chunk.end
@@ -487,7 +507,7 @@ class Job:
             if self.session.record is None:
                 raise
             record = read_record(self.session.record, self.session.id)
-            return JobRead(record.job_status(self.id), list(record.logs(self.id, after=after)))
+            return JobRead(record.job_status(self.id, kind=self.kind), list(record.logs(self.id, after=after, kind=self.kind)))
 
     def _read_live(self, after: LogCursor | None, *, watch: bool) -> JobRead:
         """status.json, then (after given) each stream past after, each file one base64 line, so
@@ -616,24 +636,25 @@ class Record:
             return None
         return Ended("machine_lost")
 
-    def jobs(self) -> list[str]:
-        """Every job id recorded, oldest first."""
-        prefix = f"{record_prefix(self.session_id)}/jobs/"
+    def jobs(self, kind: str = "jobs") -> list[str]:
+        """Every job id recorded (kind="services": every service's), oldest first."""
+        assert kind in KINDS, kind
+        prefix = f"{record_prefix(self.session_id)}/{kind}/"
         return sorted({key[len(prefix) :].split("/", 1)[0] for key in self.store.list(prefix)})
 
-    def job_status(self, job_id: str) -> dict | None:
+    def job_status(self, job_id: str, kind: str = "jobs") -> dict | None:
         """The job's status.json as last recorded (with all its output, once "done"); None if
         none was (it never started, or started after the last flush)."""
         try:
-            return json.loads(self.store.get(f"{record_prefix(self.session_id)}/jobs/{job_id}/status.json"))
+            return json.loads(self.store.get(f"{record_prefix(self.session_id)}/{kind}/{job_id}/status.json"))
         except FileNotFoundError:
             return None
 
-    def logs(self, job_id: str, after: LogCursor = (0, 0)) -> Iterator[LogChunk]:
+    def logs(self, job_id: str, after: LogCursor = (0, 0), kind: str = "jobs") -> Iterator[LogChunk]:
         """The job's recorded output past `after`, in the order it was recorded, as Job.logs gives
         it. Only chunks past the cursor are read. Output that is not UTF-8 is decoded with
         replacement characters."""
-        prefix = f"{record_prefix(self.session_id)}/jobs/{job_id}/"
+        prefix = f"{record_prefix(self.session_id)}/{kind}/{job_id}/"
         names = [key[len(prefix) :] for key in self.store.list(prefix)]
         chunks = sorted((*parse_chunk(name), name) for name in names if CHUNK.fullmatch(name))
         cursor = dict(zip(STREAMS, after, strict=True))

@@ -24,7 +24,7 @@ A Relay owns all of that (boots and their threads, event streams, clients); Hand
     POST /sessions/{id}/end       X-Box-Token                     -> {session_id, status}
     GET  /sessions/{id}/events    ?token=id:secret (EventSource)  -> SSE: step | log | status
 
-The session's machine runs one job, a service: Jupyter Server on PORT, behind box's expose(PORT) (on
+The session's machine runs one service (Session.serve): Jupyter Server on PORT, behind box's expose(PORT) (on
 Modal an encrypted tunnel). Its token is derived, never stored: HMAC(reader's token secret, session
 id), so any relay holding the reader's token can say it again. Once Jupyter answers, the relay
 releases the session's lease: the supervisor then ends it when idle (no connection to the port for
@@ -253,7 +253,7 @@ def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: boo
             kernel = {"url": s.expose(int(labels[LABEL_PORT])).url, "token": kernel_token(token, s.id)}
             if ready or jupyter_ready(kernel):
                 return wire("running", gpu, started_at, deadline_at, kernel=kernel)
-            jupyter = the_kernel_job(s)
+            jupyter = kernel_service(s)
             done = None if jupyter is None else jupyter.status()
             if done is not None and done["state"] == "done":  # the session's reason, or Jupyter's own end (then the session's is "released")
                 return ended(reason=REASONS.get(done["reason"], REASONS["released"]))
@@ -276,11 +276,11 @@ def jupyter_ready(kernel: dict[str, str]) -> bool:
         return False
 
 
-def the_kernel_job(s: sdk.Session) -> sdk.Job | None:
-    """The session's Jupyter service: its first job (with --push, the forwarder is the second).
-    None before the boot has started it."""
-    jobs = s.jobs()
-    return jobs[0] if jobs else None
+def kernel_service(s: sdk.Session) -> sdk.Job | None:
+    """The session's Jupyter: its first service (with --push, the forwarder is the second). None
+    before the boot has started it."""
+    services = s.services()
+    return services[0] if services else None
 
 
 # ---- boot (a thread per POST /sessions) ----
@@ -332,7 +332,7 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
         rec.step("machine", f"supervisor up ({time.monotonic() - t0:.1f} s since connect)")
         if rec.cancelled:
             raise Cancelled
-        job = session.run(jupyter_cmd(cfg, port, origin), service=True, env={"JUPYTER_TOKEN": kernel_token(req.token, rec.session_id)})
+        job = session.serve(jupyter_cmd(cfg, port, origin), env={"JUPYTER_TOKEN": kernel_token(req.token, rec.session_id)})
         rec.step("machine", "starting Jupyter Server")
         endpoint = session.expose(port)
         rec.step("gateway", f"tunnel open: {endpoint.url}")
@@ -347,7 +347,7 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
         status = wire("running", rec.gpu, running.started_at, running.deadline_at, kernel=kernel)
         if cfg.push is not None:
             cmd, env = cfg.push.forwarder_service(rec.session_id, cfg.python, job.dir, rec.log_cursor, status, REASONS)
-            session.run(cmd, service=True, env=env)
+            session.serve(cmd, env=env)
             rec.step("machine", "forwarder started: the machine pushes its log to the fan-out from here")
         rec.step("machine", f"Jupyter Server ready ({time.monotonic() - t0:.1f} s since connect)")
         rec.finish(status)
@@ -659,7 +659,7 @@ def follow_machine(  # noqa: PLR0913 (the stream, the session, where the reader 
     while not closing.is_set():
         status = machine_status(cfg, s, token, ready=ready)  # before the log: once ended, the log read next is all of it
         ready = status["state"] == "running"
-        job = job or the_kernel_job(s)  # None only while a boot (on some relay) has yet to start Jupyter
+        job = job or kernel_service(s)  # None only while a boot (on some relay) has yet to start Jupyter
         # watch: the machine lingers for us after the session ends, so the next poll reads why
         read = job.read(cursor, watch=True) if job else sdk.JobRead(None, [])
         for stream, text, end in log_lines(read.chunks, cursor):

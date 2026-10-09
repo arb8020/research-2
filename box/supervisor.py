@@ -7,10 +7,12 @@ Everything goes through files under ROOT (no sockets), so a client only needs th
     ROOT/lease                  client touches it to hold the session (mtime = last heartbeat)
     ROOT/released               client wrote it: stop checking the lease; end when no job is left
     ROOT/stop                   client wrote it: kill any job, run its hook, end
-    ROOT/jobs/<id>/spec.json    client writes it (atomically) to start a job: {cmd, on_exit, hook_budget_s, env, service}
+    ROOT/jobs/<id>/spec.json    client writes it (atomically) to queue a job: {cmd, on_exit, hook_budget_s, env}
     ROOT/jobs/<id>/stdout       \\ the job's output
     ROOT/jobs/<id>/stderr       /
     ROOT/jobs/<id>/status.json  supervisor writes it: {state, reason, exit_code, hook_exit_code, started, ended}
+    ROOT/jobs/<id>/kill         client wrote it: kill the job (its hook runs), the session goes on
+    ROOT/services/<id>/...      a service: spec.json {cmd, env}, then as a job (no hook)
     ROOT/watch                  a log follower or job waiter touches it each poll (the machine lingers for it)
     ROOT/ended.json             supervisor writes it last: {reason}; then it lingers up to LINGER_S
                                 while someone is still reading (see linger)
@@ -22,7 +24,7 @@ work in the box. Whatever ends it, a running job is killed (whole process group)
 hook still runs, inside the time left before the deadline. The job is killed hook_budget_s before
 the deadline for that.
 
-A service (spec "service": true) is a long-lived server, e.g. a Jupyter Server behind an exposed
+A service (ROOT/services/<id>) is a long-lived server, e.g. a Jupyter Server behind an exposed
 port. It starts at once, beside the job queue (never waits for a job, never holds one up), and it
 is not work for idleness: its connections are what count. It keeps a released session alive (it
 is something left), has no hook, and is killed (whole group) when the session ends; its
@@ -34,8 +36,8 @@ there every FLUSH_S (sooner past FLUSH_BYTES of new output), so it outlives the 
 
     DIR/session.json            as ROOT/session.json, at start
     DIR/heartbeat.json          every flush: {at, ttl_s}; older than ttl_s, the recorder has stopped
-    DIR/jobs/<id>/spec.json     \\ as under ROOT (env: names only), copied when they change
-    DIR/jobs/<id>/status.json   /
+    DIR/jobs/<id>/spec.json     \\ as under ROOT (env: names only), copied when they change;
+    DIR/jobs/<id>/status.json   /  services the same, under DIR/services/<id>
     DIR/jobs/<id>/<stream>.<n>.<end>  closed chunks of new output, n = 1, 2, ... per job across both
                                 streams; end = the stream's bytes up to the chunk's last (a reader
                                 resuming at a byte offset skips chunks without reading them)
@@ -74,6 +76,7 @@ HEARTBEAT_TTL_S = 5 * FLUSH_S  # a reader takes a heartbeat older than this as "
 CHUNK_DIGITS = 6  # flushes come at most every TICK_S, so a 24 h session (Modal's cap) has < 2 * 432000 chunks
 MAX_CHUNKS = 10**CHUNK_DIGITS - 1
 MAX_SERVICES = 8  # a session's long-lived servers; more is a client bug, not a workload
+KINDS = ("jobs", "services")  # ROOT/<kind>/<id>: what a client queues and what it serves
 
 
 # TODO(handoff): if the supervisor itself dies, nothing writes ended.json or runs BOX_ON_SHUTDOWN;
@@ -96,7 +99,8 @@ def main() -> None:
     )  # fmt: skip
     a = p.parse_args()
     root = Path(a.root)
-    (root / "jobs").mkdir(parents=True, exist_ok=True)
+    for kind in KINDS:
+        (root / kind).mkdir(parents=True, exist_ok=True)
     started_at = time.time()
     write_json(root / "session.json", {"started_at": started_at, "deadline_at": started_at + a.deadline_s})
     recorder = Recorder(root, root / a.record, sync=a.record_sync) if a.record else None
@@ -133,11 +137,10 @@ def supervise(root: Path, deadline: float, lease_ttl_s: float, idle_timeout_s: f
     """Run jobs one at a time (services beside them) until the session ends; returns why it ended."""
     done: set[str] = set()
     services: dict[Path, subprocess.Popen] = {}  # every service started, running or not
-    plain: set[Path] = set()  # job dirs tend_services is done with: jobs (a spec never changes once written), refused services
     end = None
     idle_since = time.monotonic()
     while end is None:
-        tend_services(root, services, plain)
+        tend_services(root, services)
         now = time.monotonic()
         if idle_timeout_s and ports and connected(ports):
             idle_since = now  # someone is using an exposed port: not idle
@@ -151,29 +154,25 @@ def supervise(root: Path, deadline: float, lease_ttl_s: float, idle_timeout_s: f
             time.sleep(TICK_S)
             continue
         done.add(job_dir.name)
-        end = run_job(root, job_dir, deadline, lease_ttl_s, lambda: tend_services(root, services, plain))
+        end = run_job(root, job_dir, deadline, lease_ttl_s, lambda: tend_services(root, services))
         idle_since = time.monotonic()
     stop_services(services, end)
     return end
 
 
-def tend_services(root: Path, services: dict[Path, subprocess.Popen], plain: set[Path]) -> None:
-    """Start every service spec not started yet; kill those asked to (ROOT/jobs/<id>/kill); record
-    the end of each that exited by itself."""
-    for job_dir in sorted((root / "jobs").iterdir()):
-        if job_dir in services or job_dir in plain or not (job_dir / "spec.json").exists():
-            continue
-        if not is_service(job_dir):
-            plain.add(job_dir)
+def tend_services(root: Path, services: dict[Path, subprocess.Popen]) -> None:
+    """Start every service spec not started (or refused) yet; kill those asked to
+    (ROOT/services/<id>/kill); record the end of each that exited by itself."""
+    for job_dir in sorted((root / "services").iterdir()):
+        if job_dir in services or (job_dir / "status.json").exists() or not (job_dir / "spec.json").exists():
             continue
         if len(services) >= MAX_SERVICES:  # the client checks too, but two clients can race past it
-            write_json(job_dir / "status.json", {"state": "done", "service": True, "reason": "refused", "exit_code": None, "ended": time.time()})
-            plain.add(job_dir)
+            write_json(job_dir / "status.json", {"state": "done", "reason": "refused", "exit_code": None, "ended": time.time()})
             continue
         spec = json.loads((job_dir / "spec.json").read_text())
         env = {**spec.get("env", {}), "BOX_JOB_ID": job_dir.name, "BOX_JOB_DIR": str(job_dir)}
         services[job_dir] = child = spawn(spec["cmd"], env, job_dir, stdout=job_dir / "stdout", stderr=job_dir / "stderr")
-        write_json(job_dir / "status.json", {"state": "running", "service": True, "started": time.time(), "pgid": child.pid})
+        write_json(job_dir / "status.json", {"state": "running", "started": time.time(), "pgid": child.pid})
     for job_dir, child in services.items():
         if child.poll() is None and (job_dir / "kill").exists():
             kill_group(child)
@@ -199,10 +198,6 @@ def end_service(job_dir: Path, reason: str, code: int | None) -> None:
 
 def service_state(job_dir: Path) -> str:
     return json.loads((job_dir / "status.json").read_text())["state"]
-
-
-def is_service(job_dir: Path) -> bool:
-    return json.loads((job_dir / "spec.json").read_text()).get("service") is True
 
 
 def session_end(root: Path, now: float, deadline: float, lease_ttl_s: float, idle_timeout_s: float, idle_since: float) -> str | None:
@@ -242,8 +237,8 @@ def established_local_ports() -> list[int]:
 
 
 def next_job(root: Path, done: set[str]) -> Path | None:
-    """The oldest job (not a service) with a spec that has not run yet."""
-    pending = [d for d in (root / "jobs").iterdir() if d.name not in done and (d / "spec.json").exists() and not is_service(d)]
+    """The oldest job with a spec that has not run yet."""
+    pending = [d for d in (root / "jobs").iterdir() if d.name not in done and (d / "spec.json").exists()]
     return min(pending, key=lambda d: (d / "spec.json").stat().st_mtime, default=None)
 
 
@@ -350,8 +345,8 @@ class Recorder:
         self.root = root
         self.dest = dest
         self.sync = sync
-        self.offsets: dict[tuple[str, str], int] = {}  # (job, stream) -> bytes of it recorded
-        self.chunks: dict[str, int] = {}  # job -> chunks written (numbered from 1)
+        self.offsets: dict[tuple[str, str], int] = {}  # ("<kind>/<id>", stream) -> bytes of it recorded
+        self.chunks: dict[str, int] = {}  # "<kind>/<id>" -> chunks written (numbered from 1)
         self.copied: dict[str, bytes] = {}  # rel path -> what was last copied there
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self.run, daemon=True, name="box-recorder")
@@ -387,24 +382,28 @@ class Recorder:
         """Everything new since the last flush, then the heartbeat, then a sync. final: drain all
         output (the session has ended, nothing is written any more)."""
         self.copy("session.json", (self.root / "session.json").read_bytes())
-        for job_dir in sorted(d for d in (self.root / "jobs").iterdir() if d.is_dir()):
+        for job_dir in self.job_dirs():
             self.flush_job(job_dir, final=final)
         put(self.dest / "heartbeat.json", json.dumps({"at": time.time(), "ttl_s": HEARTBEAT_TTL_S}).encode())
         self.commit()
 
+    def job_dirs(self) -> list[Path]:
+        """Every job's and service's directory under root."""
+        return [d for kind in KINDS for d in sorted((self.root / kind).iterdir()) if d.is_dir()]
+
     def flush_job(self, job_dir: Path, *, final: bool) -> None:
-        job = job_dir.name
+        job = f"{job_dir.parent.name}/{job_dir.name}"
         if (job_dir / "spec.json").exists():
-            self.copy(f"jobs/{job}/spec.json", recorded_spec((job_dir / "spec.json").read_bytes()))
+            self.copy(f"{job}/spec.json", recorded_spec((job_dir / "spec.json").read_bytes()))
         status = (job_dir / "status.json").read_bytes() if (job_dir / "status.json").exists() else None  # before the output
         caught_up = all([self.record_output(job_dir, stream, final=final) for stream in STREAMS])
         if status is not None and caught_up:  # a recorded "done" comes with all of the job's output
-            self.copy(f"jobs/{job}/status.json", status)
+            self.copy(f"{job}/status.json", status)
 
     def record_output(self, job_dir: Path, stream: str, *, final: bool) -> bool:
         """New bytes of job_dir/stream as closed chunks: one per flush (backpressure), all of them
         if final. Returns whether the record has all of it now."""
-        job, src = job_dir.name, job_dir / stream
+        job, src = f"{job_dir.parent.name}/{job_dir.name}", job_dir / stream
         if not src.exists():
             return True
         while True:
@@ -419,7 +418,7 @@ class Recorder:
             n = self.chunks.get(job, 0) + 1
             if n > MAX_CHUNKS:
                 raise RuntimeError(f"{job}: more than {MAX_CHUNKS} chunks of output")
-            put(self.dest / "jobs" / job / f"{stream}.{n:0{CHUNK_DIGITS}d}.{offset + cut}", data[:cut])
+            put(self.dest / job / f"{stream}.{n:0{CHUNK_DIGITS}d}.{offset + cut}", data[:cut])
             self.chunks[job] = n
             self.offsets[(job, stream)] = offset + cut
             if not final:
@@ -427,7 +426,7 @@ class Recorder:
 
     def pending(self) -> int:
         """Bytes of output not recorded yet."""
-        sizes = {(d.name, s): (d / s).stat().st_size for d in (self.root / "jobs").iterdir() for s in STREAMS if (d / s).exists()}
+        sizes = {(f"{d.parent.name}/{d.name}", s): (d / s).stat().st_size for d in self.job_dirs() for s in STREAMS if (d / s).exists()}
         return sum(size - self.offsets.get(key, 0) for key, size in sizes.items())
 
     def copy(self, rel: str, data: bytes) -> None:
