@@ -1,52 +1,86 @@
-// <nn-fit>: watch a small MLP fit a function the reader draws, or classify a spiral.
+// <nn-fit>: watch a small MLP fit a hidden function from a few noisy samples, or classify a spiral.
 // TensorFlow-Playground style. Self-contained: shadow DOM with its own styles, colours from page.css
 // tokens (custom properties inherit into the shadow root), no ML dependencies.
 //
-// Initial config comes from attributes, all optional:
-//   <nn-fit dataset="draw|spiral" activation="linear|relu|tanh|sigmoid" layers="0..4" width="1..16" lr="0.03">
+// Initial config comes from attributes, all optional (values snap to the nearest slider stop):
+//   dataset="draw|wave|spiral" activation="linear|relu|tanh|sigmoid" layers="0..4" width="1..16"
+//   widths="8,4,..." lr="0.03" samples="4..512" noise="0..0.5" wiggles="1..20" roughness="0.5..3"
+//   stages="1..4" seed="1" step-budget="2000" time-budget="5"
 // Read-only `stats` exposes the live numbers (tests and any host page can read them).
 import { must } from "../../dom";
 import type { Activation, Adam, Batch, Mlp, Task } from "./mlp";
 import { ACTIVATIONS, evaluate, initMlp, makeAdam, paramCount, predictor, seeded, trainStep } from "./mlp";
-import type { DrawBuffer, Point } from "./datasets";
-import { INPUT_SCALE, columnX, describeGaps, drawSamples, fillExample, filledColumns, gaps, makeDrawBuffer, paintStroke, spiral } from "./datasets";
+import type { DrawBuffer, Point, WaveParams, WaveStage } from "./datasets";
+import {
+  INPUT_SCALE, MAX_STAGES, MAX_WIGGLES, SAMPLE_COUNTS, columnX, curveSamples, describeGaps, drawSamples, fillWave,
+  filledColumns, gaps, makeDrawBuffer, paintStroke, spiral, waveFormula, waveStages,
+} from "./datasets";
 
-export type Dataset = "draw" | "spiral";
-const DATASETS: readonly Dataset[] = ["draw", "spiral"];
+export type Dataset = "draw" | "wave" | "spiral";
+const DATASETS: readonly Dataset[] = ["draw", "wave", "spiral"];
 
 export interface NnFitStats {
   readonly dataset: Dataset;
+  readonly sizes: readonly number[];
+  readonly params: number;
+  readonly samples: number; // training points (spiral: total over both classes)
+  readonly loss: number | null; // training loss on the samples; null with no data
+  readonly trueError: number | null; // draw/wave: MSE of the net against the whole clean curve
+  readonly accuracy: number | null; // spiral: on the training points
+  readonly heldOutAccuracy: number | null; // spiral: on a fresh sample from the same spiral
   readonly steps: number;
-  readonly samples: number;
-  readonly loss: number | null; // null with no data
-  readonly accuracy: number | null; // spiral only
+  readonly seconds: number; // training wall-clock time used
+  readonly flops: number; // estimated: 6 * params * samples per step
+  readonly stepBudget: number; // Infinity = off
+  readonly timeBudget: number; // seconds, Infinity = off
   readonly training: boolean; // the reader pressed Train (it may still be paused offscreen)
-  readonly ready: boolean; // Train is enabled: spiral, or a drawing that spans the whole x axis
+  readonly ready: boolean; // Train is enabled: data is complete and budget remains
 }
 
-// Judgement calls (see the report): full-batch Adam, a few steps per animation frame, 160 draw columns,
-// a spiral heatmap grid of one cell per HEAT_PX CSS px (capped at HEATMAP_MAX), learning rate 10^(-4 + k/4) for slider k in 0..16.
+// Judgement calls (see the report). Training: full-batch Adam, up to STEPS_PER_FRAME steps per animation
+// frame (fewer if a frame's steps take FRAME_MS, or a step budget is about to run out).
 const STEPS_PER_FRAME = 8;
-const COLUMNS = 160;
+const FRAME_MS = 12;
+const COLUMNS = 640; // resolution of the true curve; 160 undersampled composed waves (see the report)
+const MAX_LAYERS = 4;
+const MAX_WIDTH = 16;
 const HEAT_PX = 4;
 const HEATMAP_MAX = 128;
-const LR_STEPS = 16;
-const lrAt = (k: number): number => 10 ** (-4 + k / 4);
-const lrIndex = (lr: number): number => Math.min(LR_STEPS, Math.max(0, Math.round((Math.log10(lr) + 4) * 4)));
-const Y_RANGE = 1.2; // draw view shows y in [-Y_RANGE, Y_RANGE]; drawn values are clamped to [-1, 1]
-const SPIRAL_PER_CLASS = 100;
-const SPIRAL_NOISE = 0.15;
+const LRS = Array.from({ length: 17 }, (_, k) => 10 ** (-4 + k / 4)); // 1e-4 .. 1, log scale
+const NOISES = Array.from({ length: 11 }, (_, k) => k * 0.05); // sigma 0 .. 0.5 in y units (curve spans [-1, 1])
+const ROUGHNESSES = Array.from({ length: 11 }, (_, k) => 3 - k * 0.25); // alpha: 3 (smooth) .. 0.5 (rough)
+const STEP_BUDGETS = [500, 1000, 2000, 5000, 10000, 20000, 50000, Infinity];
+const TIME_BUDGETS = [1, 2, 5, 10, 20, 30, 60, Infinity];
+const SPIRAL_JITTER = 2; // spiral jitter (playground units, arms reach radius 5) per unit of sigma
+const HELD_OUT = 500;
+const HELD_OUT_SEED = 1000;
+const Y_RANGE = 1.2; // the curve view shows y in [-Y_RANGE, Y_RANGE]; drawn values are clamped to [-1, 1]
 const REDUCED_MOTION_MS = 250; // with prefers-reduced-motion, redraw at 4 Hz while training
 const ARIA_MS = 1000;
+const MAX_FRAME_GAP_MS = 100; // wall-clock counted per frame is capped, so a stalled tab doesn't eat the budget
 
 const isActivation = (s: string): s is Activation => ACTIVATIONS.some((a) => a === s);
 const isDataset = (s: string): s is Dataset => DATASETS.some((d) => d === s);
+const nearest = (list: readonly number[], v: number): number =>
+  list.reduce((best, x, i) => (Math.abs(x - v) < Math.abs((list[best] ?? Infinity) - v) ? i : best), 0);
+const at = (list: readonly number[], i: number): number => {
+  const v = list[i];
+  if (v === undefined) throw new RangeError(`slider index ${String(i)} outside ${String(list.length)} stops`);
+  return v;
+};
+
+function numAttr(el: Element, name: string): number | null {
+  const raw = el.getAttribute(name);
+  if (raw === null) return null;
+  const v = raw === "off" ? Infinity : Number(raw);
+  if (Number.isNaN(v)) throw new Error(`<nn-fit ${name}="${raw}">: expected a number`);
+  return v;
+}
 
 function intAttr(el: Element, name: string, lo: number, hi: number, fallback: number): number {
-  const raw = el.getAttribute(name);
-  if (raw === null) return fallback;
-  const v = Number(raw);
-  if (!Number.isInteger(v) || v < lo || v > hi) throw new Error(`<nn-fit ${name}="${raw}">: expected an integer in ${String(lo)}..${String(hi)}`);
+  const v = numAttr(el, name);
+  if (v === null) return fallback;
+  if (!Number.isInteger(v) || v < lo || v > hi) throw new Error(`<nn-fit ${name}="${String(v)}">: expected an integer in ${String(lo)}..${String(hi)}`);
   return v;
 }
 
@@ -59,36 +93,49 @@ canvas { display: block; width: 100%; aspect-ratio: 2 / 1; background: var(--cod
          border-radius: 6px; touch-action: none; cursor: crosshair; }
 .stage.spiral canvas { aspect-ratio: 1 / 1; cursor: default; touch-action: auto; }
 .hint { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--muted); pointer-events: none; }
-.hint[hidden] { display: none; }
+[hidden] { display: none !important; }
 .need { margin: 6px 0 0; color: var(--fg); text-wrap: pretty; }
-.need[hidden] { display: none; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; color: var(--muted); }
 .legend span::before { content: ""; display: inline-block; width: 14px; height: 0; margin-right: 6px; vertical-align: middle;
                        border-top: 2.5px solid var(--swatch); }
-.legend .dot::before { width: 8px; height: 8px; border: 0; border-radius: 50%; background: var(--swatch); }
-.legend .square::before { width: 8px; height: 8px; border: 0; border-radius: 1px; background: var(--swatch); }
-.legend [hidden] { display: none; }
-.buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 10px; }
+.legend .faint::before { opacity: 0.4; }
+.legend .dot::before { width: 7px; height: 7px; border: 0; border-radius: 50%; background: var(--swatch); }
+.legend .square::before { width: 7px; height: 7px; border: 0; border-radius: 1px; background: var(--swatch); }
+.readout { margin: 8px 0 0; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.6; }
+.readout b { font-weight: 600; color: var(--fg); }
+.buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
 button { font: inherit; min-height: 30px; padding: 4px 12px; border: 1px solid var(--rule); border-radius: 4px;
          background: var(--bg); color: var(--fg); cursor: pointer; }
 button:hover { background: var(--active, var(--code-bg)); }
 button.train { min-width: 72px; border-color: var(--muted); }
 button[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 button[aria-disabled="true"]:hover { background: var(--bg); }
-button[hidden] { display: none; }
+fieldset { margin: 10px 0 0; padding: 8px 0 0; border: 0; border-top: 1px solid var(--rule); min-width: 0; }
+legend { padding: 0 8px 0 0; color: var(--muted); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
 .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 8px 24px; }
-.control { display: grid; grid-template-columns: 9.5em minmax(60px, 1fr) 3.5em; align-items: center; gap: 8px; color: var(--muted); white-space: nowrap; }
+.control { display: grid; grid-template-columns: 9.5em minmax(60px, 1fr) 4em; align-items: center; gap: 8px; color: var(--muted); white-space: nowrap; }
 .control select { grid-column: 2 / 4; }
 select { font: inherit; color: var(--fg); background: var(--code-bg); border: 1px solid var(--rule); border-radius: 4px; padding: 3px 4px; min-height: 28px; }
 input[type="range"] { width: 100%; margin: 0; accent-color: var(--fg); }
-input:disabled { opacity: 0.4; }
 output { color: var(--fg); font-variant-numeric: tabular-nums; text-align: right; }
-.readout { margin: 10px 0 0; color: var(--muted); font-variant-numeric: tabular-nums; }
-.readout b { font-weight: 600; color: var(--fg); }
-button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.widths { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 24px; margin-top: 8px; }
+.layer-width { display: grid; grid-template-columns: 9.5em 28px 3.2em 28px; align-items: center; gap: 4px; color: var(--muted); white-space: nowrap; }
+.layer-width button { min-height: 28px; padding: 0; }
+.layer-width input { font: inherit; width: 100%; min-height: 28px; text-align: center; color: var(--fg); background: var(--code-bg);
+                     border: 1px solid var(--rule); border-radius: 4px; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.layer-width input::-webkit-inner-spin-button, .layer-width input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+details { margin-top: 8px; color: var(--muted); }
+summary { cursor: pointer; width: fit-content; }
+pre.formula { margin: 6px 0 0; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 11.5px;
+              line-height: 1.5; color: var(--fg); background: var(--code-bg); border: 1px solid var(--rule); border-radius: 4px; }
+button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-@media (pointer: coarse) { button { min-height: 40px; } select { min-height: 36px; } }
+@media (pointer: coarse) { button, .layer-width button { min-height: 40px; } select, .layer-width input { min-height: 36px; }
+                           .layer-width { grid-template-columns: 9.5em 40px 3.2em 40px; } }
 `;
+
+const range = (cls: string, label: string, max: number): string =>
+  `<label class="control">${label} <input type="range" class="${cls}" min="0" max="${String(max)}" step="1"><output class="${cls}-out"></output></label>`;
 
 const TEMPLATE = `
 <div class="stage">
@@ -97,27 +144,52 @@ const TEMPLATE = `
 </div>
 <p class="need" id="need"></p>
 <p class="legend">
-  <span class="draw-only" style="--swatch: var(--fg)">your curve</span>
-  <span class="draw-only" style="--swatch: var(--tok-number)">the network</span>
+  <span class="curve-only faint" style="--swatch: var(--fg)">true curve</span>
+  <span class="curve-only dot" style="--swatch: var(--fg)">training samples</span>
+  <span class="curve-only" style="--swatch: var(--tok-number)">the network</span>
   <span class="spiral-only dot" style="--swatch: var(--tok-number)">class A</span>
   <span class="spiral-only square" style="--swatch: var(--tok-string)">class B</span>
 </p>
+<p class="readout"><span class="metrics"></span><br><span class="usage"></span></p>
 <div class="buttons">
   <button type="button" class="train" aria-describedby="need">Train</button>
   <button type="button" class="reset">Reset weights</button>
-  <button type="button" class="example draw-only">Example curve</button>
-  <button type="button" class="clear draw-only">Clear drawing</button>
+  <button type="button" class="resample">New samples</button>
+  <button type="button" class="new-wave wave-only">New random curve</button>
+  <button type="button" class="clear curve-only">Clear drawing</button>
 </div>
-<div class="controls">
-  <label class="control">Data
-    <select class="dataset"><option value="draw">Draw a function</option><option value="spiral">Spiral</option></select></label>
-  <label class="control">Activation
-    <select class="activation">${ACTIVATIONS.map((a) => `<option value="${a}">${a}</option>`).join("")}</select></label>
-  <label class="control">Hidden layers <input type="range" class="layers" min="0" max="4" step="1"><output class="layers-out"></output></label>
-  <label class="control">Width <input type="range" class="width" min="1" max="16" step="1"><output class="width-out"></output></label>
-  <label class="control">Learning rate <input type="range" class="lr" min="0" max="${String(LR_STEPS)}" step="1"><output class="lr-out"></output></label>
-</div>
-<p class="readout"></p>
+<fieldset>
+  <legend>Data</legend>
+  <div class="controls">
+    <label class="control">Data
+      <select class="dataset"><option value="draw">Draw a function</option><option value="wave">Random wave</option><option value="spiral">Spiral</option></select></label>
+    ${range("samples", "Samples", SAMPLE_COUNTS.length - 1)}
+    ${range("noise", "Noise σ", NOISES.length - 1)}
+    <div class="wave-only" style="display: contents">
+      ${range("wiggles", "Wiggles K", MAX_WIGGLES - 1)}
+      ${range("roughness", "Roughness α", ROUGHNESSES.length - 1)}
+      ${range("stages", "Stages d", MAX_STAGES - 1)}
+    </div>
+  </div>
+  <details class="wave-only"><summary>show formula</summary><pre class="formula"></pre></details>
+</fieldset>
+<fieldset>
+  <legend>Network</legend>
+  <div class="controls">
+    <label class="control">Activation
+      <select class="activation">${ACTIVATIONS.map((a) => `<option value="${a}">${a}</option>`).join("")}</select></label>
+    ${range("lr", "Learning rate", LRS.length - 1)}
+    ${range("layers", "Hidden layers", MAX_LAYERS)}
+  </div>
+  <div class="widths"></div>
+</fieldset>
+<fieldset>
+  <legend>Budget</legend>
+  <div class="controls">
+    ${range("step-budget", "Step budget", STEP_BUDGETS.length - 1)}
+    ${range("time-budget", "Time budget", TIME_BUDGETS.length - 1)}
+  </div>
+</fieldset>
 <p class="sr-only" role="status"></p>
 `;
 
@@ -129,6 +201,7 @@ interface Palette {
   readonly muted: string;
   readonly rule: string;
   readonly bg: string;
+  readonly codeBg: string;
   readonly net: string;
   readonly classA: string;
   readonly classB: string;
@@ -139,33 +212,59 @@ interface Palette {
 
 const formatLr = (lr: number): string => (lr < 0.001 ? lr.toExponential(0) : String(Number(lr.toPrecision(2))));
 const formatLoss = (loss: number): string => (loss < 1e-4 ? loss.toExponential(1) : loss.toPrecision(3));
+const formatInt = (n: number): string => n.toLocaleString("en-US");
+const formatPct = (a: number): string => `${(a * 100).toFixed(1)}%`;
+function formatFlops(f: number): string {
+  const units: readonly [number, string][] = [[1e12, "T"], [1e9, "G"], [1e6, "M"], [1e3, "k"]];
+  for (const [scale, unit] of units) {
+    const v = f / scale;
+    if (v >= 1) return `${v >= 100 ? v.toFixed(0) : v.toPrecision(2)} ${unit}FLOP`;
+  }
+  return `${String(Math.round(f))} FLOP`;
+}
+const formatBudget = (v: number, unit: string): string => (v === Infinity ? "off" : `${formatInt(v)}${unit}`);
+
+const EMPTY: Batch = { n: 0, x: new Float64Array(0), y: new Float64Array(0) };
 
 export class NnFit extends HTMLElement {
   #root = this.attachShadow({ mode: "open" });
   #ctx: CanvasRenderingContext2D | null = null;
 
-  // Model state.
+  // Settings (slider stops are indices into the lists above).
   #dataset: Dataset = "draw";
   #activation: Activation = "tanh";
   #layers = 2;
-  #width = 8;
-  #lrK = lrIndex(0.03);
-  #seed = 1;
+  #widths: number[] = Array.from({ length: MAX_LAYERS }, () => 8); // kept for layers that are removed and re-added
+  #lrK = nearest(LRS, 0.03);
+  #samplesK = SAMPLE_COUNTS.indexOf(128);
+  #noiseK = 0;
+  #wave = { wiggles: 4, roughnessK: nearest(ROUGHNESSES, 1.5), stages: 1, seed: 1 };
+  #stepBudgetK = STEP_BUDGETS.length - 1;
+  #timeBudgetK = TIME_BUDGETS.length - 1;
+  #seed = 1; // weights
+  #sampleSeed = 1;
+
+  // Model and usage.
   #net: Mlp = initMlp([1, 8, 8, 1], "tanh", seeded(1));
   #opt: Adam = makeAdam(this.#net);
   #steps = 0;
+  #trainMs = 0;
+  #flops = 0;
 
-  // Data.
-  #drawing: DrawBuffer = makeDrawBuffer(COLUMNS);
-  #drawBatch: Batch = drawSamples(this.#drawing);
-  #complete = false; // the drawing spans every column
-  #spiral: Batch = spiral(SPIRAL_PER_CLASS, SPIRAL_NOISE, seeded(3));
+  // Data: the true curve (drawn or generated), the training sample drawn from it, the spiral's held-out set.
+  #truth: DrawBuffer = makeDrawBuffer(COLUMNS);
+  #truthBatch: Batch = EMPTY;
+  #complete = false;
+  #train: Batch = EMPTY;
+  #heldOut: Batch = EMPTY;
+  #waveStages: WaveStage[] = [];
   #stroke: { pointer: number; last: Point } | null = null;
 
   // Loop: runs only while the reader wants training AND the widget is on screen AND the tab is visible.
   #training = false;
   #onScreen = false;
   #frame = 0;
+  #lastTick: number | null = null;
   #lastPaint = 0;
   #lastAria = 0;
   #reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -176,14 +275,24 @@ export class NnFit extends HTMLElement {
   #built = false;
 
   get stats(): NnFitStats {
-    const batch = this.#batch();
-    const result = batch.n > 0 ? evaluate(this.#net, this.#task(), batch) : null;
+    const task = this.#task();
+    const train = this.#train.n > 0 ? evaluate(this.#net, task, this.#train) : null;
+    const curve = this.#isCurve() && this.#truthBatch.n > 0 ? evaluate(this.#net, task, this.#truthBatch) : null;
+    const held = !this.#isCurve() && this.#heldOut.n > 0 ? evaluate(this.#net, task, this.#heldOut) : null;
     return {
       dataset: this.#dataset,
+      sizes: this.#net.sizes,
+      params: paramCount(this.#net),
+      samples: this.#train.n,
+      loss: train?.loss ?? null,
+      trueError: curve?.loss ?? null,
+      accuracy: train?.accuracy ?? null,
+      heldOutAccuracy: held?.accuracy ?? null,
       steps: this.#steps,
-      samples: batch.n,
-      loss: result?.loss ?? null,
-      accuracy: result?.accuracy ?? null,
+      seconds: this.#trainMs / 1000,
+      flops: this.#flops,
+      stepBudget: this.#stepBudget(),
+      timeBudget: this.#timeBudget(),
       training: this.#training,
       ready: this.#ready(),
     };
@@ -213,25 +322,45 @@ export class NnFit extends HTMLElement {
     this.#root.innerHTML = TEMPLATE;
 
     const dataset = this.getAttribute("dataset") ?? "draw";
-    if (!isDataset(dataset)) throw new Error(`<nn-fit dataset="${dataset}">: expected draw or spiral`);
+    if (!isDataset(dataset)) throw new Error(`<nn-fit dataset="${dataset}">: expected ${DATASETS.join(", ")}`);
     const activation = this.getAttribute("activation") ?? "tanh";
     if (!isActivation(activation)) throw new Error(`<nn-fit activation="${activation}">: expected ${ACTIVATIONS.join(", ")}`);
-    const lr = Number(this.getAttribute("lr") ?? "0.03");
-    if (!(lr > 0)) throw new Error(`<nn-fit lr="${String(this.getAttribute("lr"))}">: expected a positive number`);
     this.#dataset = dataset;
     this.#activation = activation;
-    this.#layers = intAttr(this, "layers", 0, 4, 2);
-    this.#width = intAttr(this, "width", 1, 16, 8);
-    this.#lrK = lrIndex(lr);
+    this.#layers = intAttr(this, "layers", 0, MAX_LAYERS, 2);
+    const width = intAttr(this, "width", 1, MAX_WIDTH, 8);
+    this.#widths.fill(width);
+    const widths = this.getAttribute("widths");
+    if (widths !== null) {
+      widths.split(",").forEach((w, i) => {
+        const v = Number(w);
+        if (!Number.isInteger(v) || v < 1 || v > MAX_WIDTH || i >= MAX_LAYERS) throw new Error(`<nn-fit widths="${widths}">: expected up to ${String(MAX_LAYERS)} integers in 1..${String(MAX_WIDTH)}`);
+        this.#widths[i] = v;
+      });
+      if (!this.hasAttribute("layers")) this.#layers = widths.split(",").length;
+    }
+    const pick = (name: string, list: readonly number[], fallback: number): number => {
+      const v = numAttr(this, name);
+      return v === null ? fallback : nearest(list, v);
+    };
+    this.#lrK = pick("lr", LRS, this.#lrK);
+    this.#samplesK = pick("samples", SAMPLE_COUNTS, this.#samplesK);
+    this.#noiseK = pick("noise", NOISES, this.#noiseK);
+    this.#stepBudgetK = pick("step-budget", STEP_BUDGETS, this.#stepBudgetK);
+    this.#timeBudgetK = pick("time-budget", TIME_BUDGETS, this.#timeBudgetK);
+    this.#wave = {
+      wiggles: intAttr(this, "wiggles", 1, MAX_WIGGLES, this.#wave.wiggles),
+      roughnessK: pick("roughness", ROUGHNESSES, this.#wave.roughnessK),
+      stages: intAttr(this, "stages", 1, MAX_STAGES, this.#wave.stages),
+      seed: intAttr(this, "seed", 0, 2 ** 31, this.#wave.seed),
+    };
 
     this.#el("select.dataset", HTMLSelectElement).value = this.#dataset;
     this.#el("select.activation", HTMLSelectElement).value = this.#activation;
-    this.#el("input.layers", HTMLInputElement).value = String(this.#layers);
-    this.#el("input.width", HTMLInputElement).value = String(this.#width);
-    this.#el("input.lr", HTMLInputElement).value = String(this.#lrK);
     this.#ctx = this.#el("canvas", HTMLCanvasElement).getContext("2d");
+    if (this.#dataset === "wave") this.#regenWave();
     this.#rebuildNet();
-    this.#syncControls();
+    this.#dataChanged();
   }
 
   #listen(): void {
@@ -239,32 +368,44 @@ export class NnFit extends HTMLElement {
       target.addEventListener(type, fn);
       this.#cleanup.push(() => { target.removeEventListener(type, fn); });
     };
+    const button = (cls: string, fn: () => void): void => { on(this.#el(`button.${cls}`, HTMLButtonElement), "click", fn); };
     const canvas = this.#el("canvas", HTMLCanvasElement);
 
-    on(this.#el("button.train", HTMLButtonElement), "click", () => { this.#setTraining(!this.#training); });
-    on(this.#el("button.reset", HTMLButtonElement), "click", () => {
+    button("train", () => { this.#setTraining(!this.#training); });
+    button("reset", () => {
       this.#seed++;
       this.#rebuildNet();
-      this.#announce("Weights reset to new random values.");
+      this.#announce("Weights reset to new random values; step and time counters back to zero.");
     });
-    on(this.#el("button.example", HTMLButtonElement), "click", () => {
-      fillExample(this.#drawing);
-      this.#announce("Example curve drawn.");
-      this.#dataChanged(); // may announce "Train is ready" over the line above
+    button("resample", () => {
+      this.#sampleSeed++;
+      this.#resample();
+      this.#announce(`New random sample of ${String(this.#train.n)} training points.`);
     });
-    on(this.#el("button.clear", HTMLButtonElement), "click", () => {
-      this.#drawing = makeDrawBuffer(COLUMNS);
+    button("new-wave", () => {
+      this.#wave = { ...this.#wave, seed: this.#wave.seed + 1 };
+      this.#announce(`New random curve, seed ${String(this.#wave.seed)}.`);
+      this.#regenWave();
+    });
+    button("clear", () => {
+      this.#truth = makeDrawBuffer(COLUMNS);
       this.#announce("Drawing cleared.");
       this.#dataChanged(); // announces the pause if training was running
     });
+
     const select = this.#el("select.dataset", HTMLSelectElement);
     on(select, "change", () => {
       if (!isDataset(select.value)) return;
+      const inputsBefore = this.#inputs();
       this.#dataset = select.value;
+      this.#announce(
+        select.value === "draw" ? "Draw a function on the plot, edge to edge."
+          : select.value === "wave" ? "Random wave generated. You can draw over it to edit it."
+            : "Spiral dataset: two classes.");
       if (this.#training && !this.#ready()) this.#setTraining(false);
-      this.#rebuildNet();
-      this.#syncControls();
-      this.#announce(select.value === "draw" ? "Draw a function on the plot." : "Spiral dataset: two classes.");
+      if (this.#inputs() !== inputsBefore) this.#rebuildNet(); // draw <-> wave keeps the weights
+      if (select.value === "wave") this.#regenWave();
+      else this.#dataChanged();
     });
     const activation = this.#el("select.activation", HTMLSelectElement);
     on(activation, "change", () => {
@@ -272,32 +413,60 @@ export class NnFit extends HTMLElement {
       this.#activation = activation.value;
       this.#rebuildNet();
     });
-    const range = (cls: string, set: (v: number) => void, rebuild: boolean): void => {
+
+    const slider = (cls: string, set: (v: number) => void, after: () => void): void => {
       const input = this.#el(`input.${cls}`, HTMLInputElement);
       on(input, "input", () => {
         set(input.valueAsNumber);
-        if (rebuild) this.#rebuildNet();
+        after();
         this.#syncControls();
         this.#paint();
       });
     };
-    range("layers", (v) => { this.#layers = v; }, true);
-    range("width", (v) => { this.#width = v; }, true);
-    range("lr", (v) => { this.#lrK = v; }, false); // keeps the weights: change the step size mid-run
+    const nothing = (): void => undefined;
+    slider("lr", (v) => { this.#lrK = v; }, nothing); // keeps the weights: change the step size mid-run
+    slider("layers", (v) => { this.#layers = v; }, () => { this.#rebuildNet(); });
+    slider("samples", (v) => { this.#samplesK = v; }, () => { this.#resample(); }); // keeps the weights
+    slider("noise", (v) => { this.#noiseK = v; }, () => { this.#resample(); });
+    slider("wiggles", (v) => { this.#wave = { ...this.#wave, wiggles: v + 1 }; }, () => { this.#regenWave(); });
+    slider("roughness", (v) => { this.#wave = { ...this.#wave, roughnessK: v }; }, () => { this.#regenWave(); });
+    slider("stages", (v) => { this.#wave = { ...this.#wave, stages: v + 1 }; }, () => { this.#regenWave(); });
+    slider("step-budget", (v) => { this.#stepBudgetK = v; }, nothing);
+    slider("time-budget", (v) => { this.#timeBudgetK = v; }, nothing);
 
-    // Drawing: one stroke per pointer, captured so it continues outside the canvas.
+    // Per-layer widths: a number input per layer (the keyboard/AT control) flanked by -/+ buttons for pointers.
+    const widths = this.#el(".widths", HTMLDivElement);
+    const setWidth = (layer: number, w: number): void => {
+      const v = Math.min(MAX_WIDTH, Math.max(1, Math.round(w)));
+      if (Number.isNaN(v) || this.#widths[layer] === v) { this.#syncControls(); return; }
+      this.#widths[layer] = v;
+      this.#rebuildNet();
+      this.#syncControls();
+    };
+    on(widths, "click", (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLButtonElement)) return;
+      const layer = Number(t.dataset["layer"]);
+      setWidth(layer, (this.#widths[layer] ?? 1) + Number(t.dataset["delta"]));
+    });
+    on(widths, "change", (e) => {
+      const t = e.target;
+      if (t instanceof HTMLInputElement) setWidth(Number(t.dataset["layer"]), t.valueAsNumber);
+    });
+
+    // Drawing (draw and wave): one stroke per pointer, captured so it continues outside the canvas.
     on(canvas, "pointerdown", (e) => {
-      if (this.#dataset !== "draw" || this.#stroke) return;
+      if (!this.#isCurve() || this.#stroke) return;
       canvas.setPointerCapture(e.pointerId);
       const p = this.#toPlot(e);
-      paintStroke(this.#drawing, null, p);
+      paintStroke(this.#truth, null, p);
       this.#stroke = { pointer: e.pointerId, last: p };
       this.#dataChanged();
     });
     on(canvas, "pointermove", (e) => {
       if (this.#stroke?.pointer !== e.pointerId) return;
       const p = this.#toPlot(e);
-      paintStroke(this.#drawing, this.#stroke.last, p);
+      paintStroke(this.#truth, this.#stroke.last, p);
       this.#stroke = { pointer: e.pointerId, last: p };
       this.#dataChanged();
     });
@@ -330,70 +499,153 @@ export class NnFit extends HTMLElement {
     });
   }
 
+  // --- model and data ---
+
+  #isCurve(): boolean {
+    return this.#dataset !== "spiral";
+  }
+
   #task(): Task {
-    return this.#dataset === "draw" ? "regression" : "binary";
+    return this.#isCurve() ? "regression" : "binary";
   }
 
-  #batch(): Batch {
-    return this.#dataset === "draw" ? this.#drawBatch : this.#spiral;
+  #inputs(): number {
+    return this.#isCurve() ? 1 : 2;
   }
 
-  #lr(): number {
-    return lrAt(this.#lrK);
+  #stepBudget(): number {
+    return at(STEP_BUDGETS, this.#stepBudgetK);
+  }
+
+  #timeBudget(): number {
+    return at(TIME_BUDGETS, this.#timeBudgetK);
+  }
+
+  #budgetLeft(): boolean {
+    return this.#steps < this.#stepBudget() && this.#trainMs < this.#timeBudget() * 1000;
+  }
+
+  // Train is enabled when the data is usable and budget remains.
+  #dataReady(): boolean {
+    return !this.#isCurve() || this.#complete;
+  }
+
+  #ready(): boolean {
+    return this.#dataReady() && this.#budgetLeft();
+  }
+
+  #waveParams(): WaveParams {
+    return { wiggles: this.#wave.wiggles, roughness: at(ROUGHNESSES, this.#wave.roughnessK), stages: this.#wave.stages, seed: this.#wave.seed };
   }
 
   #rebuildNet(): void {
-    const inputs = this.#dataset === "draw" ? 1 : 2;
-    const sizes = [inputs, ...Array.from({ length: this.#layers }, () => this.#width), 1];
+    const sizes = [this.#inputs(), ...this.#widths.slice(0, this.#layers), 1];
     this.#net = initMlp(sizes, this.#activation, seeded(this.#seed));
     this.#opt = makeAdam(this.#net);
     this.#steps = 0;
+    this.#trainMs = 0;
+    this.#flops = 0;
+    this.#syncControls();
     this.#paint();
   }
 
-  // Training on the drawing needs it to span the whole x axis; this keeps Train's state in step.
-  #ready(): boolean {
-    return this.#dataset !== "draw" || this.#complete;
+  // Regenerate the wave from its parameters (same seed: the slider changes reshape the same curve).
+  #regenWave(): void {
+    if (this.#dataset !== "wave") return;
+    const params = this.#waveParams();
+    this.#waveStages = waveStages(params, seeded);
+    this.#truth = makeDrawBuffer(COLUMNS);
+    fillWave(this.#truth, this.#waveStages);
+    this.#el("pre.formula", HTMLPreElement).textContent = waveFormula(params, this.#waveStages);
+    this.#dataChanged();
   }
 
+  // The true curve changed (drawn, cleared, generated) or the dataset switched.
   #dataChanged(): void {
-    this.#drawBatch = drawSamples(this.#drawing);
+    this.#truthBatch = drawSamples(this.#truth);
     const was = this.#complete;
-    this.#complete = gaps(this.#drawing).length === 0;
-    if (this.#complete && !was && this.#dataset === "draw") this.#announce("The drawing spans the whole width. Train is ready.");
-    if (!this.#complete && this.#training && this.#dataset === "draw") {
+    this.#complete = gaps(this.#truth).length === 0;
+    if (this.#isCurve() && this.#complete && !was && this.#dataset === "draw") this.#announce("The drawing spans the whole width. Train is ready.");
+    if (this.#isCurve() && !this.#complete && this.#training) {
       this.#setTraining(false);
       this.#announce("Paused: the drawing no longer spans the whole width.");
+    }
+    this.#resample();
+  }
+
+  // Training data from the current source, sample count, noise and sample seed. Keeps the weights.
+  #resample(): void {
+    const n = at(SAMPLE_COUNTS, this.#samplesK);
+    const sigma = at(NOISES, this.#noiseK);
+    if (this.#isCurve()) {
+      this.#train = this.#complete ? curveSamples(this.#truth, n, sigma, seeded(this.#sampleSeed)) : EMPTY;
+      this.#heldOut = EMPTY;
+    } else {
+      this.#train = spiral(n, sigma * SPIRAL_JITTER, seeded(this.#sampleSeed));
+      this.#heldOut = spiral(HELD_OUT, sigma * SPIRAL_JITTER, seeded(HELD_OUT_SEED));
     }
     this.#syncControls();
     this.#paint();
   }
 
+  #renderWidths(): void {
+    const box = this.#el(".widths", HTMLDivElement);
+    const groups = Array.from({ length: this.#layers }, (_, l) => {
+      const name = `layer ${String(l + 1)} width`;
+      return `<div class="layer-width"><label for="w${String(l)}">${name}</label>`
+        + `<button type="button" tabindex="-1" aria-hidden="true" data-layer="${String(l)}" data-delta="-1">−</button>`
+        + `<input id="w${String(l)}" type="number" min="1" max="${String(MAX_WIDTH)}" step="1" inputmode="numeric" data-layer="${String(l)}">`
+        + `<button type="button" tabindex="-1" aria-hidden="true" data-layer="${String(l)}" data-delta="1">+</button></div>`;
+    });
+    if (box.children.length !== this.#layers) box.innerHTML = groups.join("");
+    box.querySelectorAll("input").forEach((input, l) => {
+      const v = String(this.#widths[l] ?? 1);
+      if (input.value !== v) input.value = v;
+    });
+  }
+
   #syncControls(): void {
-    const isDraw = this.#dataset === "draw";
-    for (const el of this.#root.querySelectorAll(".draw-only")) el.toggleAttribute("hidden", !isDraw);
-    for (const el of this.#root.querySelectorAll(".spiral-only")) el.toggleAttribute("hidden", isDraw);
-    this.#el(".stage", HTMLDivElement).classList.toggle("spiral", !isDraw);
-    this.#el("input.width", HTMLInputElement).disabled = this.#layers === 0;
-    this.#el("output.layers-out", HTMLOutputElement).value = String(this.#layers);
-    this.#el("output.width-out", HTMLOutputElement).value = String(this.#width);
-    const lr = formatLr(this.#lr());
-    this.#el("output.lr-out", HTMLOutputElement).value = lr;
-    this.#el("input.lr", HTMLInputElement).setAttribute("aria-valuetext", lr);
+    const isCurve = this.#isCurve();
+    for (const el of this.#root.querySelectorAll(".curve-only")) el.toggleAttribute("hidden", !isCurve);
+    for (const el of this.#root.querySelectorAll(".spiral-only")) el.toggleAttribute("hidden", isCurve);
+    for (const el of this.#root.querySelectorAll(".wave-only")) el.toggleAttribute("hidden", this.#dataset !== "wave");
+    this.#el(".stage", HTMLDivElement).classList.toggle("spiral", !isCurve);
+
+    const set = (cls: string, index: number, text: string): void => {
+      const input = this.#el(`input.${cls}`, HTMLInputElement);
+      input.value = String(index);
+      input.setAttribute("aria-valuetext", text);
+      this.#el(`output.${cls}-out`, HTMLOutputElement).value = text;
+    };
+    const n = at(SAMPLE_COUNTS, this.#samplesK);
+    set("samples", this.#samplesK, String(n));
+    set("noise", this.#noiseK, at(NOISES, this.#noiseK).toFixed(2));
+    set("lr", this.#lrK, formatLr(at(LRS, this.#lrK)));
+    set("layers", this.#layers, String(this.#layers));
+    set("wiggles", this.#wave.wiggles - 1, String(this.#wave.wiggles));
+    set("roughness", this.#wave.roughnessK, at(ROUGHNESSES, this.#wave.roughnessK).toFixed(2));
+    set("stages", this.#wave.stages - 1, String(this.#wave.stages));
+    set("step-budget", this.#stepBudgetK, formatBudget(this.#stepBudget(), ""));
+    set("time-budget", this.#timeBudgetK, formatBudget(this.#timeBudget(), " s"));
+    this.#renderWidths();
+
     const train = this.#el("button.train", HTMLButtonElement);
     train.textContent = this.#training ? "Pause" : "Train";
     // aria-disabled rather than disabled: the button stays focusable, so a screen reader still reaches
-    // it and reads its description (the .need line) saying why it can't train yet.
-    const ready = this.#ready();
+    // it and reads its description (the .need line) saying why it can't train.
+    const ready = this.#ready() || this.#training;
     train.setAttribute("aria-disabled", String(!ready));
     const need = this.#el(".need", HTMLParagraphElement);
     need.hidden = ready;
-    need.textContent = ready ? "" : `Draw across the whole width to train. Missing: ${describeGaps(this.#drawing)}.`;
+    need.textContent = ready ? ""
+      : !this.#dataReady() ? `Draw across the whole width to train. Missing: ${describeGaps(this.#truth)}.`
+        : "Budget used up. Raise a budget or reset the weights to train again.";
   }
 
   #setTraining(on: boolean): void {
     if (on && !this.#ready()) return;
     this.#training = on;
+    this.#lastTick = null;
     this.#syncControls();
     this.#announce(on ? "Training." : "Paused.");
     this.#updateLoop();
@@ -415,14 +667,31 @@ export class NnFit extends HTMLElement {
   #stopLoop(): void {
     if (this.#frame !== 0) cancelAnimationFrame(this.#frame);
     this.#frame = 0;
+    this.#lastTick = null; // time offscreen or paused doesn't count against the time budget
   }
 
   #tick(now: number): void {
-    const batch = this.#batch();
-    if (batch.n > 0 && this.#ready()) {
+    if (this.#lastTick !== null) this.#trainMs += Math.min(MAX_FRAME_GAP_MS, now - this.#lastTick);
+    this.#lastTick = now;
+    const batch = this.#train;
+    if (batch.n > 0 && this.#dataReady()) {
       const task = this.#task();
-      for (let i = 0; i < STEPS_PER_FRAME; i++) trainStep(this.#net, task, batch, this.#opt, this.#lr());
-      this.#steps += STEPS_PER_FRAME;
+      const lr = at(LRS, this.#lrK);
+      const flopsPerStep = 6 * paramCount(this.#net) * batch.n;
+      const start = performance.now();
+      for (let i = 0; i < STEPS_PER_FRAME && this.#steps < this.#stepBudget() && performance.now() - start < FRAME_MS; i++) {
+        trainStep(this.#net, task, batch, this.#opt, lr);
+        this.#steps++;
+        this.#flops += flopsPerStep;
+      }
+    }
+    if (!this.#budgetLeft()) {
+      const which = this.#steps >= this.#stepBudget() ? `step budget (${formatInt(this.#stepBudget())} steps)` : `time budget (${String(this.#timeBudget())} s)`;
+      this.#frame = 0;
+      this.#setTraining(false);
+      this.#announce(`Stopped: ${which} used up.`);
+      this.#paint(now);
+      return;
     }
     if (!this.#reducedMotion.matches || now - this.#lastPaint >= REDUCED_MOTION_MS) this.#paint(now);
     this.#frame = requestAnimationFrame((t) => { this.#tick(t); });
@@ -459,7 +728,7 @@ export class NnFit extends HTMLElement {
       const [r = 0, g = 0, b = 0] = probe.getImageData(0, 0, 1, 1).data;
       return [r, g, b];
     };
-    const bg = token("--code-bg", "Canvas");
+    const codeBg = token("--code-bg", "Canvas");
     const classA = token("--tok-number", "LinkText");
     const classB = token("--tok-string", "VisitedText");
     this.#palette = {
@@ -467,10 +736,11 @@ export class NnFit extends HTMLElement {
       muted: token("--muted", "GrayText"),
       rule: token("--rule", "GrayText"),
       bg: token("--bg", "Canvas"),
+      codeBg,
       net: classA,
       classA,
       classB,
-      bgRgb: rgb(bg),
+      bgRgb: rgb(codeBg),
       aRgb: rgb(classA),
       bRgb: rgb(classB),
     };
@@ -487,13 +757,13 @@ export class NnFit extends HTMLElement {
     const h = canvas.height / dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    this.#el(".hint", HTMLParagraphElement).hidden = this.#dataset !== "draw" || this.#drawBatch.n > 0;
-    if (this.#dataset === "draw") this.#paintDraw(ctx, w, h);
+    this.#el(".hint", HTMLParagraphElement).hidden = this.#dataset !== "draw" || this.#truthBatch.n > 0;
+    if (this.#isCurve()) this.#paintCurve(ctx, w, h);
     else this.#paintSpiral(ctx, w, h);
     this.#paintReadout(now);
   }
 
-  #paintDraw(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+  #paintCurve(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     const c = this.#colors();
     const px = (x: number): number => ((x + 1) / 2) * w;
     const py = (y: number): number => (1 - (y / Y_RANGE + 1) / 2) * h;
@@ -507,7 +777,7 @@ export class NnFit extends HTMLElement {
     // Undrawn x ranges: a hatched band plus a dashed baseline (pattern, not just colour).
     ctx.save();
     ctx.strokeStyle = c.muted;
-    for (const { from, to } of gaps(this.#drawing)) {
+    for (const { from, to } of gaps(this.#truth)) {
       const x0 = (from / COLUMNS) * w;
       const x1 = ((to + 1) / COLUMNS) * w;
       ctx.save();
@@ -531,23 +801,25 @@ export class NnFit extends HTMLElement {
     }
     ctx.restore();
 
-    // The reader's curve: one polyline per run of drawn columns, a dot for a lone column.
+    // The true curve, faint: one polyline per run of known columns.
+    ctx.save();
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     ctx.strokeStyle = c.fg;
-    ctx.fillStyle = c.fg;
+    ctx.globalAlpha = 0.35;
     ctx.lineWidth = 3;
     let run = 0;
     ctx.beginPath();
-    this.#drawing.forEach((y, i) => {
+    this.#truth.forEach((y, i) => {
       if (Number.isNaN(y)) { run = 0; return; }
       const x = px(columnX(COLUMNS, i));
       if (run === 0) ctx.moveTo(x, py(y)); else ctx.lineTo(x, py(y));
-      const next = this.#drawing[i + 1];
+      const next = this.#truth[i + 1];
       if (run === 0 && (next === undefined || Number.isNaN(next))) ctx.arc(x, py(y), 1.5, 0, 2 * Math.PI);
       run++;
     });
     ctx.stroke();
+    ctx.restore();
 
     // The network's curve, sampled every 2 CSS px across the whole width.
     const f = predictor(this.#net, "regression");
@@ -561,6 +833,18 @@ export class NnFit extends HTMLElement {
       if (sx === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
     }
     ctx.stroke();
+
+    // Training samples on top.
+    const r = this.#train.n > 128 ? 2.25 : 3.25;
+    ctx.fillStyle = c.fg;
+    ctx.strokeStyle = c.codeBg;
+    ctx.lineWidth = 1;
+    for (let s = 0; s < this.#train.n; s++) {
+      ctx.beginPath();
+      ctx.arc(px((this.#train.x[s] ?? 0) / INPUT_SCALE), py(this.#train.y[s] ?? 0), r, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+    }
   }
 
   #paintSpiral(ctx: CanvasRenderingContext2D, w: number, h: number): void {
@@ -591,13 +875,13 @@ export class NnFit extends HTMLElement {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(this.#heat, 0, 0, w, h);
 
-    // Points: class A circles, class B squares (shape as well as colour).
+    // Training points: class A circles, class B squares (shape as well as colour).
     const px = (x: number): number => ((x / INPUT_SCALE + 1) / 2) * w;
     const py = (y: number): number => (1 - (y / INPUT_SCALE + 1) / 2) * h;
     const r = Math.max(2.5, w / 120);
     ctx.lineWidth = 1;
     ctx.strokeStyle = c.bg;
-    const pts = this.#spiral;
+    const pts = this.#train;
     for (let s = 0; s < pts.n; s++) {
       const x = px(pts.x[2 * s] ?? 0);
       const y = py(pts.x[2 * s + 1] ?? 0);
@@ -615,26 +899,32 @@ export class NnFit extends HTMLElement {
   }
 
   #paintReadout(now: number): void {
-    const { loss, accuracy, samples } = this.stats;
-    const arch = this.#net.sizes.join(" → ");
-    const params = paramCount(this.#net);
-    const parts: string[] = [];
-    if (loss === null) parts.push("loss —");
-    else parts.push(`${this.#dataset === "draw" ? "MSE" : "loss"} <b>${formatLoss(loss)}</b>`);
-    if (accuracy !== null) parts.push(`accuracy <b>${(accuracy * 100).toFixed(1)}%</b>`);
-    parts.push(`step ${this.#steps.toLocaleString("en-US")}`);
-    parts.push(`${arch} (${String(params)} params)`);
-    this.#el(".readout", HTMLParagraphElement).innerHTML = parts.join(" · ");
+    const s = this.stats;
+    const arch = `${s.sizes.join(" → ")} (${formatInt(s.params)} params)`;
+    const b = (v: string): string => `<b>${v}</b>`;
+    const metrics = this.#isCurve()
+      ? [`train MSE ${s.loss === null ? "—" : b(formatLoss(s.loss))}`, `vs true curve ${s.trueError === null ? "—" : b(formatLoss(s.trueError))}`]
+      : [`train loss ${s.loss === null ? "—" : b(formatLoss(s.loss))}`, `train accuracy ${b(formatPct(s.accuracy ?? 0))}`,
+        `held-out accuracy ${b(formatPct(s.heldOutAccuracy ?? 0))}`];
+    const of = (budget: number, unit: string): string => (budget === Infinity ? "" : ` / ${formatInt(budget)}${unit}`);
+    const usage = [
+      `step ${formatInt(s.steps)}${of(s.stepBudget, "")}`,
+      `${s.seconds.toFixed(1)} s${of(s.timeBudget, " s")}`,
+      `~${formatFlops(s.flops)}`,
+      arch,
+    ];
+    this.#el(".metrics", HTMLSpanElement).innerHTML = metrics.join(" · ");
+    this.#el(".usage", HTMLSpanElement).innerHTML = usage.join(" · ");
 
     if (now - this.#lastAria < ARIA_MS && this.#frame !== 0) return;
     this.#lastAria = now;
-    const lossText = loss === null ? "no loss yet" : `loss ${formatLoss(loss)}`;
-    const net = `a ${arch} network with ${this.#activation} hidden units, ${lossText} after ${String(this.#steps)} training steps`;
-    const label = this.#dataset === "draw"
-      ? samples === 0
-        ? `Empty drawing area. Draw a function with a pointer, or press Example curve. The plot shows ${net}.`
-        : `Your drawn function (${String(filledColumns(this.#drawing))} of ${String(COLUMNS)} columns) and the fit of ${net}.`
-      : `Spiral of ${String(samples)} points in two classes, background shaded by the prediction of ${net}${accuracy === null ? "" : `, accuracy ${(accuracy * 100).toFixed(0)}%`}.`;
+    const lossText = s.loss === null ? "no loss yet" : `training loss ${formatLoss(s.loss)}`;
+    const net = `a ${s.sizes.join("-")} network with ${this.#activation} hidden units, ${lossText} after ${String(s.steps)} steps`;
+    const label = this.#isCurve()
+      ? !this.#complete && filledColumns(this.#truth) === 0
+        ? `Empty drawing area. Draw a function with a pointer, or choose Random wave. The plot shows ${net}.`
+        : `${this.#dataset === "wave" ? "A random wave" : "Your drawn function"} (faint), ${String(s.samples)} training samples as dots, and the fit of ${net}${s.trueError === null ? "" : `; error against the true curve ${formatLoss(s.trueError)}`}.`
+      : `Spiral of ${String(s.samples)} training points in two classes, background shaded by the prediction of ${net}, training accuracy ${formatPct(s.accuracy ?? 0)}, held-out accuracy ${formatPct(s.heldOutAccuracy ?? 0)}.`;
     this.#el("canvas", HTMLCanvasElement).setAttribute("aria-label", label);
   }
 }

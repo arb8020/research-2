@@ -12,10 +12,12 @@
 <main>
   <article>
     <h1>Neural nets can fit functions</h1>
-    <p>Draw a curve, press Train, and watch the network bend toward it. Switch the activation to linear: however many layers you stack, it can only draw a straight line.</p>
+    <p>Draw a curve edge to edge, press Train, and watch the network bend toward it. It only sees the dots: with few samples it can hit every dot and still miss the curve between them. Switch the activation to linear: however many layers you stack, it can only draw a straight line.</p>
     <nn-fit id="draw"></nn-fit>
+    <p>A random wave: a composition of random Fourier series. More wiggles or more stages make it harder.</p>
+    <nn-fit id="wave" dataset="wave" layers="1" width="8"></nn-fit>
     <p>The same network on TensorFlow Playground's spiral.</p>
-    <nn-fit id="spiral" dataset="spiral" activation="tanh" layers="3" width="8"></nn-fit>
+    <nn-fit id="spiral" dataset="spiral" activation="tanh" layers="3" width="8" samples="256"></nn-fit>
   </article>
 </main>
 </body>
