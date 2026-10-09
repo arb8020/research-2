@@ -55,7 +55,7 @@ from typing import TYPE_CHECKING, Any, BinaryIO
 from urllib.parse import parse_qs, quote, urlsplit
 
 from box import sdk
-from box.modal_provider import ModalToken
+from box.providers.modal import ModalToken
 from box.sdk import Booting, Done, Ended, Queued, Running
 from box.store import Store
 
@@ -809,7 +809,7 @@ def error_code(e: Exception) -> int:
 
 
 def modal_access(token: ModalToken, region: str) -> Access:
-    from box.modal_provider import Modal, ModalVolumeStore
+    from box.providers.modal import Modal, ModalVolumeStore
 
     provider = Modal(token=token, region=region)
     return Access(provider, ModalVolumeStore(RECORD_VOLUME, client=provider.client), close=provider.close)

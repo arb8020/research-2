@@ -20,7 +20,7 @@ import pytest
 from box import sdk
 from box.gateway import kernel_client, relay
 from box.gateway.push import Push
-from box.local_provider import Local
+from box.providers.local import Local
 from box.store import DirStore
 from box.tests.test_relay import AUTH, call, create, free_port, status
 

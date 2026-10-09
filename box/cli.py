@@ -30,15 +30,15 @@ def make_provider(name: str, region: str | None = None) -> sdk.Provider:
     """The one place a provider is named, and where its credentials are read (the providers take
     them as arguments). Imported on use: each pulls its own SDK. region: Modal only; None = anywhere."""
     if name == "modal":
-        from box.modal_provider import Modal, ModalToken
+        from box.providers.modal import Modal, ModalToken
 
         return Modal(token=ModalToken.from_config(), region=region)
     if name == "runpod":
-        from box.runpod_provider import RunPod
+        from box.providers.runpod import RunPod
 
         return RunPod.from_env()
     if name == "local":
-        from box.local_provider import Local
+        from box.providers.local import Local
 
         return Local()
     raise SystemExit(f"box: unknown provider {name!r}; known: modal, runpod, local")

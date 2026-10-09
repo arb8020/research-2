@@ -224,10 +224,10 @@ def pct(xs: list[float], p: float) -> float | None:
 def killer(provider: str, token: dict[str, str]) -> Callable[[str], None]:
     if provider == "local":
         from box.gateway.local_stack import MACHINES
-        from box.local_provider import Local
+        from box.providers.local import Local
 
         return lambda sid: [m.terminate() for m in Local(MACHINES).list({sdk.LABEL_SESSION: sid})]  # type: ignore[func-returns-value]
-    from box.modal_provider import Modal, ModalToken
+    from box.providers.modal import Modal, ModalToken
 
     modal = Modal(token=ModalToken(token["id"], token["secret"]), region="us")
     return lambda sid: sdk.attach(modal, sid).machine.terminate()

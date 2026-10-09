@@ -24,15 +24,15 @@ def make(name: str, base: Path) -> Provider:
 
 def _make(name: str, base: Path) -> Provider:
     if name == "local":
-        from box.local_provider import Local
+        from box.providers.local import Local
 
         return Local(base)
     if name == "modal":
-        from box.modal_provider import Modal, ModalToken
+        from box.providers.modal import Modal, ModalToken
 
         return Modal(token=ModalToken.from_config(), region="us")  # unpinned, Modal has placed an L4 in Tokyo (~330 s boot, ~390 ms/exec)
     if name == "runpod":
-        from box.runpod_provider import RunPod
+        from box.providers.runpod import RunPod
 
         return RunPod.from_env()
     raise ValueError(f"unknown provider {name!r}")
@@ -43,7 +43,7 @@ def make_store(name: str, base: Path, provider: Provider) -> Store:
     if name == "local":
         return DirStore(base)
     if name == "modal":
-        from box.modal_provider import ModalVolumeStore
+        from box.providers.modal import ModalVolumeStore
 
         return ModalVolumeStore(RECORD_VOLUME, client=provider.client)
     raise ValueError(f"no store for provider {name!r}")

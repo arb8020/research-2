@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from box.modal_provider import ModalToken
+from box.providers.modal import ModalToken
 
 ACTIVE = '[work]\ntoken_id = "ak-work"\ntoken_secret = "as-work"\nactive = true\n'
 OTHER = '[home]\ntoken_id = "ak-home"\ntoken_secret = "as-home"\n'
