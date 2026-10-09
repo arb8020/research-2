@@ -27,7 +27,7 @@ from pathlib import Path
 import requests
 
 from box import gpus
-from box.sdk import LABEL_BY, LABEL_SESSION, Gone
+from box.sdk import LABEL_BY, LABEL_SESSION, Endpoint, Gone
 
 # TODO(handoff): seen live: a pod whose client died before attaching deleted itself at its boot
 # timeout (UP_TIMEOUT_S). Not yet seen live on the current sdk: the normal path, where the
@@ -130,12 +130,12 @@ class RunPod:
 
     def launch(
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
-        labels: dict[str, str], timeout_s: int,
+        labels: dict[str, str], timeout_s: int, ports: list[int],
     ) -> RunPodMachine:  # fmt: skip
         """Returns once ssh answers (the supervisor may still be starting)."""
         body: dict = {
             "name": f"box-{labels[LABEL_SESSION]}", "image": image or IMAGE, "cloud": self.cloud,
-            "disk": DISK_GB, "ports": ["22/tcp"], "entrypoint": ["bash", "-c", BOOT, "boot", *entrypoint],
+            "disk": DISK_GB, "ports": ["22/tcp", *(f"{p}/http" for p in ports)], "entrypoint": ["bash", "-c", BOOT, "boot", *entrypoint],
             "env": {
                 **env, "BOX_ROOT": ROOT, "BOX_ON_SHUTDOWN": SHUTDOWN, "BOX_TIMEOUT_S": str(timeout_s),
                 "BOX_UP_TIMEOUT_S": str(int(UP_TIMEOUT_S)),
@@ -195,6 +195,7 @@ class RunPodMachine:
         self.root = ROOT
         self._direct = (pod.get("ssh") or {}).get("direct")
         self._pod_dc: str | None = pod.get("dataCenterId")
+        self._http_ports = [int(p.split("/")[0]) for p in pod.get("ports") or [] if p.endswith("/http")]
 
     def _pod(self) -> dict:
         """The pod as the API sees it now; Gone if it no longer exists."""
@@ -257,6 +258,13 @@ class RunPodMachine:
 
     def terminate(self) -> None:
         self.rp.api("DELETE", f"/pods/{self.id}")  # a 404 (already gone) is fine
+
+    def expose(self, port: int) -> Endpoint:
+        """RunPod's HTTP proxy for a port declared at launch (as <port>/http). Not seen live yet:
+        the service must listen on 0.0.0.0, and the proxy (Cloudflare) cuts requests at ~100 s."""
+        if port not in self._http_ports:
+            raise ValueError(f"runpod: port {port} was not declared at launch (ports={self._http_ports})")
+        return Endpoint(f"https://{self.id}-{port}.proxy.runpod.net")
 
 
 def _labels(pod: dict) -> dict[str, str]:

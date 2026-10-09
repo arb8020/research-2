@@ -13,6 +13,10 @@
     match s.status():                        # Booting() | Running(started_at, deadline_at) | Ended(reason)
         case Running(): s.wait()             # -> Ended: the awaitable terminal state
 
+    with box.launch(provider, deadline_s=3600, ports=[8888]) as s:   # ports: declared at launch
+        s.run("jupyter server --port 8888 ...")
+        s.expose(8888)                       # Endpoint(url="https://...", headers={})
+
 A provider only rents raw machines (Machine: exec, write, read, terminate). Everything else is
 here, built from those four calls and the supervisor (box/supervisor.py), which every machine
 runs as its entrypoint and which talks to this file only through files under machine.root.
@@ -60,6 +64,7 @@ class Machine(Protocol):
     def write(self, path: str, data: bytes) -> None: ...
     def read(self, path: str) -> bytes: ...  # FileNotFoundError if absent
     def terminate(self) -> None: ...  # hard stop, idempotent; no hooks run
+    def expose(self, port: int) -> Endpoint: ...  # ValueError unless port was declared at launch
 
 
 class Provider(Protocol):
@@ -67,10 +72,21 @@ class Provider(Protocol):
 
     def launch(
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
-        labels: dict[str, str], timeout_s: int,
+        labels: dict[str, str], timeout_s: int, ports: list[int],
     ) -> Machine: ...  # fmt: skip
     def get(self, machine_id: str) -> Machine: ...  # LookupError if box did not launch it
     def list(self, labels: dict[str, str] | None = None) -> list[Machine]: ...  # live machines labelled LABEL_BY and all of labels
+
+
+@dataclass(frozen=True)
+class Endpoint:
+    """A port on the machine, reachable from anywhere over HTTP(S), websockets included.
+    headers: what every request must carry. Empty when the url alone reaches the port, as on every
+    provider today: then whoever has the url does, and the service brings its own auth (Jupyter's
+    token). A token-gated provider route (Modal's connect token) would fill it."""
+
+    url: str  # no trailing slash; a request goes to url + path
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -115,16 +131,22 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     provider: Provider, *, deadline_s: int, gpu: str | None = None, image: str | None = None,
     env: dict[str, str] | None = None, labels: dict[str, str] | None = None,
     lease_ttl_s: float = 60.0, idle_timeout_s: float = 0.0, boot_timeout_s: float = 900.0,
+    ports: tuple[int, ...] = (),
 ) -> Session:  # fmt: skip
     """Rent a machine whose supervisor ends it by deadline_s (or sooner: lease lost, idle, stop).
     Returns once the supervisor is up; a machine that is not up in boot_timeout_s (image pull,
     a stuck host) is terminated here, since no supervisor exists yet to end it. The returned
     Session holds the lease (heartbeats) until release() or close(). Its id is new (LABEL_SESSION),
     not the machine's: attach() finds a session by it. labels are the caller's (who launched it,
-    for what, e.g. box.user, box.cmd); box stamps only RESERVED."""
+    for what, e.g. box.user, box.cmd); box stamps only RESERVED. ports: what Session.expose may
+    open later (Modal and RunPod route a port only if the machine was created with it). Idle: no
+    job running and no connection to any of ports, for idle_timeout_s (0: never idle)."""
     if clash := sorted(set(labels or {}) & set(RESERVED)):
         raise ValueError(f"labels {clash} are box's own (launch stamps them)")
-    args = ["--deadline-s", str(deadline_s), "--lease-ttl-s", str(lease_ttl_s), "--idle-timeout-s", str(idle_timeout_s)]
+    args = [
+        "--deadline-s", str(deadline_s), "--lease-ttl-s", str(lease_ttl_s), "--idle-timeout-s", str(idle_timeout_s),
+        "--ports", ",".join(map(str, ports)),
+    ]  # fmt: skip
     boot = "import base64,os; exec(base64.b64decode(os.environ['BOX_SUPERVISOR']))"
     entrypoint = ["bash", "-c", f'exec python3 -c {shlex.quote(boot)} --root "$BOX_ROOT" {shlex.join(args)}']
     # TODO(handoff): LABEL_DEADLINE is stamped before the machine boots, but the supervisor's clock
@@ -140,6 +162,7 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
         labels={**(labels or {}), LABEL_BY: "box", LABEL_SESSION: f"s-{secrets.token_hex(6)}",
                 LABEL_DEADLINE: str(int(time.time() + deadline_s))},
         timeout_s=deadline_s + 600,  # the provider's own backstop, past the supervisor's deadline
+        ports=list(ports),
     )  # fmt: skip
     session = Session(machine)
     give_up = time.monotonic() + boot_timeout_s
@@ -209,6 +232,11 @@ class Session:
             with contextlib.suppress(TimeoutError):
                 self.wait(timeout_s)
         self.machine.terminate()
+
+    def expose(self, port: int) -> Endpoint:
+        """Where to reach `port` on the machine (one of launch's ports) from anywhere. Something
+        must listen there (e.g. a job); until it does, requests fail (Modal: 502)."""
+        return self.machine.expose(port)
 
     def status(self) -> Status:
         """Booting, Running, or Ended (and why), from the supervisor's files. Ended is final: once
