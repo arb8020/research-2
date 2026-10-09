@@ -65,13 +65,19 @@ def kill_supervisor(machine: Machine) -> None:
             machine.exec("kill -9 1")
 
 
+# The supervisor's own process, by its command line (/proc: a slim image has no ps or pgrep). Not
+# PID 1: on Modal that is dumb-init, and stopping it leaves the supervisor (PID 2) answering.
+STOP_SUPERVISOR = """for d in /proc/[0-9]*; do case "$(tr '\\0' ' ' < $d/cmdline)" in 'python3 '*'/supervisor.py --root '*) kill -STOP ${d#/proc/};; esac; done"""
+
+
 def freeze_supervisor(machine: Machine) -> None:
     """SIGSTOP the machine's supervisor: alive, but it never answers (a hung host, a wedged process)."""
     pid_file = getattr(machine, "dir", None)
     if pid_file is not None:
         os.kill(int((pid_file / "pid").read_text()), signal.SIGSTOP)
     else:
-        machine.exec("kill -STOP 1")
+        rc, _, err = machine.exec(STOP_SUPERVISOR)
+        assert rc == 0, err
 
 
 class Tested:
