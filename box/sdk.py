@@ -138,6 +138,10 @@ class Provider(Protocol):
     ) -> Machine: ...  # fmt: skip  # mounts: ValueError for a store this provider cannot mount
     def get(self, machine_id: str) -> Machine: ...  # LookupError if box did not launch it
     def list(self, labels: dict[str, str] | None = None) -> list[Machine]: ...  # live machines labelled LABEL_BY and all of labels
+    # Releases what it holds open (Modal: its loop thread and client); idempotent. Its machines are
+    # unreachable through it after (Modal raises). Whoever made a provider closes it, so every
+    # provider has close, a no-op where nothing is held: `with contextlib.closing(provider):`.
+    def close(self) -> None: ...
 
 
 @dataclass(frozen=True)

@@ -66,6 +66,9 @@ class Local:
         found = [LocalMachine(d) for d in sorted(self.base.glob("local-*"))] if self.base.exists() else []
         return [m for m in found if m.alive() and want.items() <= m.labels.items()]
 
+    def close(self) -> None:
+        """Holds nothing open: its machines are directories and processes, reachable after."""
+
 
 class LocalMachine:
     def __init__(self, path: Path) -> None:
