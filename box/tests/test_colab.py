@@ -101,6 +101,16 @@ def test_expose_is_refused(colab: Callable) -> None:
         s.expose(8888)
 
 
+def test_a_pty_and_a_shell_are_refused_and_a_plain_stream_still_works(colab: Callable) -> None:
+    with sdk.launch(colab(), ceiling_s=600) as s:
+        with pytest.raises(ValueError, match="no pty: a kernel cell takes no stdin"):
+            s.stream("bash", pty=True)
+        with pytest.raises(ValueError, match="no shell"):
+            s.shell_argv()
+        with s.stream("echo plain", timeout_s=60) as stream:
+            assert b"".join(data for _, data in stream) == b"plain\n"
+
+
 def test_a_ceiling_past_colabs_max_runtime_is_refused_not_clamped(colab: Callable, backend: FakeBackend) -> None:
     """The backstop is the ceiling + BACKSTOP_MARGIN_S; Colab ends a runtime at its max. A ceiling
     whose backstop fits is launched as asked; one past it is refused before anything is rented."""
