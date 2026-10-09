@@ -18,7 +18,7 @@ reinforcement learning is about teaching `agents` to behave in `environments` by
 
 in particular, here we're going to study reinforcement learning using neural networks. neural networks are basically functions that are constructed of many smaller functions whose parameters are fit on on lots of data. it turns out these are very good at the general task of approximating a function f(x) when given a lot of data. 
 
-<!-- wip: still working on connecting network depth/learning ability on some dataset -->
+<!-- wip: still working on connecting network depth/learning ability on some dataset; the default curve may be too easy to be convincing (wave, width 12 fits to ~1e-4 in 3 s) -->
 ```nn-fit file=01-flappy-nnfit.nnfit
 ```
 
