@@ -21,7 +21,8 @@ Start here for the next session. The plan of record is `blogs/engine/00-plan.md`
 | `worktree-agent-a7fdb11404b864483` | `box dev` (held Modal A100, git sync, streamed runs, ports) | done, verified live; someone else is merging the box work |
 | `worktree-agent-aad0b243b3c6f22cd` | `box --provider colab` | done; needs the user's live smoke run (`box/tests/smoke_colab`) |
 | `spike/workspace-cells` | spike of the workspace-cell uncertainties | done: see "spike findings" below |
-| `engine/ch01-forward` | gpt2 torch functional forward + HF measurement harness (planted bugs) | running at time of writing |
+| `engine/ch01-forward` | gpt2 torch functional forward + HF measurement harness (planted bugs) under `ref/ch01/` | running at time of writing |
+| `engine/ch01-harness` | chapter 1 correctness machinery under `ref/ch01/harness/`: `@op` registry, case generator, coverage check, fp64 budget + logprob checks, isolation runner, `run_checks` | running at time of writing; merge with `engine/ch01-forward` after both land |
 
 ## spike findings
 
@@ -34,12 +35,21 @@ Spike branch `spike/workspace-cells` (worktree `.claude/worktrees/agent-ab43b364
 5. **Persistence:** git bundle to a Volume works: 8k-line repo -> 79 KiB bundle; whole pass commit (commit + tag + bundle + copy + sync) 0.6-0.9 s; restore 0.33 s. Git directly on a Volume is slow and showed a broken repo without explicit `sync` -> keep the bundle; write temp + rename, keep the previous bundle, `git bundle verify` before restore.
 6. **Error links:** `path:line:col` -> jump-to-line works for gcc / clang / UBSan / ASan / trace output, streamed in random chunks. Linkify complete lines only; match paths by suffix (absolute sandbox paths).
 
+## correctness decisions (chapter 1 onward)
+
+- correctness is introduced in chapter 1; the reader uses the machinery (given), doesn't write it, for now
+- op registry = kelpie's `@op` evolved (body is the reference; `.register` attaches candidates; bind-once dispatch, which suits per-deployment certification). Plain Python in chapter 1; torch custom-op binding opt-in later without changing user code. The global registry is an accepted exception
+- correct = within 2x the reference's own error vs fp64 truth (+ dtype floor: fp32 2e-5, fp16 1e-3, bf16 2e-2), from popcorn / FlashAttention / crucible; plus a vLLM-style top-k logprob check at model level
+- per-op checks block by default, toggleable (visible WARN); model-level always blocks
+- shape sweeps must cover code paths: `coverage.py` for Python; tile / alignment / specialization / autotune / algorithm-edge rules + sanitizers for GPU kernels; full production shape list from chapter 12 (finite thanks to buckets: low thousands of cases per model / dtype / TP / GPU)
+- isolation from chapter 1 in pygpubench's shape (trusted parent, spawned child, pipe, timeout; inputs unchanged; two runs identical); vendor / reference pygpubench, popcorn, KernelGuard as needed
+- per-deployment certification looks novel as a combination: llama.cpp `test-export-graph-ops` (enumerate from the deployment) + popcorn (fp64 budget + fingerprinted records) are the two halves to cite
+
 ## next
 
-1. fold the spike findings into 00-plan.md
-2. define what "correct" means for a forward pass (chapter 1's check); measurements from the gpt2 forward subagent inform it
-3. chapter 1 reference code + checks (gpt2 torch functional forward vs HuggingFace), as the first layered reference folder `engine/ref/ch01/`
-4. the smallest workspace-cell slice (a toy 2-file C++ chapter end to end), then chapter 5's engine
+1. land + merge `engine/ch01-forward` and `engine/ch01-harness`; set tolerance floors from the planted-bug table; plug the real forward into the `gpt2.forward` spec
+2. chapter 1 page: cells over the workspace (decided design), checks via `run_checks ch1`
+3. kernel image toolchain line + the smallest workspace-cell slice end to end (a toy 2-file C++ chapter), then chapter 5's engine
 
 ## open
 
