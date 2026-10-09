@@ -165,11 +165,14 @@ def _summary(job: Job, records: list[Record], policy: Policy, seconds: float) ->
         verdict = "PASS"
     else:
         verdict = ("FAIL" if policy.blocking else "WARN") + f" ({kinds})"
-    ratios = [r.outcome.err / r.outcome.band for r in budget
-              if r.outcome.err is not None and r.outcome.band]
-    worst = f"worst err/budget {max(ratios):.2g}" if ratios else "worst err/budget -"
+    graded = [r.outcome for r in budget if r.outcome.err is not None and r.outcome.band]
+    # NaN err sorts as the worst: it is a failure no finite error beats
+    worst_case = max(graded, key=lambda o: o.err / o.band if o.err == o.err else float("inf"),
+                     default=None)
+    worst = ("worst err -" if worst_case is None else
+             f"worst err {worst_case.err:.2g} vs budget {worst_case.band:.2g}")
     return (f"{job.op:<17} {job.candidate:<58} {verdict:<44} "
-            f"cases {passed_cases}/{len(budget)} {worst}  {seconds:.1f}s")
+            f"cases {passed_cases}/{len(budget)}  {worst}  {seconds:.1f}s")
 
 
 def _stamp() -> str:
