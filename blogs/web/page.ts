@@ -1,17 +1,14 @@
 import { EditorView, basicSetup, minimalSetup } from "codemirror";
 import { lineNumbers } from "@codemirror/view";
-import { EditorState, Compartment } from "@codemirror/state";
-import type { Extension } from "@codemirror/state";
-import { cpp } from "@codemirror/lang-cpp";
-import { python } from "@codemirror/lang-python";
-import { syntaxHighlighting } from "@codemirror/language";
-import { classHighlighter } from "@lezer/highlight";
-import { vim } from "@replit/codemirror-vim";
+import { EditorState } from "@codemirror/state";
 import { attr, must } from "./dom";
+import { look, registerEditor, setVim, syntax, vimEnabled, vimExtension } from "./editor";
+import { registerFile } from "./out-links";
 import { interrupt, kernelState, onKernelState, runCode } from "./connect/kernel";
 import type { RunResult as KernelResult } from "./connect/kernel";
 import "./connect/ui";
 import "./page-link";
+import "./ws-cell";
 
 // GET {SESSION}/state (session.py): the reader's latest passing source per cell, and per C cell the
 // session path of a play widget built from it.
@@ -83,31 +80,6 @@ let state: SessionState = { passed: {}, wasm: {} };
 
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g; // eslint-disable-line no-control-regex
 
-const syntax = (lang: string): Extension => (lang === "c" ? cpp() : python());
-
-// Token colours come from page.css (.tok-* classes), so light/dark follow the page's CSS variables.
-// The font has to be a theme: CodeMirror's base theme (.ͼ1 .cm-scroller { font-family: monospace }) outranks a
-// plain .cm-scroller rule in page.css, and a theme is scoped and mounted after it, so this one wins.
-const monoFont = EditorView.theme({ ".cm-scroller": { fontFamily: "var(--font-mono)" } });
-const look = (label: string): Extension[] => [
-  monoFont,
-  syntaxHighlighting(classHighlighter),
-  EditorView.contentAttributes.of({ "aria-label": label }),
-];
-
-// One vim switch for every editor on the page, remembered per reader.
-const vimMode = new Compartment();
-const vimKey = "blogs.vim";
-let vimOn = false;
-try { vimOn = localStorage.getItem(vimKey) === "1"; } catch { /* storage blocked: vim stays off */ }
-const editors: EditorView[] = [];
-function setVim(on: boolean): void {
-  vimOn = on;
-  try { localStorage.setItem(vimKey, on ? "1" : "0"); } catch { /* storage blocked: not remembered */ }
-  for (const view of editors) view.dispatch({ effects: vimMode.reconfigure(on ? vim() : []) });
-  for (const b of document.querySelectorAll(".vim-toggle")) b.setAttribute("aria-pressed", String(on));
-}
-
 async function refresh(): Promise<void> {
   state = parseState(await (await fetch(`${SESSION}/state`)).json());
   document.dispatchEvent(new Event("session-state"));
@@ -154,6 +126,9 @@ class CodeView extends HTMLElement {
       : [basicSetup];
     const view = new EditorView({ parent: this, state: EditorState.create({ doc, extensions: [...setup, syntax(lang), look(this.getAttribute("data-label") ?? `given code (${lang})`), EditorState.readOnly.of(true)] }) });
     view.scrollDOM.tabIndex = 0;
+    // A workspace file shown read-only (```lang given file=X): output lines naming X link here.
+    const file = this.getAttribute("data-file");
+    if (file !== null) registerFile(file, view, this);
   }
 }
 customElements.define("code-view", CodeView);
@@ -178,17 +153,17 @@ class CodeCell extends HTMLElement {
     // shown read-only with copy blocked.
     this.innerHTML = `
       <div class="cell-head"><span>${name} · ${lang}</span>
-        <span class="cell-status"></span><button class="vim-toggle" aria-pressed="${String(vimOn)}">vim</button><button class="run">Run</button></div>
+        <span class="cell-status"></span><button class="vim-toggle" aria-pressed="${String(vimEnabled())}">vim</button><button class="run">Run</button></div>
       <div class="cell-editor"></div>
       <pre class="cell-out" tabindex="0" aria-label="${name} output" hidden></pre>`;
     this.view.setState(EditorState.create({ doc: stub, extensions: [
-      vimMode.of(vimOn ? vim() : []), basicSetup, syntax(lang),
+      vimExtension(), basicSetup, syntax(lang),
       look(`${name} code (${lang})`),
     ] }));
     must(this, ".cell-editor", HTMLDivElement).append(this.view.dom);
     this.view.scrollDOM.tabIndex = 0;
-    editors.push(this.view);
-    must(this, ".vim-toggle", HTMLButtonElement).onclick = () => { setVim(!vimOn); };
+    registerEditor(this.view);
+    must(this, ".vim-toggle", HTMLButtonElement).onclick = () => { setVim(!vimEnabled()); };
     must(this, ".run", HTMLButtonElement).onclick = () => { void this.run(); };
     document.addEventListener("session-state", () => { this.gate(); });
     this.gate();
@@ -255,14 +230,14 @@ class ScratchCell extends HTMLElement {
     this.innerHTML = `
       <div class="cell-head"><span>scratch · ${lang}</span>
         <span class="cell-status"></span><button class="connect-to-run" type="button">Connect to run</button>
-        <button class="vim-toggle" aria-pressed="${String(vimOn)}">vim</button><button class="run">Run</button></div>
+        <button class="vim-toggle" aria-pressed="${String(vimEnabled())}">vim</button><button class="run">Run</button></div>
       <div class="cell-editor"></div>
       <pre class="cell-out scratch-out" tabindex="0" aria-label="scratch output" hidden></pre>`;
-    this.view.setState(EditorState.create({ doc: code, extensions: [vimMode.of(vimOn ? vim() : []), basicSetup, syntax(lang), look(`scratch code (${lang})`)] }));
+    this.view.setState(EditorState.create({ doc: code, extensions: [vimExtension(), basicSetup, syntax(lang), look(`scratch code (${lang})`)] }));
     must(this, ".cell-editor", HTMLDivElement).append(this.view.dom);
     this.view.scrollDOM.tabIndex = 0;
-    editors.push(this.view);
-    must(this, ".vim-toggle", HTMLButtonElement).onclick = () => { setVim(!vimOn); };
+    registerEditor(this.view);
+    must(this, ".vim-toggle", HTMLButtonElement).onclick = () => { setVim(!vimEnabled()); };
     must(this, ".connect-to-run", HTMLButtonElement).onclick = () => { document.dispatchEvent(new Event("connect:open")); };
     must(this, ".run", HTMLButtonElement).onclick = () => {
       if (this.running) interrupt().catch((e: unknown) => { this.status(`interrupt failed: ${String(e)}`, "fail"); });
