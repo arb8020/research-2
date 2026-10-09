@@ -18,9 +18,9 @@ POST /sessions                     body {provider:"modal", token:{id, secret}, g
                                    -> 202 {session_id, status}          returns immediately; boot continues
 GET  /sessions/{id}                header X-Box-Token: <id>:<secret> (A/C; B ignores)
                                    -> {session_id, status}
-POST /sessions/{id}/end            -> {status}
+POST /sessions/{id}/end            -> {session_id, status}
 POST /sessions/{id}/extend         header X-Box-Token; body {until} (unix seconds)
-                                   -> {status}   lease_until becomes until, clamped to ceiling; never shorter (an
+                                   -> {session_id, status} lease_until becomes until, clamped to ceiling; never shorter (an
                                    earlier until changes nothing). 409 while the session is booting (machine not up).
 GET  /sessions/{id}/events         SSE (text/event-stream). Each event is one JSON object:
                                      {t, kind:"step", source:"gateway"|"machine", text}      human-readable progress
