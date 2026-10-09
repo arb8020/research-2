@@ -21,7 +21,10 @@ from anyio.from_thread import BlockingPortal, start_blocking_portal
 
 from box import gpus
 from box.providers.pump import MAX_SEND_BYTES, Closed, Emit, Pumped, kill_pid_file, with_pid_file
-from box.sdk import LABEL_BY, LABEL_NAME, LABEL_PORTS, Dropped, Endpoint, Gone, NameTaken, Refused, declared_ports
+from box.sdk import (
+    LABEL_BY, LABEL_NAME, LABEL_PORTS, Dockerfile, Dropped, Endpoint, Gone, NameTaken, Refused, RegistryImage, SnapshotImage,
+    declared_ports, parse_image, snapshot_ref,
+)  # fmt: skip
 from box.store import Mount
 
 APP = "box"
@@ -36,7 +39,6 @@ CALL_TIMEOUT_S = 60.0  # MUST KILL: one 60 s bound for every call after boot, wr
 CREATE_TIMEOUT_S = 3600.0
 POLL_S = 0.5
 MODAL_TOML = Path.home() / ".modal.toml"
-SNAPSHOT = "modal-snapshot:"
 SNAPSHOT_TIMEOUT_S = 900.0
 STREAM_DROPS = (modal.exception.ConnectionError, grpclib.exceptions.StreamTerminatedError, OSError)
 
@@ -191,8 +193,14 @@ class Modal:
         if timeout_s > MAX_TIMEOUT_S:
             raise Refused(f"modal provider: timeout_s={timeout_s} past Modal's {MAX_TIMEOUT_S} s cap (a ceiling over {MAX_TIMEOUT_S - 600} s)")
         stores: list[ModalVolumeStore] = [m.store for m in mounts]  # MUST KILL: narrowed by the isinstance check above, which the checker can't see (was type: ignore[misc]); filter with a TypeGuard
-        snapshot = image.removeprefix(SNAPSHOT) if image and image.startswith(SNAPSHOT) else None
-        modal_image, modal_gpu_ = None if snapshot else resolve_image(image), modal_gpu(gpu)
+        match None if image is None else parse_image(image):
+            case SnapshotImage(provider="modal", id=snapshot):
+                modal_image = None
+            case SnapshotImage() as foreign_snapshot:
+                raise Refused(f"modal provider: {image!r} is a {foreign_snapshot.provider} snapshot")
+            case built:
+                snapshot, modal_image = None, resolve_image(built)
+        modal_gpu_ = modal_gpu(gpu)
 
         async def create() -> modal.Sandbox:
             client = await self.client()
@@ -223,7 +231,7 @@ class Modal:
             image = await machine.sandbox.snapshot_filesystem.aio(timeout=int(SNAPSHOT_TIMEOUT_S), ttl=ttl_s)
             return image.object_id
 
-        return SNAPSHOT + self._call(snap, timeout_s=SNAPSHOT_TIMEOUT_S + CALL_TIMEOUT_S)
+        return snapshot_ref(self.name, self._call(snap, timeout_s=SNAPSHOT_TIMEOUT_S + CALL_TIMEOUT_S))
 
     def get(self, machine_id: str) -> ModalMachine:
         async def lookup() -> tuple[modal.Sandbox, dict[str, str]]:
@@ -477,9 +485,11 @@ def modal_gpu(gpu: str | None) -> str | None:
     return f"{modal_id}:{count}" if count else modal_id
 
 
-def resolve_image(image: str | None) -> modal.Image:  # MUST KILL: image is a str sniffed by suffix (Dockerfile path vs OCI ref), and by prefix (SNAPSHOT) in launch; give image a typed union
-    if image is None:
-        return modal.Image.debian_slim(python_version=DEFAULT_PYTHON)
-    if image.lower().endswith("dockerfile"):
-        return modal.Image.from_dockerfile(image, context_dir=Path(image).parent)
-    return modal.Image.from_registry(image)
+def resolve_image(image: Dockerfile | RegistryImage | None) -> modal.Image:
+    match image:
+        case None:
+            return modal.Image.debian_slim(python_version=DEFAULT_PYTHON)
+        case Dockerfile(path=path):
+            return modal.Image.from_dockerfile(path, context_dir=path.parent)
+        case RegistryImage(ref=ref):
+            return modal.Image.from_registry(ref)
