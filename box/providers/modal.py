@@ -373,6 +373,8 @@ class ModalMachine:
             try:
                 with contextlib.suppress(Gone):
                     self.exec(kill_pid_file(pid_file))
+            except ProviderClosed as e:
+                raise Dropped(f"{self.id}: the modal provider closed before `{cmd}` was killed") from e
             finally:
                 for future in pumping:
                     future.cancel()
