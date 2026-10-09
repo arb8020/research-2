@@ -79,7 +79,7 @@ article { max-width: calc(var(--measure) + 32px); margin: 0 auto; padding: 48px 
 .wip { margin: 1.6em 0; padding: 8px 12px; font-family: var(--font-mono); font-size: 13px; color: var(--fg);
        background: var(--code-bg); border: 1px solid var(--rule); border-left: 4px solid var(--tok-meta); border-radius: 4px; }
 
-code-cell, scratch-cell { display: block; margin: 1.6em -16px; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+code-cell, scratch-cell, ws-cell { display: block; margin: 1.6em -16px; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
 .cell-head { display: flex; gap: 12px; align-items: center; padding: 6px 10px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--rule); }
 .cell-status { flex: 1; }
 .cell-status.pass { color: var(--pass); } .cell-status.fail { color: var(--fail); }
@@ -113,6 +113,9 @@ code-cell, scratch-cell { display: block; margin: 1.6em -16px; border: 1px solid
 .connect-to-run { font: inherit; padding: 3px 10px; border: 1px solid var(--muted); border-radius: 4px; background: none; color: var(--fg); cursor: pointer; }
 .connect-to-run:hover { background: var(--active); }
 .connect-to-run[hidden] { display: none; }
+/* workspace cells (```cpp cell=X file=F): output links jump to a file's editor. */
+.cell-out a.out-link { color: var(--fg); text-decoration: underline; text-decoration-color: var(--muted); }
+.cell-out a.out-link:hover { text-decoration-color: var(--fg); }
 
 figure.excerpt { margin: 1.6em -16px; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
 .excerpt-src { margin-left: auto; }
