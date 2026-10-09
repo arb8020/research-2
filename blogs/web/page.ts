@@ -65,6 +65,9 @@ async function* lines(body: ReadableStream<Uint8Array<ArrayBuffer>>): AsyncGener
   if (buf !== "") yield buf;
 }
 
+// TODO(page): "copy for your agent" (agent panel deferred, notes/research/infra/agent-panel.md): on a text selection,
+// a small button copies a prompt (the highlight, its section, the chapter URL, a slot for the question) to paste into the
+// reader's own coding agent.
 // TODO(page): ports and the session URL in one place (now: build_page.py --session-url default, session.py --port,
 // dev.sh, verify_page.py/a11y.py default URLs).
 function sessionUrl(): string {

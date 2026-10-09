@@ -5,6 +5,15 @@ decided 2026-10-09), adds a comment, and Claude or Codex replies in a sidebar. R
 Clones used: `/tmp/agent-panel-research/` (plannotator, pi), `/tmp/t3-auth-research/` (t3code @ c9fa1367, codex,
 others, raw policy pages in `policy/`), `/tmp/bb-research/bb`. These are /tmp and may be gone.
 
+## Decision (2026-10-09): deferred
+
+- **Punted.** No chapter has proofs or readers yet, the ground is moving (Sign in with ChatGPT launched 2026-09-29; Max/Team plans got monthly API credits 2026-10-07; WebMCP in a Chrome origin trial), and a local bridge is the biggest maintenance burden discussed.
+- **Picture when it comes back:** Google-Docs-style comments. Highlight text, a thread opens in the right margin, and the reader's *own* coding agent (Claude Code / Codex / pi, assumed installed) replies. No hidden reference proof for now (questions, not grading).
+- **Most likely shape then:** reader stays on our site (Safari not supported, accepted) and runs `npx blogs-agent`; the bridge speaks ACP to whichever agent is installed (adapters: claude-agent-acp, codex app-server; pi unverified) and pairs with the open tab via a `#pair=<token>` link. Optional `npx blogs-agent install` (autostart) makes returning readers do nothing. Vendor T3 Code (MIT) pairing + adapters, bb's Origin/Host guard.
+- **Zero-install paths researched and rejected for now:** ChatGPT sign-in needs a 127.0.0.1 redirect (local apps only) or OpenAI approval via the interest form; Claude sign-in needs Anthropic approval (contact sales); OpenRouter/Puter/pasted keys bypass the reader's coding agent; "Open in ChatGPT/Claude" links put the answer in another tab.
+- **Stand-in, left as a TODO (web/page.ts):** highlight -> "copy for your agent" button that copies a prompt (highlight, its section, chapter link, a slot for the question) to paste into any agent. Measures whether readers want "ask about this".
+- **Free background moves:** fill in OpenAI's Sign in with ChatGPT interest form; ask Anthropic about approval.
+
 ## The references
 
 **pi-durable** (`@earendil-works/pi-durable` v1.1.0, MIT, Mario Zechner; github.com/earendil-works/pi/tree/main/packages/durable)
