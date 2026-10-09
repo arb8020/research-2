@@ -38,7 +38,7 @@ def test_a_recorded_session_says_why_it_ended_after_its_machine_is_gone(launch: 
     record = sdk.read_record(store, s.id)
     assert (record.ended, record.machine_id, record.labels["box.user"]) == (Ended("stopped"), s.machine.id, "reader-7@relay")
     assert record.jobs() == [job.id]
-    assert (record.job_status(job.id)["state"], record.job_status(job.id)["exit_code"]) == ("done", 3)
+    assert record.job_status(job.id).ending == Ending("exited", 3)
     assert recorded_output(record, job.id) == "hello\n"
     assert recorded_output(record, job.id, "stderr") == "oops\n"
 

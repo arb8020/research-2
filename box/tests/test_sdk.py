@@ -107,7 +107,7 @@ def test_a_session_runs_jobs_in_order(launch: Callable) -> None:
     with launch(deadline_s=600) as s:
         first, second = s.run("echo one"), s.run("echo two")
         assert (second.wait(), first.wait()) == (Ending("exited", 0), Ending("exited", 0))
-        assert first.status()["ended"] <= second.status()["started"]
+        assert first.status().ended_at <= second.status().started_at
 
 
 def test_crashed_job_still_runs_its_hook(launch: Callable) -> None:
@@ -130,7 +130,7 @@ def test_deadline_kills_the_job_in_time_for_its_hook_then_ends_the_box(launch: C
 def test_closing_mid_job_still_runs_its_hook(launch: Callable, provider: Provider) -> None:
     s = launch(deadline_s=600)
     job = s.run("sleep 999", on_exit="echo $BOX_REASON", hook_budget_s=30)
-    eventually(lambda: (job.status() or {}).get("state") == "running", timeout_s=60)
+    eventually(lambda: isinstance(job.status(), sdk.JobRunning), timeout_s=60)
     s._stop_holding()
     s.machine.exec(f"touch {s.machine.root}/stop")  # close() minus its terminate, so the status stays readable
     assert job.wait() == Ending("stopped", -15, hook_exit_code=0)
@@ -141,7 +141,7 @@ def test_closing_mid_job_still_runs_its_hook(launch: Callable, provider: Provide
 def test_kill_reaches_grandchildren_and_the_session_goes_on(launch: Callable) -> None:
     with launch(deadline_s=600) as s:
         job = s.run("sleep 777 & sleep 778; wait")
-        eventually(lambda: (job.status() or {}).get("state") == "running", timeout_s=60)
+        eventually(lambda: isinstance(job.status(), sdk.JobRunning), timeout_s=60)
         job.kill()
         assert job.wait().reason == "killed"
         assert s.machine.exec("pgrep -f 'sleep 77[78]'")[1] == ""
@@ -289,7 +289,7 @@ def test_a_service_runs_beside_the_queue_and_is_not_work_for_idleness(launch: Ca
     job = s.run("echo queued after a service")  # the service never holds the queue up
     assert job.wait() == Ending("exited", 0)
     eventually(lambda: fetch(s.expose(port)) is not None, timeout_s=30 * scale)
-    assert (server.status() or {}).get("state") == "running"
+    assert isinstance(server.status(), sdk.JobRunning)
     assert s.wait(timeout_s=20 * idle_s) == Ended("idle")  # nobody connected: idle, though the server still ran
     assert server.wait() == Ending("idle", -15)  # killed (SIGTERM) when the session ended
     s.close()
@@ -298,7 +298,7 @@ def test_a_service_runs_beside_the_queue_and_is_not_work_for_idleness(launch: Ca
 def test_a_released_session_lives_while_its_service_does(launch: Callable, provider: Provider, scale: float) -> None:
     s = launch(deadline_s=600, lease_ttl_s=2 * scale)
     server = s.serve("sleep 999")
-    eventually(lambda: (server.status() or {}).get("state") == "running", timeout_s=30 * scale)
+    eventually(lambda: isinstance(server.status(), sdk.JobRunning), timeout_s=30 * scale)
     s.release()
     time.sleep(3 * scale)  # past the lease TTL: released, and a service is something left
     assert isinstance(s.status(), Running)

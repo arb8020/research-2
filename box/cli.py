@@ -87,15 +87,15 @@ def cmd_logs(a: argparse.Namespace) -> int:
         for chunk in jobs[-1].logs(follow=a.follow):
             sinks[chunk.stream].write(chunk.text)
             sinks[chunk.stream].flush()
-        status = jobs[-1].status() or {}
+        status = jobs[-1].status()
     except sdk.Gone:
         print(f"box: {a.id} is gone (its logs went with it)", file=sys.stderr)
         return 2
-    if status.get("state") != "done":
+    if not isinstance(status, sdk.Done):
         print(f"box: {a.id} still running; -f to follow", file=sys.stderr)
         return 0
-    print(f"box: {status['reason']}, exit {status['exit_code']}", file=sys.stderr)
-    return status["exit_code"] if status["exit_code"] is not None else 1  # so `box logs -f` can gate a script
+    print(f"box: {status.ending.reason}, exit {status.ending.exit_code}", file=sys.stderr)
+    return status.ending.exit_code if status.ending.exit_code is not None else 1  # so `box logs -f` can gate a script
 
 
 def cmd_who(a: argparse.Namespace) -> int:

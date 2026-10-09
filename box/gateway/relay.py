@@ -56,7 +56,7 @@ from urllib.parse import parse_qs, quote, urlsplit
 
 from box import sdk
 from box.modal_provider import ModalToken
-from box.sdk import Booting, Ended, Running
+from box.sdk import Booting, Done, Ended, Queued, Running
 from box.store import Store
 
 if TYPE_CHECKING:
@@ -254,9 +254,9 @@ def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: boo
             if ready or jupyter_ready(kernel):
                 return wire("running", gpu, started_at, deadline_at, kernel=kernel)
             jupyter = kernel_service(s)
-            done = None if jupyter is None else jupyter.status()
-            if done is not None and done["state"] == "done":  # the session's reason, or Jupyter's own end (then the session's is "released")
-                return ended(reason=REASONS.get(done["reason"], REASONS["released"]))
+            match Queued() if jupyter is None else jupyter.status():
+                case Done(ending=ending):  # the session's reason, or Jupyter's own end (then the session's is "released")
+                    return ended(reason=REASONS.get(ending.reason, REASONS["released"]))
             return wire("booting", gpu, started_at, deadline_at)
         case Ended(reason=reason):
             return ended(reason=REASONS[reason])
