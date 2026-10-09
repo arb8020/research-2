@@ -84,7 +84,7 @@ touch "$BOX_ROOT/booted"
     chmod 600 /root/.ssh/authorized_keys && ssh-keygen -A && /usr/sbin/sshd
 } > "$BOX_ROOT/boot.log" 2>&1
 # Start the supervisor only once the client reached us (RunPod publishes the ssh port ~20 s after
-# the container starts): its lease and deadline clocks run from when a client can heartbeat.
+# the container starts). The lease and ceiling are absolute times from create: this wait comes out of them.
 for _ in $(seq "$((BOX_UP_TIMEOUT_S / 2))"); do [ -e "$BOX_ROOT/attached" ] && break; sleep 2; done
 if [ ! -e "$BOX_ROOT/attached" ]; then
     echo "$(date) no client attached" >> "$BOX_ROOT/shutdown.log"; bash -c "$BOX_ON_SHUTDOWN"; sleep 600; exit 1

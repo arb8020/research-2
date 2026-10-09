@@ -33,7 +33,7 @@ class Local:
         labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
     ) -> LocalMachine:  # fmt: skip
         """mounts: DirStores only, as symlinks (a local machine shares this computer's disk)."""
-        del timeout_s  # the supervisor's deadline is the only clock here; a VM provider enforces this
+        del timeout_s  # the supervisor's ceiling is the only clock here; a VM provider enforces this
         if gpu or image:
             raise NotImplementedError(f"local provider: no gpu/image (got gpu={gpu!r}, image={image!r})")
         if foreign := [m.store.uri for m in mounts if not isinstance(m.store, DirStore)]:

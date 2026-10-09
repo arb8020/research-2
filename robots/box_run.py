@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 from box import sdk
-from box.cli import make_provider, user
+from box.cli import DETACH_IDLE_S, make_provider, user
 
 ROOT = Path(__file__).resolve().parent.parent  # the checkout whose code is uploaded
 REMOTE = "/workspace/research"
@@ -79,20 +79,20 @@ def main() -> int:
 
     s = sdk.launch(
         make_provider(a.provider), gpu=None if local else a.gpu, image=None if local else IMAGE,
-        deadline_s=a.timeout, labels={"box.cmd": cmd[:200], "box.tree": str(ROOT), "box.user": user()},
+        ceiling_s=a.timeout, labels={"box.cmd": cmd[:200], "box.tree": str(ROOT), "box.user": user()},
+        idle_timeout_s=DETACH_IDLE_S if a.detach else 0.0,  # detached: idle ends it once the job (and hook) is done
     )  # fmt: skip
     if a.detach:
         for d in ("robots", "observe"):
             s.put(ROOT / d, f"{remote}/{d}", ignore=IGNORE)
-        s.run(job, on_exit=on_exit)
-        s.release()  # the machine ends itself after the job and its hook
+        s.run(job, max_duration_s=a.timeout, on_exit=on_exit)
         print(s.id)
         print(f"box --provider {a.provider} logs {s.id} -f    # follow", file=sys.stderr)
         return 0
     with s:  # however this process leaves, the session ends: the job is killed, its hook runs
         for d in ("robots", "observe"):
             s.put(ROOT / d, f"{remote}/{d}", ignore=IGNORE)
-        j = s.run(job, on_exit=on_exit)
+        j = s.run(job, max_duration_s=a.timeout, on_exit=on_exit)
         sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
         for chunk in j.logs(follow=True):
             sinks[chunk.stream].write(chunk.text)

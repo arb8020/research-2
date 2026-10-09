@@ -6,7 +6,7 @@
       put  this kelpie tree -> TREE, observe/ -> RESEARCH/observe                   # ~1.5 MB gzipped
       run  python -m kelpie_http.dev.job: setup (setup.py) against /data, then cmd  # one job
       attached: stream its logs, then close (the machine ends)
-      --detach: release and print the id; the machine ends itself after the job (`box logs <id> -f`)
+      --detach: print the id; the machine ends itself once idle after the job (`box logs <id> -f`)
 
 The image is oci/Dockerfile plus kelpie-http's locked python deps, written as one Dockerfile and
 built by the provider (cached by its bytes). Results stay on the volume at /data. Runs in box's
@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from box import sdk
-from box.cli import user
+from box.cli import DETACH_IDLE_S, user
 
 from kelpie_http.dev.local import KELPIE, xgrammar_submodule_sha
 
@@ -138,13 +138,14 @@ def make_provider(name: str, volume: str) -> sdk.Provider:
 
 def start(a: argparse.Namespace, cmd: str) -> tuple[sdk.Session, sdk.Job]:
     """launch, put the trees, queue the job. A failure after launch closes the machine: one with
-    no job would idle until its deadline."""
+    no job would idle until its ceiling."""
     local = a.provider == "local"
     s = sdk.launch(
         make_provider(a.provider, a.volume),
         gpu=None if local else a.gpu,
         image=None if local else dockerfile(KELPIE),
-        deadline_s=a.timeout + GRACE_S,
+        ceiling_s=a.timeout + GRACE_S,
+        idle_timeout_s=DETACH_IDLE_S if a.detach else 0.0,  # detached: idle ends it once the job is done
         labels={
             "box.cmd": cmd[:200],
             "box.user": user(),
@@ -160,6 +161,7 @@ def start(a: argparse.Namespace, cmd: str) -> tuple[sdk.Session, sdk.Job]:
         sha = xgrammar_submodule_sha(KELPIE)
         job = s.run(
             job_cmd(where, submodule_sha=sha, models=a.model, timeout=a.timeout, cmd=cmd),
+            max_duration_s=a.timeout + GRACE_S,  # setup + cmd (cmd has its own --timeout inside)
             env={"BOX_ID": s.id},
         )
     except BaseException:
@@ -232,7 +234,6 @@ def main(argv: list[str] | None = None) -> int:
     s, job = start(a, cmd)
     if not a.detach:
         return follow(s, job)
-    s.release()
     print(s.id)
     print(
         f"box logs {s.id} -f    # follow (exits with the job's status)\nbox kill {s.id}       # stop",

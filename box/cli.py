@@ -3,12 +3,20 @@ a project. Projects with their own setup (robots/box_run.py, kelpie's remote run
 themselves.
 
     box run [--gpu L4] [--image REF] [--put LOCAL:REMOTE]... [--get REMOTE:LOCAL]... [--on-exit CMD]
-            [--timeout S] [--region us] [--detach] -- <cmd>
+            [--lease 90m] [--ceiling 8h] [--max-duration 2h] [--region us] [--detach] -- <cmd>
+    box attach <session>     its status (lease, ceiling, jobs) and how to follow it
     box logs <session> [-f]  the session's latest job's output; exits with its exit code once it ends
-    box who                  running sessions box launched: session id, machine id, user, time left
+    box extend <session> <duration>   its lease to now + duration (never past its ceiling, never shorter)
+    box release <session>    end its lease now: its job is killed, its hook runs
+    box who                  running sessions box launched: session id, machine id, user, lease and ceiling left
     box kill <session>       end a session: kill its job, let its hook run, terminate the machine
-    box gc [--yes]           sessions past their deadline (their supervisor should have ended them)
+    box gc [--yes]           sessions past their ceiling (their supervisor should have ended them)
     box gpus [--sync]        GPU names (--gpu takes these), provider ids, $/hr
+
+Durations: 90, 90s, 30m, 8h, 2d (seconds by default). A session ends when its lease does (--lease,
+default: the ceiling), never past its ceiling (--ceiling, default 1h, at most 48h); a --detach run
+also ends once it has been idle (its job done) for DETACH_IDLE_S. Nothing ends it because this
+command exits: the lease is the guarantee.
 
 Every command takes --provider (modal by default; runpod; local for a machine on this computer).
 """
@@ -17,13 +25,29 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import re
 import socket
 import sys
 import time
 
 from box import gpus, sdk
 
-GC_MARGIN_S = 1800  # past box.deadline by this much, a supervisor has failed to end its machine
+GC_MARGIN_S = 1800  # past box.ceiling by this much (the provider backstop is 600 s), a machine has outlived both
+DETACH_IDLE_S = 120  # a detached run's machine ends this long after its job (no ROOT/released "end when done" any more)
+DURATION = re.compile(r"(\d+(?:\.\d+)?)([smhd]?)")
+UNIT_S = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
+def duration(raw: str) -> float:
+    """'90', '90s', '30m', '8h', '2d' -> seconds."""
+    m = DURATION.fullmatch(raw.strip())
+    if m is None:
+        raise argparse.ArgumentTypeError(f"not a duration: {raw!r} (e.g. 90s, 30m, 8h)")
+    return float(m.group(1)) * UNIT_S[m.group(2)]
+
+
+def until(t: float) -> str:
+    return f"{time.strftime('%H:%M:%S', time.localtime(t))} (in {(t - time.time()) / 60:.0f} min)"
 
 
 def make_provider(name: str, region: str | None = None) -> sdk.Provider:
@@ -59,20 +83,20 @@ def pairs(specs: list[str], what: str) -> list[tuple[str, str]]:
 def cmd_run(a: argparse.Namespace) -> int:
     cmd = " ".join(a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd) or "nvidia-smi"
     provider = make_provider(a.provider, a.region)
-    kw = {"gpu": a.gpu, "image": a.image, "deadline_s": a.timeout, "labels": {"box.cmd": cmd[:200], "box.user": user()}}
+    max_duration_s = a.max_duration or a.ceiling  # by default the job may use the whole session
+    kw = {"gpu": a.gpu, "image": a.image, "lease_s": a.lease, "ceiling_s": a.ceiling, "labels": {"box.cmd": cmd[:200], "box.user": user()}}
     if not a.detach:
-        ending = sdk.run_job(provider, cmd, put=pairs(a.put, "put"), get=pairs(a.get, "get"), on_exit=a.on_exit, **kw)
+        ending = sdk.run_job(provider, cmd, max_duration_s=max_duration_s, put=pairs(a.put, "put"), get=pairs(a.get, "get"), on_exit=a.on_exit, **kw)
         print(f"box: {ending.reason}, exit {ending.exit_code}", file=sys.stderr)
         return ending.exit_code if ending.exit_code is not None else 1
     if a.get:
         raise SystemExit("box run: --detach brings nothing home; save results from --on-exit instead")
-    s = sdk.launch(provider, **kw)
+    s = sdk.launch(provider, idle_timeout_s=DETACH_IDLE_S, **kw)
     for local, remote in pairs(a.put, "put"):
         s.put(local, remote)
-    s.run(cmd, on_exit=a.on_exit)
-    s.release()
+    s.run(cmd, max_duration_s=max_duration_s, on_exit=a.on_exit)
     print(s.id)
-    print(f"box logs {s.id} -f    # follow\nbox kill {s.id}       # stop", file=sys.stderr)
+    print(f"box attach {s.id}    # status\nbox logs {s.id} -f   # follow\nbox extend {s.id} 1h  # more lease\nbox kill {s.id}      # stop", file=sys.stderr)
     return 0
 
 
@@ -99,11 +123,39 @@ def cmd_logs(a: argparse.Namespace) -> int:
 
 
 def cmd_who(a: argparse.Namespace) -> int:
-    machines = make_provider(a.provider).list()
+    provider = make_provider(a.provider)
+    machines = provider.list()
     print(f"{len(machines)} running")
     for m in machines:
-        left = (int(m.labels.get(sdk.LABEL_DEADLINE, 0)) - time.time()) / 60
-        print(f"{m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  {m.labels.get('box.user', '?')}  {left:.0f} min left\n    {m.labels.get('box.cmd', '')}")
+        ceiling = float(m.labels.get(sdk.LABEL_CEILING, 0))
+        status = sdk.Session(m).status()  # one exec each
+        lease = f"lease {(status.lease.until - time.time()) / 60:.0f} min" if isinstance(status, sdk.Running) else type(status).__name__.lower()
+        print(f"{m.labels[sdk.LABEL_SESSION]}  {m.id}  {m.labels.get('box.user', '?')}  {lease}, ceiling {(ceiling - time.time()) / 60:.0f} min\n    {m.labels.get('box.cmd', '')}")
+    return 0
+
+
+def cmd_attach(a: argparse.Namespace) -> int:
+    s = sdk.attach(make_provider(a.provider), a.id)
+    match s.status():
+        case sdk.Running(started_at=started_at, lease=lease):
+            print(f"{a.id}: running since {time.strftime('%H:%M:%S', time.localtime(started_at))}; lease until {until(lease.until)}, ceiling {until(lease.ceiling)}")
+        case status:
+            print(f"{a.id}: {status}")
+    jobs = s.jobs()
+    print(f"{len(jobs)} job(s){f'; latest {jobs[-1].id}: {jobs[-1].status()}' if jobs else ''}")
+    print(f"box logs {a.id} -f   # follow\nbox extend {a.id} 1h  # more lease\nbox release {a.id}   # end it now", file=sys.stderr)
+    return 0
+
+
+def cmd_extend(a: argparse.Namespace) -> int:
+    lease = sdk.attach(make_provider(a.provider), a.id).extend(time.time() + a.duration)
+    print(f"box: {a.id}: lease until {until(lease.until)}, ceiling {until(lease.ceiling)}")
+    return 0
+
+
+def cmd_release(a: argparse.Namespace) -> int:
+    lease = sdk.attach(make_provider(a.provider), a.id).release()
+    print(f"box: {a.id}: released; its lease ended {time.strftime('%H:%M:%S', time.localtime(lease.until))}")
     return 0
 
 
@@ -119,12 +171,12 @@ def cmd_kill(a: argparse.Namespace) -> int:
 
 
 def cmd_gc(a: argparse.Namespace) -> int:
-    late = [m for m in make_provider(a.provider).list() if time.time() > int(m.labels[sdk.LABEL_DEADLINE]) + GC_MARGIN_S]
+    late = [m for m in make_provider(a.provider).list() if time.time() > int(m.labels[sdk.LABEL_CEILING]) + GC_MARGIN_S]
     for m in late:
-        print(f"  {m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  past its deadline by {(time.time() - int(m.labels[sdk.LABEL_DEADLINE])) / 3600:.1f} h")
+        print(f"  {m.labels.get(sdk.LABEL_SESSION, '?')}  {m.id}  past its ceiling by {(time.time() - int(m.labels[sdk.LABEL_CEILING])) / 3600:.1f} h")
         if a.yes:
             m.terminate()
-    print(f"box gc: {len(late)} past deadline; {'terminated' if a.yes else 'nothing done (--yes terminates)'}")
+    print(f"box gc: {len(late)} past their ceiling; {'terminated' if a.yes else 'nothing done (--yes terminates)'}")
     return 0
 
 
@@ -146,11 +198,23 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--put", action="append", default=[], help="LOCAL_DIR:REMOTE_DIR, copied in first (repeatable)")
     s.add_argument("--get", action="append", default=[], help="REMOTE_DIR:LOCAL_DIR, copied home after (repeatable)")
     s.add_argument("--on-exit", default=None, help="bash run on the machine after cmd, however it ended")
-    s.add_argument("--timeout", type=int, default=3600, help="seconds the machine may live")
+    s.add_argument("--lease", type=duration, default=None, help="the session ends after this (default: the ceiling); `box extend` moves it")
+    s.add_argument("--ceiling", type=duration, default=sdk.CEILING_S, help="no lease passes this, from now (default 1h, at most 48h)")
+    s.add_argument("--max-duration", type=duration, default=None, help="the job is killed after this (default: the ceiling)")
     s.add_argument("--region", default=None, help="modal: pin a region (e.g. us; billed at a premium); default anywhere")
-    s.add_argument("--detach", action="store_true", help="print the id and return; the machine ends itself")
+    s.add_argument("--detach", action="store_true", help="print the id and return; the machine ends itself (lease, or idle once the job is done)")
     s.add_argument("cmd", nargs=argparse.REMAINDER, help="-- command, run by bash")
     s.set_defaults(fn=cmd_run)
+    s = sub.add_parser("attach", help="a session's status and how to follow it")
+    s.add_argument("id")
+    s.set_defaults(fn=cmd_attach)
+    s = sub.add_parser("extend", help="move a session's lease to now + duration")
+    s.add_argument("id")
+    s.add_argument("duration", type=duration)
+    s.set_defaults(fn=cmd_extend)
+    s = sub.add_parser("release", help="end a session's lease now")
+    s.add_argument("id")
+    s.set_defaults(fn=cmd_release)
     s = sub.add_parser("logs", help="a session's latest job output")
     s.add_argument("id")
     s.add_argument("-f", "--follow", action="store_true")
@@ -159,7 +223,7 @@ def parser() -> argparse.ArgumentParser:
     s = sub.add_parser("kill", help="end one session, by id")
     s.add_argument("id")
     s.set_defaults(fn=cmd_kill)
-    s = sub.add_parser("gc", help="sessions past their deadline; --yes terminates them")
+    s = sub.add_parser("gc", help="sessions past their ceiling; --yes terminates them")
     s.add_argument("--yes", action="store_true")
     s.set_defaults(fn=cmd_gc)
     s = sub.add_parser("gpus", help="GPU names, provider ids and $/hr")
@@ -170,4 +234,9 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     a = parser().parse_args()
-    sys.exit(a.fn(a))
+    try:
+        code = a.fn(a)
+    except ValueError as e:  # the SDK refused what was asked (a ceiling past 48 h, a hook that cannot fit): say so, no traceback
+        print(f"box: {e}", file=sys.stderr)
+        code = 2
+    sys.exit(code)

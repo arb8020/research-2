@@ -3,7 +3,7 @@
 One HTTP API that all three session-owner variants implement, so the page doesn't care which one runs
 and the comparison is apples to apples:
 - (A) `relay` : Python, stateless, box SDK; the machine (supervisor) owns the session.
-- (C) `fanout`: Worker + Durable Object in front of (A); DO only fans out logs / proxies; never owns lease/deadline,
+- (C) `fanout`: Worker + Durable Object in front of (A); DO only fans out logs / proxies; never owns the lease,
   never stores the token. It may call the Python relay for control ops.
 - (B) `do-owns`: Worker + DO holds canonical session state + log ring buffer + token (for the session lifetime);
   calls a Python control service (box SDK) to create/kill machines.
@@ -12,11 +12,16 @@ Base URL is configured on the page (`data-gateway="http://localhost:8790"`). COR
 
 ## Control
 ```
-POST /sessions                     body {provider:"modal", token:{id, secret}, gpu:"T4"|null, labels?:{}}
+POST /sessions                     body {provider:"modal", token:{id, secret}, gpu:"T4"|null, labels?:{}, lease_s?:int}
+                                   lease_s: 60..43200 (default 5400); else 400. The session ends when its lease
+                                   does, at most 12 h after it was created (its ceiling).
                                    -> 202 {session_id, status}          returns immediately; boot continues
 GET  /sessions/{id}                header X-Box-Token: <id>:<secret> (A/C; B ignores)
                                    -> {session_id, status}
 POST /sessions/{id}/end            -> {status}
+POST /sessions/{id}/extend         header X-Box-Token; body {until} (unix seconds)
+                                   -> {status}   lease_until becomes until, clamped to ceiling; never shorter (an
+                                   earlier until changes nothing). 409 while the session is booting (machine not up).
 GET  /sessions/{id}/events         SSE (text/event-stream). Each event is one JSON object:
                                      {t, kind:"step", source:"gateway"|"machine", text}      human-readable progress
                                      {t, kind:"log",  source:"machine", stream:"stdout"|"stderr", text}
@@ -24,8 +29,10 @@ GET  /sessions/{id}/events         SSE (text/event-stream). Each event is one JS
                                    Reconnect with Last-Event-ID resumes (B/C from ring buffer; A best effort).
                                    (EventSource can't set headers: token goes as ?token= for A/C over localhost dev.)
 ```
-`status` = `{state:"booting"|"running"|"ended", gpu, started_at, deadline, reason?, kernel?:{url, token}}`
-`reason` (ended) = `"stopped"|"deadline"|"idle"|"lease_lost"|"boot_failed"|"machine_lost"`.
+`status` = `{state:"booting"|"running"|"ended", gpu, started_at, lease_until, ceiling, deadline, reason?, kernel?:{url, token}}`
+`lease_until`, `ceiling`: unix seconds. `deadline` = `lease_until` (kept for older pages).
+`reason` (ended) = `"stopped"|"lease"|"idle"|"boot_failed"|"machine_lost"`. Idle (no connection to the kernel
+for the relay's idle timeout) stays on: a closed tab ends the session even with lease left.
 `kernel` appears once running: a Jupyter Server base URL + token reachable from the browser (A: Modal tunnel
 direct; B/C: may be a DO-proxied URL).
 

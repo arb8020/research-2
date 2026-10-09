@@ -2,7 +2,8 @@
 
 A sandbox lives exactly as long as its entrypoint, so when the supervisor exits the sandbox ends
 by itself (no BOX_ON_SHUTDOWN needed), and its files go with it. Sandbox.create's `timeout` is
-Modal's hard backstop past the supervisor's deadline (Modal caps it at 24 h). No Modal
+Modal's hard backstop past the session's ceiling (Modal caps it at 24 h, so a ceiling past
+24 h - 600 s is refused here, never clamped). No Modal
 `idle_timeout`, on purpose: Modal counts only connections and execs as activity, never work inside
 the sandbox, so it would reap a long job nobody watches; the supervisor owns idleness. labels are sandbox
 tags; list()/get() only see sandboxes tagged box.by=box under the "box" app.
@@ -111,10 +112,12 @@ class Modal:
         """mounts: ModalVolumeStores only, each a sub_path of its Volume (created on start if missing)."""
         if foreign := [m.store.uri for m in mounts if not isinstance(m.store, ModalVolumeStore)]:
             raise ValueError(f"modal provider: mounts only a ModalVolumeStore (got {foreign})")
+        if timeout_s > MAX_TIMEOUT_S:  # refused, not clamped: a clamped backstop would end the sandbox before the session's ceiling
+            raise ValueError(f"modal provider: timeout_s={timeout_s} past Modal's {MAX_TIMEOUT_S} s cap (a ceiling over {MAX_TIMEOUT_S - 600} s)")
         stores = {f"{ROOT}/{m.path}": m.store.volume.with_mount_options(sub_path=f"/{m.prefix}") for m in mounts}
         sandbox = modal.Sandbox.create(
             *entrypoint, app=self.app, image=resolve_image(image), gpu=modal_gpu(gpu), region=self.region,
-            env={**env, "BOX_ROOT": ROOT}, tags=labels, timeout=min(timeout_s, MAX_TIMEOUT_S), client=self.client,
+            env={**env, "BOX_ROOT": ROOT}, tags=labels, timeout=timeout_s, client=self.client,
             encrypted_ports=ports,
             volumes={**{path: modal.Volume.from_name(v, create_if_missing=True, client=self.client) for path, v in self.volumes.items()}, **stores},
         )  # fmt: skip
