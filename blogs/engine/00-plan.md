@@ -16,6 +16,7 @@ desc:
 - the reader *uses* the machinery (given), and doesn't write it, for now; revisit later
 - built as if an agent might write the candidate and try to game the check: pygpubench's shape (a trusted parent computes inputs + fp64 truth before importing the candidate; one untrusted spawned child runs it; results over a pipe; timeout). Vendor or reference pygpubench, tilde-research/popcorn, KernelGuard rules as needed; push the heavier hardening later only if it's really hard
 - shape sweeps must cover code paths, not just a toy sample (kelpie's gap: one `randn(4,8)` per op). Python: `coverage.py` over the sweep, every line + branch hit. GPU kernels later: tile-remainder / alignment / specialization / autotune-config / algorithm-edge rules, sanitizers, and the full production shape list
+- blocking: per-op checks (2x fp64 error budget) block by default, as do model-level checks; per-op blocking is toggleable (block / warn) per op or globally. Model-level always blocks
 - per-deployment certification (from chapter 12, once buckets exist): the engine owns the bucket ladder and the model is fixed, so the production shape list is finite (~14 shapes per dense op; attention ~105 shapes x sampled length configs; low thousands of cases total per model / dtype / TP / GPU). Run it all against fp64 truth once per deployment; cache verdicts keyed by (op, impl, shape) that actually run
 
 check:
