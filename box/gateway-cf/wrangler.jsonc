@@ -1,0 +1,11 @@
+// Box gateway on Cloudflare: Worker router + one SQLite-backed Durable Object per session.
+// Local: `npx wrangler dev` (port 8787). Free plan requires new_sqlite_classes.
+{
+  "name": "box-gateway-spike",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "durable_objects": { "bindings": [{ "name": "SESSION", "class_name": "SessionDO" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionDO"] }],
+  "vars": { "RING_SIZE": "1000", "HEARTBEAT_MS": "15000" },
+  "observability": { "enabled": true }
+}

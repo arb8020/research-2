@@ -1,0 +1,15 @@
+== reader a (always connected)
+   line 1
+   line 2
+   line 3
+   line 4 (b offline)
+   line 5 (b offline)
+   line 6
+== reader b (before drop, last id 3)
+   line 1
+   line 2
+   line 3
+== reader b (resumed with Last-Event-ID: 3)
+   line 4 (b offline)
+   line 5 (b offline)
+   line 6

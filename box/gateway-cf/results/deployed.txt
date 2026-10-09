@@ -1,0 +1,19 @@
+### fanout (deployed)
+readers https://box-gateway-spike.chiraagbalu.workers.dev producer https://box-gateway-spike.chiraagbalu.workers.dev session fanout-1791525112225
+POST->SSE latency ms: p50=40.8 p90=54.0 max=89.1
+WS->SSE latency ms: p50=28.1 p90=29.6 max=30.1
+ok: reconnect replay count 31 (got 31)
+ok: replayed lines in order, none duplicated
+ok: reader a saw all 51 live events (got 51)
+ok: event ids are contiguous
+ok: gap notice: "replay gap: 150 events dropped"
+ok: ring replay holds exactly 1000 (got 1000)
+ok: ring replay ends at the latest seq
+status {"session_id":"fanout-1791525112225","status":{"state":"booting","gpu":null,"started_at":1791525115686,"deadline":null}}
+### alarm (deployed)
+ok: armed deadline in 3000 ms on alarm-1791525115779 (https://box-gateway-spike.chiraagbalu.workers.dev)
+ok: status ended, reason=deadline, observed -36 ms after deadline
+gateway step: deadline reached (alarm fired, late by 1 ms)
+ok: armed deadline in 10000 ms on alarm-1791525118815 (https://box-gateway-spike.chiraagbalu.workers.dev)
+ok: status ended, reason=deadline, observed -31 ms after deadline
+gateway step: deadline reached (alarm fired, late by 0 ms)
