@@ -1,9 +1,3 @@
-"""Run code on a session's Jupyter kernel from Python, as the page's kernel.ts does from the browser:
-Jupyter Server REST (/api/kernels) + the kernel websocket, token in the query string.
-
-    out = run(kernel, "!nvidia-smi")          # kernel = status["kernel"] = {url, token}; -> Output
-"""
-
 from __future__ import annotations
 
 import json
@@ -16,17 +10,17 @@ from urllib.parse import quote
 
 from websockets.sync.client import connect
 
-REPLY_TIMEOUT_S = 600.0  # one cell (nn-fit's remote run is bounded at 300 s by the page)
-MAX_OUTPUT = 64 * 1024 * 1024  # bytes of stream output kept per cell
+REPLY_TIMEOUT_S = 600.0
+MAX_OUTPUT = 64 * 1024 * 1024
 
 
 @dataclass(frozen=True)
 class Output:
-    status: str  # execute_reply's: ok | error | aborted
+    status: str
     stdout: str
     stderr: str
-    seconds: float  # execute_request sent -> the kernel idle again
-    error: str = ""  # ename: evalue, when status is error
+    seconds: float
+    error: str = ""
 
 
 def api(kernel: dict[str, str], path: str) -> str:
@@ -34,7 +28,6 @@ def api(kernel: dict[str, str], path: str) -> str:
 
 
 def kernel_id(kernel: dict[str, str]) -> str:
-    """The session's kernel: the first one running, else a new one (the page does the same)."""
     with urllib.request.urlopen(api(kernel, "/api/kernels"), timeout=30) as r:
         listed = json.loads(r.read())
     if listed:
