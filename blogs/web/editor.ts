@@ -1,6 +1,8 @@
 // What every CodeMirror on the page shares: the look (font, token classes), the language, the one vim switch.
 import { EditorView } from "codemirror";
-import { Compartment } from "@codemirror/state";
+import { Compartment, Prec } from "@codemirror/state";
+import { acceptCompletion, autocompletion, completionStatus, startCompletion } from "@codemirror/autocomplete";
+import { keymap } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
 import { cpp } from "@codemirror/lang-cpp";
 import { python } from "@codemirror/lang-python";
@@ -14,8 +16,22 @@ export const syntax = (lang: string): Extension => (lang === "c" || lang === "cp
 // The font has to be a theme: CodeMirror's base theme (.ͼ1 .cm-scroller { font-family: monospace }) outranks a
 // plain .cm-scroller rule in page.css, and a theme is scoped and mounted after it, so this one wins.
 const monoFont = EditorView.theme({ ".cm-scroller": { fontFamily: "var(--font-mono)" } });
+// Completion opens on Tab, never by itself while typing: Tab right after a word character opens the list (or
+// accepts the selected option once it is open; Enter accepts too). Tab anywhere else does what it did before
+// (moves focus), so the editor never traps keyboard users.
+const tabCompletion: Extension = [
+  autocompletion({ activateOnTyping: false }),
+  Prec.highest(keymap.of([{ key: "Tab", run: (view) => {
+    if (completionStatus(view.state) === "active") return acceptCompletion(view);
+    const sel = view.state.selection.main;
+    const before = view.state.sliceDoc(Math.max(0, sel.head - 1), sel.head);
+    return sel.empty && /\w/.test(before) ? startCompletion(view) : false;
+  } }])),
+];
+
 export const look = (label: string): Extension[] => [
   monoFont,
+  tabCompletion,
   syntaxHighlighting(classHighlighter),
   EditorView.contentAttributes.of({ "aria-label": label }),
 ];
