@@ -78,13 +78,21 @@ def embeds(browser: Browser, a: argparse.Namespace) -> None:
     check(True, "carousel: Next -> 2, Previous -> 1")
     car.screenshot(path=a.out / "carousel.png")
 
+    # Which env plays depends on the session: the reference until the reader's flappy passes (cells.md), then theirs.
+    session = page.locator('meta[name="session-url"]').get_attribute("content") or ""
+    reader_wasm = page.request.get(f"{session}/state").json()["wasm"].get("flappy")
     play = page.locator('env-play[cell="flappy"]')
     play.scroll_into_view_if_needed()
+    if reader_wasm:
+        expect(play.locator(".play-caption")).to_contain_text("playing: your env (latest passing version)")
     src = play.locator("iframe").get_attribute("src") or ""
     caption = play.locator(".play-caption").inner_text()
-    check("flappy.js" in src and caption.startswith("playing: reference env"), f"env-play: {caption!r} ({src})")
+    if reader_wasm:
+        check(src.endswith(re.sub(r"/", "%2F", reader_wasm)), f"env-play (reader's flappy has passed): {caption!r} ({src})")
+    else:
+        check(src.endswith("js=.%2Fflappy.js") and caption.startswith("playing: reference env"), f"env-play (fresh reader): {caption!r} ({src})")
     page.wait_for_timeout(2000)
-    play.screenshot(path=a.out / "env-play-reference.png")
+    play.screenshot(path=a.out / f"env-play-{'reader' if reader_wasm else 'reference'}.png")
 
     page.goto(f"{a.base}/neural-nets/")
     nn = page.locator("nn-fit")
