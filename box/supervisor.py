@@ -17,7 +17,8 @@ Everything goes through files under ROOT (no sockets), so a client only needs th
     ROOT/jobs/<id>/status.json  supervisor writes it: {state, reason, exit_code, hook_exit_code, started, ended}
     ROOT/jobs/<id>/kill         client wrote it: kill the job (its hook runs), the session goes on
     ROOT/services/<id>/...      a service: spec.json {cmd, env}, then as a job (no hook, no max duration)
-    ROOT/watch                  a log follower or job waiter touches it each poll (the machine lingers for it)
+    ROOT/watch                  a log follower (its tail, each beat) or job waiter (each poll) touches it (the machine lingers for it)
+    ROOT/supervisor.py          this file, installed by the boot: `supervisor.py lease` changes the lease, `supervisor.py tail` feeds a log follower
     ROOT/ended.json             supervisor writes it last: {reason, at}; then it lingers up to LINGER_S
                                 while someone is still reading (see linger)
 
@@ -59,6 +60,7 @@ Volume commits on it). A chunk never splits a UTF-8 character unless the output 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import ctypes
 import fcntl
 import json
@@ -70,11 +72,12 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import BinaryIO
 
 TICK_S = 0.2
 KILL_GRACE_S = 10.0  # SIGTERM -> SIGKILL
 LINGER_S = 30.0  # after the session ends, the most a reader still there gets to finish reading
-WATCH_TTL_S = 5.0  # a log follower touches ROOT/watch each poll; older than this, nobody is following
+WATCH_TTL_S = 5.0  # a log follower touches ROOT/watch each beat; older than this, nobody is following
 PROC_TCP = ("/proc/net/tcp", "/proc/net/tcp6")
 TCP_ESTABLISHED = "01"  # /proc/net/tcp's st column (include/net/tcp_states.h)
 STREAMS = ("stdout", "stderr")
@@ -572,5 +575,69 @@ def write_json(path: Path, data: dict | list) -> None:
     tmp.replace(path)
 
 
+# ---- tail: a log follower's reader, run on the machine by Job.logs(follow=True) as its own command ----
+# Kept apart from the supervisor's loop (its only tie is the files under ROOT), and reached as a mode of
+# this file, which the boot places at ROOT/supervisor.py: no second file to ship onto every machine.
+TAIL_TICK_S = 0.05  # how often it looks for new output: the follower's latency floor (a local stat, no API call)
+TAIL_BEAT_S = 1.0  # a frame at least this often: the follower tells a quiet job from a hung connection by it
+TAIL_FRAME_BYTES = 256 * 1024  # one frame's payload at most; more goes in the next one
+TAIL_MAX_S = 3600.0  # the longest one tail runs; the follower reconnects past it (so does one that vanished: this ends it)
+
+
+def tail(job_dir: Path, offsets: list[int], max_s: float, out: BinaryIO) -> str:
+    """Send job_dir's stdout and stderr past offsets as frames on out, as they are written, until the
+    job is done or the session ended (or max_s, or out closes). Returns the end it sent. Frames:
+
+        stdout <n>\\n<n bytes>   stderr <n>\\n<n bytes>   beat\\n   end done|ended|max\\n
+
+    A "done" status is read before the output it ends with (as Job.read does), so end done comes
+    after all of it. It touches ROOT/watch each beat, as a polling follower did, so the machine
+    lingers for this reader after the session ends; it never counts as work or a connection, so it
+    keeps no session from going idle, and it exits once the session ends."""
+    root = job_dir.parent.parent
+    give_up = time.monotonic() + max_s
+    last_beat = 0.0
+    while True:
+        status = job_dir / "status.json"
+        done = status.exists() and json.loads(status.read_bytes()).get("state") == "done"
+        ended = (root / "ended.json").exists()
+        sent = False
+        for i, name in enumerate(STREAMS):
+            with contextlib.suppress(FileNotFoundError), (job_dir / name).open("rb") as f:
+                f.seek(offsets[i])
+                data = f.read(TAIL_FRAME_BYTES)
+                if data:
+                    out.write(f"{name} {len(data)}\n".encode() + data)
+                    offsets[i] += len(data)
+                    sent = True
+        end = None if sent else "done" if done else "ended" if ended else "max" if time.monotonic() > give_up else None
+        if end is not None:
+            out.write(f"end {end}\n".encode())
+            out.flush()
+            return end
+        if time.monotonic() - last_beat >= TAIL_BEAT_S:
+            out.write(b"beat\n")
+            with contextlib.suppress(OSError):
+                (root / "watch").touch()
+            last_beat = time.monotonic()
+        out.flush()  # a reader gone (BrokenPipeError) ends this
+        if not sent:
+            time.sleep(TAIL_TICK_S)
+
+
+def tail_main(argv: list[str]) -> None:
+    p = argparse.ArgumentParser(prog="supervisor.py tail")
+    p.add_argument("job_dir", type=Path)
+    p.add_argument("out_offset", type=int)
+    p.add_argument("err_offset", type=int)
+    p.add_argument("--max-s", type=float, default=TAIL_MAX_S)
+    a = p.parse_args(argv)
+    assert 0 < a.max_s <= TAIL_MAX_S, a.max_s
+    tail(a.job_dir, [a.out_offset, a.err_offset], a.max_s, sys.stdout.buffer)
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:2] == ["tail"]:
+        tail_main(sys.argv[2:])
+    else:
+        main()  # also `supervisor.py lease ...` (see lease_main)

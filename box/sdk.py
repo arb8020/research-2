@@ -27,8 +27,8 @@
     job.logs(after=chunk.end)                # resumes where a reader left off, live or from the record
     r = box.read_record(store, s.id)         # Record: no machine, no provider needed
 
-A provider only rents raw machines (Machine: exec, write, read, terminate). Everything else is
-here, built from those four calls and the supervisor (box/supervisor.py), which every machine
+A provider only rents raw machines (Machine: exec, stream, write, read, terminate). Everything else is
+here, built from those calls and the supervisor (box/supervisor.py), which every machine
 runs as its entrypoint and which talks to this file only through files under machine.root.
 
 One lease ends a session: at min(lease.until, ceiling), both absolute unix times. Callers pass
@@ -61,7 +61,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol, TypeVar, get_args
 
 from box.store import Mount, Store
-from box.supervisor import HEARTBEAT_TTL_S, KINDS, MAX_CEILING_S, MAX_SERVICES, utf8_cut
+from box.supervisor import HEARTBEAT_TTL_S, KINDS, MAX_CEILING_S, MAX_SERVICES, TAIL_FRAME_BYTES, TAIL_MAX_S, utf8_cut
 
 SUPERVISOR = Path(__file__).with_name("supervisor.py")
 LABEL_BY = "box.by"
@@ -80,10 +80,29 @@ T = TypeVar("T")
 STREAMS = ("stdout", "stderr")
 LogCursor = tuple[int, int]  # bytes of (stdout, stderr) a reader has had: where it resumes, live or from the record
 MAX_LOG_READ = 4 * 1024 * 1024  # bytes of one stream one exec brings back; more is read by the next
+FOLLOW_QUIET_S = 10.0  # a follow stream with no frame this long (the tail beats every second) is dropped: reconnect
+FOLLOW_TRIES = 5  # reconnects in a row with no frame in between; then the error is the caller's
+FOLLOW_BACKOFF_S = 1.0  # before reconnect n: n times this
+TAIL_ERR_BYTES = 4096  # the end of a tail's own stderr kept, to say why it failed
 
 
 class Gone(Exception):
     """The machine no longer exists (ended, terminated, or lost by the provider)."""
+
+
+class Stream(Protocol):
+    """A command running on the machine (Machine.stream). Iterating yields (stream name, bytes) as the
+    command writes them ("stdout" | "stderr"; chunked however the provider gets them) and ends when
+    it exits; rc is then its exit code. close() (or leaving `with`), from any thread, kills it and
+    ends an iteration in progress. Iterating raises Gone once the machine is gone, and TimeoutError
+    past machine.stream's bounds; either way the command is killed."""
+
+    rc: int | None
+
+    def __iter__(self) -> Iterator[tuple[str, bytes]]: ...
+    def close(self) -> None: ...
+    def __enter__(self) -> Stream: ...
+    def __exit__(self, *exc: object) -> None: ...
 
 
 class Machine(Protocol):
@@ -95,6 +114,9 @@ class Machine(Protocol):
     root: str  # the supervisor's directory on the machine
 
     def exec(self, cmd: str) -> tuple[int, str, str]: ...  # bash on the machine: (rc, stdout, stderr)
+    # bash on the machine, its output as it arrives. Bounded: killed (TimeoutError) past timeout_s, or
+    # past quiet_s with no output. A provider that cannot stream may poll inside it; callers never know.
+    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None) -> Stream: ...
     def write(self, path: str, data: bytes) -> None: ...
     def read(self, path: str) -> bytes: ...  # FileNotFoundError if absent
     def terminate(self) -> None: ...  # hard stop, idempotent; no hooks run
@@ -592,30 +614,78 @@ class Job:
         """Kill this job (its whole process group); its hook runs; the session goes on."""
         self.session._touch(f"{self.kind}/{self.id}/kill")
 
-    def logs(self, *, after: LogCursor = (0, 0), follow: bool = False) -> Iterator[LogChunk]:
-        """The job's output past `after` (the job's start by default); follow=True until it is done.
-        A reader that resumes (a reconnecting browser) passes the last chunk's end, so it never
-        re-reads a byte. Once the machine is gone, from the session's record (with follow, once the
-        record has the session's end, so it is all of the output there will be). One exec per poll."""
+    def logs(self, *, after: LogCursor = (0, 0), follow: bool = False, stop: threading.Event | None = None) -> Iterator[LogChunk]:
+        """The job's output past `after` (the job's start by default); follow=True until it is done
+        (or the session ended without running it). A reader that resumes (a reconnecting browser)
+        passes the last chunk's end, so it never re-reads a byte. Once the machine is gone, from the
+        session's record (with follow, once the record has the session's end, so it is all of the
+        output there will be). Without follow: one exec per MAX_LOG_READ. With follow: one stream
+        (Machine.stream) as the output is written; stop, set from another thread, ends it within a
+        second (the tail's beat)."""
+        if follow:
+            yield from self._follow(after, stop)
+            return
         cursor = after
         while True:
             try:
-                read = self._read_live(cursor, watch=follow)
+                read = self._read_live(cursor, watch=False)
             except Gone:
                 if self.session.record is None:
                     raise
-                if follow:
-                    self.session.wait()
                 yield from read_record(self.session.record, self.session.id).logs(self.id, after=cursor, kind=self.kind)
                 return
             for chunk in read.chunks:
                 cursor = chunk.end
                 yield chunk
-            if read.more:
-                continue
-            if read.done or not follow:
+            if not read.more:
                 return
-            time.sleep(POLL_S)
+
+    def _follow(self, cursor: LogCursor, stop: threading.Event | None) -> Iterator[LogChunk]:
+        """logs(follow=True): supervisor.py's tail mode on the machine sends both files from the cursor
+        as they grow, in one streamed command, and exits once the job is done. A stream that drops
+        (no frame for FOLLOW_QUIET_S, or an error) reconnects from the last chunk's end, at most
+        FOLLOW_TRIES times in a row with no frame between; one that reached TAIL_MAX_S reconnects at once."""
+        tries = 0
+        while stop is None or not stop.is_set():
+            tail = TailReader(cursor)
+            try:
+                for chunk in self._tail(tail, stop):
+                    cursor = chunk.end
+                    yield chunk
+            except Gone:
+                if self.session.record is None:
+                    raise
+                self.session.wait()  # the record's end landed: what it has is all there will be
+                yield from read_record(self.session.record, self.session.id).logs(self.id, after=cursor, kind=self.kind)
+                return
+            except TailError:
+                raise
+            except Exception as e:  # a dropped stream: Modal's and ssh's errors differ, so any; bounded by FOLLOW_TRIES
+                tries = 1 if tail.frames else tries + 1
+                if tries > FOLLOW_TRIES:
+                    raise
+                print(f"box: {self.session.id}: following {self.id} dropped ({e!r}); reconnecting from {cursor}", file=sys.stderr)
+                (stop or threading.Event()).wait(FOLLOW_BACKOFF_S * tries)
+                continue
+            if tail.end in ("done", "ended"):
+                return
+            if tail.end is None and not (stop and stop.is_set()):  # it exited without saying why: a failure, not a drop
+                raise TailError(f"{self.id}: the log tail exited {tail.rc} without an end: {tail.errors.decode(errors='replace').strip()!r}")
+
+    def _tail(self, tail: TailReader, stop: threading.Event | None) -> Iterator[LogChunk]:
+        """One streamed tail (supervisor.py tail) from tail.cursor: its chunks as they come. After it,
+        tail says how it ended (end, rc, errors). Stops at the first frame after stop is set."""
+        cmd = f"exec python3 {shlex.quote(self.session._path('supervisor.py'))} tail {shlex.quote(self.dir)} {tail.cursor[0]} {tail.cursor[1]}"
+        # timeout_s: the tail ends itself by TAIL_MAX_S; this bounds one that does not (a hung call)
+        with self.session.machine.stream(cmd, timeout_s=TAIL_MAX_S + 60, quiet_s=FOLLOW_QUIET_S) as stream:
+            for name, data in stream:
+                if name == "stderr":
+                    tail.errors = (tail.errors + data)[-TAIL_ERR_BYTES:]
+                    continue
+                yield from tail.feed(data)
+                if stop is not None and stop.is_set():
+                    return
+        tail.rc = stream.rc
 
     def read(self, after: LogCursor, *, watch: bool = False) -> JobRead:
         """One look at the job in one exec: its status, then its output past after (so a "done"
@@ -677,6 +747,64 @@ class LogChunk:
     end: LogCursor
 
 
+class TailError(RuntimeError):
+    """The machine's log tail (supervisor.py tail) failed: not a dropped connection, so not retried.
+    E.g. a machine booted by an older box, whose supervisor has no tail mode."""
+
+
+class TailReader:
+    """Job.logs(follow=True)'s side of one supervisor.tail: its frames in, LogChunks out, each with the
+    cursor just past it. A UTF-8 character cut by a frame waits for the rest (the cursor stays before
+    it), unless the job is done: then the output is whole and is decoded as it is."""
+
+    def __init__(self, after: LogCursor) -> None:
+        self.cursor = list(after)
+        self.end: str | None = None  # done | ended | max, once the tail said it
+        self.frames = 0  # frames read (beats too): any, and the connection worked
+        self.rc: int | None = None  # the tail's exit code, once it exited
+        self.errors = b""  # the end of its own stderr: why it failed, if it did
+        self._held = dict.fromkeys(STREAMS, b"")  # the start of a character cut by the last frame
+        self._buf = b""  # bytes of frames not parsed yet: at most a frame and a header
+
+    def feed(self, data: bytes) -> list[LogChunk]:
+        self._buf += data
+        chunks: list[LogChunk] = []
+        while self.end is None:
+            header, sep, rest = self._buf.partition(b"\n")
+            if not sep:
+                if len(self._buf) > 64:  # no header is this long
+                    raise TailError(f"log tail sent no frame header: {self._buf[:64]!r}")
+                break
+            word, _, arg = header.decode(errors="replace").partition(" ")
+            self.frames += 1
+            if word in STREAMS:
+                n = int(arg)
+                if not 0 < n <= TAIL_FRAME_BYTES:
+                    raise TailError(f"log tail frame of {n} bytes (at most {TAIL_FRAME_BYTES})")
+                if len(rest) < n:
+                    break
+                chunks += self._text(word, rest[:n], whole=False)
+                self._buf = rest[n:]
+            elif word == "beat":
+                self._buf = rest
+            elif word == "end" and arg in ("done", "ended", "max"):
+                self._buf, self.end = rest, arg
+                if arg == "done":
+                    chunks += [c for stream in STREAMS for c in self._text(stream, b"", whole=True)]
+            else:
+                raise TailError(f"log tail sent {header[:64]!r}")
+        return chunks
+
+    def _text(self, stream: str, data: bytes, *, whole: bool) -> list[LogChunk]:
+        raw = self._held[stream] + data
+        cut = len(raw) if whole else utf8_cut(raw)
+        self._held[stream] = raw[cut:]
+        if not cut:
+            return []
+        self.cursor[STREAMS.index(stream)] += cut
+        return [LogChunk(stream, raw[:cut].decode(errors="replace"), (self.cursor[0], self.cursor[1]))]
+
+
 def run_job(
     provider: Provider, cmd: str, *, max_duration_s: float, put: list[tuple[str, str]] = (),
     get: list[tuple[str, str]] = (), on_exit: str | None = None, **launch_kw: object,
@@ -707,6 +835,9 @@ class Lost:
     root: str = ""  # nothing is under it
 
     def exec(self, cmd: str) -> tuple[int, str, str]:
+        raise Gone(f"{self.id}: gone (known from its record)")
+
+    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None) -> Stream:
         raise Gone(f"{self.id}: gone (known from its record)")
 
     def write(self, path: str, data: bytes) -> None:

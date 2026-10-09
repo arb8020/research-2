@@ -445,3 +445,48 @@ def test_ceilings_past_48_hours_and_leases_past_the_ceiling_are_refused(provider
         assert done.returncode != 0
         assert "AssertionError" in done.stderr
         assert not (tmp_path / "root").exists()  # before it made anything
+
+
+def test_a_stream_yields_output_before_its_command_exits(launch: Callable, scale: float) -> None:
+    with launch(ceiling_s=600) as s:
+        go = f"{s.machine.root}/go"
+        cmd = f"echo first; while [ ! -e {go} ]; do sleep 0.05; done; echo second >&2"
+        with s.machine.stream(cmd, timeout_s=60 * scale) as stream:
+            chunks = iter(stream)
+            assert next(chunks) == ("stdout", b"first\n")  # live: the command is still waiting on us
+            s.machine.exec(f"touch {go}")
+            assert b"".join(data for name, data in chunks if name == "stderr") == b"second\n"
+        assert stream.rc == 0
+
+
+def test_closing_a_stream_kills_its_command(launch: Callable, scale: float) -> None:
+    with launch(ceiling_s=600) as s:
+        with s.machine.stream("echo $$; exec sleep 999", timeout_s=60 * scale) as stream:
+            pid = int(next(iter(stream))[1])
+            assert s.machine.exec(f"kill -0 {pid}")[0] == 0  # running
+        eventually(lambda: s.machine.exec(f"kill -0 {pid}")[0] != 0, timeout_s=10 * scale)
+
+
+def test_a_stream_is_bounded_in_time_and_in_silence(launch: Callable, scale: float) -> None:
+    with launch(ceiling_s=600) as s:
+        with pytest.raises(TimeoutError, match="no output"), s.machine.stream("echo hi; exec sleep 999", timeout_s=60 * scale, quiet_s=2 * scale) as stream:
+            list(stream)
+        with pytest.raises(TimeoutError, match="past"), s.machine.stream("while true; do echo .; sleep 0.2; done", timeout_s=3 * scale) as stream:
+            list(stream)
+
+
+def test_a_follower_that_leaves_and_comes_back_misses_nothing_and_repeats_nothing(launch: Callable, scale: float) -> None:
+    with launch(ceiling_s=600) as s:
+        go = f"{s.machine.root}/go"
+        # é = c3 a9: the first follower leaves between its two bytes
+        job = s.run(rf"printf 'caf\xc3'; printf 'e1\n' >&2; while [ ! -e {go} ]; do sleep 0.05; done; printf '\xa9 ok\n'; printf 'e2\n' >&2", max_duration_s=600)
+        first = job.logs(follow=True)
+        seen = [next(first), next(first)]
+        first.close()  # leaves: its stream on the machine is killed
+        s.machine.exec(f"touch {go}")
+        rest = list(job.logs(after=seen[-1].end, follow=True))
+        both = seen + rest
+        assert "".join(c.text for c in both if c.stream == "stdout") == "café ok\n"
+        assert "".join(c.text for c in both if c.stream == "stderr") == "e1\ne2\n"
+        assert both[-1].end == (len("café ok\n".encode()), len("e1\ne2\n"))
+        assert [c.end for c in both] == sorted(c.end for c in both)  # the cursor only moves on

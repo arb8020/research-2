@@ -42,6 +42,7 @@ import hashlib
 import hmac
 import json
 import math
+import queue
 import re
 import sys
 import threading
@@ -81,7 +82,12 @@ CLIENT_IDLE_S = 10 * 60  # a reader's client unused this long is closed (and its
 MAX_BODY = 8 * 1024
 MAX_LABELS = 8
 MAX_BOOT_EVENTS = 1000  # a boot's own steps + Jupyter's startup log; past this, lines are counted, not kept
-STREAM_POLL_S = 2.0  # how often an event stream asks the machine (once Jupyter answers, 2 provider calls: the session's status, the log)
+READY_POLL_S = 1.0  # an event stream for a session another relay boots: how often it asks whether Jupyter answers yet
+STREAM_TICK_S = 1.0  # an event stream looks this often whether the relay is closing (no provider call)
+LOG_QUEUE = 256  # Jupyter's log chunks between an event stream's follower thread and its writer; full: the follower waits
+FOLLOWER_JOIN_S = 30.0  # a stopped follower ends at the tail's next beat (1 s), or once a dropped stream is noticed (10 s)
+END_WAIT_S = 60.0  # once Jupyter's log ends (the session's end kills it): how long to wait for the supervisor's reason
+IDLE_CONNECTION_S = 30.0  # a kept-alive connection with no request this long is closed, so closing the server joins its thread
 SSE_PING_S = 15.0
 PROBE_TIMEOUT_S = 5.0
 CLOSE_TIMEOUT_S = 60.0
@@ -516,7 +522,7 @@ class Relay:
         now = time.time()
         sid = sdk.new_session_id()
         rec = Boot(sid, digest(req.token), req.gpu, now, sdk.Lease(until=now + req.lease_s, ceiling=now + READER_CEILING_S))
-        thread = threading.Thread(target=self._boot, args=(rec, req, origin), name=f"boot-{sid}")
+        thread = threading.Thread(target=self._boot, args=(rec, req, origin), name=f"boot-{sid}", daemon=False)  # not inherited from the request's
         with self._changed:
             self._forget_old_boots()
             if len(self._boots) >= MAX_BOOTS:
@@ -686,29 +692,80 @@ def replay_boot(sse: Sse, rec: Boot, start: int, closing: threading.Event) -> di
 def follow_machine(  # noqa: PLR0913 (the stream, the session, where the reader is; each one thing)
     cfg: Config, sse: Sse, s: sdk.Session, token: ModalToken, cursor: sdk.LogCursor, last: dict[str, Any] | None, closing: threading.Event,
 ) -> None:  # fmt: skip
-    """The machine's word until it ends: Jupyter's log (live, or from the record once the machine
-    is gone), and its status when it changes. Bounded by the session's deadline (plus the
+    """The machine's word until it ends, in three parts: until Jupyter answers (a session this relay
+    is not booting), its status, every READY_POLL_S; then Jupyter's log as it is written, live or
+    from the record once the machine is gone (one stream: Job.logs(follow=True)); then why the
+    session ended. The log ends exactly when the session does, since every end kills Jupyter, so
+    booting -> running comes from the poll and running -> ended from the log ending: once Jupyter
+    answers, an idle stream asks the provider nothing. Bounded by the session's deadline (plus the
     provider's backstop), like Session.wait(), or the relay closing."""
-    job = None
-    ready = last is not None and last["state"] == "running"
-    while not closing.is_set():
-        status = machine_status(cfg, s, token, ready=ready)  # before the log: once ended, the log read next is all of it
-        ready = status["state"] == "running"
-        job = job or kernel_service(s)  # None only while a boot (on some relay) has yet to start Jupyter
-        # watch: the machine lingers for us after the session ends, so the next poll reads why
-        read = job.read(cursor, watch=True) if job else sdk.JobRead(None, [])
-        for stream, text, end in log_lines(read.chunks, cursor):
-            sse.send(f"o{end[0]}.{end[1]}", {"t": time.time(), "kind": "log", "source": "machine", "stream": stream, "text": text})
-            cursor = end
+    while last is None or last["state"] != "running":
+        status = machine_status(cfg, s, token, ready=False)
+        if status["state"] == "ended":
+            break  # said after its log, which the record still has
         if status != last:
             sse.send(f"o{cursor[0]}.{cursor[1]}", {"t": time.time(), "kind": "status", "status": status})
             last = status
-        if read.more:
-            continue  # more log than one read brings: no wait, and not done until it is all sent
-        if status["state"] == "ended":
+        if status["state"] != "running" and closing.wait(READY_POLL_S):
             return
-        closing.wait(STREAM_POLL_S)
         sse.ping()
+    job = kernel_service(s)  # None: the session ended before any boot started Jupyter
+    if job is not None and (cursor := forward_log(sse, job, cursor, closing)) is None:
+        return
+    with contextlib.suppress(TimeoutError):
+        s.wait(END_WAIT_S)  # Jupyter is done, so the session is ending: read why before the machine goes
+    status = machine_status(cfg, s, token, ready=False)
+    if status != last:
+        sse.send(f"o{cursor[0]}.{cursor[1]}", {"t": time.time(), "kind": "status", "status": status})
+    # Not ended past END_WAIT_S (Jupyter exited on a session still held): the stream ends, and the
+    # page's EventSource reconnects with its Last-Event-ID, as after any dropped stream.
+
+
+def forward_log(sse: Sse, job: sdk.Job, cursor: sdk.LogCursor, closing: threading.Event) -> sdk.LogCursor | None:
+    """Jupyter's log past cursor as SSE log events, as it is written, until it ends; returns the cursor
+    just past it, or None if the relay closed first. The log is followed on a thread this call owns
+    (stopped and joined before it returns), so that this one can ping and see the relay closing while
+    the log is quiet."""
+    chunks: queue.Queue[sdk.LogChunk | BaseException | None] = queue.Queue(LOG_QUEUE)
+    stop = threading.Event()
+
+    def put(item: sdk.LogChunk | BaseException | None) -> None:
+        while not stop.is_set():
+            with contextlib.suppress(queue.Full):
+                chunks.put(item, timeout=STREAM_TICK_S)
+                return
+
+    def follow() -> None:
+        end: BaseException | None = None
+        try:
+            for chunk in job.logs(after=cursor, follow=True, stop=stop):
+                put(chunk)
+        except BaseException as e:  # noqa: BLE001 (raised again by the writer, which owns the stream)
+            end = e
+        put(end)
+
+    follower = threading.Thread(target=follow, name=f"follow-{job.session.id}", daemon=False)
+    follower.start()
+    try:
+        while not closing.is_set():
+            try:
+                item = chunks.get(timeout=STREAM_TICK_S)
+            except queue.Empty:
+                sse.ping()
+                continue
+            if item is None:
+                return cursor
+            if isinstance(item, BaseException):
+                raise item
+            for stream, text, end in log_lines([item], cursor):
+                sse.send(f"o{end[0]}.{end[1]}", {"t": time.time(), "kind": "log", "source": "machine", "stream": stream, "text": text})
+                cursor = end
+        return None
+    finally:
+        stop.set()
+        follower.join(FOLLOWER_JOIN_S)
+        if follower.is_alive():  # a call that ignores stop (a hung provider call past its own bound)
+            print(f"relay: {job.session.id}: log follower still running {FOLLOWER_JOIN_S:.0f} s after it was stopped", file=sys.stderr)
 
 
 # ---- HTTP ----
@@ -720,6 +777,7 @@ class Handler(BaseHTTPRequestHandler):
 
     server_version = "box-relay/0"
     protocol_version = "HTTP/1.1"
+    timeout = IDLE_CONNECTION_S  # the socket's: an idle kept-alive connection ends, so its thread can be joined
     server: Server
 
     def log_message(self, fmt: str, *args: Any) -> None:
@@ -862,17 +920,18 @@ def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...]) -> Config:
 
 
 class Server(ThreadingHTTPServer):
-    """The relay on 127.0.0.1:port. server_close() also closes its Relay (after shutdown())."""
+    """The relay on 127.0.0.1:port. server_close() also closes its Relay (after shutdown()), then
+    joins every request's thread (socketserver's block_on_close): none is a daemon."""
 
-    daemon_threads = True
+    daemon_threads = False
 
     def __init__(self, relay: Relay, port: int) -> None:
         super().__init__(("127.0.0.1", port), Handler)
         self.relay = relay
 
     def server_close(self) -> None:
-        super().server_close()
-        self.relay.close()
+        self.relay.close()  # first: an event stream's thread ends only once the relay says it is closing
+        super().server_close()  # closes the socket, joins every request's thread
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         if isinstance(sys.exc_info()[1], ConnectionError):
