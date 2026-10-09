@@ -45,8 +45,7 @@ def name(request: pytest.FixtureRequest) -> str:
 def provider(name: str, tmp_path: Path) -> Iterator[Provider]:
     p = providers.make(name, tmp_path / "machines")
     yield p
-    if callable(close := getattr(p, "close", None)):  # a provider that holds connections (Modal's client, Colab's kernels)
-        close()
+    p.close()  # the test made it, the test closes it (Modal: joins its loop thread)
 
 
 @pytest.fixture

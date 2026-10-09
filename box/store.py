@@ -4,7 +4,7 @@ through a Mount (a provider makes part of the store a directory on the machine);
 the machine (the SDK, a reader after the machine is gone) goes through get/list/put.
 
     store = DirStore(Path("~/.cache/box/records").expanduser())       # local provider, tests
-    store = ModalVolumeStore("box-sessions", client=...)              # box/providers/modal.py
+    store = ModalVolumeStore("box-sessions", provider=modal)          # box/providers/modal.py
     box.launch(provider, ..., record=store)                           # its first user: sessions/<id>/
 
 Stdlib only, like the supervisor: nothing here talks to a cloud.

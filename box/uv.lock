@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-10-01T19:12:56.020925Z"
+exclude-newer = "2026-10-01T19:56:12.312838Z"
 exclude-newer-span = "P8D"
 
 [[package]]
@@ -316,6 +316,7 @@ name = "box"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "modal" },
     { name = "requests" },
     { name = "research" },
@@ -334,6 +335,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4.10" },
     { name = "google-colab-cli", marker = "python_full_version >= '3.12' and extra == 'colab'", specifier = "==0.7.4" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = "~=7.1" },
     { name = "jupyter-server", marker = "extra == 'dev'", specifier = "~=2.17" },
