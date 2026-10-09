@@ -163,9 +163,12 @@ class Receipt:
         return self.ended.reason != "machine_lost"
 
 
+JobEndReason = Literal["exited", "killed", "timeout", "lease", "released", "stopped", "idle", "refused"]
+
+
 @dataclass(frozen=True)
 class Ending:
-    reason: str  # MUST KILL: a free str whose values only the deleted docstring listed (exited, killed, timeout, lease, released, stopped, idle, refused); make it a Literal like EndReason
+    reason: JobEndReason
     exit_code: int | None
     hook_exit_code: int | None = None
 
@@ -1069,12 +1072,19 @@ def parse_job_status(raw: bytes) -> JobStatus:
         case "running":
             return JobRunning(float(d["started"]))
         case "hook":
-            return Hooking(Ending(d["reason"], d["exit_code"]))
+            return Hooking(Ending(parse_job_end_reason(d["reason"]), d["exit_code"]))
         case "done":
-            ending = Ending(d["reason"], d["exit_code"], d.get("hook_exit_code"))
+            ending = Ending(parse_job_end_reason(d["reason"]), d["exit_code"], d.get("hook_exit_code"))
             return Done(ending, float(d["started"]) if "started" in d else None, float(d["ended"]))
         case state:
             raise ValueError(f"status.json: unknown job state {state!r}")
+
+
+def parse_job_end_reason(reason: object) -> JobEndReason:
+    for known in get_args(JobEndReason):
+        if reason == known:
+            return known
+    raise ValueError(f"status.json: unknown job end reason {reason!r}")
 
 
 def receipt_json(receipt: Receipt) -> bytes:
