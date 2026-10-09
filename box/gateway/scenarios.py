@@ -25,8 +25,10 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import faulthandler
 import http.client
 import json
+import signal
 import socket
 import threading
 import time
@@ -70,9 +72,13 @@ class Gateway:
                                      headers={"X-Box-Token": self.auth, "Content-Type": "application/json"})  # fmt: skip
         try:
             with urllib.request.urlopen(req, timeout=180) as r:
-                return r.status, json.loads(r.read())
+                code, raw = r.status, r.read()
         except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read() or b"{}")
+            code, raw = e.code, e.read()
+        try:
+            return code, json.loads(raw or b"{}")
+        except ValueError:  # not the gateway talking (a Cloudflare error page, a tunnel's 502)
+            return code, {"error": raw[:300].decode(errors="replace")}
 
     def create(self, gpu: str | None) -> str:
         code, body = self.call("/sessions", "POST", {"provider": "modal", "token": self.token, "gpu": gpu, "labels": {"box.caller": "scenarios"}})
@@ -95,7 +101,8 @@ class Tab:
         conn_class = http.client.HTTPSConnection if url.scheme == "https" else http.client.HTTPConnection
         self.conn = conn_class(url.netloc, timeout=30)
         self.opened = time.monotonic()
-        self.conn.request("GET", f"{url.path}?{url.query}", headers={"Last-Event-ID": last_id} if last_id else {})
+        headers = {"User-Agent": "box-scenarios/0", **({"Last-Event-ID": last_id} if last_id else {})}
+        self.conn.request("GET", f"{url.path}?{url.query}", headers=headers)
         self.sock = self.conn.sock  # before getresponse: a response read to close detaches it from conn
         self.resp = self.conn.getresponse()
         self.code = self.resp.status
@@ -354,14 +361,22 @@ def run_deadline(gw: Gateway, ledger: Ledger) -> dict:
     """(4): one session left alone, one held by a kernel websocket. Who ends each, why, how late."""
 
     def one(hold: bool) -> dict:
+        try:
+            return ending(hold)
+        except Exception as e:  # noqa: BLE001 (the other session's result still counts)
+            return {"held": hold, "error": f"{type(e).__name__}: {e}"}
+
+    def ending(hold: bool) -> dict:
         created = time.monotonic()
         sid, running, _ = boot(gw, None)
+        say(gw, f"{'held' if hold else 'idle'} session {sid} running; deadline in {running['deadline'] - time.time():.0f} s")
         running_at = time.time()
         stop = threading.Event()
         if hold:
             threading.Thread(target=lambda: _quietly(lambda: hold_kernel(running["kernel"], stop)), daemon=True).start()
         tab = Tab(gw, sid)
         tab.wait(state_is("ended"), running["deadline"] - time.time() + 300)
+        say(gw, f"{sid}: {last_status([e for _, e, _ in tab.events])}")
         stop.set()
         tab.close()
         ended = [(e, at) for _, e, at in tab.events if e["kind"] == "status" and e["status"]["state"] == "ended"]
@@ -406,6 +421,7 @@ def modal_token() -> dict[str, str]:
 
 
 def main() -> None:
+    faulthandler.register(signal.SIGUSR1)  # kill -USR1 <pid>: every thread's stack, when a run hangs
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--gw", action="append", required=True, type=lambda s: tuple(s.split("=", 1)), help="NAME=URL (repeat)")
     ap.add_argument("--provider", choices=("modal", "local"), default="modal")
@@ -414,6 +430,9 @@ def main() -> None:
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
     token = modal_token() if a.provider == "modal" else LOCAL_TOKEN
+    opener = urllib.request.build_opener()
+    opener.addheaders = [("User-Agent", "box-scenarios/0")]  # workers.dev refuses urllib's default UA (error 1010)
+    urllib.request.install_opener(opener)  # kernel_client's REST calls go through it too
     gws = [Gateway(name, url.rstrip("/"), token) for name, url in a.gw]
     kill = killer(a.provider, token)
     ledger = Ledger()

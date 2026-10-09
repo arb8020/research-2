@@ -1,0 +1,356 @@
+{
+  "static": {
+    "token": {
+      "A": "browser localStorage; sent on every call; the relay holds it for one request (or the boot thread), keeps a sha256 digest (relay.py digest/Boot.token_digest). Jupyter token = HMAC(secret, session) (relay.py kernel_token): derived, never stored.",
+      "B": "as A on the relay, plus: OwnerDO stores the reader's Modal token {id, secret} in DO SQLite from create until the session ends (owner-do.ts created -> setEnded drops it), and Jupyter's token (upstream); the browser gets a DO-minted kernel token.",
+      "C": "as A on the relay; the Worker passes it through (never stored); FanoutDO keeps only a sha256 digest. The ring holds the running status, so the derived Jupyter token sits in DO SQLite while the ring keeps that event."
+    },
+    "authority": {
+      "A": "the machine (supervisor: lease, deadline, idle). The relay keeps boot records in memory <=10 min (rebuildable).",
+      "B": "two: the DO (status, deadline alarm, token, kernel proxy) and the machine (idle, backstop deadline = DO's + 120 s).",
+      "C": "the machine, as A. The DO is a cache (event ring + digest): lose it and only replay is lost."
+    },
+    "deploy": {
+      "A": "one Python process the browser can reach (dev: localhost) + the reader's Modal.",
+      "B": "A's relay reachable by the Worker (dev: cloudflared quick tunnel) + Worker + 1 SQLite DO class + PUSH_SECRET; machine egress to workers.dev.",
+      "C": "same as B (different DO class)."
+    }
+  },
+  "code_weight": {
+    "A": {
+      "files": {
+        "gateway/relay.py": {
+          "lines": 672,
+          "code": 555
+        },
+        "gateway/kernel.Dockerfile": {
+          "lines": 4,
+          "code": 2
+        }
+      },
+      "code": 557,
+      "lines": 676
+    },
+    "B": {
+      "files": {
+        "gateway/relay.py": {
+          "lines": 672,
+          "code": 555
+        },
+        "gateway/kernel.Dockerfile": {
+          "lines": 4,
+          "code": 2
+        },
+        "gateway/push.py": {
+          "lines": 115,
+          "code": 96
+        },
+        "gateway/forwarder.py": {
+          "lines": 125,
+          "code": 101
+        },
+        "gateway-do/src/index.ts": {
+          "lines": 117,
+          "code": 89
+        },
+        "gateway-do/src/hub.ts": {
+          "lines": 152,
+          "code": 110
+        },
+        "gateway-do/src/types.ts": {
+          "lines": 93,
+          "code": 75
+        },
+        "gateway-do/src/relay.ts": {
+          "lines": 22,
+          "code": 14
+        },
+        "gateway-do/src/event-log.ts": {
+          "lines": 40,
+          "code": 31
+        },
+        "gateway-do/src/sse.ts": {
+          "lines": 60,
+          "code": 45
+        },
+        "gateway-do/src/owner-do.ts": {
+          "lines": 148,
+          "code": 115
+        },
+        "gateway-do/src/proxy.ts": {
+          "lines": 29,
+          "code": 21
+        }
+      },
+      "code": 1254,
+      "lines": 1577
+    },
+    "C": {
+      "files": {
+        "gateway/relay.py": {
+          "lines": 672,
+          "code": 555
+        },
+        "gateway/kernel.Dockerfile": {
+          "lines": 4,
+          "code": 2
+        },
+        "gateway/push.py": {
+          "lines": 115,
+          "code": 96
+        },
+        "gateway/forwarder.py": {
+          "lines": 125,
+          "code": 101
+        },
+        "gateway-do/src/index.ts": {
+          "lines": 117,
+          "code": 89
+        },
+        "gateway-do/src/hub.ts": {
+          "lines": 152,
+          "code": 110
+        },
+        "gateway-do/src/types.ts": {
+          "lines": 93,
+          "code": 75
+        },
+        "gateway-do/src/relay.ts": {
+          "lines": 22,
+          "code": 14
+        },
+        "gateway-do/src/event-log.ts": {
+          "lines": 40,
+          "code": 31
+        },
+        "gateway-do/src/sse.ts": {
+          "lines": 60,
+          "code": 45
+        },
+        "gateway-do/src/fanout-do.ts": {
+          "lines": 30,
+          "code": 15
+        }
+      },
+      "code": 1133,
+      "lines": 1430
+    }
+  },
+  "live": {
+    "A": {
+      "url": "http://localhost:8780",
+      "session": "s-5f8616a6f06a",
+      "connect_cpu_s": 3.2,
+      "clock_offset_s": 0.051,
+      "two_tabs": {
+        "both_saw_all": true,
+        "same_order": true,
+        "lat_ms_p50": [
+          2012.973,
+          1963.494
+        ],
+        "lat_ms_max": [
+          2918.821,
+          2869.46
+        ]
+      },
+      "reattach": {
+        "resume_code": 200,
+        "resume_first_event_ms": 538,
+        "resume_gap_lines": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "resume_repeats": 0,
+        "resume_all_gap_ms": 538,
+        "reload_replayed": {
+          "two": 20,
+          "gap": 5
+        },
+        "reload_full_replay_ms": 493,
+        "get_ms_p50": 509.024
+      },
+      "machine_dies": {
+        "reader_saw": [
+          {
+            "after_s": 0.7,
+            "kind": "status",
+            "what": {
+              "state": "ended",
+              "gpu": null,
+              "started_at": 1791530091.0,
+              "deadline": 1791531291.0,
+              "reason": "machine_lost"
+            }
+          }
+        ],
+        "run_lines_before_kill": 6,
+        "get_after": {
+          "code": 404,
+          "status": {
+            "error": "modal provider: no live machine for session s-5f8616a6f06a"
+          }
+        },
+        "fresh_tab": {
+          "code": 200,
+          "run_lines_replayed": 0,
+          "events": 17
+        }
+      },
+      "recovery": {
+        "new_session": "s-59d93fc69ec8",
+        "connect_s": 3.4,
+        "end": "stopped"
+      },
+      "modal_usd": 0.0005
+    },
+    "B": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/b",
+      "session": "s-ac345401ed50",
+      "connect_cpu_s": 4.1,
+      "clock_offset_s": 0.186,
+      "two_tabs": {
+        "both_saw_all": true,
+        "same_order": true,
+        "lat_ms_p50": [
+          430.29,
+          429.039
+        ],
+        "lat_ms_max": [
+          594.924,
+          594.89
+        ]
+      },
+      "reattach": {
+        "resume_code": 200,
+        "resume_first_event_ms": 47,
+        "resume_gap_lines": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "resume_repeats": 0,
+        "resume_all_gap_ms": 47,
+        "reload_replayed": {
+          "two": 20,
+          "gap": 5
+        },
+        "reload_full_replay_ms": 50,
+        "get_ms_p50": 43.297
+      },
+      "machine_dies": {
+        "reader_saw": [
+          {
+            "after_s": 20.3,
+            "kind": "step",
+            "what": "no word from the machine for 20 s and the relay finds no machine"
+          },
+          {
+            "after_s": 20.3,
+            "kind": "status",
+            "what": {
+              "state": "ended",
+              "gpu": null,
+              "started_at": 1791530093.3604956,
+              "deadline": 1791531291.551,
+              "reason": "machine_lost"
+            }
+          }
+        ],
+        "run_lines_before_kill": 4,
+        "get_after": {
+          "code": 200,
+          "status": {
+            "state": "ended",
+            "gpu": null,
+            "started_at": 1791530093.3604956,
+            "deadline": 1791531291.551,
+            "reason": "machine_lost"
+          }
+        },
+        "fresh_tab": {
+          "code": 200,
+          "run_lines_replayed": 4,
+          "events": 68
+        }
+      },
+      "recovery": {
+        "new_session": "s-9f5a1bf081f4",
+        "connect_s": 4.0,
+        "end": "stopped"
+      },
+      "modal_usd": 0.0007
+    },
+    "C": {
+      "url": "https://box-gateway-do.chiraagbalu.workers.dev/c",
+      "session": "s-1ee79fca808f",
+      "connect_cpu_s": 4.0,
+      "clock_offset_s": -0.037,
+      "two_tabs": {
+        "both_saw_all": true,
+        "same_order": true,
+        "lat_ms_p50": [
+          237.192,
+          237.155
+        ],
+        "lat_ms_max": [
+          356.507,
+          371.772
+        ]
+      },
+      "reattach": {
+        "resume_code": 200,
+        "resume_first_event_ms": 51,
+        "resume_gap_lines": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "resume_repeats": 0,
+        "resume_all_gap_ms": 51,
+        "reload_replayed": {
+          "two": 20,
+          "gap": 5
+        },
+        "reload_full_replay_ms": 47,
+        "get_ms_p50": 573.115
+      },
+      "machine_dies": {
+        "reader_saw": [
+          {
+            "after_s": 20.0,
+            "kind": "step",
+            "what": "no word from the machine for 20 s: it may be gone (the relay knows: GET /sessions/{id})"
+          }
+        ],
+        "run_lines_before_kill": 4,
+        "get_after": {
+          "code": 404,
+          "status": {
+            "error": "modal provider: no live machine for session s-1ee79fca808f"
+          }
+        },
+        "fresh_tab": {
+          "code": 200,
+          "run_lines_replayed": 4,
+          "events": 67
+        }
+      },
+      "recovery": {
+        "new_session": "s-03399d7c0e59",
+        "connect_s": 5.0,
+        "end": "stopped"
+      },
+      "modal_usd": 0.0016
+    }
+  },
+  "deadline": {},
+  "latency": {}
+}
