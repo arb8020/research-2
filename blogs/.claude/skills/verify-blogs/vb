@@ -1,0 +1,608 @@
+#!/usr/bin/env python3
+"""verify-blogs helper: launch, doctor, drive, and clean up one verification instance of blogs/.
+
+    vb setup                      once per fresh worktree: npm ci in web/ (the only mutating setup step)
+    vb launch [--fresh]           build every page, start session.py + static server + connect_dev.py on free ports
+    vb doctor                     read-only: is the launched instance worth driving? exit 1 on any FAIL
+    vb drive <feature> [...]      run a feature's recipe; transcript + artifacts into the run's evidence dir
+                                    features: build plan cells embeds links connect nn-fit-remote all
+    vb status                     print the run's URLs, ports, PIDs and evidence dir
+    vb cleanup                    kill what launch/drive started (by recorded process group), remove scratch state;
+                                    evidence stays in blogs/.evidence/verify-blogs/<run id>/
+
+Stdlib only (run with the system python3). Browser drives shell out to `uv run --with playwright` from blogs/.
+Run state: blogs/.session/verify-blogs/run.json (gitignored, removed by cleanup).
+Evidence:  blogs/.evidence/verify-blogs/<run id>/ (gitignored, never removed by this script).
+"""
+
+from __future__ import annotations
+
+import argparse
+import glob
+import json
+import os
+import re
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+SKILL = Path(__file__).resolve().parent
+BLOGS = SKILL.parents[2]  # blogs/.claude/skills/verify-blogs -> blogs
+RUN_FILE = BLOGS / ".session" / "verify-blogs" / "run.json"
+EVIDENCE_ROOT = BLOGS / ".evidence" / "verify-blogs"
+SCAFFOLD = BLOGS / "verify-blogs-scaffold"  # VERIFICATION SCAFFOLDING: fixture chapters live here only during `drive build`
+READER_STATE = BLOGS / ".session" / "01-flappy"  # session.py's state for rl/01-flappy.md (fixed path, no flag)
+USER_PORTS = {8010, 8012, 8060, 8787, 8790}  # the author's long-running tmux servers: never bind, never kill
+CHROME_GLOB = "~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+FAKE_TOKEN = ("ak-verify-blogs", "as-verify-blogs-secret")  # connect_dev.py boots any token id starting "ak-"
+FEATURES = ("build", "plan", "cells", "embeds", "links", "connect", "nn-fit-remote")
+ALL = ("build", "plan", "embeds", "links", "cells", "connect")  # `drive all`; nn-fit-remote is slow, run it by name
+
+
+# ---------------------------------------------------------------- small utilities
+
+def say(msg: str, log: Path | None = None) -> None:
+    print(msg, flush=True)
+    if log is not None:
+        with log.open("a") as f:
+            f.write(msg + "\n")
+
+
+def free_port() -> int:
+    while True:
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = int(s.getsockname()[1])
+        if port not in USER_PORTS:
+            return port
+
+
+def http_get(url: str, timeout: float = 5) -> tuple[int, str]:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return r.status, r.read().decode(errors="replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode(errors="replace")
+
+
+def load_run() -> dict | None:
+    return json.loads(RUN_FILE.read_text()) if RUN_FILE.exists() else None
+
+
+def save_run(run: dict) -> None:
+    RUN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    RUN_FILE.write_text(json.dumps(run, indent=1))
+    (Path(run["evidence"]) / "run.json").write_text(json.dumps(run, indent=1))
+
+
+def command_of(pid: int) -> str:
+    out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True)
+    return out.stdout.strip()
+
+
+def group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists but not ours: never signal it
+
+
+def ours(proc: dict) -> bool:
+    """The recorded leader still runs the command we started (guards against PID reuse)."""
+    return proc["match"] in command_of(proc["pid"])
+
+
+def listening_pids(port: int) -> list[int]:
+    out = subprocess.run(["lsof", "-nP", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"], capture_output=True, text=True)
+    return [int(p) for p in out.stdout.split()]
+
+
+def pgid_of(pid: int) -> int | None:
+    try:
+        return os.getpgid(pid)
+    except ProcessLookupError:
+        return None
+
+
+def kill_group(pgid: int, log: Path | None = None, label: str = "") -> None:
+    """TERM the process group we started, wait, then KILL survivors. Never by name."""
+    if not group_alive(pgid):
+        return
+    os.killpg(pgid, signal.SIGTERM)
+    for _ in range(50):
+        if not group_alive(pgid):
+            say(f"  stopped {label} (pgid {pgid})", log)
+            return
+        time.sleep(0.2)
+    os.killpg(pgid, signal.SIGKILL)
+    say(f"  killed {label} (pgid {pgid}) after TERM timed out", log)
+
+
+def chrome() -> str | None:
+    found = sorted(glob.glob(os.path.expanduser(CHROME_GLOB)))
+    return found[-1] if found else None
+
+
+# ---------------------------------------------------------------- setup
+
+def cmd_setup(_: argparse.Namespace) -> int:
+    web = BLOGS / "web"
+    if not (web / "node_modules" / ".bin" / "esbuild").exists():
+        print("npm ci in blogs/web (fresh worktree)")
+        subprocess.run(["npm", "ci", "--no-audit", "--no-fund"], cwd=web, check=True)
+    else:
+        print("web/node_modules present")
+    if chrome() is None:
+        print("no Playwright Chromium: installing")
+        subprocess.run(["uv", "run", "--with", "playwright", "playwright", "install", "chromium"], cwd=BLOGS, check=True)
+    print("ok: now `vb launch`")
+    return 0
+
+
+# ---------------------------------------------------------------- launch
+
+def spawn(name: str, argv: list[str], log: Path, match: str, env: dict | None = None) -> dict:
+    out = log.open("ab")
+    proc = subprocess.Popen(argv, cwd=BLOGS, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                            start_new_session=True, env=env)  # own process group: cleanup kills exactly this
+    return {"name": name, "pid": proc.pid, "pgid": proc.pid, "argv": argv, "match": match, "log": str(log)}
+
+
+def wait_http(url: str, ok: tuple[int, ...], seconds: float, proc: dict) -> bool:
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if not group_alive(proc["pgid"]):
+            return False
+        try:
+            code, _ = http_get(url, timeout=2)
+            if code in ok:
+                return True
+        except OSError:
+            pass
+        time.sleep(0.3)
+    return False
+
+
+def build_cmd(run: dict, *chapters: str) -> list[str]:
+    return ["uv", "run", "build_page.py", *(chapters or ("--all",)),
+            "--session-url", run["urls"]["session"], "--gateway-url", run["urls"]["gateway"]]
+
+
+def cmd_launch(args: argparse.Namespace) -> int:
+    if (run := load_run()) is not None:
+        live = [p["name"] for p in run["procs"] if group_alive(p["pgid"]) and ours(p)]
+        print(f"a run is recorded in {RUN_FILE} ({run['id']}; live: {live or 'none'}). `vb cleanup` first.")
+        return 1
+    if not (BLOGS / "web" / "node_modules" / ".bin" / "esbuild").exists():
+        print("FAIL web/node_modules missing (the builder only says `esbuild: command not found`): run `vb setup`")
+        return 1
+    if READER_STATE.exists():
+        if not args.fresh:
+            print(f"FAIL {READER_STATE} exists (someone's reader progress in this worktree; verify_page.py needs a fresh"
+                  " reader). Re-run with --fresh to delete it, or move it aside.")
+            return 1
+        shutil.rmtree(READER_STATE)
+
+    run_id = time.strftime("%Y%m%d-%H%M%S")
+    evidence = EVIDENCE_ROOT / run_id
+    (evidence / "logs").mkdir(parents=True)
+    ports = {"session": free_port(), "static": free_port(), "gateway": free_port()}
+    run = {
+        "id": run_id, "evidence": str(evidence), "ports": ports, "procs": [], "reader_state_ours": True,
+        "branch": subprocess.run(["git", "branch", "--show-current"], cwd=BLOGS, capture_output=True, text=True).stdout.strip(),
+        "head": subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=BLOGS, capture_output=True, text=True).stdout.strip(),
+        "urls": {
+            "session": f"http://127.0.0.1:{ports['session']}",
+            "static": f"http://127.0.0.1:{ports['static']}",
+            "gateway": f"http://127.0.0.1:{ports['gateway']}",
+        },
+    }
+    save_run(run)
+    log = evidence / "launch.txt"
+    say(f"run {run_id} on {run['branch']} @ {run['head']}; ports {ports}", log)
+
+    say("$ " + " ".join(build_cmd(run)), log)
+    with (evidence / "logs" / "build.log").open("w") as out:
+        rc = subprocess.run(build_cmd(run), cwd=BLOGS, stdout=out, stderr=subprocess.STDOUT).returncode
+    say(f"  build exit {rc} (logs/build.log)", log)
+    if rc != 0:
+        say("FAIL build: see logs/build.log; then `vb cleanup`", log)
+        return 1
+
+    specs = [
+        ("session", ["uv", "run", "session.py", "rl/01-flappy.md", "--port", str(ports["session"]), "--timeout", "20"],
+         f"--port {ports['session']}", f"{run['urls']['session']}/state", (200,), 180),
+        ("static", [sys.executable, "-m", "http.server", str(ports["static"]), "-d", "dist", "--bind", "127.0.0.1"],
+         f"http.server {ports['static']}", f"{run['urls']['static']}/01-flappy/", (200,), 30),
+        ("gateway", ["uv", "run", "connect_dev.py", "--port", str(ports["gateway"]), "--boot-delay", "0.6"],
+         f"--port {ports['gateway']}", f"{run['urls']['gateway']}/sessions/none", (404,), 240),  # first run installs jupyter
+    ]
+    for name, argv, match, probe, ok, seconds in specs:
+        proc = spawn(name, argv, evidence / "logs" / f"{name}.log", match)
+        run["procs"].append(proc)
+        save_run(run)
+        say(f"$ {' '.join(argv)}   (pgid {proc['pgid']})", log)
+        if not wait_http(probe, ok, seconds, proc):
+            say(f"FAIL {name} not ready at {probe} within {seconds}s: see logs/{name}.log; then `vb cleanup`", log)
+            return 1
+        say(f"  {name} ready: {probe}", log)
+
+    say("ready. drive these URLs (always pass ?gateway= on Connect pages):", log)
+    print_urls(run, log)
+    return 0
+
+
+def print_urls(run: dict, log: Path | None = None) -> None:
+    s, g = run["urls"]["static"], run["urls"]["gateway"]
+    say(f"  flappy (checked cells): {s}/01-flappy/", log)
+    say(f"  neural-nets (Connect):  {s}/neural-nets/?gateway={g}", log)
+    say(f"  engine plan:            {s}/00-plan/", log)
+    say(f"  session.py:             {run['urls']['session']}/state", log)
+    say(f"  evidence:               {run['evidence']}", log)
+
+
+def cmd_status(_: argparse.Namespace) -> int:
+    run = load_run()
+    if run is None:
+        print("no run recorded (vb launch)")
+        return 1
+    print(f"run {run['id']} on {run['branch']} @ {run['head']}")
+    for p in run["procs"]:
+        print(f"  {p['name']:8} pgid {p['pgid']:6} {'alive' if group_alive(p['pgid']) and ours(p) else 'DEAD'}  {' '.join(p['argv'])}")
+    print_urls(run)
+    return 0
+
+
+# ---------------------------------------------------------------- doctor (read-only)
+
+def doctor(log: Path | None = None, quiet: bool = False) -> bool:
+    """quiet: PASS/INFO lines go only to the log (drive transcripts keep the full doctor)."""
+    fails: list[str] = []
+
+    def check(ok: bool, what: str, fix: str = "", warn: bool = False) -> None:
+        tag = "PASS" if ok else ("WARN" if warn else "FAIL")
+        line = f"{tag} {what}" + ("" if ok or not fix else f"  -> {fix}")
+        if quiet and ok and log is not None:
+            with log.open("a") as f:
+                f.write(line + "\n")
+        else:
+            say(line, log)
+        if not ok and not warn:
+            fails.append(what)
+
+    branch = subprocess.run(["git", "branch", "--show-current"], cwd=BLOGS, capture_output=True, text=True).stdout.strip()
+    head = subprocess.run(["git", "log", "-1", "--format=%h %s"], cwd=BLOGS, capture_output=True, text=True).stdout.strip()
+    say(f"INFO checkout {BLOGS} branch {branch or '(detached)'} @ {head}", log)
+    check((BLOGS / "web" / "node_modules" / ".bin" / "esbuild").exists(), "web/node_modules (esbuild) present",
+          "vb setup (npm ci in web/); without it build_page.py fails with only `esbuild: command not found`")
+    check(shutil.which("uv") is not None, "uv on PATH")
+    check((BLOGS / ".venv" / "bin" / "python").exists(), "blogs/.venv present", "first `uv run` creates it", warn=True)
+    check(chrome() is not None, "Playwright Chromium in ~/Library/Caches/ms-playwright", "vb setup")
+    check(shutil.which("emcc") is not None, "emcc on PATH (play widget wasm)", "brew install emscripten")
+    check(shutil.which("clang") is not None, "clang on PATH (C cells, ASan)")
+    check(bool(glob.glob(str(BLOGS / "vendor" / "raylib-*"))), "vendor/raylib-* fetched", "the first build downloads it", warn=True)
+    check(not SCAFFOLD.exists(), f"no leftover scaffolding at {SCAFFOLD.name}/", "vb cleanup", warn=True)
+
+    run = load_run()
+    check(run is not None, f"a launched run is recorded ({RUN_FILE.relative_to(BLOGS)})", "vb launch")
+    if run is None:
+        say(f"doctor: {len(fails)} FAIL", log)
+        return False
+    say(f"INFO run {run['id']} launched on {run['branch']} @ {run['head']}", log)
+    check(run["branch"] == branch, f"run launched on the current branch ({run['branch']})", "vb cleanup && vb launch")
+    for p in run["procs"]:
+        alive = group_alive(p["pgid"]) and ours(p)
+        check(alive, f"{p['name']} alive (pid {p['pid']}, {p['match']!r})", "vb cleanup && vb launch")
+        port = run["ports"][p["name"]]
+        owners = listening_pids(port)
+        check(bool(owners) and all(pgid_of(o) == p["pgid"] for o in owners),
+              f"{p['name']} port {port} listened on only by our process group {p['pgid']} (owners {owners})")
+    check(not (set(run["ports"].values()) & USER_PORTS), f"run ports {sorted(run['ports'].values())} avoid the author's {sorted(USER_PORTS)}")
+
+    s = run["urls"]
+    try:
+        code, body = http_get(f"{s['session']}/state")
+        state = json.loads(body) if code == 200 else {}
+        check(code == 200 and {"passed", "wasm"} <= set(state), f"session /state answers (passed: {sorted(state.get('passed', {}))})")
+    except (OSError, ValueError) as e:
+        check(False, f"session /state answers ({e})")
+    try:
+        code, page = http_get(f"{s['static']}/01-flappy/")
+        meta = re.search(r'<meta name="session-url" content="([^"]+)">', page)
+        check(code == 200 and meta is not None and meta[1] == s["session"],
+              f"served 01-flappy points at our session ({meta[1] if meta else None})", "rebuild: vb drive build")
+        code, nn = http_get(f"{s['static']}/neural-nets/")
+        gw = re.search(r'<connect-pill data-gateway="([^"]+)"', nn)
+        check(code == 200 and gw is not None and gw[1] == s["gateway"],
+              f"served neural-nets' data-gateway is ours ({gw[1] if gw else None})",
+              "a harness rebuilt it with the default (the author's relay :8790): vb drive build", warn=True)
+    except OSError as e:
+        check(False, f"static server answers ({e})")
+    try:
+        code, body = http_get(f"{s['gateway']}/sessions/none")
+        check(code == 404 and "no session" in body, "connect_dev.py answers (GET /sessions/none -> 404)")
+    except OSError as e:
+        check(False, f"connect_dev.py answers ({e})")
+    built = BLOGS / "dist" / "01-flappy" / "page.js"
+    sources = [BLOGS / "web" / "page.ts", *BLOGS.glob("web/connect/*.ts"), *BLOGS.glob("*/*.md")]
+    # relative parts: this checkout itself may live under .claude/worktrees/
+    newest = max(p.stat().st_mtime for p in sources if p.exists() and not {".claude", "notes"} & set(p.relative_to(BLOGS).parts))
+    check(built.exists() and built.stat().st_mtime >= newest, "dist/ is newer than web/*.ts and the chapters",
+          "sources changed since the build: vb drive build", warn=True)
+    say(f"doctor: {'ok' if not fails else f'{len(fails)} FAIL'}", log)
+    return not fails
+
+
+def cmd_doctor(_: argparse.Namespace) -> int:
+    return 0 if doctor() else 1
+
+
+# ---------------------------------------------------------------- drive
+
+class Drive:
+    def __init__(self, run: dict, feature: str) -> None:
+        self.run = run
+        self.feature = feature
+        self.dir = Path(run["evidence"]) / feature
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self.log = self.dir / "transcript.txt"
+        self.failures: list[str] = []
+
+    def say(self, msg: str) -> None:
+        say(msg, self.log)
+
+    def expect(self, ok: bool, what: str) -> None:
+        self.say(f"{'ok  ' if ok else 'FAIL'} {what}")
+        if not ok:
+            self.failures.append(what)
+
+    def sh(self, argv: list[str], env: dict | None = None) -> tuple[int, str]:
+        """Run a harness in its own process group, tee its output into the transcript, then kill any stragglers."""
+        self.say("$ " + " ".join(argv))
+        proc = subprocess.Popen(argv, cwd=BLOGS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                start_new_session=True, env={**{k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}, **(env or {})})
+        out = []
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            out.append(line)
+            self.say("  | " + line.rstrip("\n"))
+        rc = proc.wait()
+        kill_group(proc.pid, self.log, f"stragglers of {Path(argv[-1]).name}")
+        self.say(f"  exit {rc}")
+        return rc, "".join(out)
+
+    def pages(self, case: str, *extra: str) -> int:
+        rc, _ = self.sh(["uv", "run", "--with", "playwright", "python", str(SKILL / "pages.py"), case,
+                         "--base", self.run["urls"]["static"], "--gateway", self.run["urls"]["gateway"],
+                         "--out", str(self.dir), *extra])
+        return rc
+
+    def collect(self, src: Path, since: float) -> None:
+        """Copy a harness's artifacts written during this drive (harness dirs are shared and overwritten)."""
+        n = 0
+        for f in sorted(src.rglob("*")) if src.exists() else []:
+            if f.is_file() and f.stat().st_mtime >= since:
+                dest = self.dir / f.relative_to(src)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(f, dest)
+                n += 1
+        self.say(f"  collected {n} artifact(s) from {src.relative_to(BLOGS)}/")
+
+
+def read(path: Path) -> str:
+    return path.read_text() if path.exists() else ""
+
+
+# fixture -> (should build?, substring the build output must contain)
+FIXTURES = {
+    "vf-page-ok.md": (True, "wrote"),
+    "vf-excerpt-bad.md": (False, "is not in ../vendor/pufferlib/pufferenv.h verbatim"),
+    "vf-leak.md": (False, "leaked into the page"),
+    "vf-bad-link.md": (False, "no chapter called vf-no-such-page"),
+    "vf-wip-empty.md": (False, "<!-- wip: --> needs text"),
+    "vf-scratch-no-connect.md": (False, "scratch cells need <!-- page: connect -->"),
+}
+
+
+def drive_build(d: Drive) -> None:
+    rc, out = d.sh(build_cmd(d.run, "rl/01-flappy.md"))
+    d.expect(rc == 0 and "dist/01-flappy/index.html" in out and "cells ['flappy', 'policy'" in out, "single chapter builds")
+    rc, out = d.sh(build_cmd(d.run))
+    wrote = re.findall(r"wrote \S+/dist/([^/]+)/index.html", out)
+    d.expect(rc == 0 and {"01-flappy", "neural-nets", "00-plan"} <= set(wrote), f"--all builds every chapter ({wrote})")
+
+    dist = BLOGS / "dist"
+    flappy, nn, plan = (read(dist / n / "index.html") for n in ("01-flappy", "neural-nets", "00-plan"))
+    d.expect(not re.search(r"(solution|check|budget)=", flappy), "01-flappy: no solution=/check=/budget= fence in the page")
+    d.expect("flappy-&gt;tick += 1" not in flappy and "flappy->tick += 1" not in flappy, "01-flappy: the reference puf_step line is not in the page")
+    d.expect(flappy.count("<code-cell ") == 6 and '<env-play cell="flappy"' in flappy, "01-flappy: 6 <code-cell>s and <env-play cell=flappy>")
+    d.expect('<div class="todo" role="note"' in flappy, "01-flappy: <!-- --> placeholders render as .todo notes")
+    d.expect('<page-link data-embeds="nn-fit"><a href="../neural-nets/#fitting-a-curve">' in flappy, "01-flappy: [[neural-nets#fitting a curve]] -> <page-link>")
+    d.expect('aria-label="under construction"' in nn and "still working on" in nn, "neural-nets: wip banner")
+    d.expect(f'<connect-pill data-gateway="{d.run["urls"]["gateway"]}">' in nn and "<scratch-cell" in nn, "neural-nets: connect pill (our gateway) + scratch cell")
+    d.expect('aria-label="under construction"' in plan and "plan only. no prose yet" in plan, "00-plan: wip banner")
+    (d.dir / "built").mkdir(exist_ok=True)
+    for name in ("01-flappy", "neural-nets", "00-plan"):
+        shutil.copy2(dist / name / "index.html", d.dir / "built" / f"{name}.html")
+
+    # Fixture chapters: VERIFICATION SCAFFOLDING, one at a time in blogs/verify-blogs-scaffold/, removed below.
+    try:
+        for name, (should_build, needle) in FIXTURES.items():
+            shutil.rmtree(SCAFFOLD, ignore_errors=True)
+            SCAFFOLD.mkdir()
+            (SCAFFOLD / "SCAFFOLD.txt").write_text("verification scaffolding from .claude/skills/verify-blogs (vb drive build); vb cleanup removes it\n")
+            shutil.copy(SKILL / "fixtures" / name, SCAFFOLD / name)
+            rc, out = d.sh(["uv", "run", "build_page.py", f"{SCAFFOLD.name}/{name}"])
+            d.expect((rc == 0) == should_build and needle in out,
+                     f"fixture {name}: {'builds' if should_build else 'fails the build'} with {needle!r}")
+            if should_build:
+                d.expect(d.pages("fixture", "--path", f"/{Path(name).stem}/") == 0, "fixture page renders excerpt, wip, todo, link")
+    finally:
+        shutil.rmtree(SCAFFOLD, ignore_errors=True)
+        for name in FIXTURES:
+            shutil.rmtree(dist / Path(name).stem, ignore_errors=True)
+    d.expect(not SCAFFOLD.exists(), "scaffolding removed")
+
+
+def drive_plan(d: Drive) -> None:
+    rc, out = d.sh(build_cmd(d.run, "engine/00-plan.md"))
+    d.expect(rc == 0 and "dist/00-plan/index.html: cells [], scratch 0, connect False" in out, "engine/00-plan.md builds alone")
+    d.expect(d.pages("plan") == 0, "plan page: title, wip banner, heading ids, no session traffic")
+
+
+def drive_cells(d: Drive) -> None:
+    if (READER_STATE / "state.json").exists():
+        if not d.run.get("reader_state_ours"):
+            d.expect(False, f"{READER_STATE} is not this run's; refusing to reset it")
+            return
+        shutil.rmtree(READER_STATE)
+        d.say(f"  reset this run's reader state ({READER_STATE.relative_to(BLOGS)}) for a fresh reader")
+    since = time.time()
+    rc, out = d.sh(["uv", "run", "--with", "playwright", "verify_page.py", f"{d.run['urls']['static']}/01-flappy/"])
+    d.collect(BLOGS / ".evidence" / "verify_page", since)
+    d.expect(rc == 0, "verify_page.py passes")
+    d.expect("run flappy" in out and "-> PASS" in out and "-> FAIL" in out, "flappy: stub FAILs, solution PASSes")
+    d.expect("sample unlocked: True" in out, "gating: passing policy unlocks sample")
+    d.expect("restored to last passing = True" in out, "reload restores the last passing flappy")
+    code, body = http_get(f"{d.run['urls']['session']}/state")
+    (d.dir / "state-after.json").write_text(body)
+    state = json.loads(body) if code == 200 else {"passed": {}}
+    d.expect({"flappy", "policy"} <= set(state["passed"]), f"side effect: session state.json has passed {sorted(state['passed'])}")
+
+
+def drive_embeds(d: Drive) -> None:
+    d.expect(d.pages("embeds") == 0, "carousel, env-play (reference) and nn-fit (browser) work")
+
+
+def drive_links(d: Drive) -> None:
+    d.expect(d.pages("links") == 0, "[[link]] hover card, Escape, click navigates")
+
+
+def restore_neural_nets(d: Drive) -> None:
+    rc, _ = d.sh(build_cmd(d.run, "dl/neural-nets.md"))
+    d.expect(rc == 0, "dist/neural-nets rebuilt with our gateway (the harness rebuilt it with the default :8790)")
+
+
+def drive_connect(d: Drive) -> None:
+    d.expect(d.pages("bad-token") == 0, "a token the gateway rejects shows the failure in the panel")
+    since = time.time()
+    rc, out = d.sh(["uv", "run", "--with", "playwright", "verify_connect.py", "--gateway", d.run["urls"]["gateway"],
+                    "--page-port", str(free_port())], env={"MODAL_TOKEN_ID": FAKE_TOKEN[0], "MODAL_TOKEN_SECRET": FAKE_TOKEN[1]})
+    d.collect(BLOGS / ".evidence" / "verify_connect", since)
+    d.expect(rc == 0, "verify_connect.py passes against our connect_dev.py")
+    d.expect("nvidia-smi:" in out and "(FAKE)" in out, "scratch cell ran !nvidia-smi on the local kernel")
+    d.expect("stop: 'KeyboardInterrupt (" in out, "Stop interrupts a running scratch cell")
+    d.expect("same kernel" in out, "reload reattaches to the same session + kernel")
+    restore_neural_nets(d)
+
+
+def drive_nn_fit_remote(d: Drive) -> None:
+    since = time.time()
+    rc, _ = d.sh(["uv", "run", "--with", "playwright", "python", "web/embeds/nn-fit/remote_e2e.py"])
+    d.collect(BLOGS / ".evidence" / "nn-fit-remote", since)
+    d.expect(rc == 0, "remote_e2e.py passes (nn-fit trains on a connect_dev.py kernel)")
+    restore_neural_nets(d)
+
+
+DRIVES = {"build": drive_build, "plan": drive_plan, "cells": drive_cells, "embeds": drive_embeds, "links": drive_links,
+          "connect": drive_connect, "nn-fit-remote": drive_nn_fit_remote}
+
+
+def cmd_drive(args: argparse.Namespace) -> int:
+    run = load_run()
+    if run is None:
+        print("no launched run: vb launch")
+        return 1
+    features = [f for name in args.features for f in (ALL if name == "all" else (name,))]
+    bad = [f for f in features if f not in DRIVES]
+    if bad:
+        print(f"unknown feature(s) {bad}; features: {', '.join(FEATURES)}, all")
+        return 1
+    failed = []
+    for feature in features:
+        d = Drive(run, feature)
+        d.say(f"== drive {feature} (run {run['id']}, {time.strftime('%H:%M:%S')})")
+        if not doctor(d.log, quiet=True):
+            d.say("doctor failed: not driving. Fix it (or `vb cleanup && vb launch`) first.")
+            return 1
+        try:
+            DRIVES[feature](d)
+        except Exception as e:  # noqa: BLE001 - a broken drive still reports and lets cleanup run
+            d.expect(False, f"drive crashed: {type(e).__name__}: {e}")
+        verdict = "PASS" if not d.failures else f"FAIL ({len(d.failures)}: {d.failures})"
+        d.say(f"== {feature}: {verdict}; evidence {d.dir}")
+        if d.failures:
+            failed.append(feature)
+    print(f"drive: {'all passed' if not failed else f'FAILED {failed}'}; evidence {run['evidence']}")
+    return 1 if failed else 0
+
+
+# ---------------------------------------------------------------- cleanup
+
+def cmd_cleanup(_: argparse.Namespace) -> int:
+    run = load_run()
+    evidence = Path(run["evidence"]) if run else None
+    log = evidence / "cleanup.txt" if evidence else None
+    if run is None:
+        say(f"no run recorded in {RUN_FILE}: nothing of ours to stop")
+    else:
+        say(f"cleanup run {run['id']}", log)
+        for p in reversed(run["procs"]):
+            if not group_alive(p["pgid"]):
+                say(f"  {p['name']}: already gone", log)
+            elif not ours(p):
+                say(f"  {p['name']}: pid {p['pid']} now runs {command_of(p['pid'])!r}, not ours: left alone", log)
+            else:
+                kill_group(p["pgid"], log, p["name"])
+        for name, port in run["ports"].items():
+            owners = listening_pids(port)
+            say(f"  port {port} ({name}): {'free' if not owners else f'STILL LISTENING {owners}'}", log)
+        if run.get("reader_state_ours") and READER_STATE.exists():
+            shutil.rmtree(READER_STATE)
+            say(f"  removed this run's reader state {READER_STATE.relative_to(BLOGS)}", log)
+        RUN_FILE.unlink()
+        say(f"  removed {RUN_FILE.relative_to(BLOGS)}", log)
+    if SCAFFOLD.exists():
+        shutil.rmtree(SCAFFOLD)
+        say(f"  removed scaffolding {SCAFFOLD.name}/", log)
+    for name in FIXTURES:
+        if (stale := BLOGS / "dist" / Path(name).stem).exists():
+            shutil.rmtree(stale)
+            say(f"  removed dist/{stale.name}", log)
+    if evidence is not None:
+        kept = sorted(p.name for p in evidence.iterdir())
+        say(f"evidence kept: {evidence} ({', '.join(kept)})", log)
+        if not evidence.exists():
+            print("FAIL: the evidence dir is gone")
+            return 1
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("setup").set_defaults(fn=cmd_setup)
+    p = sub.add_parser("launch")
+    p.add_argument("--fresh", action="store_true", help=f"delete an existing {READER_STATE.relative_to(BLOGS)} first")
+    p.set_defaults(fn=cmd_launch)
+    sub.add_parser("doctor").set_defaults(fn=cmd_doctor)
+    sub.add_parser("status").set_defaults(fn=cmd_status)
+    p = sub.add_parser("drive")
+    p.add_argument("features", nargs="+", help=f"{', '.join(FEATURES)}, or all")
+    p.set_defaults(fn=cmd_drive)
+    sub.add_parser("cleanup").set_defaults(fn=cmd_cleanup)
+    args = ap.parse_args()
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
