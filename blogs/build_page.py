@@ -10,6 +10,7 @@ cell=X     -> <code-cell> editor prefilled with the stub, Run button, output pan
 given      -> collapsed, read-only code (the reader calls into it, so they can read it)
 solution=X, check=X, budget=X -> not in the page; the session runs them
 <!-- ... --> on its own line -> a muted "todo" note
+<!-- wip: ... --> on its own line -> a visible "under construction" banner (🚧 + the text), for readers
 <X-play></X-play>, X a C cell -> <env-play cell=X>, the wasm play widget (reference env until X passes)
 ```K fence, web/embeds/K/ exists -> embed K (embeds.py: one folder per kind, e.g. carousel)
 """
@@ -107,6 +108,12 @@ def main() -> None:
 
     def html_block(tokens: Sequence[Token], idx: int, opts: OptionsDict, env: EnvType) -> str:
         content = tokens[idx].content
+        if wip := re.fullmatch(r"\s*<!--\s*wip:\s*(.*?)\s*-->\s*", content, re.DOTALL):
+            span = tokens[idx].map
+            assert span is not None, "markdown-it gave the wip comment no line numbers"
+            assert wip[1], f"line {span[0] + 1}: <!-- wip: --> needs text"
+            return (f'<div class="wip" role="note" aria-label="under construction" data-not-typeset>'
+                    f'<span aria-hidden="true">🚧</span> {html.escape(wip[1])}</div>\n')
         if note := re.fullmatch(r"\s*<!--\s*(.*?)\s*-->\s*", content, re.DOTALL):
             return f'<div class="todo" role="note" data-not-typeset>{html.escape(note[1])}</div>\n'
         return content
