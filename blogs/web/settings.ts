@@ -36,7 +36,7 @@ const FONTS: Readonly<Record<"body" | "mono", Fonts>> = {
   ],
 };
 
-const DEFAULTS = { theme: "classic", body: "Charter", mono: "System mono", size: "18px", leading: "1.75", flow: "1.25em", measure: "80ch" };
+const DEFAULTS = { theme: "classic", body: "Charter", mono: "System mono", size: "18px", leading: "1.6", flow: "1.25em", measure: "64ch" };
 type SettingKey = keyof typeof DEFAULTS;
 type Settings = Record<SettingKey, string>;
 const isSettingKey = (key: string): key is SettingKey => Object.hasOwn(DEFAULTS, key);
@@ -48,9 +48,9 @@ const CONTROLS: readonly (readonly [SettingKey, string, readonly Option[]])[] = 
   ["body", "Body", FONTS.body.map(([name]): Option => [name, name])],
   ["mono", "Mono", FONTS.mono.map(([name]): Option => [name, name])],
   ["size", "Size", [14, 15, 16, 18, 20].map((px): Option => [`${String(px)}px`, `${String(px)}px`])],
-  ["leading", "Leading", [["Tight 1.6", "1.6"], ["Regular 1.75", "1.75"], ["Loose 1.9", "1.9"]]],
+  ["leading", "Leading", [["Tight 1.5", "1.5"], ["Regular 1.6", "1.6"], ["Loose 1.75", "1.75"]]],
   ["flow", "Flow", [["Compact 1em", "1em"], ["Regular 1.25em", "1.25em"], ["Airy 2em", "2em"]]],
-  ["measure", "Measure", [60, 70, 80, 90].map((ch): Option => [`${String(ch)}ch`, `${String(ch)}ch`])],
+  ["measure", "Measure", [56, 60, 64, 70, 80].map((ch): Option => [`${String(ch)}ch`, `${String(ch)}ch`])],
 ];
 
 const read = (key: string): string | null => { try { return localStorage.getItem(key); } catch { return null; } };
@@ -61,14 +61,18 @@ const write = (key: string, value: string | null): void => {
   } catch { /* storage blocked: the setting lasts for this page only */ }
 };
 
-// Saved settings over the defaults. Unknown keys and non-string values are dropped.
+const isOption = (key: SettingKey, value: string): boolean =>
+  CONTROLS.some(([k, , options]) => k === key && options.some(([, v]) => v === value));
+
+// Saved settings over the defaults. Unknown keys, and values no longer offered (e.g. a saved 90ch or leading 1.9
+// from before the 2026-10-09 typeset change), are dropped so the panel always shows what is applied.
 function load(): Settings {
   const loaded = { ...DEFAULTS };
   let saved: unknown;
   try { saved = JSON.parse(read(SETTINGS_KEY) ?? "{}"); } catch { return loaded; }
   if (typeof saved !== "object" || saved === null) return loaded;
   for (const [key, value] of Object.entries(saved)) {
-    if (isSettingKey(key) && typeof value === "string") loaded[key] = value;
+    if (isSettingKey(key) && typeof value === "string" && isOption(key, value)) loaded[key] = value;
   }
   return loaded;
 }
@@ -109,8 +113,10 @@ function toggleScheme(): void {
   apply();
 }
 
+// Only what differs from the defaults is stored, so a later change of default reaches readers who never chose.
 function save(): void {
-  write(SETTINGS_KEY, JSON.stringify(settings));
+  const changed = Object.fromEntries(Object.entries(settings).filter(([key, value]) => isSettingKey(key) && DEFAULTS[key] !== value));
+  write(SETTINGS_KEY, JSON.stringify(changed));
   apply();
 }
 
