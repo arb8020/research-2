@@ -214,7 +214,7 @@ def parse_create(body: bytes, gpus: tuple[str | None, ...]) -> CreateRequest:
         raise BadRequest("labels must be {string: string}")
     if len(labels) > MAX_LABELS:
         raise BadRequest(f"at most {MAX_LABELS} labels")
-    if mine := [k for k in labels if k.startswith(("box.by", "box.session", "box.deadline", "relay."))]:
+    if mine := [k for k in labels if k.startswith((*sdk.RESERVED, "relay."))]:
         raise BadRequest(f"labels {mine} are set by box or the relay")
     return CreateRequest(ModalToken(token["id"], token["secret"]), gpu, labels)
 

@@ -58,14 +58,16 @@ def run(kernel: dict[str, str], code: str, on_stdout: Callable[[str], None] | No
         size = 0
         while reply is None or not idle:
             left = REPLY_TIMEOUT_S - (time.monotonic() - t0)
-            assert left > 0, f"no reply to the cell in {REPLY_TIMEOUT_S} s"
+            if left <= 0:
+                raise TimeoutError(f"no reply to the cell in {REPLY_TIMEOUT_S} s")
             msg = json.loads(ws.recv(timeout=left))
             if (msg.get("parent_header") or {}).get("msg_id") != msg_id:
                 continue
             kind, c = msg["header"]["msg_type"], msg["content"]
             if kind == "stream":
                 size += len(c["text"])
-                assert size <= MAX_OUTPUT, f"cell printed over {MAX_OUTPUT} bytes"
+                if size > MAX_OUTPUT:
+                    raise RuntimeError(f"cell printed over {MAX_OUTPUT} bytes")
                 (err if c["name"] == "stderr" else out).append(c["text"])
                 if on_stdout is not None and c["name"] == "stdout":
                     on_stdout(c["text"])

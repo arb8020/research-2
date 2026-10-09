@@ -28,6 +28,12 @@ def test_no_single_active_profile_is_refused(tmp_path: Path, text: str) -> None:
         ModalToken.from_config(config(tmp_path, text))
 
 
+def test_a_named_profile_is_read_active_or_not(tmp_path: Path) -> None:
+    assert ModalToken.from_profile("home", config(tmp_path, OTHER + ACTIVE)) == ModalToken("ak-home", "as-home")
+    with pytest.raises(ValueError, match="no profile 'gone'"):
+        ModalToken.from_profile("gone", config(tmp_path, OTHER))
+
+
 def test_a_token_never_prints(tmp_path: Path) -> None:
     token = ModalToken.from_config(config(tmp_path, ACTIVE))
     assert "ak-work" not in repr(token)

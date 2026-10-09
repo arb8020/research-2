@@ -63,9 +63,14 @@ class ModalToken:
         active = [name for name, p in profiles.items() if isinstance(p, dict) and p.get("active") is True]
         if len(active) != 1:
             raise ValueError(f"{path}: {len(active)} active profiles {active}; want exactly one (`modal profile activate`)")
-        profile = profiles[active[0]]
-        if not (isinstance(profile.get("token_id"), str) and isinstance(profile.get("token_secret"), str)):
-            raise ValueError(f"{path}: profile {active[0]!r} has no token_id/token_secret")
+        return cls.from_profile(active[0], path)
+
+    @classmethod
+    def from_profile(cls, name: str, path: Path = MODAL_TOML) -> ModalToken:
+        """The named profile of Modal's config file, active or not (a script pinned to one workspace)."""
+        profile = tomllib.loads(path.read_text()).get(name)
+        if not (isinstance(profile, dict) and isinstance(profile.get("token_id"), str) and isinstance(profile.get("token_secret"), str)):
+            raise ValueError(f"{path}: no profile {name!r} with token_id/token_secret")
         return cls(profile["token_id"], profile["token_secret"])
 
 
