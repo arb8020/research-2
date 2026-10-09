@@ -1,21 +1,24 @@
-"""Workspace cells end to end: engine/ch00-toy.md in headless Chromium, through the Connect path (connect_dev.py).
+"""Workspace cells end to end: engine/ch00-toy.md and engine/ch01-forward.md in headless Chromium, through the
+Connect path (connect_dev.py). Ports are free ones picked at start (never the author's 8790 / 8012).
 
-    uv run --with playwright verify_workspace.py                  # sandbox = a local Jupyter (connect_dev --root)
-    uv run --with playwright --with modal verify_workspace.py --modal   # sandbox = a Modal CPU sandbox (ws_modal.py)
+    uv run --with playwright verify_workspace.py [--page ch00|ch01|all]   # sandbox = a local Jupyter (connect_dev --root)
+    uv run --with playwright --with modal verify_workspace.py --modal --page ch00   # ch00 on a Modal CPU sandbox
 
-Evidence goes to .evidence/verify_workspace/ (or verify_workspace-modal/; gitignored, kept until the next run):
-numbered screenshots, story.log (what each step saw), timings.json, git-log.txt (the restored workspace's history),
-connect_dev logs; locally also the two Jupyter roots and the persist dir (root1/, root2/, persist/).
+ch01's checks run the FAKE run_checks (fake_checks/, ref.TRUSTED_SRC) until the real check core lands.
+
+Evidence goes to .evidence/verify_workspace/<page>/ (or verify_workspace-modal/; gitignored, kept until the next run):
+numbered screenshots, story.log (what each step saw), timings.json, git-log.txt (the workspace's history),
+connect_dev logs; locally also the Jupyter roots and the persist dir (root1/, root2/, persist/).
 
 Phases (the shape a verify-blogs skill can call one by one):
   launch   build the page; serve dist/; start sandbox 1 (local root1, or a Modal sandbox with Jupyter on the relay's
            flags and the persist dir on a Volume) and connect_dev.py in front of it
-  doctor   g++ / make / git in the sandbox; the page ships workspace.py + ref.bundle; after Connect the workspace is
-           seeded (tag ref/ch00/start) and only the first cell is unlocked
-  drive    the story:
+  doctor   g++ / make / git in the sandbox; the page ships _blogs/ (workspace.py, checks/, MANIFEST.sha256) +
+           ref.bundle; after Connect the workspace is seeded (tag ref/<chapter>/start) and every cell can run
+  drive    the ch00 story (C++ + Python, whole-file cells, the legacy plain-text check output):
              1  ring.cpp with a missing ';' -> Run -> the compiler error streams in; its ring.cpp:L:C link moves the
                 ring editor's cursor to line L; nothing committed
-             2  fixed -> Run -> pass: commit + tag pass/ch00/ring on the checked text, the bundle saved; loop unlocks
+             2  fixed -> Run -> pass: commit + tag pass/ch00/ring on the checked text, the bundle saved
              3  a loop.cpp draft saves to the workspace (the save latency); drop the browser's draft copies; reload:
                 the editor shows the draft, read back from the workspace
              4  loop.cpp that never returns -> Run; while it runs, a scratch cell runs on the same kernel; Stop kills
@@ -25,6 +28,26 @@ Phases (the shape a verify-blogs skill can call one by one):
                 workspace is restored from the bundle (refs identical to sandbox 1's); ring/loop show their passing
                 versions; the budget draft comes back from the browser's copy and is written to the new workspace
              7  budget passes in the restored workspace
+           the ch01 story (one gpt2.py, seven region cells over one shared doc, contract JSON lines from the fake):
+             1  before Connect: edit the linear region in its cell; the gelu cell's view of gpt2.py shows the same
+                edit at once; Run linear while disconnected -> "waiting for sandbox"; Connect (slow boot) -> the
+                queued run starts once the workspace is up and passes on the edit made before Connect: tag
+                pass/ch01/linear on exactly that text, the bundle saved
+             2  edit gelu in the gelu cell; undo (Mod-z) from the attention cell undoes it everywhere (one history
+                per file), redo restores it; Run gelu -> PASS row (float32) + a visibly distinct SKIP row (bfloat16)
+             3  a syntax error planted in the forward region; Run layer_norm -> BLOCKED with gpt2.py:L (forward); the
+                link puts the cursor on line L in the forward cell (the one whose region holds it); nothing committed
+             4  syntax fixed; Run forward with attention still a stub -> FAIL whose link names attention's stub line
+             5  the block region's start marker deleted: the block cell says so (nothing to highlight); Run block still
+                checks (a verdict, no crash); marker restored
+             6  `# fake: infra` -> Run -> "not run (infrastructure)", HEAD unchanged
+             7  a trusted file in _blogs/ tampered -> Run refused (HEAD unchanged); MANIFEST.sha256 itself rewritten
+                to match -> refused (the page's sha256 differs); reload re-uploads _blogs/ -> Run passes again
+             8  reload: the shared doc comes back from the workspace with every edit; linear / gelu show passed
+             9  sandbox 1 stops; this browser's draft is replaced by one built on a commit the restored sandbox never
+                had (another device's); sandbox 2 restores from the bundle -> every gpt2.py cell shows the conflict
+                banner and the sandbox's text; "Use this browser's draft" puts it in (saved to the workspace); Run
+                generate passes
   evidence screenshots, story.log, timings.json, git-log.txt
   cleanup  stop only what this script started: connect_dev (every process it spawned must be gone, or the run fails),
            the static server, and on Modal both sandboxes (none of this app's sandboxes may be left; the Volume is
@@ -42,6 +65,7 @@ import re
 import shlex
 import shutil
 import signal
+import socket
 import statistics
 import subprocess
 import threading
@@ -173,14 +197,15 @@ def bundle_note(output: str) -> tuple[float, int]:
     return float(m[1]), int(m[2])
 
 
-def connect(page: Page) -> None:
-    page.locator(".connect-pill").click()
+def connect(page: Page, cells: int = CELLS) -> None:
+    if page.locator(".connect-panel").is_hidden():
+        page.locator(".connect-pill").click()
     if page.locator("input[name=token-id]").is_visible():
         page.fill("input[name=token-id]", TOKEN[0])
         page.fill("input[name=token-secret]", TOKEN[1])
     page.locator(".connect-go").click()
     page.wait_for_selector("connect-pill[data-phase=connected]", timeout=120_000)
-    page.wait_for_function(f"document.querySelectorAll('ws-cell[data-loaded]').length === {CELLS}", timeout=120_000)
+    page.wait_for_function(f"document.querySelectorAll('ws-cell[data-loaded]').length === {cells}", timeout=120_000)
 
 
 # ---- launch / cleanup ----
@@ -233,10 +258,10 @@ class Gateway:
     """connect_dev.py in front of one box, started by this script and only stopped by it. Remembers every process
     it spawned (locally: Jupyter, kernels, check jobs) so stop() can prove they all ended."""
 
-    def __init__(self, port: int, box: Box, out: Path) -> None:
+    def __init__(self, port: int, box: Box, out: Path, boot_delay: float = 0.1) -> None:
         self.box = box
         self.log = (out / f"connect_dev-{box.name}.log").open("wb")
-        self.proc = subprocess.Popen(["uv", "run", "connect_dev.py", "--port", str(port), "--boot-delay", "0.1", *box.gateway_args()],
+        self.proc = subprocess.Popen(["uv", "run", "connect_dev.py", "--port", str(port), "--boot-delay", str(boot_delay), *box.gateway_args()],
                                      cwd=HERE, stdout=self.log, stderr=self.log)  # fmt: skip
         self.seen: set[int] = set()
         for _ in range(240):  # the first run installs jupyter_server
@@ -268,11 +293,12 @@ class Gateway:
 # ---- doctor ----
 
 
-def doctor_page() -> str:
-    dist = HERE / "dist" / PAGE
-    for f in ("index.html", "page.js", "workspace.py", "ref.bundle"):
+def doctor_page(name: str) -> str:
+    dist = HERE / "dist" / name
+    for f in ("index.html", "page.js", "_blogs/workspace.py", "_blogs/checks/run_checks.py", "_blogs/MANIFEST.sha256", "ref.bundle"):
         assert (dist / f).is_file(), f"the built page lacks {f}"
-    return "doctor: the page ships workspace.py + ref.bundle"
+    listed = sorted(line.split("  ")[1] for line in (dist / "_blogs/MANIFEST.sha256").read_text().splitlines())
+    return f"doctor: {name} ships _blogs/ ({', '.join(listed)} + MANIFEST.sha256) + ref.bundle"
 
 
 def doctor_box(box: Box) -> str:
@@ -282,11 +308,10 @@ def doctor_box(box: Box) -> str:
 
 def doctor_workspace(run: Run, box: Box) -> None:
     assert "refs/tags/ref/ch00/start" in refs(box), refs(box)
-    expect(run.page.locator("ws-cell[name=ring] .run")).to_be_enabled()
-    for cell in ("loop", "budget"):
-        expect(run.page.locator(f"ws-cell[name={cell}] .run")).to_be_disabled()
-        expect(run.page.locator(f"ws-cell[name={cell}] .cell-status")).to_have_text("locked until ring passes")
-    run.say(f"doctor: workspace {run.page.evaluate('document.documentElement.dataset.workspaceBoot')}; tag ref/ch00/start; ring unlocked, loop + budget locked")
+    for cell in ("ring", "loop", "budget"):
+        expect(run.page.locator(f"ws-cell[name={cell}] .run")).to_be_enabled()
+        expect(run.page.locator(f"ws-cell[name={cell}] .cell-status")).to_have_text("not passed yet")
+    run.say(f"doctor: workspace {run.page.evaluate('document.documentElement.dataset.workspaceBoot')}; tag ref/ch00/start; every cell runnable (no gating)")
 
 
 # ---- drive ----
@@ -437,9 +462,6 @@ def drive(run: Run, gateway: Gateway) -> Gateway:
     run.shot("0-connected")
     step_compile_error(run, box)
     step_pass(run, box, "ring", "ring.cpp")
-    expect(run.page.locator("ws-cell[name=loop] .run")).to_be_enabled()
-    expect(run.page.locator("ws-cell[name=budget] .cell-status")).to_have_text("locked until loop passes")
-    run.say("2 loop unlocked; budget now waits for loop")
     step_reload_from_workspace(run, box)
     step_scratch_and_stop(run, box)
     gateway.remember()
@@ -460,48 +482,307 @@ def box_factory(modal: bool, out: Path, origin: str, stack: ExitStack) -> Callab
     return lambda name: ws_modal.ModalBox(name, volume, origin)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--modal", action="store_true", help="sandboxes on Modal (CPU) instead of local Jupyter roots")
-    ap.add_argument("--gateway-port", type=int, default=8793)
-    ap.add_argument("--page-port", type=int, default=8013)
-    ap.add_argument("--slow-mo", type=int, default=0, help="ms between browser actions (a watchable run: 250)")
-    args = ap.parse_args()
+# ---- ch01: one gpt2.py, region cells over one shared doc ----
 
-    out = HERE / ".evidence" / ("verify_workspace-modal" if args.modal else "verify_workspace")
-    shutil.rmtree(out, ignore_errors=True)
+CH1 = "ch01"
+PAGE1 = "ch01-forward"
+CHAPTER1 = HERE / "engine" / "ch01-forward.md"
+SOL1 = ref.materialize(CH1, "solution")["gpt2.py"].data.decode()
+CELLS1 = 7
+SLOW_BOOT_S = 1.5  # connect_dev's delay between boot steps in ch01: time to edit and press Run while it connects
+
+
+def region_text(text: str, name: str) -> str:
+    m = re.search(rf"# region: {name}\n.*?# endregion", text, re.DOTALL)
+    assert m, f"no region {name} in the text"
+    return m[0]
+
+
+def replace_in_view(page: Page, cell: str, old: str, new: str) -> None:
+    """Replace `old` with `new` in one cell's view of the shared doc, as typing there would."""
+    page.evaluate("""([n, a, b]) => { const v = document.querySelector(`ws-cell[name=${n}]`).view; const i = v.state.doc.toString().indexOf(a);
+                     if (i < 0) throw new Error(`not in ${n}'s view: ${a.slice(0, 60)}`);
+                     v.dispatch({changes: {from: i, to: i + a.length, insert: b}, userEvent: "input.type"}); }""", [cell, old, new])  # fmt: skip
+
+
+def put_region(page: Page, cell: str, name: str, text: str) -> None:
+    """Set region `name` (edited through `cell`'s view) to its text in `text`."""
+    replace_in_view(page, cell, region_text(doc(page, cell), name), region_text(text, name))
+
+
+def line_of(text: str, needle: str) -> int:
+    return next(i for i, line in enumerate(text.split("\n"), start=1) if needle in line)
+
+
+def scrolled_to_region(page: Page, cell: str) -> None:
+    """The cell's first visible line is just above its region's start marker (the view was fitted to its region)."""
+    page.wait_for_function("""(n) => { const v = document.querySelector(`ws-cell[name=${n}]`).view; const d = v.state.doc;
+        let start = 0; for (let i = 1; i <= d.lines; i++) if (d.line(i).text.trim() === `# region: ${n}`) { start = i; break; }
+        const top = d.lineAt(v.lineBlockAtHeight(v.scrollDOM.scrollTop + 1).from).number;
+        return start > 0 && top >= start - 1 && top <= start; }""", arg=cell, timeout=5_000)  # fmt: skip
+
+
+def head(box: Box) -> str:
+    return git(box, "rev-parse", "HEAD").strip()
+
+
+def ch01_before_connect(run: Run, gateway: Gateway) -> None:
+    page, box = run.page, gateway.box
+    expect(page.locator("ws-cell[name=linear] .cell-status")).to_have_text("not connected: edits are kept in this browser")
+    put_region(page, "linear", "linear", SOL1)
+    want = region_text(SOL1, "linear")
+    assert want in doc(page, "gelu"), "the gelu cell's view of gpt2.py doesn't show the edit made in the linear cell"
+    stored = page.evaluate("JSON.parse(localStorage.getItem('blogs.ws.ch01.gpt2.py')).text")
+    assert want in stored, "the edit isn't in the browser's draft"
+    run.shot("1-edited-before-connect")
+    page.locator("ws-cell[name=linear] .run").click()
+    expect(page.locator("ws-cell[name=linear] .cell-status")).to_have_text("waiting for sandbox: connect to run")
+    expect(page.locator(".connect-panel")).to_be_visible()  # Run opened the Connect panel
+    t0 = time.perf_counter()
+    page.fill("input[name=token-id]", TOKEN[0])
+    page.fill("input[name=token-secret]", TOKEN[1])
+    page.locator(".connect-go").click()
+    page.wait_for_function("document.querySelector('ws-cell[name=linear] .cell-status').textContent.startsWith('waiting for sandbox (')", timeout=30_000)
+    waiting = page.locator("ws-cell[name=linear] .cell-status").inner_text()
+    put_region(page, "layer_norm", "layer_norm", SOL1)  # still editable while the sandbox boots
+    run.shot("1-connecting-queued")
+    page.wait_for_function(DONE, arg="linear", timeout=CHECK_TIMEOUT_MS)
+    page.wait_for_function(f"document.querySelectorAll('ws-cell[data-loaded]').length === {CELLS1}", timeout=120_000)
+    took = time.perf_counter() - t0
+    status = page.locator("ws-cell[name=linear] .cell-status").inner_text()
+    assert status.startswith("passed"), f"{status}\n{page.locator('ws-cell[name=linear] .cell-out').inner_text()}"
+    assert "refs/tags/pass/ch01/linear" in refs(box)
+    assert region_text(git(box, "show", "pass/ch01/linear:gpt2.py"), "linear") == want, "the tagged commit lacks the pre-Connect edit"
+    box.sh(f"test -s {box.persist}/workspace.bundle")
+    run.timings["connect_click_to_queued_pass_s"] = round(took, 3)
+    scrolled_to_region(page, "generate")
+    run.shot("1-queued-run-passed")
+    assert region_text(box.sh("cat workspace/gpt2.py"), "layer_norm") == region_text(SOL1, "layer_norm"), "the edit made while connecting was lost"
+    run.say(f"1 linear edited before Connect (mirrored into the gelu cell, kept in localStorage); Run queued while disconnected; "
+            f"while connecting the cell said '{waiting}' and layer_norm was edited; "
+            f"Connect -> workspace {page.evaluate('document.documentElement.dataset.workspaceBoot')} -> the queued run passed "
+            f"{took:.2f}s after clicking Connect; tag pass/ch01/linear holds the pre-Connect edit; bundle saved")  # fmt: skip
+
+
+def ch01_mirror_undo_skip(run: Run, box: Box) -> None:
+    page = run.page
+    stub = region_text(doc(page, "gelu"), "gelu")
+    put_region(page, "gelu", "gelu", SOL1)
+    assert region_text(doc(page, "attention"), "gelu") == region_text(SOL1, "gelu"), "the attention view doesn't mirror gelu's edit"
+    page.locator("ws-cell[name=attention] .cm-content").click()
+    page.keyboard.press("ControlOrMeta+z")
+    for cell in ("gelu", "attention", "generate"):
+        assert region_text(doc(page, cell), "gelu") == stub, f"undo from the attention cell didn't undo gelu's edit in {cell}"
+    page.keyboard.press("ControlOrMeta+Shift+z")
+    for cell in ("gelu", "attention"):
+        assert region_text(doc(page, cell), "gelu") == region_text(SOL1, "gelu"), f"redo didn't restore the gelu edit in {cell}"
+    status, _, took = run_cell(page, "gelu")
+    assert status.startswith("passed"), status
+    rows = page.locator("ws-cell[name=gelu] tr.verdict")
+    outcomes = [rows.nth(i).get_attribute("data-outcome") for i in range(rows.count())]
+    assert outcomes == ["pass", "skip"], outcomes
+    skip = page.locator("ws-cell[name=gelu] tr.verdict.skip")
+    assert skip.evaluate("(r) => getComputedStyle(r).fontStyle") == "italic", "SKIP isn't styled apart"
+    assert page.locator("ws-cell[name=gelu] .check-summary").inner_text().startswith("PASS")
+    run.timings["check_pass_s"] = round(took, 3)
+    run.shot("2-gelu-pass-skip")
+    run.say(f"2 gelu edited in its cell, mirrored into attention's view; Mod-z in the attention cell undid it in every view, "
+            f"Mod-Shift-z redid it; Run gelu -> PASS (float32) + SKIP (bfloat16, italic, muted) in {took:.2f}s")  # fmt: skip
+
+
+def ch01_blocked(run: Run, box: Box) -> None:
+    page = run.page
+    put_region(page, "layer_norm", "layer_norm", SOL1)
+    stub_line = 'raise NotImplementedError("forward: write this in the forward cell")'
+    replace_in_view(page, "forward", stub_line, "oops = (  # a syntax error, planted\n    " + stub_line)
+    bad = line_of(doc(page, "forward"), "oops = (")
+    before = head(box)
+    status, out, _ = run_cell(page, "layer_norm")
+    assert status.startswith("blocked"), f"{status}\n{out}"
+    row = page.locator("ws-cell[name=layer_norm] tr.verdict.blocked")
+    expect(row).to_have_count(1)
+    link = row.locator("a.where")
+    assert link.get_attribute("data-loc") == f"gpt2.py:{bad}:1", link.get_attribute("data-loc")
+    assert "(forward)" in link.inner_text(), link.inner_text()
+    link.click()
+    cursor = page.evaluate("() => { const v = document.querySelector('ws-cell[name=forward]').view; return {line: v.state.doc.lineAt(v.state.selection.main.head).number, focused: v.hasFocus}; }")
+    assert cursor == {"line": bad, "focused": True}, cursor
+    assert head(box) == before and "pass/ch01/layer_norm" not in refs(box), "a blocked check committed"
+    run.shot("3-blocked-jump")
+    run.say(f"3 syntax error planted in forward (line {bad}); Run layer_norm -> '{status}'; the BLOCKED row's link {link.inner_text()} "
+            f"put the forward cell's cursor on line {bad} (focused); nothing committed")  # fmt: skip
+    replace_in_view(page, "forward", "oops = (  # a syntax error, planted\n    ", "")
+
+
+def ch01_fail_at_stub(run: Run, box: Box) -> None:
+    page = run.page
+    put_region(page, "forward", "forward", SOL1)
+    put_region(page, "block", "block", SOL1)
+    status, out, _ = run_cell(page, "forward")
+    assert status.startswith("failed"), f"{status}\n{out}"
+    stub = line_of(doc(page, "attention"), 'raise NotImplementedError("attention:')
+    loc = page.locator("ws-cell[name=forward] tr.verdict.fail a.where").get_attribute("data-loc")
+    assert loc == f"gpt2.py:{stub}:1", (loc, stub)
+    run.say(f"4 Run forward with attention still a stub -> '{status}' (any order: the stub raises; the link names its line {stub})")
+
+
+def ch01_missing_marker(run: Run, box: Box) -> None:
+    page = run.page
+    replace_in_view(page, "block", "# region: block\n", "")
+    note = page.locator("ws-cell[name=block] .cell-note")
+    expect(note).to_be_visible()
+    expect(note).to_contain_text('no "# region: block"')
+    status, out, _ = run_cell(page, "block")
+    assert status.startswith("failed") and page.locator("ws-cell[name=block] tr.verdict").count() == 1, f"{status}\n{out}"
+    run.shot("5-missing-marker")
+    replace_in_view(page, "block", "def mlp(", "# region: block\ndef mlp(")
+    expect(note).to_be_hidden()
+    run.say(f"5 block's start marker deleted: the cell says so (no highlight, view stays where it was); Run block "
+            f"still checked ('{status}'); marker restored, note gone")  # fmt: skip
+
+
+def ch01_infra(run: Run, box: Box) -> None:
+    page = run.page
+    replace_in_view(page, "generate", "# endregion\n", "# endregion\n# fake: infra\n")
+    before = head(box)
+    status, out, _ = run_cell(page, "linear")
+    assert status.startswith("not run (infrastructure)"), f"{status}\n{out}"
+    assert head(box) == before
+    replace_in_view(page, "generate", "# fake: infra\n", "")
+    run.say(f"6 '# fake: infra' -> Run linear -> '{status}'; HEAD unchanged")
+
+
+def ch01_tamper(run: Run, box: Box) -> None:
+    page = run.page
+    before = head(box)
+    box.sh("echo '# tampered' >> _blogs/checks/run_checks.py")
+    status, _, _ = run_cell(page, "linear")
+    assert status.startswith("not run (infrastructure): the trusted code in _blogs/ differs from MANIFEST.sha256: checks/run_checks.py changed"), status
+    run.shot("7-tampered")
+    box.sh("python3 - <<'PY'\nimport hashlib, pathlib\nm = pathlib.Path('_blogs/MANIFEST.sha256')\n"
+           "lines = [l.split('  ') for l in m.read_text().splitlines()]\n"
+           "m.write_text(''.join(f\"{hashlib.sha256(pathlib.Path('_blogs', p).read_bytes()).hexdigest()}  {p}\\n\" for _, p in lines))\nPY")  # fmt: skip
+    status2, _, _ = run_cell(page, "linear")
+    assert status2.startswith("not run (infrastructure): _blogs/MANIFEST.sha256 is not the page's"), status2
+    assert head(box) == before
+    page.reload()
+    page.wait_for_function(f"document.querySelectorAll('ws-cell[data-loaded]').length === {CELLS1}", timeout=120_000)
+    status3, _, _ = run_cell(page, "linear")
+    assert status3.startswith("passed"), status3
+    run.say(f"7 tampered checks/run_checks.py -> '{status[:90]}…'; manifest rewritten to match -> '{status2[:80]}…'; "
+            f"HEAD unchanged; reload re-uploaded _blogs/ -> Run linear '{status3}'")  # fmt: skip
+
+
+def ch01_reload(run: Run, box: Box) -> None:
+    page = run.page
+    text = doc(page, "linear")
+    wait_saved(box, "gpt2.py", text)
+    page.reload()
+    page.wait_for_function(f"document.querySelectorAll('ws-cell[data-loaded]').length === {CELLS1}", timeout=120_000)
+    for cell in ("linear", "generate"):
+        assert doc(page, cell) == text, f"{cell} after reload differs from the workspace's draft"
+    for cell in ("linear", "gelu"):
+        expect(page.locator(f"ws-cell[name={cell}] .cell-status")).to_contain_text("passed")
+    run.shot("8-reloaded")
+    statuses = {c: page.locator(f"ws-cell[name={c}] .cell-status").inner_text() for c in ("linear", "gelu", "layer_norm")}
+    run.say(f"8 reload: every view shows the workspace's gpt2.py with all edits; {statuses}")
+
+
+def ch01_conflict(run: Run, old: Gateway) -> Gateway:
+    page = run.page
+    run.say(old.stop())
+    # A draft from another device: the whole solution, built on a commit this workspace never had.
+    page.evaluate("(t) => localStorage.setItem('blogs.ws.ch01.gpt2.py', JSON.stringify({text: t, acked: true, base: '0000000'}))", SOL1)
+    box = run.new_box("sandbox2")
+    gateway = Gateway(run.gateway_port, box, run.out)
+    page.reload()
+    page.wait_for_selector("connect-pill[data-phase=disconnected]", timeout=30_000)
+    assert doc(page, "linear") == SOL1, "before Connect the editors should show this browser's draft"
+    connect(page, CELLS1)
+    boot = page.evaluate("document.documentElement.dataset.workspaceBoot")
+    assert boot.startswith("restored "), boot
+    in_workspace = box.sh("cat workspace/gpt2.py")
+    for cell in ("linear", "generate"):
+        expect(page.locator(f"ws-cell[name={cell}] .cell-conflict")).to_be_visible()
+    assert doc(page, "linear") == in_workspace, "with a conflict the editor should show the sandbox's passing code"
+    scrolled_to_region(page, "gelu")
+    run.shot("9-conflict")
+    page.locator("ws-cell[name=generate] .use-browser").click()
+    assert doc(page, "linear") == SOL1
+    wait_saved(box, "gpt2.py", SOL1)
+    expect(page.locator("ws-cell[name=linear] .cell-conflict")).to_be_hidden()
+    status, _, _ = run_cell(page, "generate")
+    assert status.startswith("passed"), status
+    run.shot("9-resolved-generate-passed")
+    run.say(f"9 new sandbox ({boot}); a draft built on another commit -> conflict banner on every gpt2.py cell, editor shows "
+            f"the sandbox's passing code; 'Use this browser's draft' -> saved to the workspace; Run generate '{status}'")  # fmt: skip
+    return gateway
+
+
+def drive_ch01(run: Run, gateway: Gateway) -> Gateway:
+    ch01_before_connect(run, gateway)
+    assert "refs/tags/ref/ch01/start" in refs(gateway.box)
+    assert "ring.cpp" not in gateway.box.sh("ls workspace"), "ch00's toy files leaked into ch01's tree"
+    ch01_mirror_undo_skip(run, gateway.box)
+    ch01_blocked(run, gateway.box)
+    ch01_fail_at_stub(run, gateway.box)
+    ch01_missing_marker(run, gateway.box)
+    ch01_infra(run, gateway.box)
+    ch01_tamper(run, gateway.box)
+    ch01_reload(run, gateway.box)
+    gateway.remember()
+    gateway = ch01_conflict(run, gateway)
+    (run.out / "git-log.txt").write_text(git(gateway.box, "log", "--oneline", "--decorate", "--all"))
+    return gateway
+
+
+@dataclass(frozen=True)
+class Story:
+    chapter: Path
+    page: str
+    boot_delay: float
+    first: str  # a cell checked before Connect
+    drive: Callable[[Run, Gateway], Gateway]
+
+
+STORIES = {"ch00": Story(CHAPTER, PAGE, 0.1, "ring", drive), "ch01": Story(CHAPTER1, PAGE1, SLOW_BOOT_S, "linear", drive_ch01)}
+
+
+def free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def run_story(name: str, story: Story, args: argparse.Namespace, out: Path, browser: Any, origin: str) -> None:
     out.mkdir(parents=True)
-    origin = f"http://localhost:{args.page_port}"
-    print("launch", flush=True)
-    subprocess.run(["uv", "run", "build_page.py", str(CHAPTER.relative_to(HERE))], cwd=HERE, check=True, stdout=subprocess.DEVNULL)
     errors: list[str] = []
     gateway: Gateway | None = None
+    print(f"== {name}: launch", flush=True)
     with ExitStack() as stack:
         new_box = box_factory(args.modal, out, origin, stack)
-        stack.enter_context(static_server(args.page_port))
-        p = stack.enter_context(sync_playwright())
-        browser = p.chromium.launch(executable_path=CHROME, slow_mo=args.slow_mo)
-        page = browser.new_page(viewport={"width": 1100, "height": 900})
+        context = browser.new_context(viewport={"width": 1100, "height": 900})  # fresh localStorage per story
+        page = context.new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
         run = Run(page, out, new_box, args.gateway_port)
         try:
             box = new_box("sandbox1")
-            print("doctor", flush=True)
-            run.say(doctor_page())
+            print(f"== {name}: doctor", flush=True)
+            run.say(doctor_page(story.page))
             run.say(doctor_box(box))
-            gateway = Gateway(args.gateway_port, box, out)
-            page.goto(f"{origin}/{PAGE}/?gateway=http://localhost:{args.gateway_port}")
-            expect(page.locator("ws-cell[name=ring] .cell-status")).to_have_text("connect to load your workspace")
-            print("drive", flush=True)
-            gateway = drive(run, gateway)
+            gateway = Gateway(args.gateway_port, box, out, story.boot_delay)
+            page.goto(f"{origin}/{story.page}/?gateway=http://localhost:{args.gateway_port}")
+            expect(page.locator(f"ws-cell[name={story.first}] .cell-status")).to_have_text("not connected: edits are kept in this browser")
+            print(f"== {name}: drive", flush=True)
+            gateway = story.drive(run, gateway)
         except Exception:
             run.shot("failed")
             cells = page.evaluate("[...document.querySelectorAll('ws-cell')].map((c) => `${c.getAttribute('name')}: ${c.querySelector('.cell-status').textContent} | ${c.querySelector('.cell-out').textContent.slice(-600)}`)")
             print("FAILED; the cells said:\n  " + "\n  ".join(cells) + f"\npage errors: {errors}", flush=True)
             raise
         finally:
-            print("cleanup", flush=True)
-            browser.close()
+            print(f"== {name}: cleanup", flush=True)
+            context.close()
             if gateway is not None:
                 run.say(gateway.stop())
             if args.modal:
@@ -511,11 +792,39 @@ def main() -> None:
                 assert left == 0, f"{left} Modal sandbox(es) were still running (now terminated)"
                 run.say(f"cleanup: no sandboxes left under Modal app {ws_modal.APP}; the Volume was ephemeral")
     assert not errors, f"page errors: {errors}"
-    print("evidence", flush=True)
     (out / "timings.json").write_text(json.dumps(run.timings, indent=1))
     (out / "story.log").write_text("\n".join(run.log) + "\n")
     run.say(f"timings: {json.dumps(run.timings)}")
-    print(f"ok: {out}/ ({', '.join(sorted(p.name for p in out.iterdir()))})")
+    print(f"ok {name}: {out}/ ({', '.join(sorted(p.name for p in out.iterdir()))})", flush=True)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--modal", action="store_true", help="sandboxes on Modal (CPU) instead of local Jupyter roots (ch00 only)")
+    ap.add_argument("--page", choices=("ch00", "ch01", "all"), default="all")
+    ap.add_argument("--gateway-port", type=int, default=0, help="default: a free port")
+    ap.add_argument("--page-port", type=int, default=0, help="default: a free port")
+    ap.add_argument("--slow-mo", type=int, default=0, help="ms between browser actions (a watchable run: 250)")
+    args = ap.parse_args()
+    names = ["ch00", "ch01"] if args.page == "all" else [args.page]
+    assert not (args.modal and "ch01" in names), "--modal drives ch00 only (pass --page ch00)"
+    args.gateway_port = args.gateway_port or free_port()
+    args.page_port = args.page_port or free_port()
+    assert {args.gateway_port, args.page_port}.isdisjoint({8790, 8012, 8010, 8787, 8060}), "those ports are the author's"
+
+    root = HERE / ".evidence" / ("verify_workspace-modal" if args.modal else "verify_workspace")
+    shutil.rmtree(root, ignore_errors=True)
+    origin = f"http://localhost:{args.page_port}"
+    print(f"build (page :{args.page_port}, gateway :{args.gateway_port})", flush=True)
+    subprocess.run(["uv", "run", "build_page.py", *(str(STORIES[n].chapter.relative_to(HERE)) for n in names)], cwd=HERE, check=True, stdout=subprocess.DEVNULL)
+    with ExitStack() as stack:
+        stack.enter_context(static_server(args.page_port))
+        p = stack.enter_context(sync_playwright())
+        browser = p.chromium.launch(executable_path=CHROME, slow_mo=args.slow_mo)
+        stack.callback(browser.close)
+        for name in names:
+            run_story(name, STORIES[name], args, root / name, browser, origin)
+    print(f"ok: {root}/")
 
 
 if __name__ == "__main__":

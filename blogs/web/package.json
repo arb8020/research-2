@@ -10,6 +10,7 @@
     "test:nn-fit-grok": "cd .. && uv run python web/embeds/nn-fit/grok_train_test.py"
   },
   "dependencies": {
+    "@codemirror/commands": "6.11.1",
     "@codemirror/lang-cpp": "6.0.3",
     "@codemirror/lang-python": "6.2.1",
     "@codemirror/language": "6.13.1",
