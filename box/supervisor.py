@@ -18,17 +18,23 @@ Everything goes through files under ROOT (no sockets), so a client only needs th
     ROOT/jobs/<id>/kill         client wrote it: kill the job (its hook runs), the session goes on
     ROOT/services/<id>/...      a service: spec.json {cmd, env}, then as a job (no hook, no max duration)
     ROOT/watch                  a log follower (its tail, each beat) or job waiter (each poll) touches it (the machine lingers for it)
+    ROOT/activity               mtime = when the session was last used. The supervisor touches it at start, when a job
+                                ends, and while a connection to a declared port is open; a client's keepalive while
+                                a stream, shell or port proxy of its runs, and a sync. Not a log follower: reading
+                                is not use (that is ROOT/watch)
     ROOT/supervisor.py          this file, installed by the boot: `supervisor.py lease` changes the lease, `supervisor.py tail` feeds a log follower
     ROOT/ended.json             supervisor writes it last: {reason, at}; then it lingers up to LINGER_S
                                 while someone is still reading (see linger)
 
 A session ends at min(lease.until, ceiling) (reason "lease", or "released" if a client released
 it), on stop ("stopped"), or idle timeout ("idle"). Nothing ends it because a client went away:
-the lease is the guarantee. Idle means no job running and no established TCP connection to an
-exposed port (--ports): the supervisor owns idleness, since a provider's own idle timer (Modal's)
-sees only connections, never work in the box. Whatever ends it, a running job is killed (whole
-process group) and its on_exit hook still runs, for up to its hook_budget_s but never past the
-ceiling. A job is killed at min(its start + max_duration_s ("timeout"), the lease's end minus its
+the lease is the guarantee. Idle is one check: no job running, and ROOT/activity untouched for the
+idle timeout. Everything that is use touches it: a job ending, an established TCP connection to a
+port declared at create (--ports, seen each tick; not a port reached by a token route: see
+sdk.Session.expose), and a client's streams, shells, port proxies and syncs. The supervisor owns
+idleness, since a provider's own idle timer (Modal's) sees only connections, never work in the
+box. Whatever ends it, a running job is killed (whole process group) and its on_exit hook still
+runs, for up to its hook_budget_s but never past the ceiling. A job is killed at min(its start + max_duration_s ("timeout"), the lease's end minus its
 hook_budget_s ("lease")), so its hook fits inside the lease.
 
 A service (ROOT/services/<id>) is a long-lived server, e.g. a Jupyter Server behind an exposed
@@ -134,6 +140,7 @@ def main() -> None:
     try:
         if recorder:
             recorder.start()  # the record has session.json and the lease before anyone is told the supervisor is up
+        (root / "activity").touch()  # idle counts from the start
         (root / "up").touch()  # last: a client takes it as "the supervisor is up"
         reason = supervise(root, a.idle_timeout_s, a.ports)
         ended = {"reason": reason, "at": time.time()}
@@ -248,18 +255,17 @@ def supervise(root: Path, idle_timeout_s: float, ports: list[int]) -> str:
     """Run jobs one at a time (services beside them) until the session ends; returns why it ended."""
     done: set[str] = set()
     services: dict[Path, subprocess.Popen] = {}  # every service started, running or not
-    idle_since = time.monotonic()
-    while (end := session_end(root, idle_timeout_s, idle_since)) is None:  # bounded: the lease ends by the ceiling
+    while (end := session_end(root, idle_timeout_s)) is None:  # bounded: the lease ends by the ceiling
         tend_services(root, services)
-        if idle_timeout_s and ports and connected(ports):
-            idle_since = time.monotonic()  # someone is using an exposed port: not idle
+        if idle_timeout_s and connected(ports):
+            (root / "activity").touch()  # someone is using an exposed port: not idle
         job_dir = next_job(root, done)
         if job_dir is None:
             time.sleep(TICK_S)
             continue
         done.add(job_dir.name)
-        run_job(root, job_dir, lambda: tend_services(root, services))
-        idle_since = time.monotonic()
+        run_job(root, job_dir, lambda: tend_services(root, services))  # a running job is never idle: this loop waits on it
+        (root / "activity").touch()  # idle counts from the job's end
     stop_services(services, end)
     return end
 
@@ -304,20 +310,22 @@ def service_state(job_dir: Path) -> str:
     return json.loads((job_dir / "status.json").read_text())["state"]
 
 
-def session_end(root: Path, idle_timeout_s: float, idle_since: float) -> str | None:
+def session_end(root: Path, idle_timeout_s: float) -> str | None:
+    """Why the session ends now, if it does. Called only between jobs, so idle is only ROOT/activity's
+    age, by this machine's clock (the one every touch of it uses: they all run here)."""
     if (root / "stop").exists():
         return "stopped"
     end_at, reason = lease_end(read_lease(root))
     if time.time() >= end_at:
         return reason
-    if idle_timeout_s and time.monotonic() - idle_since >= idle_timeout_s:
+    if idle_timeout_s and time.time() - (root / "activity").stat().st_mtime >= idle_timeout_s:
         return "idle"
     return None
 
 
 def connected(ports: list[int]) -> bool:
     """Does any established TCP connection end at one of ports on this machine?"""
-    return any(port in ports for port in established_local_ports())
+    return bool(ports) and any(port in ports for port in established_local_ports())
 
 
 def established_local_ports() -> list[int]:
@@ -592,8 +600,8 @@ def tail(job_dir: Path, offsets: list[int], max_s: float, out: BinaryIO) -> str:
 
     A "done" status is read before the output it ends with (as Job.read does), so end done comes
     after all of it. It touches ROOT/watch each beat, as a polling follower did, so the machine
-    lingers for this reader after the session ends; it never counts as work or a connection, so it
-    keeps no session from going idle, and it exits once the session ends."""
+    lingers for this reader after the session ends. It never touches ROOT/activity (reading is not
+    use: a follower left open must not keep an idle session billing), and it exits once the session ends."""
     root = job_dir.parent.parent
     give_up = time.monotonic() + max_s
     last_beat = 0.0

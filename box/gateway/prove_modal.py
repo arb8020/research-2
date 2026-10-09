@@ -117,7 +117,7 @@ def hold(kernel: dict, sid: str, tok: ModalToken, hold_s: float) -> dict:
     from box.providers.modal import Modal
 
     with Modal(token=tok, region="us") as modal:
-        s = sdk.attach(modal, sid)
+        s = sdk.attach(modal, session_id=sid)
         url = kernel_client.api(kernel, f"/api/kernels/{kernel_client.kernel_id(kernel)}/channels").replace("http", "ws", 1)
         with kernel_client.connect(url, open_timeout=60):
             time.sleep(hold_s)

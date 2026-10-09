@@ -16,20 +16,30 @@
     with s.keep(every_s=60): ...             # interactive: renews to now + 120 s each minute, releases on exit
     s.release()                              # until = now: ends it (reason "released"), hooks still run
 
-    s = box.attach(provider, session_id)     # from anywhere, by the session's own id
+    s = box.attach(provider, session_id=sid)  # from anywhere, by the session's own id
+    s, created = box.find_or_create(provider, "dev", lease_s=3600, idle_timeout_s=1800)   # or by its name
+    s.wait_up(900)                           # (create's half of launch; a found one may still be booting)
     match s.status():                        # Booting() | Running(started_at, lease) | Ended(reason)
         case Running(): s.wait()             # -> Ended: the awaitable terminal state
 
     with box.launch(provider, ceiling_s=3600, ports=[8888]) as s:   # ports: declared at launch
         s.serve("jupyter server --port 8888 ...")   # a service: beside the job queue, until the session ends
-        s.expose(8888)                       # Endpoint(url="https://...", headers={})
+        s.expose(8888)                       # Endpoint(url="https://...", headers={}): declared, browser-reachable
+        s.expose(8000)                       # undeclared: Endpoint(url, headers={"Authorization": ...}) (Modal)
+        with s.proxy(8000) as p: p.url       # http://127.0.0.1:N adds the headers, for what can't send them
+
+    synced = s.sync(Path.cwd(), paths=("kelpie",))   # this git worktree -> machine.work/<its dir>, incrementally
+    with s.stream("make test", cwd=synced.path, pty=True) as t:   # a command under a terminal, live
+        t.send(b"\x03")                      # Ctrl-C; for (name, data) in t: ... (a pty merges stderr into stdout)
+    os.execvp(*(argv := s.shell_argv(cwd=synced.path))[:1], argv)   # a real interactive terminal there
 
     s = box.launch(provider, ceiling_s=3600, record=store)   # the supervisor records into store (box/store.py)
-    box.attach(provider, s.id, record=store).wait()           # works after the machine is gone too
+    box.attach(provider, session_id=s.id, record=store).wait()   # works after the machine is gone too
     job.logs(after=chunk.end)                # resumes where a reader left off, live or from the record
     r = box.read_record(store, s.id)         # Record: no machine, no provider needed
 
-A provider only rents raw machines (Machine: exec, stream, write, read, terminate, gone). Everything else is
+A provider only rents raw machines (Machine: exec, stream, write, read, terminate, gone, expose,
+shell_argv). Everything else is
 here, built from those calls and the supervisor (box/supervisor.py), which every machine
 runs as its entrypoint and which talks to this file only through files under machine.root.
 
@@ -60,16 +70,28 @@ from collections.abc import Callable, Generator, Iterator
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any, Literal, Protocol, TypeVar, get_args
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar, get_args
 
+from box.gitsync import Synced
 from box.store import Mount, Store
 from box.supervisor import HEARTBEAT_TTL_S, KINDS, MAX_CEILING_S, MAX_SERVICES, TAIL_FRAME_BYTES, TAIL_MAX_S, utf8_cut
+
+if TYPE_CHECKING:
+    from box.proxy import Proxy
 
 SUPERVISOR = Path(__file__).with_name("supervisor.py")
 LABEL_BY = "box.by"
 LABEL_SESSION = "box.session"  # the session's own id: a session is not its machine, even while 1:1
 LABEL_CEILING = "box.ceiling"  # unix time no lease of the session can pass (`box who`, `box gc`)
-RESERVED = (LABEL_BY, LABEL_SESSION, LABEL_CEILING)  # launch stamps these; a caller's labels are the rest
+LABEL_NAME = "box.name"  # create(name=): a caller's handle, unique among a provider's live machines (NameTaken)
+LABEL_IDLE = "box.idle"  # the idle timeout, s: a keepalive touches ROOT/activity well inside it
+LABEL_PORTS = "box.ports"  # the ports declared at create, comma-separated: which expose() route a port takes
+RESERVED = (LABEL_BY, LABEL_SESSION, LABEL_CEILING, LABEL_NAME, LABEL_IDLE, LABEL_PORTS)  # create stamps these; a caller's labels are the rest
+# Modal's rule for a sandbox name (the strictest provider's), so a name works on every provider
+NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,62}")
+NAME_TRIES = 3  # find_or_create: look, create, and on NameTaken look again; past this many rounds the race is the caller's
+KEEPALIVE_S = 60.0  # a stream, shell or proxy touches ROOT/activity this often (or a quarter of the idle timeout, if less)
+MIN_KEEPALIVE_S = 1.0  # ... but never more often: each touch is an exec
 CEILING_S = 3600  # create()'s default ceiling, from creation
 BACKSTOP_MARGIN_S = 600  # the provider's own hard stop comes this long after the ceiling
 MAX_ENV_VALUE = 32768  # bytes: Modal's limit on one environment value (Sandbox.create passes env as a secret)
@@ -97,11 +119,15 @@ class Stream(Protocol):
     command writes them ("stdout" | "stderr"; chunked however the provider gets them) and ends when
     it exits; rc is then its exit code. close() (or leaving `with`), from any thread, kills it and
     ends an iteration in progress. Iterating raises Gone once the machine is gone, and TimeoutError
-    past machine.stream's bounds; either way the command is killed."""
+    past machine.stream's bounds; either way the command is killed. Under a pty (stream(pty=True))
+    the terminal merges stderr into "stdout", as a terminal does, and send() writes to its input."""
 
     rc: int | None
 
     def __iter__(self) -> Iterator[tuple[str, bytes]]: ...
+    # pty only: bytes to the command's terminal; b"\x03" is Ctrl-C (a SIGINT to its foreground group).
+    # ValueError on a stream without a pty (its stdin is closed); at most pump.MAX_SEND_BYTES a call.
+    def send(self, data: bytes) -> None: ...
     def close(self) -> None: ...
     def __enter__(self) -> Stream: ...
     def __exit__(self, *exc: object) -> None: ...
@@ -114,15 +140,24 @@ class Machine(Protocol):
     id: str
     labels: dict[str, str]
     root: str  # the supervisor's directory on the machine
+    work: str  # where synced code lives (Session.sync: work/<worktree dir name>)
 
     def exec(self, cmd: str) -> tuple[int, str, str]: ...  # bash on the machine: (rc, stdout, stderr)
     # bash on the machine, its output as it arrives. Bounded: killed (TimeoutError) past timeout_s, or
     # past quiet_s with no output. A provider that cannot stream may poll inside it; callers never know.
-    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None) -> Stream: ...
+    # pty=True: under a terminal (Stream.send); ValueError from a provider that cannot give one.
+    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Stream: ...
     def write(self, path: str, data: bytes) -> None: ...
     def read(self, path: str) -> bytes: ...  # FileNotFoundError if absent
     def terminate(self) -> None: ...  # hard stop, idempotent; no hooks run
-    def expose(self, port: int) -> Endpoint: ...  # ValueError unless port was declared at launch
+    # A port declared at create (LABEL_PORTS): its browser-reachable route, the URL alone. Any other
+    # port: the provider's gated route, headers filled (Modal: a connect token), or ValueError where
+    # there is none (RunPod; Colab refuses every port).
+    def expose(self, port: int) -> Endpoint: ...
+    # argv that, run on this computer, gives its terminal `cmd` (bash) on the machine, interactively:
+    # an escape hatch to the provider's own shell (Modal: `modal shell`; local: bash). ValueError where
+    # there is none (Colab).
+    def shell_argv(self, cmd: str) -> list[str]: ...
     # The provider's own word that this machine id runs nothing any more (no process, no bill): one
     # bounded check, never Gone (gone is the answer). Session.close polls it; a provider that cannot
     # say it honestly cannot be closed honestly, so it is required, as stream is.
@@ -147,9 +182,11 @@ class Provider(Protocol):
 @dataclass(frozen=True)
 class Endpoint:
     """A port on the machine, reachable from anywhere over HTTP(S), websockets included.
-    headers: what every request must carry. Empty when the url alone reaches the port, as on every
-    provider today: then whoever has the url does, and the service brings its own auth (Jupyter's
-    token). A token-gated provider route (Modal's connect token) would fill it."""
+    headers: what every request must carry. Empty when the url alone reaches the port (a port
+    declared at create, any port on the local provider): then whoever has the url does, and the
+    service brings its own auth (Jupyter's token). Filled on a token-gated route (Modal's connect
+    token, a bearer header): whoever holds them reaches the port. A browser cannot add them; a
+    Session.proxy can."""
 
     url: str  # no trailing slash; a request goes to url + path
     headers: dict[str, str] = field(default_factory=dict)
@@ -192,6 +229,12 @@ class Ended:
 Status = Booting | Running | Ended
 
 GONE_TIMEOUT_S = 60.0  # close(): how long the provider gets to confirm the machine is gone (Modal: ~1-5 s after terminate)
+
+
+class NameTaken(Exception):
+    """A live machine of this provider already has this name (another create got there first).
+    Race-free on Modal (the sandbox's own name) and local (a lock on this computer); on RunPod and
+    Colab a check before launch, so two creates racing can both win (each provider says why)."""
 
 
 class NotGone(TimeoutError):
@@ -279,6 +322,7 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     provider: Provider, *, lease_s: float | None = None, ceiling_s: float = CEILING_S, gpu: str | None = None,
     image: str | None = None, env: dict[str, str] | None = None, labels: dict[str, str] | None = None,
     idle_timeout_s: float = 0.0, ports: tuple[int, ...] = (), record: Store | None = None, session_id: str | None = None,
+    name: str | None = None,
 ) -> Session:  # fmt: skip
     """Rent a machine whose supervisor ends the session at min(lease, ceiling) (or sooner: idle,
     stop, release). lease_s (default: ceiling_s) and ceiling_s count from now, and are parsed here,
@@ -291,8 +335,12 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     ceiling plus BACKSTOP_MARGIN_S, from the same clock reading, so a slow boot never cuts it short.
     Its id is new (LABEL_SESSION), not the machine's: attach() finds a session by it. labels are the caller's (who launched it,
     for what, e.g. box.user, box.cmd); box stamps only RESERVED. ports: what Session.expose may
-    open later (Modal and RunPod route a port only if the machine was created with it). Idle: no
-    job running and no connection to any of ports, for idle_timeout_s (0: never idle).
+    open to a browser later (Modal and RunPod route such a port only if the machine was created
+    with it); expose() reaches other ports by a gated route where the provider has one. Idle: no job
+    running, no connection to a declared port, and nothing touching ROOT/activity (streams, shells,
+    proxies, syncs: Session.touch), for idle_timeout_s (0: never idle).
+    name: a handle (NAME) unique among the provider's live machines, for attach(name=) and
+    find_or_create; NameTaken if a live machine has it.
     record: the supervisor records status, jobs, the lease, and output into it, under
     record_prefix(id), so status() and wait() still answer after the machine is gone, and
     read_record() reads it. session_id: one from new_session_id(), for a caller that must name the
@@ -302,6 +350,10 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
         raise ValueError(f"session_id {session_id!r} is not one new_session_id() makes")
     if clash := sorted(set(labels or {}) & set(RESERVED)):
         raise ValueError(f"labels {clash} are box's own (launch stamps them)")
+    if name is not None and not NAME.fullmatch(name):
+        raise ValueError(f"name {name!r}: letters, digits, '.', '_', '-', at most 63, starting with a letter or digit")
+    if not 0 <= idle_timeout_s <= MAX_CEILING_S:
+        raise ValueError(f"idle_timeout_s={idle_timeout_s}: 0 (never idle) to {MAX_CEILING_S} s")
     lease_s = ceiling_s if lease_s is None else lease_s
     if not 0 < ceiling_s <= MAX_CEILING_S:
         raise ValueError(f"ceiling_s={ceiling_s}: a ceiling is more than 0 and at most {MAX_CEILING_S} s (48 h)")
@@ -326,7 +378,10 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     machine = provider.launch(
         gpu=gpu, image=image, entrypoint=["bash", "-c", boot],
         env={**(env or {}), "BOX_SUPERVISOR": supervisor_env()},
-        labels={**(labels or {}), LABEL_BY: "box", LABEL_SESSION: session_id, LABEL_CEILING: str(int(lease.ceiling))},
+        labels={
+            **(labels or {}), LABEL_BY: "box", LABEL_SESSION: session_id, LABEL_CEILING: str(int(lease.ceiling)),
+            LABEL_IDLE: f"{idle_timeout_s:g}", LABEL_PORTS: ",".join(map(str, ports)), **({LABEL_NAME: name} if name else {}),
+        },
         timeout_s=backstop_s, ports=list(ports), mounts=[Mount(record, record_prefix(session_id), RECORD_PATH)] if record else [],
     )  # fmt: skip
     if record:
@@ -351,21 +406,57 @@ def new_session_id() -> str:
     return f"s-{secrets.token_hex(6)}"
 
 
-def attach(provider: Provider, session_id: str, record: Store | None = None) -> Session:
-    """A session launched elsewhere (another process, a detached run). It can extend, release, and
-    close it as its creator can: the provider credential is the authority.
-    Without record: while its machine lives; LookupError if no live machine carries that id. With
-    the store it was launched with: also after its machine is gone (status() and wait() answer from
-    the record, every machine call raises Gone; read the output with read_record)."""
-    found = provider.list({LABEL_SESSION: session_id})
-    if len(found) > 1:
-        raise LookupError(f"{provider.name} provider: {len(found)} live machines for session {session_id}")
-    if found:
-        return Session(found[0], record=record)
-    if record is None:
-        raise LookupError(f"{provider.name} provider: no live machine for session {session_id}")
+def attach(provider: Provider, *, session_id: str | None = None, name: str | None = None, record: Store | None = None) -> Session:
+    """A session launched elsewhere (another process, a detached run), by its id or by the name it
+    was created with (exactly one). It can extend, release, and close it as its creator can: the
+    provider credential is the authority. Both are one label lookup (provider.list).
+    Without record: while its machine lives; LookupError if no live machine carries that id or name.
+    With the store it was launched with (and its id: a record is kept by id): also after its machine
+    is gone (status() and wait() answer from the record, every machine call raises Gone; read the
+    output with read_record)."""
+    if (session_id is None) == (name is None):
+        raise ValueError("attach: pass exactly one of session_id or name")
+    found = _find(provider, {LABEL_SESSION: session_id} if name is None else {LABEL_NAME: name}, record)
+    if found is not None:
+        return found
+    if record is None or session_id is None:
+        raise LookupError(f"{provider.name} provider: no live machine for session {session_id or repr(name)}")
     recorded = read_record(record, session_id)  # LookupError if it was never recorded there
     return Session(Lost(recorded.machine_id, recorded.labels), record=record)
+
+
+def _find(provider: Provider, labels: dict[str, str], record: Store | None = None) -> Session | None:
+    """The one live session whose machine has labels; None if none. LookupError past one: an id or
+    a name is one session's, so two is a bug (or a best-effort name check lost a race) to look at."""
+    found = provider.list(labels)
+    if len(found) > 1:
+        raise LookupError(f"{provider.name} provider: {len(found)} live machines for {labels}: {[m.id for m in found]}")
+    return Session(found[0], record=record) if found else None
+
+
+def find_or_create(provider: Provider, name: str, **create_kw: Any) -> tuple[Session, bool]:
+    """(the live session named name, whether this call created it). Booting either way, maybe:
+    wait_up it before use. Two callers racing get one session: the provider refuses the second
+    create (NameTaken), which then finds the first's (race-free where NameTaken is: Modal, local).
+    A found session that already ended (its machine lingers for readers, LINGER_S) still holds the
+    name: it is closed (receipt and all) and a new one created, since a caller asking for this name
+    wants a session it can use, not one that is over."""
+    for _ in range(NAME_TRIES):
+        found = _find(provider, {LABEL_NAME: name}, create_kw.get("record"))
+        if found is not None and not isinstance(found.status(), Ended):
+            return found, False
+        if found is not None:
+            found.close()
+        try:
+            return create(provider, name=name, **create_kw), True
+        except NameTaken:
+            continue  # created by another caller between our look and our create: look again
+    raise NameTaken(f"{provider.name} provider: {name!r}: taken, then gone, {NAME_TRIES} times in a row")
+
+
+def declared_ports(labels: dict[str, str]) -> tuple[int, ...]:
+    """The ports a machine was created with (LABEL_PORTS): expose's browser-reachable ones."""
+    return tuple(int(p) for p in labels.get(LABEL_PORTS, "").split(",") if p)
 
 
 def record_prefix(session_id: str) -> str:
@@ -385,6 +476,11 @@ class Session:
     @property
     def id(self) -> str:
         return self.machine.labels[LABEL_SESSION]
+
+    @property
+    def name(self) -> str | None:
+        """The name it was created with (create(name=)), if any."""
+        return self.machine.labels.get(LABEL_NAME)
 
     def __enter__(self) -> Session:
         return self
@@ -502,12 +598,101 @@ class Session:
         return time.time()
 
     def expose(self, port: int) -> Endpoint:
-        """Where to reach `port` on the machine (one of launch's ports) from anywhere. Something
-        must listen there (e.g. a job); until it does, requests fail (Modal: 502). Asked of the
-        provider once per Session: a port's endpoint is fixed for its machine's life."""
-        if port not in self._endpoints:
-            self._endpoints[port] = self.machine.expose(port)
-        return self._endpoints[port]
+        """Where to reach `port` on the machine from anywhere. Which route is not a parameter: it is
+        whether the port was declared at create (ports=). Declaring is already the caller's explicit
+        "a browser opens this", made where it must be (Modal and RunPod route such a port only if
+        the machine was created with it), so a for_browser flag could only agree with it or ask for
+        what cannot be. Declared: the URL alone (headers empty). Otherwise the provider's gated route
+        (Modal: a connect token, headers filled), or ValueError where it has none.
+        Idleness: a connection to a declared port is use (the supervisor sees it); to any other port
+        it is not, so go through proxy() (its keepalive) or touch(). Not watched on purpose: seen live
+        (2026-10-09), Modal's connect-token edge keeps a keep-alive client's connection to the
+        sandbox port open for 5+ min after the request (its pool), which would read as use for good;
+        a tunnel leaves none. Something must listen there (e.g. a job); until it does, requests fail
+        (Modal: 502). A URL-only endpoint is fixed for the machine's life, so it is asked of the
+        provider once per Session; a token one each time."""
+        if not 0 < port < 65536:
+            raise ValueError(f"port {port}: not a TCP port")
+        if port in self._endpoints:
+            return self._endpoints[port]
+        endpoint = self.machine.expose(port)
+        if not endpoint.headers:
+            self._endpoints[port] = endpoint
+        return endpoint
+
+    def proxy(self, port: int, *, local_port: int = 0) -> Proxy:
+        """http://127.0.0.1:<local_port> (0: any free one; Proxy.url says which) forwarding to
+        expose(port), adding its headers: for a client that cannot send them (a browser, a tool
+        with no header option). While it is used it touches ROOT/activity (Proxy's keepalive), so
+        the session does not go idle under a request in flight. Leave `with` (or close) to stop it."""
+        from box.proxy import Proxy
+
+        return Proxy(self.expose(port), port=local_port, on_use=self.touch, every_s=self._keepalive_every_s())
+
+    def stream(  # noqa: PLR0913 (keyword-only: each is one bound of the stream)
+        self, cmd: str, *, cwd: str | None = None, pty: bool = False, timeout_s: float | None = None, quiet_s: float | None = None,
+    ) -> Stream:  # fmt: skip
+        """cmd (bash, in cwd) on the machine, its output as it arrives (Machine.stream). pty=True:
+        under a terminal: send() types into it (b"\x03" is Ctrl-C), and its output is one merged
+        "stdout". Not a job: no queue, no log, no hook; it ends when closed (or this process ends
+        it). While it runs, a keepalive beside it on the machine touches ROOT/activity, so the
+        session does not go idle under it; a log follow (Job.logs) never does: reading is not use.
+        Bounded, as every stream: timeout_s, by default until the session's ceiling. Not the lease's
+        end: keep() renews a lease of 2 * every_s, so a stream bounded by the lease as it stands
+        would die under a session kept alive; the session's own end (lease, release, idle) ends the
+        machine, and the stream with it, sooner. The keepalive hangs up on the command at the bound."""
+        running = self._running_now()
+        left = running.lease.ceiling - time.time()
+        timeout_s = left if timeout_s is None else timeout_s
+        if not 0 < timeout_s <= left:
+            raise ValueError(f"timeout_s={timeout_s}: more than 0 and at most the {left:.0f} s to the session's ceiling")
+        inner = f"cd {shlex.quote(cwd)} && {cmd}" if cwd else cmd
+        then = f"exec bash -c {shlex.quote(inner)}"
+        return self.machine.stream(self._keepalive(then, until=time.time() + timeout_s), timeout_s=timeout_s, quiet_s=quiet_s, pty=pty)
+
+    def shell_argv(self, cwd: str | None = None) -> list[str]:
+        """argv that, run on this computer (os.execvp, subprocess with this terminal), gives it a
+        login shell on the machine, in cwd: the provider's own interactive terminal (Machine.shell_argv),
+        wrapped in the activity keepalive (so the session does not go idle under it) and bounded by
+        the session's ceiling (the keepalive hangs up on it there). Its argv is built now: run it soon."""
+        running = self._running_now()
+        start = f"cd {shlex.quote(cwd)} && " if cwd else ""
+        return self.machine.shell_argv(self._keepalive(f"{start}exec bash -l", until=running.lease.ceiling))
+
+    def sync(self, repo: str | Path, *, paths: tuple[str, ...] = (), force: bool = False) -> Synced:
+        """Make machine.work/<worktree dir name> match the git worktree holding repo: tracked files as
+        they are on disk now (committed or not), plus untracked ones under paths (repo-relative).
+        Incremental: sends only the objects the machine lacks (pack_bytes 0 when nothing changed).
+        Refuses (gitsync.Drift) if a tracked file there changed since the last sync, unless force.
+        Needs git on the machine. A sync is use: it touches ROOT/activity (in its first exec)."""
+        from box import gitsync
+
+        keep = f"refs/box/{self.name or self.id}"  # a local ref per session, so local gc keeps what was sent
+        return gitsync.sync(self.machine, Path(repo), paths=paths, force=force, keep=keep, touch=self._path("activity"))
+
+    def touch(self) -> None:
+        """Mark the session used now: its idle timeout counts from the last touch (or job end)."""
+        self._touch("activity")
+
+    def _keepalive_every_s(self) -> float:
+        """How often a keepalive touches ROOT/activity: well inside the idle timeout (a quarter of
+        it), so one missed touch never idles the session; at most KEEPALIVE_S."""
+        idle_s = float(self.machine.labels.get(LABEL_IDLE) or 0)
+        return max(MIN_KEEPALIVE_S, min(KEEPALIVE_S, idle_s / 4)) if idle_s else KEEPALIVE_S
+
+    def _keepalive(self, then: str, *, until: float) -> str:
+        """bash: run `then` (an exec: it keeps this shell's pid) beside a loop that touches
+        ROOT/activity every _keepalive_every_s while that pid lives. The loop is owned by the
+        command (it ends within one period of it) and bounded by until (unix time): there it hangs
+        up on the command (SIGHUP), so nothing it keeps alive outlives its bound. It holds no
+        terminal (a pty's output ends when `then` does) and, as a background job of a
+        non-interactive shell, ignores the SIGINT a Ctrl-C sends the terminal's group."""
+        activity = shlex.quote(self._path("activity"))
+        loop = (f"while kill -0 $$ 2>/dev/null; do touch {activity}; "
+                f"if [ $(date +%s) -ge {int(until)} ]; then kill -HUP $$; exit; fi; sleep {self._keepalive_every_s():g}; done")  # fmt: skip
+        # Braced, so `&` backgrounds the loop alone: `x && ( loop ) &` would background `x` too, in a
+        # shell that holds the caller's stdout open until the loop ends.
+        return f"{{ ( {loop} ) </dev/null >/dev/null 2>&1 & }} && {then}"
 
     def status(self) -> Status:
         """Booting, Running (with the lease as it is now), or Ended (and why), from the
@@ -904,11 +1089,15 @@ class Lost:
     id: str
     labels: dict[str, str]
     root: str = ""  # nothing is under it
+    work: str = ""
 
     def exec(self, cmd: str) -> tuple[int, str, str]:
         raise Gone(f"{self.id}: gone (known from its record)")
 
-    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None) -> Stream:
+    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Stream:
+        raise Gone(f"{self.id}: gone (known from its record)")
+
+    def shell_argv(self, cmd: str) -> list[str]:
         raise Gone(f"{self.id}: gone (known from its record)")
 
     def write(self, path: str, data: bytes) -> None:
