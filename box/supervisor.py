@@ -9,13 +9,15 @@ Everything goes through files under ROOT (no sockets), so a client only needs th
     ROOT/lease.json             {until, ceiling, released}: the session ends at until (<= ceiling). The
                                 supervisor writes the first one; after that only `lease` changes it
     ROOT/lease-audit.json       every change of the lease: [{op, until, at, host, pid, n}] (debugging only)
-    ROOT/up                     supervisor writes it last at start: a client takes it as "the supervisor is up"
+    ROOT/up                     supervisor writes it last at start, holding the session id: a client takes it
+                                as "this session's supervisor is up" (a snapshot of another machine has its up)
     ROOT/stop                   client wrote it: kill any job, run its hook, end
     ROOT/jobs/<id>/spec.json    client writes it (atomically) to queue a job: {cmd, on_exit, hook_budget_s, max_duration_s, env}
     ROOT/jobs/<id>/stdout       \\ the job's output
     ROOT/jobs/<id>/stderr       /
     ROOT/jobs/<id>/status.json  supervisor writes it: {state, reason, exit_code, hook_exit_code, started, ended}
     ROOT/jobs/<id>/kill         client wrote it: kill the job (its hook runs), the session goes on
+    ROOT/jobs/<id>/code/<wt>    client writes it before spec.json: the commit each synced worktree is at
     ROOT/services/<id>/...      a service: spec.json {cmd, env}, then as a job (no hook, no max duration)
     ROOT/watch                  a log follower (its tail, each beat) or job waiter (each poll) touches it (the machine lingers for it)
     ROOT/activity               mtime = when the session was last used. The supervisor touches it at start, when a job
@@ -53,6 +55,7 @@ there every FLUSH_S (sooner past FLUSH_BYTES of new output), so it outlives the 
     DIR/heartbeat.json          every flush: {at, ttl_s}; older than ttl_s, the recorder has stopped
     DIR/jobs/<id>/spec.json     \\ as under ROOT (env: names only), copied when they change;
     DIR/jobs/<id>/status.json   /  services the same, under DIR/services/<id>
+    DIR/jobs/<id>/code/<wt>     as under ROOT: the commit each synced worktree was at when the job was queued
     DIR/jobs/<id>/<stream>.<n>.<end>  closed chunks of new output, n = 1, 2, ... per job across both
                                 streams; end = the stream's bytes up to the chunk's last (a reader
                                 resuming at a byte offset skips chunks without reading them)
@@ -117,6 +120,7 @@ def main() -> None:
     p.add_argument("--ceiling", type=float, required=True, help="unix time no lease can pass")
     p.add_argument("--host", required=True, help="the creating client's host, for the lease audit")
     p.add_argument("--pid", type=int, required=True, help="the creating client's pid, for the lease audit")
+    p.add_argument("--session-id", default="", help="written into ROOT/up: whose supervisor is up (a snapshot can hold another's)")
     p.add_argument("--idle-timeout-s", type=float, default=0.0, help="end after this long with no job and no connection; 0 = never")
     p.add_argument("--ports", type=lambda s: [int(p) for p in s.split(",") if p], default=[], help="exposed ports, comma-separated")
     p.add_argument("--record", default="", help="record the session into this directory (a mounted store), relative to --root")
@@ -141,7 +145,7 @@ def main() -> None:
         if recorder:
             recorder.start()  # the record has session.json and the lease before anyone is told the supervisor is up
         (root / "activity").touch()  # idle counts from the start
-        (root / "up").touch()  # last: a client takes it as "the supervisor is up"
+        (root / "up").write_text(a.session_id)  # last: a client takes it as "this session's supervisor is up"
         reason = supervise(root, a.idle_timeout_s, a.ports)
         ended = {"reason": reason, "at": time.time()}
         if recorder:
@@ -511,6 +515,8 @@ class Recorder:
 
     def flush_job(self, job_dir: Path, *, final: bool) -> None:
         job = f"{job_dir.parent.name}/{job_dir.name}"
+        for code in sorted((job_dir / "code").glob("*")):  # written before spec.json (sdk Session._start), never after
+            self.copy(f"{job}/code/{code.name}", code.read_bytes())
         if (job_dir / "spec.json").exists():
             self.copy(f"{job}/spec.json", recorded_spec((job_dir / "spec.json").read_bytes()))
         status = (job_dir / "status.json").read_bytes() if (job_dir / "status.json").exists() else None  # before the output

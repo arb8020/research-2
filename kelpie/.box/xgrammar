@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# xgrammar's C++ build for the gitlink's commit, into /opt/kelpie/xgrammar/<sha> (outside the tree:
+# a sync never touches it), linked at kelpie-core/xgrammar_shim/build. A no-op when that build exists.
+# Run from kelpie/ by .box/setup and .box/resume.
+set -euo pipefail
+OPT=/opt/kelpie
+sha=$(git ls-tree HEAD third_party/xgrammar | awk '{print $3}')
+[ -n "$sha" ] || { echo "no third_party/xgrammar gitlink" >&2; exit 1; }
+shim=$(cat kelpie-core/xgrammar_shim/CMakeLists.txt kelpie-core/xgrammar_shim/xgrammar_c.* kelpie-core/scripts/build_xgrammar.sh | sha256sum | cut -c1-12)
+out="$OPT/xgrammar/$sha-$shim"
+if [ ! -f "$out/.complete" ]; then
+  src=third_party/xgrammar
+  if [ ! -f "$src/CMakeLists.txt" ]; then
+    rm -rf "$src" && git clone -q https://github.com/mlc-ai/xgrammar "$src"
+    git -C "$src" fetch -q --depth 1 origin "$sha" && git -C "$src" checkout -q "$sha"
+    git -C "$src" submodule update -q --init 3rdparty/dlpack
+  fi
+  rm -rf "$out" && mkdir -p "$out"
+  XGRAMMAR_BUILD_DIR="$out" bash kelpie-core/scripts/build_xgrammar.sh
+  touch "$out/.complete"
+fi
+mkdir -p kelpie-core/xgrammar_shim && rm -rf kelpie-core/xgrammar_shim/build && ln -sfn "$out" kelpie-core/xgrammar_shim/build

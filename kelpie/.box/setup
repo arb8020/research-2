@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# kelpie's machine setup for box (box/setup_cache.py): run once per key, then snapshotted.
+# Run by bash from the synced worktree's top (the research repo), with none of the session's env.
+# Base image: kelpie/oci/Dockerfile (CUDA devel, uv, python 3.11). Needs no GPU.
+#
+# What `kelpie remote` gets from its image + kelpie_http/dev/setup.py, minus what lives elsewhere:
+#   python deps (the locked closure, kernel extras)   here: kelpie-http/uv.lock is in the key
+#   zig toolchain                                     here: its version is in this file
+#   xgrammar C++ build, at the gitlink's commit       here, warm; resume rebuilds if the gitlink moved
+#   libkelpie.so                                      built here once (warms zig's cache); resume rebuilds
+#                                                     it incrementally from the synced code
+#   HF weights                                        not here: data belongs on a Volume (setup.py warm_hf)
+#
+# Idempotent (a provider without snapshots runs it every boot): each step checks before it acts.
+set -euo pipefail
+cd kelpie
+OPT=/opt/kelpie
+ZIG_VERSION=0.14.1
+ZIG="$OPT/zig/$ZIG_VERSION/zig"
+EXTRAS=(--extra triton-kernels --extra flashinfer)  # as kelpie_http/dev/remote.py IMAGE_EXTRAS
+mkdir -p "$OPT"
+
+echo "[1/4] python deps (kelpie-http/uv.lock)"
+# The lock's whole closure, installed as-is (--no-deps), with kelpie-http's extra indexes: the
+# same install remote.py bakes into its image. The tree's own packages come from PYTHONPATH (env.sh).
+indexes=$(python3 -c 'import tomllib; print(" ".join("--extra-index-url " + i["url"] for i in tomllib.load(open("kelpie-http/pyproject.toml", "rb"))["tool"]["uv"].get("index", [])))')
+(cd kelpie-http && uv export --frozen --no-emit-local --quiet "${EXTRAS[@]}") > "$OPT/requirements.txt"
+# shellcheck disable=SC2086 (indexes: words)
+uv pip install --system --break-system-packages --python 3.11 --no-deps --index-strategy unsafe-best-match $indexes -r "$OPT/requirements.txt"
+
+echo "[2/4] zig $ZIG_VERSION"
+if [ ! -x "$ZIG" ]; then
+  tmp=$(mktemp -d)
+  curl -fsSL "https://ziglang.org/download/$ZIG_VERSION/zig-x86_64-linux-$ZIG_VERSION.tar.xz" | tar -xJ -C "$tmp"
+  mkdir -p "$OPT/zig" && rm -rf "$OPT/zig/$ZIG_VERSION" && mv "$tmp/zig-x86_64-linux-$ZIG_VERSION" "$OPT/zig/$ZIG_VERSION" && rm -rf "$tmp"
+fi
+
+echo "[3/4] xgrammar"
+bash .box/xgrammar
+
+echo "[4/4] libkelpie (warms zig's cache for resume's incremental builds)"
+bash .box/libkelpie
+
+cat > "$OPT/env.sh" <<ENV
+export PYTHONPATH=$PWD/kelpie-engine:$PWD/kelpie-models:$PWD/kelpie-http:$PWD/..
+export KELPIE_ZIG=$ZIG
+export ZIG_GLOBAL_CACHE_DIR=$OPT/zig-cache
+export KELPIE_LIB=$PWD/kelpie-core/zig-out/lib/libkelpie.so
+export PYTHONUNBUFFERED=1
+ENV
+echo "kelpie setup: done ($OPT/env.sh)"
