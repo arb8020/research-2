@@ -9,7 +9,8 @@ themselves.
     box extend <session> <duration>   its lease to now + duration (never past its ceiling, never shorter)
     box release <session>    end its lease now: its job is killed, its hook runs
     box who                  running sessions box launched: session id, machine id, user, lease and ceiling left
-    box kill <session>       end a session: kill its job, let its hook run, terminate the machine
+    box kill <session>       end a session: kill its job, let its hook run, terminate the machine;
+                             prints its receipt once the provider says the machine is gone
     box gc [--yes]           sessions past their ceiling (their supervisor should have ended them)
     box gpus [--sync]        GPU names (--gpu takes these), provider ids, $/hr
 
@@ -165,8 +166,8 @@ def cmd_kill(a: argparse.Namespace) -> int:
     except LookupError as exc:
         print(f"box: refusing to stop {a.id}: {exc}", file=sys.stderr)
         return 2
-    s.close()
-    print(f"box: stopped {a.id}")
+    r = s.close()
+    print(f"box: {r.session_id} {r.machine_id}: ended {r.ended.reason} (supervisor {'confirmed' if r.supervisor_confirmed else 'silent'}), machine gone {time.strftime('%H:%M:%S', time.localtime(r.machine_gone_at))}")
     return 0
 
 
