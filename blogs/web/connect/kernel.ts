@@ -141,8 +141,11 @@ class Kernel {
     });
   }
 
+  // On the control channel: a busy kernel (a long cell, e.g. nn-fit's remote run) doesn't answer the shell
+  // channel until the cell ends, so a shell ping timed out and closed the socket ~30-60 s into any longer run.
+  // ipykernel answers kernel_info on control while busy (7.4 on the relay's machine: 0.1 s).
   private ping(): void {
-    this.request("kernel_info_request").catch(() => { this.ws?.close(); });
+    this.request("kernel_info_request", "control").catch(() => { this.ws?.close(); });
   }
 
   private send(type: string, content: Record<string, unknown>, channel = "shell"): string {
@@ -155,14 +158,14 @@ class Kernel {
     return id;
   }
 
-  // A shell request answered by one shell reply, or rejected after REPLY_TIMEOUT_MS / when the socket goes.
-  private request(type: string): Promise<Msg> {
+  // A request answered by one reply on the same channel, or rejected after REPLY_TIMEOUT_MS / when the socket goes.
+  private request(type: string, channel: "shell" | "control" = "shell"): Promise<Msg> {
     return new Promise((resolve, reject) => {
-      const id = this.send(type, {});
+      const id = this.send(type, {}, channel);
       const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`kernel: no ${type} reply in ${String(REPLY_TIMEOUT_MS)}ms`)); }, REPLY_TIMEOUT_MS);
       this.pending.set(id, (msg) => {
         if ("gone" in msg) { clearTimeout(timer); this.pending.delete(id); reject(new Error(msg.gone)); return; }
-        if (msg.channel !== "shell") return;
+        if (msg.channel !== channel) return;
         clearTimeout(timer);
         this.pending.delete(id);
         resolve(msg);
