@@ -13,7 +13,7 @@ import termios
 from pathlib import Path
 
 from box.providers.pump import JOIN_S, Pty, Pumped, pipe_reader
-from box.sdk import LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken
+from box.sdk import LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken, Refused
 from box.store import DirStore, Mount
 
 BASE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local"
@@ -38,7 +38,7 @@ class Local:
         if snapshot is not None and not snapshot.is_dir():
             raise LookupError(f"local provider: no snapshot {image!r}")
         if foreign := [m.store.uri for m in mounts if not isinstance(m.store, DirStore)]:
-            raise ValueError(f"local provider: mounts only a DirStore (got {foreign})")
+            raise Refused(f"local provider: mounts only a DirStore (got {foreign})")
         self.base.mkdir(parents=True, exist_ok=True)
         with (self.base / "names.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)

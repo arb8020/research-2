@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 from box import gpus
 from box.providers.pump import READ_BYTES, Closed, Emit, Pumped
-from box.sdk import BACKSTOP_MARGIN_S, LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken
+from box.sdk import BACKSTOP_MARGIN_S, LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken, Refused
 from box.store import Mount
 
 T = TypeVar("T")
@@ -191,16 +191,16 @@ class Colab:
     ) -> ColabMachine:  # fmt: skip
         backstop_at = int(time.time()) + timeout_s
         if image is not None:
-            raise ValueError(f"colab provider: Colab runs its own image; got image={image!r} (install what the job needs in the job)")
+            raise Refused(f"colab provider: Colab runs its own image; got image={image!r} (install what the job needs in the job)")
         if ports:
-            raise ValueError(f"colab provider: no ports (got {ports}): Colab's terms forbid web services and proxies")
+            raise Refused(f"colab provider: no ports (got {ports}): Colab's terms forbid web services and proxies")
         if mounts:
-            raise ValueError(
+            raise Refused(
                 f"colab provider: Colab has no volumes, so nothing can be mounted (got {[m.store.uri for m in mounts]}), "
                 "and a Colab session has no durable record (record=): get results out before it ends"
             )  # fmt: skip
         if timeout_s > self.max_runtime_s:
-            raise ValueError(self._past_max_runtime(timeout_s))
+            raise Refused(self._past_max_runtime(timeout_s))
         accelerator = colab_accelerator(gpu)
         # Colab runtimes have no names: this check races
         if LABEL_NAME in labels and self.list({LABEL_NAME: labels[LABEL_NAME]}):
@@ -327,7 +327,7 @@ class ColabMachine:
 
     def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Pumped:
         if pty:
-            raise ValueError("colab provider: no pty: a kernel cell takes no stdin, so nothing could type into it (Ctrl-C is close())")
+            raise Refused("colab provider: no pty: a kernel cell takes no stdin, so nothing could type into it (Ctrl-C is close())")
         runtime = self._connection()
         try:
             kernel = runtime.start_kernel()
@@ -386,10 +386,10 @@ class ColabMachine:
         return self._call(lambda rt: rt.get_file(path))
 
     def expose(self, port: int) -> Endpoint:
-        raise ValueError(f"colab provider: cannot expose port {port}: Colab's terms forbid web services and proxies")
+        raise Refused(f"colab provider: cannot expose port {port}: Colab's terms forbid web services and proxies")
 
     def shell_argv(self, cmd: str) -> list[str]:
-        raise ValueError("colab provider: no shell: Colab's terminal is in its UI only, and a kernel cell is not one (stream runs commands)")
+        raise Refused("colab provider: no shell: Colab's terminal is in its UI only, and a kernel cell is not one (stream runs commands)")
 
     def terminate(self) -> None:
         self._drop_connection()
@@ -518,10 +518,10 @@ def colab_accelerator(gpu: str | None) -> str:
         return CPU
     name, _, count = gpu.partition(":")
     if count not in ("", "1"):
-        raise ValueError(f"colab provider: one accelerator per runtime; got {gpu!r}")
+        raise Refused(f"colab provider: one accelerator per runtime; got {gpu!r}")
     accelerator = gpus.provider_id(gpus.lookup(name), "colab")
     if accelerator is None:
-        raise ValueError(f"colab provider: Colab does not rent {name!r}; it rents {', '.join(g.name for g in gpus.GPUS if g.colab)}")
+        raise Refused(f"colab provider: Colab does not rent {name!r}; it rents {', '.join(g.name for g in gpus.GPUS if g.colab)}")
     assert accelerator in GPU_ACCELERATORS + TPU_ACCELERATORS, accelerator
     return accelerator
 

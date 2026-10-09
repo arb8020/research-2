@@ -20,7 +20,7 @@ from anyio.from_thread import BlockingPortal, start_blocking_portal
 
 from box import gpus
 from box.providers.pump import MAX_SEND_BYTES, Closed, Emit, Pumped, kill_pid_file, with_pid_file
-from box.sdk import LABEL_BY, LABEL_NAME, LABEL_PORTS, Endpoint, Gone, NameTaken, declared_ports
+from box.sdk import LABEL_BY, LABEL_NAME, LABEL_PORTS, Endpoint, Gone, NameTaken, Refused, declared_ports
 from box.store import Mount
 
 APP = "box"
@@ -49,14 +49,14 @@ class ModalToken:
         profiles = tomllib.loads(path.read_text())
         active = [name for name, p in profiles.items() if isinstance(p, dict) and p.get("active") is True]
         if len(active) != 1:
-            raise ValueError(f"{path}: {len(active)} active profiles {active}; want exactly one (`modal profile activate`)")
+            raise Refused(f"{path}: {len(active)} active profiles {active}; want exactly one (`modal profile activate`)")
         return cls.from_profile(active[0], path)
 
     @classmethod
     def from_profile(cls, name: str, path: Path = MODAL_TOML) -> ModalToken:
         profile = tomllib.loads(path.read_text()).get(name)
         if not (isinstance(profile, dict) and isinstance(profile.get("token_id"), str) and isinstance(profile.get("token_secret"), str)):
-            raise ValueError(f"{path}: no profile {name!r} with token_id/token_secret")
+            raise Refused(f"{path}: no profile {name!r} with token_id/token_secret")
         return cls(profile["token_id"], profile["token_secret"])
 
 
@@ -185,9 +185,9 @@ class Modal:
         labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
     ) -> ModalMachine:  # fmt: skip
         if foreign := [m.store.uri for m in mounts if not isinstance(m.store, ModalVolumeStore)]:
-            raise ValueError(f"modal provider: mounts only a ModalVolumeStore (got {foreign})")
+            raise Refused(f"modal provider: mounts only a ModalVolumeStore (got {foreign})")
         if timeout_s > MAX_TIMEOUT_S:
-            raise ValueError(f"modal provider: timeout_s={timeout_s} past Modal's {MAX_TIMEOUT_S} s cap (a ceiling over {MAX_TIMEOUT_S - 600} s)")
+            raise Refused(f"modal provider: timeout_s={timeout_s} past Modal's {MAX_TIMEOUT_S} s cap (a ceiling over {MAX_TIMEOUT_S - 600} s)")
         stores: list[ModalVolumeStore] = [m.store for m in mounts]  # MUST KILL: narrowed by the isinstance check above, which the checker can't see (was type: ignore[misc]); filter with a TypeGuard
         snapshot = image.removeprefix(SNAPSHOT) if image and image.startswith(SNAPSHOT) else None
         modal_image, modal_gpu_ = None if snapshot else resolve_image(image), modal_gpu(gpu)
@@ -465,7 +465,7 @@ def modal_gpu(gpu: str | None) -> str | None:
     name, _, count = gpu.partition(":")
     modal_id = gpus.provider_id(gpus.lookup(name), "modal")
     if modal_id is None:
-        raise ValueError(f"modal provider: Modal does not rent {name!r}")
+        raise Refused(f"modal provider: Modal does not rent {name!r}")
     return f"{modal_id}:{count}" if count else modal_id
 
 

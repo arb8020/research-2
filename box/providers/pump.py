@@ -12,6 +12,8 @@ import time
 from collections.abc import Callable, Iterator
 from typing import IO
 
+from box.sdk import Refused
+
 QUEUE_CHUNKS = 64
 PUT_TICK_S = 0.1
 CHECK_S = 1.0
@@ -102,11 +104,11 @@ class Pumped:
 
     def send(self, data: bytes) -> None:
         if self._send is None:
-            raise ValueError(f"{self.label}: not a pty stream: its stdin is closed (stream(pty=True) to type into it)")
+            raise Refused(f"{self.label}: not a pty stream: its stdin is closed (stream(pty=True) to type into it)")
         if len(data) > MAX_SEND_BYTES:
-            raise ValueError(f"{self.label}: send of {len(data)} bytes; at most {MAX_SEND_BYTES} a call")
+            raise Refused(f"{self.label}: send of {len(data)} bytes; at most {MAX_SEND_BYTES} a call")
         if self._closed.is_set() or self._finished:
-            raise ValueError(f"{self.label}: the stream has ended")
+            raise Refused(f"{self.label}: the stream has ended")
         self._send(data)
 
     def close(self) -> None:
@@ -200,7 +202,7 @@ class Pty:
         with self._lock:
             while data:
                 if not self._open:
-                    raise ValueError("the stream has ended: its terminal is closed")
+                    raise Refused("the stream has ended: its terminal is closed")
                 if not select.select([], [self.master], [], max(0.0, give_up - time.monotonic()))[1]:
                     raise TimeoutError(f"a terminal took no input for {SEND_TIMEOUT_S:.0f} s")
                 data = data[os.write(self.master, data) :]

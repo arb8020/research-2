@@ -65,6 +65,10 @@ class Gone(Exception):
     pass
 
 
+class Refused(ValueError):
+    pass
+
+
 class Stream(Protocol):
     rc: int | None
 
@@ -228,18 +232,18 @@ def _create(  # noqa: PLR0913
 ) -> Session:  # fmt: skip
     session_id = new_session_id() if session_id is None else session_id
     if not SESSION_ID.fullmatch(session_id):
-        raise ValueError(f"session_id {session_id!r} is not one new_session_id() makes")
+        raise Refused(f"session_id {session_id!r} is not one new_session_id() makes")
     if clash := sorted(set(labels or {}) & set(RESERVED)):
-        raise ValueError(f"labels {clash} are box's own (launch stamps them)")
+        raise Refused(f"labels {clash} are box's own (launch stamps them)")
     if name is not None and not NAME.fullmatch(name):
-        raise ValueError(f"name {name!r}: letters, digits, '.', '_', '-', at most 63, starting with a letter or digit")
+        raise Refused(f"name {name!r}: letters, digits, '.', '_', '-', at most 63, starting with a letter or digit")
     if not 0 <= idle_timeout_s <= MAX_CEILING_S:
-        raise ValueError(f"idle_timeout_s={idle_timeout_s}: 0 (never idle) to {MAX_CEILING_S} s")
+        raise Refused(f"idle_timeout_s={idle_timeout_s}: 0 (never idle) to {MAX_CEILING_S} s")
     lease_s = ceiling_s if lease_s is None else lease_s
     if not 0 < ceiling_s <= MAX_CEILING_S:
-        raise ValueError(f"ceiling_s={ceiling_s}: a ceiling is more than 0 and at most {MAX_CEILING_S} s (48 h)")
+        raise Refused(f"ceiling_s={ceiling_s}: a ceiling is more than 0 and at most {MAX_CEILING_S} s (48 h)")
     if not 0 < lease_s <= ceiling_s:
-        raise ValueError(f"lease_s={lease_s}: a lease is more than 0 and at most the ceiling ({ceiling_s} s)")
+        raise Refused(f"lease_s={lease_s}: a lease is more than 0 and at most the ceiling ({ceiling_s} s)")
     created_at = time.time()
     lease = Lease(until=created_at + lease_s, ceiling=created_at + ceiling_s)
     assert created_at < lease.until
@@ -281,7 +285,7 @@ def _create_set_up(provider: Provider, spec: SetupSpec, *, image: str | None, en
     record: Store | None = kw["record"]
     snaps = isinstance(provider, sc.Snapshotter)
     if snaps and record is None:
-        raise ValueError(f"{provider.name} provider snapshots its setup: pass record= (the store that remembers which snapshot a key is)")
+        raise Refused(f"{provider.name} provider snapshots its setup: pass record= (the store that remembers which snapshot a key is)")
     key = sc.setup_key(spec, provider=provider.name, image=image)
     cached = None
     if snaps and not spec.rebuild:
@@ -343,7 +347,7 @@ def new_session_id() -> str:
 
 def attach(provider: Provider, *, session_id: str | None = None, name: str | None = None, record: Store | None = None) -> Session:
     if (session_id is None) == (name is None):
-        raise ValueError("attach: pass exactly one of session_id or name")
+        raise Refused("attach: pass exactly one of session_id or name")
     found = _find(provider, {LABEL_SESSION: session_id} if name is None else {LABEL_NAME: name}, record)
     if found is not None:
         return found
@@ -380,7 +384,7 @@ def declared_ports(labels: dict[str, str]) -> tuple[int, ...]:
 
 def record_prefix(session_id: str) -> str:
     if not SESSION_ID.fullmatch(session_id):
-        raise ValueError(f"not a session id: {session_id!r}")
+        raise Refused(f"not a session id: {session_id!r}")
     return f"sessions/{session_id}"
 
 
@@ -425,7 +429,7 @@ class Session:
     @contextlib.contextmanager
     def keep(self, every_s: float) -> Generator[Lease]:
         if not MIN_KEEP_EVERY_S <= every_s <= MAX_KEEP_EVERY_S:
-            raise ValueError(f"every_s={every_s}: keep() renews every {MIN_KEEP_EVERY_S} to {MAX_KEEP_EVERY_S} s")
+            raise Refused(f"every_s={every_s}: keep() renews every {MIN_KEEP_EVERY_S} to {MAX_KEEP_EVERY_S} s")
         lease = self.extend(time.time() + 2 * every_s)
         stop = threading.Event()
         renewer = threading.Thread(target=self._renew, args=(every_s, stop), daemon=False, name=f"box-keep-{self.id}")
@@ -492,7 +496,7 @@ class Session:
 
     def expose(self, port: int) -> Endpoint:
         if not 0 < port < 65536:
-            raise ValueError(f"port {port}: not a TCP port")
+            raise Refused(f"port {port}: not a TCP port")
         if port in self._endpoints:
             return self._endpoints[port]
         endpoint = self.machine.expose(port)
@@ -512,7 +516,7 @@ class Session:
         left = running.lease.ceiling - time.time()
         timeout_s = left if timeout_s is None else timeout_s
         if not 0 < timeout_s <= left:
-            raise ValueError(f"timeout_s={timeout_s}: more than 0 and at most the {left:.0f} s to the session's ceiling")
+            raise Refused(f"timeout_s={timeout_s}: more than 0 and at most the {left:.0f} s to the session's ceiling")
         inner = f"cd {shlex.quote(cwd)} && {cmd}" if cwd else cmd
         then = f"exec bash -c {shlex.quote(inner)}"
         return self.machine.stream(self._keepalive(then, until=time.time() + timeout_s), timeout_s=timeout_s, quiet_s=quiet_s, pty=pty)
@@ -574,11 +578,11 @@ class Session:
         env: dict[str, str] | None = None,
     ) -> Job:  # fmt: skip
         if not 0 < max_duration_s <= MAX_CEILING_S:
-            raise ValueError(f"max_duration_s={max_duration_s}: more than 0 and at most {MAX_CEILING_S} s")
+            raise Refused(f"max_duration_s={max_duration_s}: more than 0 and at most {MAX_CEILING_S} s")
         running = self._running_now()
         left = min(running.lease.until, running.lease.ceiling) - time.time()
         if on_exit and hook_budget_s >= left:
-            raise ValueError(f"hook_budget_s={hook_budget_s} does not fit in the lease's {left:.0f} s left")
+            raise Refused(f"hook_budget_s={hook_budget_s} does not fit in the lease's {left:.0f} s left")
         spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "max_duration_s": max_duration_s, "env": env or {}}
         return self._start(Job(self, new_job_id(), "jobs"), spec)
 
@@ -593,7 +597,7 @@ class Session:
     def serve(self, cmd: str, *, env: dict[str, str] | None = None) -> Job:
         self._running_now()
         if len([name for name in self._check(f"ls {self._path('services')}").split() if not name.endswith(".tmp")]) >= MAX_SERVICES:
-            raise ValueError(f"{self.id}: a session runs at most {MAX_SERVICES} services")
+            raise Refused(f"{self.id}: a session runs at most {MAX_SERVICES} services")
         return self._start(Job(self, new_job_id(), "services"), {"cmd": cmd, "env": env or {}})
 
     def _running_now(self) -> Running:
