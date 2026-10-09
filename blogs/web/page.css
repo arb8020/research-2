@@ -58,12 +58,14 @@
 :root {
   --font-body: Charter, "Iowan Old Style", Georgia, serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
-  --size: 18px; --leading: 1.75; --flow: 1.25em; --measure: 80ch;
+  --size: 18px; --leading: 1.6; --flow: 1.25em; --measure: 64ch;
 }
 .typeset {
   --typeset-font-body: var(--font-body); --typeset-font-heading: var(--font-body); --typeset-font-mono: var(--font-mono);
   --typeset-size: var(--size); --typeset-leading: var(--leading); --typeset-flow: var(--flow);
   --color-foreground: var(--fg); --color-muted-foreground: var(--muted); --color-border: var(--rule); --color-muted: var(--code-bg);
+  /* typeset.css sets 1.125x --size below 48rem (20.25px at 18px). Phones get --size as set, like wider screens. */
+  font-size: var(--typeset-size);
 }
 
 * { box-sizing: border-box; }
@@ -84,7 +86,6 @@ code-cell { display: block; margin: 1.6em -16px; border: 1px solid var(--rule); 
 .run { font: inherit; padding: 3px 12px; border: 1px solid var(--rule); border-radius: 4px; background: var(--bg); color: var(--fg); cursor: pointer; }
 .run:disabled { opacity: 0.4; cursor: not-allowed; }
 .cm-editor { font-size: 13px; background: var(--code-bg); max-height: 520px; }
-.cm-scroller { font-family: var(--font-mono); }
 .cm-editor .cm-content { caret-color: var(--caret); }
 .cm-editor .cm-cursor, .cm-editor .cm-fat-cursor { border-left-color: var(--caret); }
 .cm-editor .cm-gutters { background: var(--code-bg); color: var(--gutter); border-right: 1px solid var(--rule); }
