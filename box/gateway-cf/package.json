@@ -1,0 +1,20 @@
+{
+  "name": "box-gateway-cf",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8797 --inspector-port 9339",
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "test:fanout": "node test/fanout.mjs",
+    "test:alarm": "node test/alarm.mjs",
+    "test:proxy": "node test/proxy.mjs",
+    "demo": "scripts/demo-curl.sh"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261009.1",
+    "typescript": "7.0.2",
+    "wrangler": "4.149.0",
+    "ws": "8.22.0"
+  }
+}
