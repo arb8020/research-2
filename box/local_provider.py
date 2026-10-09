@@ -51,9 +51,10 @@ class Local:
             raise LookupError(f"local provider: no machine {machine_id}")
         return m
 
-    def list(self) -> list[LocalMachine]:
+    def list(self, labels: dict[str, str] | None = None) -> list[LocalMachine]:
+        want = {**(labels or {}), LABEL_BY: "box"}
         found = [LocalMachine(d) for d in sorted(self.base.glob("local-*"))] if self.base.exists() else []
-        return [m for m in found if m.alive() and m.labels.get(LABEL_BY) == "box"]
+        return [m for m in found if m.alive() and want.items() <= m.labels.items()]
 
 
 class LocalMachine:

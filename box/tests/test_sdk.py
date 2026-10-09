@@ -46,7 +46,7 @@ def output(job: sdk.Job) -> str:
 
 
 def gone(provider: Provider, s: sdk.Session) -> bool:
-    return s.id not in {m.id for m in provider.list()}
+    return s.machine.id not in {m.id for m in provider.list()}
 
 
 def eventually(predicate: Callable[[], bool], timeout_s: float = 10.0) -> None:
@@ -135,9 +135,9 @@ def test_a_vanished_client_loses_the_lease_and_the_box_ends(name: str, provider:
         import time; time.sleep(999)
     """)
     proc = subprocess.Popen([sys.executable, "-c", client], stdout=subprocess.PIPE, text=True)
-    machine_id = proc.stdout.readline().strip()
+    session_id = proc.stdout.readline().strip()
     proc.kill()  # SIGKILL: no cleanup, no goodbye
-    s = sdk.attach(provider, machine_id)
+    s = sdk.attach(provider, session_id)
     eventually(lambda: gone(provider, s), timeout_s=20 * scale)
 
 
@@ -154,9 +154,18 @@ def test_another_process_can_attach_and_read_logs_and_status(launch: Callable, p
         first = s.run("echo hello; echo oops >&2")
         first.wait()
         again = sdk.attach(provider, s.id)
-        assert s.id in {m.id for m in provider.list()}
+        assert s.machine.id in {m.id for m in provider.list()}
         logs = list(sdk.Job(again, first.id).logs())  # a job id is all another process needs
     assert ("stdout", "hello\n") in logs and ("stderr", "oops\n") in logs
+
+
+def test_a_session_has_its_own_id_and_attach_finds_it_by_that(launch: Callable, provider: Provider) -> None:
+    with launch(deadline_s=600) as s, launch(deadline_s=600) as other:
+        assert s.id != s.machine.id
+        assert sdk.attach(provider, s.id).machine.id == s.machine.id
+        assert sdk.attach(provider, other.id).machine.id == other.machine.id
+        with pytest.raises(LookupError):
+            sdk.attach(provider, "s-000000000000")
 
 
 def test_run_job_is_launch_put_run_get_close(name: str, provider: Provider, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:

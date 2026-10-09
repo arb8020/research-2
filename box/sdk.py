@@ -34,6 +34,7 @@ from typing import Protocol
 
 SUPERVISOR = Path(__file__).with_name("supervisor.py")
 LABEL_BY = "box.by"
+LABEL_SESSION = "box.session"  # the session's own id: a session is not its machine, even while 1:1
 POLL_S = 0.5
 
 
@@ -63,7 +64,7 @@ class Provider(Protocol):
         labels: dict[str, str], timeout_s: int,
     ) -> Machine: ...  # fmt: skip
     def get(self, machine_id: str) -> Machine: ...  # LookupError if box did not launch it
-    def list(self) -> list[Machine]: ...  # live machines labelled LABEL_BY
+    def list(self, labels: dict[str, str] | None = None) -> list[Machine]: ...  # live machines labelled LABEL_BY and all of labels
 
 
 @dataclass(frozen=True)
@@ -83,7 +84,8 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     """Rent a machine whose supervisor ends it by deadline_s (or sooner: lease lost, idle, stop).
     Returns once the supervisor is up; a machine that is not up in boot_timeout_s (image pull,
     a stuck host) is terminated here, since no supervisor exists yet to end it. The returned
-    Session holds the lease (heartbeats) until release() or close()."""
+    Session holds the lease (heartbeats) until release() or close(). Its id is new (LABEL_SESSION),
+    not the machine's: attach() finds a session by it."""
     args = ["--deadline-s", str(deadline_s), "--lease-ttl-s", str(lease_ttl_s), "--idle-timeout-s", str(idle_timeout_s)]
     boot = "import base64,os; exec(base64.b64decode(os.environ['BOX_SUPERVISOR']))"
     entrypoint = ["bash", "-c", f'exec python3 -c {shlex.quote(boot)} --root "$BOX_ROOT" {shlex.join(args)}']
@@ -93,7 +95,7 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     machine = provider.launch(
         gpu=gpu, image=image, entrypoint=entrypoint,
         env={**(env or {}), "BOX_SUPERVISOR": base64.b64encode(SUPERVISOR.read_bytes()).decode()},
-        labels={**(labels or {}), LABEL_BY: "box", "box.user": f"{getpass.getuser()}@{socket.gethostname()}",
+        labels={**(labels or {}), LABEL_BY: "box", LABEL_SESSION: f"s-{secrets.token_hex(6)}", "box.user": f"{getpass.getuser()}@{socket.gethostname()}",
                 "box.deadline": str(int(time.time() + deadline_s))},
         timeout_s=deadline_s + 600,  # the provider's own backstop, past the supervisor's deadline
     )  # fmt: skip
@@ -108,9 +110,13 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     return session
 
 
-def attach(provider: Provider, machine_id: str) -> Session:
-    """A session launched elsewhere (another process, a detached run). Does not hold its lease."""
-    return Session(provider.get(machine_id))
+def attach(provider: Provider, session_id: str) -> Session:
+    """A session launched elsewhere (another process, a detached run), while its machine lives.
+    Does not hold its lease. LookupError if no live machine carries that session id."""
+    found = provider.list({LABEL_SESSION: session_id})
+    if len(found) != 1:
+        raise LookupError(f"{provider.name} provider: {len(found)} live machines for session {session_id}")
+    return Session(found[0])
 
 
 @dataclass
@@ -120,7 +126,7 @@ class Session:
 
     @property
     def id(self) -> str:
-        return self.machine.id
+        return self.machine.labels[LABEL_SESSION]
 
     def __enter__(self) -> Session:
         return self
