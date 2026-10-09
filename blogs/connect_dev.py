@@ -16,8 +16,10 @@ call (X-Box-Token: id:secret, or ?token= on /events, which EventSource can't set
 The real relay (variant A over box) slots in at the same URL.
 
 Lease: POST /sessions takes lease_s (60..43200, default 5400); the session ends with reason "lease" at
-lease_until. POST /sessions/{id}/extend {until} pushes lease_until, clamped to ceiling (start + 12 h).
-status keeps "deadline" (= lease_until) for pages older than the lease. Fake only, not in the contract:
+lease_until. POST /sessions/{id}/extend {until}, as the real relay (box/gateway/relay.py, Relay.extend):
+409 while booting; running: lease_until = min(until, ceiling) (start + 12 h), never shorter (an until at or
+before lease_until is a no-op, 200 with the status as it is); ended: a no-op, 200 with the ended status.
+status keeps "deadline" (= lease_until; the contract keeps it for older pages). Fake only, not in the contract:
 POST /dev/sessions/{id}/expire ends the lease now (so a check can see a lease run out without waiting).
 """
 
@@ -25,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import secrets
 import shutil
@@ -101,11 +104,12 @@ class Session:
         return self.started_at + CEILING_S
 
     def extend(self, until: float) -> None:
-        """Push the lease to `until`, clamped to the ceiling. Caller checked the session runs and until is later."""
-        with self.changed:
-            assert self.state != "ended", f"extend on ended session {self.id}"
-            assert until > self.lease_until, f"extend to {until} is not later than {self.lease_until}"
-            self.lease_until = min(until, self.ceiling)
+        """Push the lease to `until`, clamped to the ceiling, never shorter. Caller holds `changed` and checked it runs."""
+        assert self.state == "running", f"extend on {self.state} session {self.id}"
+        lease_until = min(max(until, self.lease_until), self.ceiling)
+        if lease_until == self.lease_until:
+            return  # a shorter (or equal) re-ask never cuts the lease; at the ceiling, nothing moves it
+        self.lease_until = lease_until
         self.step("gateway", f"lease extended to {time.strftime('%H:%M:%S', time.localtime(self.lease_until))}"
                   f"{' (the 12 h ceiling)' if self.lease_until == self.ceiling else ''}")  # fmt: skip
         self.emit("status", status=self.status())
@@ -269,7 +273,7 @@ class Handler(BaseHTTPRequestHandler):
         elif len(parts) == 3 and parts[0] == "sessions" and parts[2] == "end":
             if (session := self.session(parts[1], query)) is not None:
                 session.end("stopped")
-                self.reply(200, {"status": session.status()})
+                self.reply(200, {"session_id": session.id, "status": session.status()})
         elif len(parts) == 3 and parts[0] == "sessions" and parts[2] == "extend":
             if (session := self.session(parts[1], query)) is not None:
                 self.extend(session)
@@ -294,17 +298,16 @@ class Handler(BaseHTTPRequestHandler):
         if body is None:
             return
         until = body.get("until") if isinstance(body, dict) else None
-        if isinstance(until, bool) or not isinstance(until, (int, float)):
+        if isinstance(until, bool) or not isinstance(until, (int, float)) or not math.isfinite(until):
             self.reply(400, {"error": f"expected {{until: unix seconds}}, got {body!r}"})
             return
         with session.changed:  # an RLock: the checks and the extend see one state (boot() may end it meanwhile)
-            if session.state == "ended":
-                self.reply(409, {"error": f"session {session.id} has ended ({session.reason})"})
-            elif until <= session.lease_until:
-                self.reply(400, {"error": f"until {until} is not later than lease_until {session.lease_until}; extend only pushes it later"})
-            else:
+            if session.state == "booting":
+                self.reply(409, {"error": f"{session.id} is still booting: extend once it is running"})
+                return
+            if session.state == "running":
                 session.extend(until)
-                self.reply(200, {"status": session.status()})
+            self.reply(200, {"session_id": session.id, "status": session.status()})  # ended: a no-op, as the relay
 
     def create(self) -> None:
         body = self.body()
