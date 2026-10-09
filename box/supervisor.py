@@ -61,6 +61,7 @@ import subprocess
 import sys
 import threading
 import time
+import zlib
 from collections.abc import Callable
 from pathlib import Path
 from typing import BinaryIO
@@ -537,7 +538,7 @@ def place_self(argv: list[str]) -> None:
     known, _ = root.parse_known_args(argv)
     source = os.environ.get("BOX_SUPERVISOR")
     if known.root and source:
-        put(Path(known.root) / "supervisor.py", base64.b64decode(source))
+        put(Path(known.root) / "supervisor.py", zlib.decompress(base64.b64decode(source)))  # as sdk.create packs it
 
 
 if __name__ == "__main__":
