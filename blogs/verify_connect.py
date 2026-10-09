@@ -44,6 +44,22 @@ AXE = "https://cdn.jsdelivr.net/npm/axe-core@4.10.2/axe.min.js"
 FAKE_TOKEN = ("ak-verify-connect-0001", "as-verify-connect-secret")
 PID = "import os\nprint('kernel pid', os.getpid())"
 LONG = "import time\nfor i in range(600):\n    print(i, flush=True)\n    time.sleep(0.05)"
+CEILING_S = 12 * 3600
+
+
+def created_at(status: dict[str, Any]) -> float:
+    """When the session was created: its ceiling is creation + 12 h. Not started_at: on the real relay that is when the
+    machine's supervisor came up (seconds after the POST), while the lease and ceiling count from the POST."""
+    return float(status["ceiling"]) - CEILING_S
+
+
+def left(until: float) -> str:
+    """The page's "Xh MMm" (web/connect/ui.ts duration) for the time to until, as a regex taking this minute or the one
+    before (the countdown ticks while expect waits). From the lease, not a fixed length: on the real relay the lease
+    counts from the POST, so a slow boot has already used some of it when the pill first shows connected."""
+    minutes = int((until - time.time()) // 60)
+    shown = [f"{m}m" if m < 60 else f"{m // 60}h {m % 60:02d}m" for m in (minutes, minutes - 1)]
+    return "(" + "|".join(map(re.escape, shown)) + ")"
 
 
 class Quiet(SimpleHTTPRequestHandler):
@@ -144,7 +160,9 @@ def story(context: BrowserContext, url: str, token: tuple[str, str], gateway: st
     page.screenshot(path=OUT / "3-connecting-drawer.png")
     page.wait_for_selector("connect-pill[data-phase=connected]", timeout=600_000)
     assert posts[0]["lease_s"] == 5400, f"default session length should be 90 min, sent {posts[0]!r}"
-    expect(page.locator(".connect-label")).to_have_text(re.compile(r"^T4 · 1h (29|30)m left$"))
+    first = gateway_call(gateway, "/sessions/" + page.evaluate("JSON.parse(localStorage.getItem('connect.session')).session_id"), token)["status"]
+    assert round(first["lease_until"] - created_at(first)) == 5400, first
+    expect(page.locator(".connect-label")).to_have_text(re.compile(rf"^T4 · {left(first['lease_until'])} left$"))
     page.wait_for_timeout(500)
     page.screenshot(path=OUT / "4-connected-drawer.png")
     steps = page.locator(".drawer-log li").count()
@@ -253,10 +271,10 @@ def lease_connect(page: Page, url: str, token: tuple[str, str], gateway: str) ->
     sent = created.value.post_data_json
     assert sent["lease_s"] == 9000, sent
     page.wait_for_selector("connect-pill[data-phase=connected]", timeout=600_000)
-    expect(page.locator(".connect-label")).to_have_text(re.compile(r"^T4 · 2h (29|30)m left$"))
     sid = page.evaluate("JSON.parse(localStorage.getItem('connect.session')).session_id")
     status = gateway_call(gateway, f"/sessions/{sid}", token)["status"]
-    assert round(status["lease_until"] - status["started_at"]) == 9000, status
+    expect(page.locator(".connect-label")).to_have_text(re.compile(rf"^T4 · {left(status['lease_until'])} left$"))
+    assert round(status["lease_until"] - created_at(status)) == 9000, status
     print(f"  lease: custom 150 min sent as lease_s=9000, hint {hint!r}, pill {page.locator('.connect-label').inner_text()!r}")
     return str(sid)
 
@@ -264,7 +282,7 @@ def lease_connect(page: Page, url: str, token: tuple[str, str], gateway: str) ->
 def lease_extend(page: Page, sid: str, token: tuple[str, str], gateway: str) -> None:
     """Extend +1 h, then +4 h until the gateway clamps the lease at its ceiling (start + 12 h)."""
     open_menu(page)
-    expect(page.locator(".connect-lease")).to_contain_text(re.compile(r"2h (29|30)m left"))
+    expect(page.locator(".connect-lease")).to_contain_text(re.compile(rf"{left(gateway_call(gateway, f'/sessions/{sid}', token)['status']['lease_until'])} left"))
     page.screenshot(path=LEASE_OUT / "3-menu.png")
     page.locator(".connect-extend-open").click()
     page.select_option("select[name=extend-by]", "3600")
@@ -281,11 +299,11 @@ def lease_extend(page: Page, sid: str, token: tuple[str, str], gateway: str) -> 
         return got
 
     extended = extend_once()
-    assert round(extended["lease_until"] - extended["started_at"]) == 9000 + 3600, extended
+    assert round(extended["lease_until"] - created_at(extended)) == 9000 + 3600, extended
     assert abs(extends[0]["until"] - extended["lease_until"]) < 1, (extends, extended)
-    expect(page.locator(".connect-label")).to_have_text(re.compile(r"^T4 · 3h (29|30)m left$"))
-    expect(page.locator(".connect-lease")).to_contain_text(re.compile(r"3h (29|30)m left"))
-    print(f"  extend +1 h: lease now {round((extended['lease_until'] - extended['started_at']) / 60)} min after start")
+    expect(page.locator(".connect-label")).to_have_text(re.compile(rf"^T4 · {left(extended['lease_until'])} left$"))
+    expect(page.locator(".connect-lease")).to_contain_text(re.compile(rf"{left(extended['lease_until'])} left"))
+    print(f"  extend +1 h: lease now {round((extended['lease_until'] - created_at(extended)) / 60)} min after creation")
 
     # +4 h, +4 h, +4 h: the third asks past the ceiling (start + 12 h) and is clamped to it.
     for _ in range(3):
@@ -294,13 +312,13 @@ def lease_extend(page: Page, sid: str, token: tuple[str, str], gateway: str) -> 
         page.select_option("select[name=extend-by]", str(4 * 3600))
         clamped = extend_once()
     assert extends[-1]["until"] > clamped["ceiling"], f"the last extend should have asked past the ceiling: {extends[-1]} vs {clamped}"
-    assert clamped["lease_until"] == clamped["ceiling"] == clamped["started_at"] + 12 * 3600, clamped
+    assert clamped["lease_until"] == clamped["ceiling"] and clamped["started_at"] >= created_at(clamped), clamped
     expect(page.locator(".connect-extend-result")).to_contain_text("the 12 h limit")
     expect(page.locator(".connect-lease")).to_contain_text("at the 12 h limit")
     expect(page.locator(".connect-extend-open")).to_be_disabled()
-    expect(page.locator(".connect-label")).to_have_text(re.compile(r"^T4 · 11h (59|60)m left$"))
+    expect(page.locator(".connect-label")).to_have_text(re.compile(rf"^T4 · {left(clamped['lease_until'])} left$"))
     page.screenshot(path=LEASE_OUT / "5-menu-at-ceiling.png")
-    print(f"  extend clamped: asked {extends[-1]['until'] - clamped['started_at']:.0f} s after start, got the ceiling (43200 s)")
+    print(f"  extend clamped: asked {extends[-1]['until'] - created_at(clamped):.0f} s after creation, got the ceiling (43200 s)")
     page.keyboard.press("Escape")
 
 
