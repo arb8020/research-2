@@ -45,7 +45,9 @@ const PANEL = `
     <fieldset class="connect-token-new"><legend>Modal token</legend>
       <label><span>Token ID</span><input name="token-id" autocomplete="off" spellcheck="false" placeholder="ak-…" required></label>
       <label><span>Token secret</span><input name="token-secret" type="password" autocomplete="off" spellcheck="false" placeholder="as-…" required></label>
-      <p class="connect-hint">Create one at <a href="https://modal.com/settings/tokens" target="_blank" rel="noopener">modal.com/settings/tokens</a>.
+      <p class="connect-hint">Already use Modal? Your <code>token_id</code> and <code>token_secret</code> are in
+        <code>~/.modal.toml</code>. Otherwise create one at
+        <a href="https://modal.com/settings/tokens" target="_blank" rel="noopener">modal.com/settings/tokens</a>.
         Stored only in this browser.</p>
     </fieldset>
     <label class="connect-gpu"><span>GPU</span><select name="gpu">
