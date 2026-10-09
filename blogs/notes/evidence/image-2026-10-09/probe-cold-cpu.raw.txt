@@ -1,0 +1,17 @@
+### s-009442b610c9 cell image: status=ok 0.79s 
+--- stdout
+PROBE {"probe": "image", "du_mb": "7416", "site_packages_mb": "6683", "nvidia_wheels_mb": "3649", "torch_mb": "1692", "ws_stat_L": "root:root 755\nroot:root 755\nroot:root 755", "ws_tree": "2026-10-09T22:59 19 .\n2026-10-09T22:59 6 ./hf\n2026-10-09T23:00 53 ./hf/hub\n2026-10-09T22:59 30 ./hf/hub/.locks\n2026-10-09T22:59 339 ./hf/hub/.locks/models--openai-community--gpt2\n2026-10-09T22:59 191 ./hf/hub/CACHEDIR.TAG\n2026-10-09T23:00 27 ./hf/hub/blobs\n2026-10-09T23:00 2 ./hf/hub/blobs/.huggingface-shared-blobs\n2026-10-09T23:00 202 ./hf/hub/blobs/63\n2026-10-09T23:00 32 ./hf/hub/models--openai-community--gpt2\n2026-10-09T23:00 40 ./hf/hub/models--openai-community--gpt2/.no_exist\n2026-10-09T23:00 304 ./hf/hub/models--openai-community--gpt2/blobs\n2026-10-09T22:59 4 ./hf/hub/models--openai-community--gpt2/refs\n2026-10-09T22:59 40 ./hf/hub/models--openai-community--gpt2/snapshots\n2026-10-09T22:59 45 ./hf/hub/models--openai-community--gpt2/trees\n2026-10-09T22:59 37 ./hf/xet\n2026-10-09T22:59 7 ./hf/xet/https___cas_serv-tGqkUaZf_CBPHQ6h\n2026-10-09T22:59 0 ./hf/xet/https___cas_serv-tGqkUaZf_CBPHQ6h/staging\n2026-10-09T22:59 34 ./hf/xet/logs\n2026-10-09T23:00 46323 ./hf/xet/logs/xet_20261009T225957732+0000_45.log\n2026-10-09T23:00 32 ./workspace-persist\n2026-10-09T23:00 18 ./workspace-persist/marker_nosync.txt\n2026-10-09T23:00 18 ./workspace-persist/marker_sync.txt"}
+
+--- stderr
+
+
+### s-009442b610c9 cell volume_read: status=ok 10.38s 
+--- stdout
+PROBE {"probe": "volume_read", "import_torch_s": 4.76, "import_transformers_s": 3.36, "read_safetensors_s": 1.12, "safetensors_mb": 522.71, "from_pretrained_1_s": 0.83, "from_pretrained_2_s": 0.28}
+
+--- stderr
+/usr/local/lib/python3.12/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 7208.30it/s]
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 5795.78it/s]
+
