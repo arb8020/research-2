@@ -1,8 +1,72 @@
 # policy gradients with a basic flappy bird
 
 reinforcement learning can do a lot of cool things: 
-[list/embed some cool things]
-https://www.youtube.com/watch?v=0LuGPF1z5GY
+```carousel
+title: AlphaGo, move 37
+youtube: WXuK6gekU1Y
+caption: In game 2 against Lee Sedol, AlphaGo played move 37, a move DeepMind says had a 1 in 10,000 chance of being used.
+source: AlphaGo
+org: Google DeepMind
+year: 2016
+link: https://deepmind.google/research/alphago/
+license: Video: AlphaGo - The Movie (full documentary), Google DeepMind's YouTube; embedded, not copied.
+
+title: Hide-and-seek
+youtube: kopoLzvh5jY
+caption: Agents playing hide-and-seek against each other found six distinct strategies, including using boxes and ramps as tools.
+source: Emergent tool use from multi-agent interaction
+org: OpenAI
+year: 2019
+link: https://openai.com/index/emergent-tool-use/
+license: Video: OpenAI's YouTube; embedded, not copied.
+
+title: AlphaStar, StarCraft II
+youtube: 6EQAsrfUIyo
+caption: AlphaStar beat pro StarCraft II player MaNa 5-0 in December 2018, after a winning match against his teammate TLO.
+source: AlphaStar: Mastering the real-time strategy game StarCraft II
+org: Google DeepMind
+year: 2019
+link: https://deepmind.google/blog/alphastar-mastering-the-real-time-strategy-game-starcraft-ii/
+license: Video: Google DeepMind's YouTube; embedded, not copied.
+
+title: A robot hand and a Rubik's Cube
+youtube: x4O8pojMF0w
+caption: A robot hand trained with RL only in simulation carries out a Rubik's Cube solve (steps from a classic solver) 60% of the time.
+source: Solving Rubik's Cube with a robot hand
+org: OpenAI
+year: 2019
+link: https://openai.com/index/solving-rubiks-cube/
+license: Video: OpenAI's YouTube; embedded, not copied.
+
+title: AlphaZero vs Stockfish
+youtube: 0LuGPF1z5GY
+caption: AlphaZero learned chess only by playing itself, then beat Stockfish, winning 155 and losing 6 of 1,000 games.
+source: AlphaZero: Shedding new light on chess, shogi, and Go
+org: Google DeepMind
+year: 2018
+link: https://deepmind.google/blog/alphazero-shedding-new-light-on-chess-shogi-and-go/
+license: Video: "AlphaZero CRUSHED Stockfish!", GothamChess's YouTube (2022); embedded, not copied.
+
+title: o1: reasoning scales with RL compute
+image: https://images.ctfassets.net/kftzwdyauwt9/3OO9wpK8pjcdemjd7g50xk/5ec2cc9d11f008cd754e8cefbc1c99f5/compute.png
+alt: Two scatter plots of o1's AIME accuracy: it rises with train-time compute (left) and with test-time compute (right), both on log scales.
+caption: o1's accuracy on AIME math problems improves smoothly with train-time compute (large-scale RL) and with test-time thinking.
+source: Learning to reason with LLMs
+org: OpenAI
+year: 2024
+link: https://openai.com/index/learning-to-reason-with-llms/
+license: Figure: OpenAI, all rights reserved; linked from OpenAI's image host, not copied.
+
+title: DeepSeek-R1-Zero learns to think longer
+image: https://arxiv.org/html/2501.12948v1/figures/plot_length.png
+alt: Line plot of DeepSeek-R1-Zero's average response length rising steadily over the RL training steps.
+caption: During RL, DeepSeek-R1-Zero's answers grew steadily longer, and its AIME 2024 pass@1 rose from 15.6% to 71.0%.
+source: DeepSeek-R1: Incentivizing reasoning capability in LLMs via reinforcement learning
+org: DeepSeek-AI
+year: 2025
+link: https://arxiv.org/abs/2501.12948
+license: Figure 3 of the paper (arXiv non-exclusive license, not CC); linked from arXiv, not copied.
+```
 
 
 chess

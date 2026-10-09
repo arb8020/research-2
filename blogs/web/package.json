@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild settings.ts --bundle --format=iife --minify --outfile=build/settings.js && esbuild page.ts --bundle --format=esm --minify --outfile=build/page.js",
+    "build": "esbuild settings.ts --bundle --format=iife --minify --outfile=build/settings.js && esbuild page.ts embeds/*/element.ts --bundle --format=esm --minify --outdir=build --outbase=.",
     "lint": "tsc --noEmit && eslint --max-warnings=0 . && cd .. && uv run ruff check"
   },
   "dependencies": {

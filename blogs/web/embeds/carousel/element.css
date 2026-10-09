@@ -1,0 +1,41 @@
+/* <embed-carousel>. Colours are page.css tokens only, so every theme x scheme follows. */
+embed-carousel { display: block; margin: 1.6em 0; }
+.carousel-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+                  scrollbar-width: none; position: relative; }
+.carousel-track::-webkit-scrollbar { display: none; }
+.slide { flex: 0 0 100%; margin: 0; scroll-snap-align: start; scroll-snap-stop: always; }
+
+.slide-media { position: relative; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: var(--code-bg);
+               outline: 1px solid var(--rule); outline-offset: -1px; }
+.slide-media > img { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* Published figures are drawn for a light page (some are transparent PNGs with black ink): keep them on a light plate. */
+.slide-media:has(> img) { color-scheme: light; background: Canvas; }
+.slide-media iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+.facade { display: block; width: 100%; height: 100%; color: var(--fg); }
+.facade img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.facade .play { position: absolute; top: 50%; left: 50%; width: 64px; height: 64px; translate: -50% -50%; border-radius: 50%;
+                background: var(--bg); opacity: 0.88; box-shadow: 0 2px 12px rgb(0 0 0 / 0.3); transition: scale 0.15s, opacity 0.15s; }
+.facade .play::after { content: ""; position: absolute; top: 50%; left: 50%; translate: calc(-50% + 3px) -50%;
+                       border-style: solid; border-width: 12px 0 12px 20px; border-color: transparent transparent transparent var(--fg); }
+.facade:hover .play, .facade:focus-visible .play { scale: 1.08; opacity: 1; }
+.facade:focus-visible { outline: 3px solid var(--fg); outline-offset: -3px; }
+
+.slide figcaption { padding-top: 10px; line-height: 1.5; }
+.slide figcaption p { margin: 0; text-wrap: pretty; }
+.slide-title { font-weight: 600; }
+.slide-cite { margin-top: 4px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.slide-cite a { color: inherit; }
+
+.carousel-nav { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 8px;
+                font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.carousel-count { min-width: 5ch; text-align: center; font-variant-numeric: tabular-nums; }
+.carousel-nav button { width: 40px; height: 40px; border: 1px solid var(--rule); border-radius: 50%; background: var(--bg);
+                       color: var(--fg); cursor: pointer; display: grid; place-items: center; padding: 0; }
+.carousel-nav button:hover:not([aria-disabled="true"]) { background: var(--active); }
+.carousel-nav button[aria-disabled="true"] { opacity: 0.35; cursor: default; }
+.carousel-nav button::before { content: ""; width: 8px; height: 8px; border: solid currentColor; border-width: 0 0 2px 2px; }
+.carousel-prev::before { rotate: 45deg; translate: 2px 0; }
+.carousel-next::before { rotate: -135deg; translate: -2px 0; }
+
+@media (prefers-reduced-motion: reduce) { .facade .play { transition: none; } }

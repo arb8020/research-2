@@ -11,6 +11,7 @@ given      -> collapsed, read-only code (the reader calls into it, so they can r
 solution=X, check=X, budget=X -> not in the page; the session runs them
 <!-- ... --> on its own line -> a muted "todo" note
 <X-play></X-play>, X a C cell -> <env-play cell=X>, the wasm play widget (reference env until X passes)
+```K fence, web/embeds/K/ exists -> embed K (embeds.py: one folder per kind, e.g. carousel)
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from markdown_it.token import Token
 from markdown_it.utils import EnvType, OptionsDict
 
 import build_web
+import embeds
 from check import HIDDEN, ROLES, cell_order, parse
 
 HERE = Path(__file__).parent
@@ -48,9 +50,16 @@ def main() -> None:
     md = MarkdownIt("commonmark", {"html": True})
     rules = md.renderer.rules
     plain_fence = rules["fence"]
+    kinds = embeds.discover()
+    used: set[str] = set()
 
     def fence(tokens: Sequence[Token], idx: int, opts: OptionsDict, env: EnvType) -> str:
         lang, *info = tokens[idx].info.split()
+        if (embed := kinds.get(lang)) is not None:
+            used.add(lang)
+            span = tokens[idx].map
+            assert span is not None, f"markdown-it gave the {lang} fence no line numbers"
+            return embed.render(tokens[idx].content, span[0] + 2)
         role, name = next(((k, v) for k, _, v in (i.partition("=") for i in info) if k in ROLES), ("", ""))
         src = html.escape(tokens[idx].content)
         if role == "cell":
@@ -84,10 +93,11 @@ def main() -> None:
     out = HERE / "dist" / args.chapter.with_suffix("").name
     out.mkdir(parents=True, exist_ok=True)
     page = (HERE / "web" / "page.html").read_text()
-    for key, value in {"TITLE": html.escape(title[1] if title else out.name), "SESSION": args.session_url, "BODY": body}.items():
+    subprocess.run(["npm", "run", "--silent", "build"], cwd=HERE / "web", check=True)
+    head = embeds.install(used, out)
+    for key, value in {"TITLE": html.escape(title[1] if title else out.name), "SESSION": args.session_url, "EMBEDS": head, "BODY": body}.items():
         page = page.replace("{{" + key + "}}", value)
     (out / "index.html").write_text(page)
-    subprocess.run(["npm", "run", "--silent", "build"], cwd=HERE / "web", check=True)
     for f in ("build/page.js", "build/settings.js", "page.css", "typeset.css", "play.html"):
         shutil.copy(HERE / "web" / f, out / Path(f).name)
 
@@ -95,7 +105,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         for env in envs:
             build_web.build_play(next(b for b in blocks if b.role == "solution" and b.name == env.name), out, Path(tmp))
-    print(f"wrote {out / 'index.html'}: cells {rendered}, play widgets {sorted(env_names)}")
+    print(f"wrote {out / 'index.html'}: cells {rendered}, play widgets {sorted(env_names)}, embeds {sorted(used)}")
 
 
 if __name__ == "__main__":
