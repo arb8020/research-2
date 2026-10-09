@@ -4,6 +4,7 @@ real Jupyter Server as the session's service, a real kernel. What the page sees,
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import socket
@@ -416,3 +417,22 @@ def test_a_session_ends_when_its_lease_does(make_relay: Callable[..., str]) -> N
     got = events(gw, sid, "ended", timeout_s=relay.MIN_LEASE_S + 60)  # the page keeps no kernel open: idle is 300 s here
     assert got[-1][1]["status"]["reason"] == "lease"
     assert status(gw, sid) == (200, got[-1][1]["status"])
+
+
+def test_image_and_volume_flags_reach_the_modal_provider() -> None:
+    from box.providers.modal import ModalToken
+
+    assert relay.volume("/ws=blogs-ws") == ("/ws", "blogs-ws")
+    assert relay.volume("/data/=w") == ("/data", "w")
+    for bad in ("ws=x", "/ws=", "/ws", "=x"):
+        with pytest.raises(argparse.ArgumentTypeError):
+            relay.volume(bad)
+    a = argparse.Namespace(region="us", image="registry.example/kernel:1", volume=[("/ws", "blogs-ws"), ("/hf", "weights")],
+                           label=[], idle_timeout_s=60.0)  # fmt: skip
+    cfg = relay.modal_config(a, (None, "T4"))
+    assert cfg.image == "registry.example/kernel:1"
+    access = cfg.access(ModalToken(id="ak-x", secret="as-x"))  # no network: Modal opens its client on first use
+    try:
+        assert access.provider.volumes == {"/ws": "blogs-ws", "/hf": "weights"}
+    finally:
+        access.close()

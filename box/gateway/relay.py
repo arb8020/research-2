@@ -913,16 +913,18 @@ def error_code(e: Exception) -> int:
 # ---- main ----
 
 
-def modal_access(token: ModalToken, region: str) -> Access:
+def modal_access(token: ModalToken, region: str, volumes: dict[str, str]) -> Access:
     from box.providers.modal import Modal, ModalVolumeStore
 
-    provider = Modal(token=token, region=region)
+    # volumes: {mount path: Volume name}, mounted on every session, in the READER's workspace (their token):
+    # per reader, never shared across readers. The relay only mounts them; it never reads or writes them.
+    provider = Modal(token=token, region=region, volumes=volumes)
     return Access(provider, ModalVolumeStore(RECORD_VOLUME, provider=provider), close=provider.close)  # close joins its loop thread
 
 
 def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...]) -> Config:
     return Config(
-        access=lambda token: modal_access(token, a.region), image=KERNEL_IMAGE, gpus=gpus, labels=dict(a.label),
+        access=lambda token: modal_access(token, a.region, dict(a.volume)), image=a.image, gpus=gpus, labels=dict(a.label),
         origins=re.compile(LOCAL_ORIGIN), idle_timeout_s=a.idle_timeout_s,
     )  # fmt: skip
 
@@ -958,6 +960,13 @@ def label(raw: str) -> tuple[str, str]:
     return key, value
 
 
+def volume(raw: str) -> tuple[str, str]:
+    path, sep, name = raw.partition("=")
+    if not sep or not path.startswith("/") or not name:
+        raise argparse.ArgumentTypeError(f"--volume takes /mount/path=volume-name, got {raw!r}")
+    return path.rstrip("/") or "/", name
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8790)
@@ -966,11 +975,18 @@ def main() -> None:
     ap.add_argument("--idle-timeout-s", type=float, default=IDLE_TIMEOUT_S, help="no connection to Jupyter for this long ends a session")
     ap.add_argument("--label", type=label, action="append", default=[("box.purpose", "reader-path-dev")],
                     help="key=value stamped on every session (default box.purpose=reader-path-dev, for sweeps)")  # fmt: skip
+    # One image per relay (a page's own Dockerfile or a registry ref), never chosen per request: a reader's request
+    # must not pick what gets built on their account. Each reader's workspace builds it on its first connect.
+    ap.add_argument("--image", default=KERNEL_IMAGE, help="kernel image: a path ending in Dockerfile, or a registry ref (default: gateway/kernel.Dockerfile)")
+    ap.add_argument("--volume", type=volume, action="append", default=[],
+                    help="/mount/path=volume-name, a Modal Volume in the reader's workspace (created if missing) on every session; repeatable")  # fmt: skip
     a = ap.parse_args()
+    if len({path for path, _ in a.volume}) != len(a.volume):
+        ap.error("--volume: two volumes at one mount path")
     gpus = (None, *[g for g in a.gpus.split(",") if g])
     cfg = modal_config(a, gpus)
     server = serve(cfg, a.port)
-    print(f"relay on http://localhost:{a.port} (modal, region {a.region}, gpus {list(gpus)}, labels {dict(a.label)}, "
+    print(f"relay on http://localhost:{a.port} (modal, region {a.region}, image {a.image}, volumes {dict(a.volume)}, gpus {list(gpus)}, labels {dict(a.label)}, "
           f"leases {MIN_LEASE_S}-{MAX_LEASE_S} s (default {LEASE_S}), ceiling {READER_CEILING_S} s, idle {a.idle_timeout_s} s)", flush=True)  # fmt: skip
     with contextlib.suppress(KeyboardInterrupt):  # booted sessions outlive the relay: their lease or idle ends them
         server.serve_forever()
