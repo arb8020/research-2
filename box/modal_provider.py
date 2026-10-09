@@ -88,6 +88,11 @@ class Modal:
             self._client = modal.Client.from_credentials(self.token.id, self.token.secret)
         return self._client
 
+    def close(self) -> None:
+        """Close the client (its gRPC channel), if one was opened; this Modal makes no calls after."""
+        if self._client is not None:
+            self._client.__exit__(None, None, None)  # modal.Client's own close (it has no public close())
+
     @property
     def app(self) -> modal.App:
         if self._app is None:  # a network call, like client

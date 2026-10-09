@@ -95,11 +95,11 @@ def pushing_relay(tmp_path: Path) -> Iterator[Callable[..., tuple[str, Fanout]]]
     yield make
     for server, push, fan in made:
         server.shutdown()
+        server.server_close()
         push.close()
         fan.server.shutdown()
     for m in Local(tmp_path / "machines").list():
         m.terminate()
-    relay.BOOTS.clear()
 
 
 def test_boot_then_machine_log_then_end_reach_the_fanout(pushing_relay: Callable[..., tuple[str, Fanout]]) -> None:

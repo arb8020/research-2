@@ -50,9 +50,9 @@ def make_relay(tmp_path: Path) -> Iterator[Callable[..., str]]:
     yield make
     for server in servers:
         server.shutdown()
+        server.server_close()
     for m in Local(tmp_path / "machines").list():
         m.terminate()
-    relay.BOOTS.clear()
 
 
 def call(url: str, method: str = "GET", body: dict | None = None, headers: dict | None = None) -> tuple[int, dict, dict]:
@@ -121,8 +121,7 @@ def test_the_relay_keeps_nothing_a_running_session_needs(make_relay: Callable[..
     sid = create(gw)
     events(gw, sid, "running")
     before = status(gw, sid)[1]
-    relay.BOOTS.clear()  # a restarted relay: no memory of the boot
-    other = make_relay()  # or a second relay
+    other = make_relay()  # a second relay, or this one restarted: no memory of the boot
     for g in (gw, other):
         assert status(g, sid) == (200, before)
     replay = events(other, sid, "running")
@@ -171,8 +170,7 @@ def test_after_the_machine_is_gone_the_record_answers_with_why_and_the_log(make_
     sid = create(gw)
     boot = events(gw, sid, "running")
     call(f"{gw}/sessions/{sid}/end", "POST", headers={"X-Box-Token": AUTH})
-    relay.BOOTS.clear()  # no memory of it here either
-    after = events(gw, sid, "ended")
+    after = events(make_relay(), sid, "ended")  # a relay with no memory of it either
     assert after[-1][1]["status"]["reason"] == "stopped"
     logged = [e["text"] for _, e in after if e["kind"] == "log"]
     assert [e["text"] for _, e in boot if e["kind"] == "log"] == logged[: len([1 for _, e in boot if e["kind"] == "log"])]
@@ -200,3 +198,52 @@ def test_resuming_a_replay_from_the_record_sends_only_what_came_after(make_relay
     again = events(gw, sid, "ended", last_id=replay[machine[0]][0])
     lines = lambda got: [(e["stream"], e["text"]) for _, e in got if e["kind"] == "log"]  # noqa: E731
     assert lines(again) == lines(replay[machine[0] + 1 :])
+
+
+def relay_on(tmp_path: Path, access: Callable[[object], relay.Access]) -> relay.Server:
+    cfg = relay.Config(
+        access=access, image=None, gpus=(None,), labels={"box.purpose": "relay-test"}, origins=re.compile(relay.LOCAL_ORIGIN),
+        python=sys.executable, ip="127.0.0.1", port=free_port,
+    )  # fmt: skip
+    server = relay.serve(cfg, free_port())
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def test_a_readers_client_is_reused_bounded_and_closed(tmp_path: Path) -> None:
+    made, closed = [], []
+
+    def access(token: object) -> relay.Access:
+        made.append(token)
+        return relay.Access(Local(tmp_path / "machines"), DirStore(tmp_path / "records"), close=lambda: closed.append(token))
+
+    server = relay_on(tmp_path, access)
+    gw = f"http://127.0.0.1:{server.server_address[1]}"
+    for _ in range(3):
+        assert status(gw, "s-000000000000")[0] == 404
+    assert (len(made), closed) == (1, [])  # one client for one reader, across requests
+    for i in range(relay.MAX_CLIENTS):
+        call(f"{gw}/sessions/s-000000000000", headers={"X-Box-Token": f"ak-{i}:as-{i}"})
+    assert len(made) == relay.MAX_CLIENTS + 1
+    assert closed == made[:1]  # the least recently used, to make room
+    server.shutdown()
+    server.server_close()
+    assert sorted(map(repr, closed)) == sorted(map(repr, made))  # every one closed with the relay
+
+
+def test_closing_the_relay_ends_a_boot_in_flight_and_joins_it(tmp_path: Path) -> None:
+    server = relay_on(tmp_path, lambda token: relay.Access(Local(tmp_path / "machines"), DirStore(tmp_path / "records")))
+    sid = create(f"http://127.0.0.1:{server.server_address[1]}")
+    server.shutdown()
+    server.server_close()  # returns once the boot thread has ended the session it was making
+    assert Local(tmp_path / "machines").list({"box.session": sid}) == []
+    assert not [t for t in threading.enumerate() if t.name == f"boot-{sid}"]
+
+
+def test_a_body_length_that_is_not_a_byte_count_is_refused(make_relay: Callable[..., str]) -> None:
+    gw = make_relay()
+    for bad in ("-1", "ten", "1e3"):
+        req = urllib.request.Request(f"{gw}/sessions", method="POST", data=b"{}", headers={"Content-Length": bad})
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req, timeout=30)
+        assert e.value.code == 400, bad

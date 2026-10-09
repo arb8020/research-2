@@ -66,6 +66,7 @@ def main() -> None:
         pass
     for s in servers:
         s.shutdown()
+        s.server_close()
     for p in pushes:
         p.close()
     for m in Local(MACHINES).list():
