@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from box import sdk
 from box.gateway import kernel_client, relay
 from box.local_provider import Local
 from box.store import DirStore
@@ -273,15 +274,20 @@ class CountedMachine:
         return value
 
 
+def wait_running(gw: str, sid: str) -> None:
+    """By GET, not a stream: a stream would poll on after we hang up (until its next ping)."""
+    give_up = time.monotonic() + 60
+    while status(gw, sid)[1]["state"] != "running":
+        assert time.monotonic() < give_up
+        time.sleep(0.5)
+
+
 def test_an_idle_event_stream_asks_the_machine_twice_a_poll(tmp_path: Path) -> None:
     calls: list[float] = []
     server = relay_on(tmp_path, lambda token: relay.Access(Counted(Local(tmp_path / "machines"), calls), DirStore(tmp_path / "records")))
     gw = f"http://127.0.0.1:{server.server_address[1]}"
     sid = create(gw)
-    give_up = time.monotonic() + 60
-    while status(gw, sid)[1]["state"] != "running":  # not a stream: one would poll on after we hang up (until its next ping)
-        assert time.monotonic() < give_up
-        time.sleep(0.5)
+    wait_running(gw, sid)
     stream = threading.Thread(target=events, args=(gw, sid, "ended"), daemon=True)
     stream.start()  # replays the boot from memory, then follows the machine
     time.sleep(2 * relay.STREAM_POLL_S)  # past its first poll (which also finds the job, the tunnel)
@@ -293,3 +299,39 @@ def test_an_idle_event_stream_asks_the_machine_twice_a_poll(tmp_path: Path) -> N
     server.shutdown()
     server.server_close()
     assert len(in_window) <= 2 * 4, f"{len(in_window)} calls in 3 polls"  # the session's status + one read of the log, per poll (4 polls fit)
+
+
+class Vanishing(Counted):
+    """A provider whose machine dies just as the relay asks for its tunnel, once `armed`."""
+
+    armed = False
+
+    def list(self, labels: dict[str, str] | None = None) -> list:
+        return [VanishingMachine(m, self) for m in self.inner.list(labels)]
+
+
+class VanishingMachine:
+    def __init__(self, inner: object, provider: Vanishing) -> None:
+        self.inner, self.provider = inner, provider
+
+    def expose(self, port: int) -> object:
+        if self.provider.armed:
+            self.inner.terminate()
+            raise sdk.Gone(self.inner.id)
+        return self.inner.expose(port)
+
+    def __getattr__(self, attr: str) -> object:
+        return getattr(self.inner, attr)
+
+
+def test_a_machine_gone_between_two_asks_is_ended_not_an_error(tmp_path: Path) -> None:
+    provider = Vanishing(Local(tmp_path / "machines"), [])
+    server = relay_on(tmp_path, lambda token: relay.Access(provider, DirStore(tmp_path / "records")))
+    gw = f"http://127.0.0.1:{server.server_address[1]}"
+    sid = create(gw)
+    wait_running(gw, sid)
+    provider.armed = True  # status() says Running, then the tunnel's machine is gone
+    code, after = status(gw, sid)
+    server.shutdown()
+    server.server_close()
+    assert (code, after["state"], after["reason"]) == (200, "ended", "machine_lost"), after
