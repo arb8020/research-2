@@ -4,11 +4,15 @@ page.js and settings.js are esbuild bundles of web/page.ts and web/settings.ts (
 run `npm ci` there once).
 
     uv run build_page.py rl/01-flappy.md [dl/neural-nets.md ...] [--session-url http://localhost:8787]
+                         [--gateway-url http://localhost:8790]
     uv run build_page.py --all                 # every chapter under blogs/ (links.chapters())
     python3 -m http.server 8010 -d dist        # then open http://localhost:8010/01-flappy/
 
 cell=X     -> <code-cell> editor prefilled with the stub, Run button, output pane
 given      -> collapsed, read-only code (the reader calls into it, so they can read it)
+```python scratch -> <scratch-cell>: editable, Run executes on the Connect session's kernel; no checks, no gating
+<!-- page: connect --> on its own line -> this page has the header Connect control (gateway: --gateway-url);
+                      a page with scratch cells must have it
 solution=X, check=X, budget=X -> not in the page; the session runs them
 <!-- ... --> on its own line -> a muted "todo" note
 <!-- wip: ... --> on its own line -> a visible "under construction" banner (🚧 + the text), for readers
@@ -40,6 +44,8 @@ import links
 from check import HIDDEN, ROLES, cell_order, parse
 
 HERE = Path(__file__).parent
+PAGE_FLAG = re.compile(r"^<!--\s*page:\s*(\S+)\s*-->\s*$", re.MULTILINE)
+PAGE_FLAGS = ("connect",)
 
 
 def render_excerpt(chapter: Path, path: str, lang: str, body: str, line: int) -> str:
@@ -104,6 +110,14 @@ def markdown(chapter: Path, kinds: dict[str, embeds.Embed], preview: bool) -> Ma
             return render_excerpt(chapter, excerpt[0], lang, tokens[idx].content, line)
         role, name = next(((k, v) for k, _, v in (i.partition("=") for i in info) if k in ROLES), ("", ""))
         src = html.escape(tokens[idx].content)
+        if "scratch" in info:
+            assert not role, f"line {line}: a scratch block can't also be {role}={name}"
+            assert lang == "python", f"line {line}: scratch cells run in a Python kernel, not {lang}"
+            if preview:
+                return (f'<figure class="excerpt" data-not-typeset><div class="cell-head"><span>scratch · {lang}</span>'
+                        f'<span class="excerpt-src">read-only here</span></div>'
+                        f'<code-view data-lang="{lang}" data-label="scratch cell (read-only)"><pre>{src}</pre></code-view></figure>\n')
+            return f'<scratch-cell data-lang="{lang}" data-not-typeset><pre>{src}</pre></scratch-cell>\n'
         if role == "cell" and preview:
             return (f'<figure class="excerpt" data-not-typeset><div class="cell-head"><span>{name} · {lang}</span>'
                     f'<span class="excerpt-src">cell · read-only</span></div>'
@@ -119,6 +133,9 @@ def markdown(chapter: Path, kinds: dict[str, embeds.Embed], preview: bool) -> Ma
 
     def html_block(tokens: Sequence[Token], idx: int, opts: OptionsDict, env: EnvType) -> str:
         content = tokens[idx].content
+        if flag := PAGE_FLAG.fullmatch(content.strip()):
+            assert flag[1] in PAGE_FLAGS, f"<!-- page: {flag[1]} -->: page flags are {PAGE_FLAGS}"
+            return ""
         if wip := re.fullmatch(r"\s*<!--\s*wip:\s*(.*?)\s*-->\s*", content, re.DOTALL):
             span = tokens[idx].map
             assert span is not None, "markdown-it gave the wip comment no line numbers"
@@ -181,7 +198,7 @@ def card(site: Site, target: links.Target, where: str) -> tuple[str, set[str]]:
     return f'<div class="link-card-title">{html.escape(target.source.title)}</div>\n{body}', used
 
 
-def build(site: Site, chapter: Path, session_url: str) -> None:
+def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None:
     assert site.pages.get(chapter.stem, Path()).resolve() == chapter.resolve(), (
         f"{chapter} is not a chapter under {HERE} (chapters: {', '.join(sorted(site.pages))})")
     text = chapter.read_text()
@@ -201,12 +218,17 @@ def build(site: Site, chapter: Path, session_url: str) -> None:
         if b.role in HIDDEN:
             assert html.escape(b.source) not in body, f"{b.role}={b.name} (line {b.line}) leaked into the page"
 
+    connect = "connect" in PAGE_FLAG.findall(text)
+    scratch = body.count("<scratch-cell")
+    assert connect or not scratch, f"{chapter}: scratch cells need <!-- page: connect --> (nothing else can run them)"
+    corner = f'<connect-pill data-gateway="{html.escape(gateway_url)}"></connect-pill>' if connect else ""
+
     title = re.search(r"^# (.+)$", text, re.MULTILINE)
     out = HERE / "dist" / chapter.with_suffix("").name
     out.mkdir(parents=True, exist_ok=True)
     page = (HERE / "web" / "page.html").read_text()
     head = embeds.install(used, lazy, out)
-    for key, value in {"TITLE": html.escape(title[1] if title else out.name), "SESSION": session_url, "EMBEDS": head, "BODY": body}.items():
+    for key, value in {"TITLE": html.escape(title[1] if title else out.name), "SESSION": session_url, "EMBEDS": head, "CORNER": corner, "BODY": body}.items():
         page = page.replace("{{" + key + "}}", value)
     (out / "index.html").write_text(page)
     for f in ("build/page.js", "build/settings.js", "page.css", "typeset.css", "play.html"):
@@ -218,7 +240,7 @@ def build(site: Site, chapter: Path, session_url: str) -> None:
         for env in envs:
             build_web.build_play(next(b for b in blocks if b.role == "solution" and b.name == env.name), out, Path(tmp))
     links_out = len(re.findall("<page-link", body))
-    print(f"wrote {out / 'index.html'}: cells {rendered}, play widgets {sorted(env_names)}, embeds {sorted(used)}, "
+    print(f"wrote {out / 'index.html'}: cells {rendered}, scratch {scratch}, connect {connect}, play widgets {sorted(env_names)}, embeds {sorted(used)}, "
           f"links {links_out} (preview-only embeds {sorted(lazy)})")
 
 
@@ -227,6 +249,7 @@ def main() -> None:
     ap.add_argument("chapters", type=Path, nargs="*")
     ap.add_argument("--all", action="store_true", help="build every chapter under blogs/")
     ap.add_argument("--session-url", default="http://localhost:8787")
+    ap.add_argument("--gateway-url", default="http://localhost:8790", help="the Connect gateway (box/CONTRACT-gateway.md)")
     args = ap.parse_args()
 
     site = Site(links.chapters(), embeds.discover(), {})
@@ -234,7 +257,7 @@ def main() -> None:
     assert todo, "name a chapter (rl/01-flappy.md) or pass --all"
     subprocess.run(["npm", "run", "--silent", "build"], cwd=HERE / "web", check=True)
     for chapter in todo:
-        build(site, chapter, args.session_url)
+        build(site, chapter, args.session_url, args.gateway_url)
 
 
 if __name__ == "__main__":

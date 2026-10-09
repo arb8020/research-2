@@ -183,6 +183,7 @@ class PageSettings extends HTMLElement {
 }
 
 customElements.define("page-settings", PageSettings);
-const mount = (): void => { document.body.prepend(document.createElement("page-settings")); };
+// Into the page corner (page.html), after any other corner control build_page.py put there (Connect).
+const mount = (): void => { must(document, ".corner", HTMLElement).append(document.createElement("page-settings")); };
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
 else mount();
