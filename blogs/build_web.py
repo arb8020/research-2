@@ -24,6 +24,7 @@ from pathlib import Path
 from urllib.request import urlopen
 
 import numpy as np
+
 from check import PUFFER, Block, compile_c, parse
 
 HERE = Path(__file__).parent
