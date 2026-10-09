@@ -7,17 +7,29 @@
 //   widths="8,4,..." lr="0.03" samples="4..512" noise="0..0.5" wiggles="1..20" roughness="0.5..3"
 //   stages="1..4" seed="1" step-budget="2000" time-budget="5"
 // Read-only `stats` exposes the live numbers (tests and any host page can read them).
+//
+// Backends: training runs in this browser (mlp.ts), or, when the page has a connected session (remote-runner.ts),
+// on it: remote_train.py in torch, from the same weights on the same data, streaming ticks into the same plot.
 import { must } from "../../dom";
+import type { RemoteRunner, RunResult } from "../../remote-runner";
+import { onRemoteRunnerChange, remoteRunner } from "../../remote-runner";
 import type { Activation, Adam, Batch, Mlp, Task } from "./mlp";
-import { ACTIVATIONS, evaluate, initMlp, makeAdam, paramCount, predictor, seeded, trainStep } from "./mlp";
+import { ACTIVATIONS, evaluate, get, initMlp, makeAdam, paramCount, predictor, seeded, trainStep } from "./mlp";
 import type { DrawBuffer, Point, WaveParams, WaveStage } from "./datasets";
 import {
   INPUT_SCALE, MAX_STAGES, MAX_WIGGLES, SAMPLE_COUNTS, columnX, completeCurve, curveSamples, describeGaps, drawSamples, fillWave,
   gaps, makeDrawBuffer, paintStroke, spiral, waveFormula, waveStages,
 } from "./datasets";
+import type { RemoteLine, RemoteTick, StopReason } from "./remote";
+import {
+  CURVE_POINTS, HEAT_GRID, REMOTE_MAX_SECONDS, REMOTE_MAX_STEPS, curveGrid, heatGrid, loadState, parseLine, remoteCode, remoteConfig,
+  splitLines,
+} from "./remote";
 
 export type Dataset = "draw" | "wave" | "spiral";
 const DATASETS: readonly Dataset[] = ["draw", "wave", "spiral"];
+export type Backend = "browser" | "remote";
+const BROWSER = "this browser"; // what `device` says after a browser run
 
 export interface NnFitStats {
   readonly dataset: Dataset;
@@ -33,8 +45,22 @@ export interface NnFitStats {
   readonly flops: number; // estimated: 6 * params * samples per step
   readonly stepBudget: number; // Infinity = off
   readonly timeBudget: number; // seconds, Infinity = off
-  readonly training: boolean; // the reader pressed Train (it may still be paused offscreen)
+  readonly training: boolean; // the reader pressed Train (it may still be paused offscreen); remote: a run is in flight
   readonly ready: boolean; // Train is enabled: something is drawn (or spiral) and budget remains
+  readonly backend: Backend;
+  readonly device: string; // what trained (or is training) the current weights: "this browser", "cuda · Tesla T4"
+}
+
+// A remote run in flight: its latest tick is what the plot and readout show until it ends.
+interface RemoteRun {
+  readonly runner: RemoteRunner;
+  readonly fromStep: number; // the widget's counters when it started, for the FLOP estimate
+  readonly fromFlops: number;
+  device: string | null; // from its "start" line
+  tick: RemoteTick | null;
+  end: Extract<RemoteLine, { kind: "end" }> | null;
+  stopping: boolean; // the reader pressed Stop; the interrupt is sent
+  failure: string | null; // a line that didn't parse, or the state that didn't load
 }
 
 // Judgement calls (see the report). Training: full-batch Adam, up to STEPS_PER_FRAME steps per animation
@@ -58,6 +84,9 @@ const Y_RANGE = 1.2; // the curve view shows y in [-Y_RANGE, Y_RANGE]; drawn val
 const REDUCED_MOTION_MS = 250; // with prefers-reduced-motion, redraw at 4 Hz while training
 const ARIA_MS = 1000;
 const MAX_FRAME_GAP_MS = 100; // wall-clock counted per frame is capped, so a stalled tab doesn't eat the budget
+const REMOTE_DTYPE = "float32"; // what a GPU runs fast; parity with mlp.ts's float64: remote_train_test.py
+const CURVE_X = curveGrid(CURVE_POINTS);
+const HEAT_XY = heatGrid(HEAT_GRID);
 
 const isActivation = (s: string): s is Activation => ACTIVATIONS.some((a) => a === s);
 const isDataset = (s: string): s is Dataset => DATASETS.some((d) => d === s);
@@ -112,6 +141,8 @@ button:hover { background: var(--active, var(--code-bg)); }
 button.train { min-width: 72px; border-color: var(--muted); }
 button[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 button[aria-disabled="true"]:hover { background: var(--bg); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button:disabled:hover { background: var(--bg); }
 fieldset { margin: 10px 0 0; padding: 8px 0 0; border: 0; border-top: 1px solid var(--rule); min-width: 0; }
 legend { padding: 0 8px 0 0; color: var(--muted); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
 .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 8px 24px; }
@@ -160,7 +191,7 @@ const TEMPLATE = `
   <button type="button" class="new-wave wave-only">New random curve</button>
   <button type="button" class="clear curve-only">Clear drawing</button>
 </div>
-<fieldset>
+<fieldset class="data">
   <legend>Data</legend>
   <div class="controls">
     <label class="control">Data
@@ -175,7 +206,7 @@ const TEMPLATE = `
   </div>
   <details class="wave-only"><summary>show formula</summary><pre class="formula"></pre></details>
 </fieldset>
-<fieldset>
+<fieldset class="network">
   <legend>Network</legend>
   <div class="controls">
     <label class="control">Activation
@@ -185,9 +216,11 @@ const TEMPLATE = `
   </div>
   <div class="widths"></div>
 </fieldset>
-<fieldset>
-  <legend>Budget</legend>
+<fieldset class="compute">
+  <legend>Compute</legend>
   <div class="controls">
+    <label class="control">Run on
+      <select class="backend"><option value="browser">this browser</option><option value="remote">remote</option></select></label>
     ${range("step-budget", "Step budget", STEP_BUDGETS.length - 1)}
     ${range("time-budget", "Time budget", TIME_BUDGETS.length - 1)}
   </div>
@@ -228,6 +261,11 @@ const formatBudget = (v: number, unit: string): string => (v === Infinity ? "off
 
 const EMPTY: Batch = { n: 0, x: new Float64Array(0), y: new Float64Array(0) };
 
+const stopText = (reason: StopReason): string =>
+  reason === "steps" ? "step budget used up" : reason === "time" ? "time budget used up" : "stopped";
+// A Python traceback's last line says what went wrong; the rest is in the browser console.
+const lastLine = (error: string): string => error.trim().split("\n").at(-1) ?? error;
+
 export class NnFit extends HTMLElement {
   #root = this.attachShadow({ mode: "open" });
   #ctx: CanvasRenderingContext2D | null = null;
@@ -252,6 +290,10 @@ export class NnFit extends HTMLElement {
   #steps = 0;
   #trainMs = 0;
   #flops = 0;
+  #backend: Backend = "browser";
+  #remote: RemoteRun | null = null;
+  #device = BROWSER;
+  #remoteNote = ""; // why the last remote run failed; shown under the plot until the next run
 
   // Data: the true curve (drawn or generated), the training sample drawn from it, the spiral's held-out set.
   #truth: DrawBuffer = makeDrawBuffer(COLUMNS);
@@ -277,19 +319,13 @@ export class NnFit extends HTMLElement {
   #built = false;
 
   get stats(): NnFitStats {
-    const task = this.#task();
-    const train = this.#train.n > 0 ? evaluate(this.#net, task, this.#train) : null;
-    const curve = this.#isCurve() && this.#truthBatch.n > 0 ? evaluate(this.#net, task, this.#truthBatch) : null;
-    const held = !this.#isCurve() && this.#heldOut.n > 0 ? evaluate(this.#net, task, this.#heldOut) : null;
+    const metrics = this.#remote?.tick ? this.#tickMetrics(this.#remote.tick) : this.#metrics();
     return {
       dataset: this.#dataset,
       sizes: this.#net.sizes,
       params: paramCount(this.#net),
       samples: this.#train.n,
-      loss: train?.loss ?? null,
-      trueError: curve?.loss ?? null,
-      accuracy: train?.accuracy ?? null,
-      heldOutAccuracy: held?.accuracy ?? null,
+      ...metrics,
       steps: this.#steps,
       seconds: this.#trainMs / 1000,
       flops: this.#flops,
@@ -297,7 +333,24 @@ export class NnFit extends HTMLElement {
       timeBudget: this.#timeBudget(),
       training: this.#training,
       ready: this.#ready(),
+      backend: this.#backend,
+      device: this.#remote ? this.#remote.device ?? "remote (starting)" : this.#device,
     };
+  }
+
+  // The four metrics, from the browser's net (the plot's net between runs and during browser runs).
+  #metrics(): Pick<NnFitStats, "loss" | "trueError" | "accuracy" | "heldOutAccuracy"> {
+    const task = this.#task();
+    const train = this.#train.n > 0 ? evaluate(this.#net, task, this.#train) : null;
+    const curve = this.#isCurve() && this.#truthBatch.n > 0 ? evaluate(this.#net, task, this.#truthBatch) : null;
+    const held = !this.#isCurve() && this.#heldOut.n > 0 ? evaluate(this.#net, task, this.#heldOut) : null;
+    return { loss: train?.loss ?? null, trueError: curve?.loss ?? null, accuracy: train?.accuracy ?? null, heldOutAccuracy: held?.accuracy ?? null };
+  }
+
+  // The same four, from a remote tick: its test set is the true curve (draw/wave) or the held-out sample (spiral).
+  #tickMetrics(tick: RemoteTick): Pick<NnFitStats, "loss" | "trueError" | "accuracy" | "heldOutAccuracy"> {
+    const curve = this.#isCurve();
+    return { loss: tick.loss, trueError: curve ? tick.testLoss : null, accuracy: tick.accuracy, heldOutAccuracy: curve ? null : tick.testAccuracy };
   }
 
   // The curve the net is trained and scored against (the drawing with gaps filled), or null when empty.
@@ -315,6 +368,7 @@ export class NnFit extends HTMLElement {
     for (const undo of this.#cleanup) undo();
     this.#cleanup = [];
     this.#stopLoop();
+    this.#stopRemote(); // a remote run doesn't outlive the widget that started it (e.g. a closed link card)
   }
 
   #el<T extends Element>(selector: string, type: new () => T): T {
@@ -378,7 +432,11 @@ export class NnFit extends HTMLElement {
     const button = (cls: string, fn: () => void): void => { on(this.#el(`button.${cls}`, HTMLButtonElement), "click", fn); };
     const canvas = this.#el("canvas", HTMLCanvasElement);
 
-    button("train", () => { this.#setTraining(!this.#training); });
+    button("train", () => {
+      if (this.#remote) this.#stopRemote();
+      else if (this.#backend === "remote") this.#startRemote();
+      else this.#setTraining(!this.#training);
+    });
     button("reset", () => {
       this.#seed++;
       this.#rebuildNet();
@@ -410,7 +468,9 @@ export class NnFit extends HTMLElement {
           : select.value === "wave" ? "Random wave generated. You can draw over it to edit it."
             : "Spiral dataset: two classes.");
       if (this.#training && !this.#ready()) this.#setTraining(false);
-      if (this.#inputs() !== inputsBefore) this.#rebuildNet(); // draw <-> wave keeps the weights
+      // draw <-> wave keeps the weights. Otherwise the net's input count changes: build it without painting,
+      // since painting it on the old dataset's points reads past their end; the new data paints both.
+      if (this.#inputs() !== inputsBefore) this.#makeNet();
       if (select.value === "wave") this.#regenWave();
       else this.#dataChanged();
     });
@@ -420,6 +480,24 @@ export class NnFit extends HTMLElement {
       this.#activation = activation.value;
       this.#rebuildNet();
     });
+
+    const backend = this.#el("select.backend", HTMLSelectElement);
+    on(backend, "change", () => {
+      if (backend.value !== "browser" && backend.value !== "remote") return;
+      if (this.#training) this.#setTraining(false); // a browser run pauses; the select is disabled during a remote run
+      this.#backend = backend.value;
+      this.#announce(backend.value === "remote" ? `Train runs remotely, on ${remoteRunner()?.label ?? "the connected session"}.` : "Train runs in this browser.");
+      this.#syncControls();
+      this.#paint();
+    });
+    // The page's session comes and goes (Connect / disconnect): remote is offered only while there is one.
+    this.#cleanup.push(onRemoteRunnerChange(() => {
+      if (remoteRunner() === null && this.#backend === "remote" && this.#remote === null) {
+        this.#backend = "browser";
+        this.#announce("The remote session went away; Train runs in this browser.");
+      }
+      this.#syncControls();
+    }));
 
     const slider = (cls: string, set: (v: number) => void, after: () => void): void => {
       const input = this.#el(`input.${cls}`, HTMLInputElement);
@@ -463,7 +541,7 @@ export class NnFit extends HTMLElement {
 
     // Drawing (draw and wave): one stroke per pointer, captured so it continues outside the canvas.
     on(canvas, "pointerdown", (e) => {
-      if (!this.#isCurve() || this.#stroke) return;
+      if (!this.#isCurve() || this.#stroke || this.#remote) return; // the data is fixed while a remote run trains on it
       canvas.setPointerCapture(e.pointerId);
       const p = this.#toPlot(e);
       paintStroke(this.#truth, null, p);
@@ -520,12 +598,15 @@ export class NnFit extends HTMLElement {
     return this.#isCurve() ? 1 : 2;
   }
 
+  // Budgets in force: a remote run always stops, so there "off" means the remote cap.
   #stepBudget(): number {
-    return at(STEP_BUDGETS, this.#stepBudgetK);
+    const budget = at(STEP_BUDGETS, this.#stepBudgetK);
+    return this.#backend === "remote" ? Math.min(budget, REMOTE_MAX_STEPS) : budget;
   }
 
   #timeBudget(): number {
-    return at(TIME_BUDGETS, this.#timeBudgetK);
+    const budget = at(TIME_BUDGETS, this.#timeBudgetK);
+    return this.#backend === "remote" ? Math.min(budget, REMOTE_MAX_SECONDS) : budget;
   }
 
   #budgetLeft(): boolean {
@@ -546,14 +627,20 @@ export class NnFit extends HTMLElement {
   }
 
   #rebuildNet(): void {
+    this.#makeNet();
+    this.#syncControls();
+    this.#paint();
+  }
+
+  // Fresh weights for the current settings, counters back to zero; no repaint.
+  #makeNet(): void {
     const sizes = [this.#inputs(), ...this.#widths.slice(0, this.#layers), 1];
     this.#net = initMlp(sizes, this.#activation, seeded(this.#seed));
     this.#opt = makeAdam(this.#net);
     this.#steps = 0;
     this.#trainMs = 0;
     this.#flops = 0;
-    this.#syncControls();
-    this.#paint();
+    this.#device = BROWSER;
   }
 
   // Regenerate the wave from its parameters (same seed: the slider changes reshape the same curve).
@@ -632,15 +719,26 @@ export class NnFit extends HTMLElement {
     set("wiggles", this.#wave.wiggles - 1, String(this.#wave.wiggles));
     set("roughness", this.#wave.roughnessK, at(ROUGHNESSES, this.#wave.roughnessK).toFixed(2));
     set("stages", this.#wave.stages - 1, String(this.#wave.stages));
-    set("step-budget", this.#stepBudgetK, formatBudget(this.#stepBudget(), ""));
-    set("time-budget", this.#timeBudgetK, formatBudget(this.#timeBudget(), " s"));
+    // The sliders show the reader's setting; the readout shows what's in force (remote caps "off").
+    set("step-budget", this.#stepBudgetK, formatBudget(at(STEP_BUDGETS, this.#stepBudgetK), ""));
+    set("time-budget", this.#timeBudgetK, formatBudget(at(TIME_BUDGETS, this.#timeBudgetK), " s"));
     this.#renderWidths();
 
+    const remote = this.#remote;
+    const runner = remoteRunner();
+    const option = this.#el("select.backend option[value=remote]", HTMLOptionElement);
+    option.disabled = runner === null;
+    option.textContent = runner === null ? "remote (connect first)" : `remote: ${runner.label}`;
+    this.#el("select.backend", HTMLSelectElement).value = this.#backend;
+    // While a remote run trains, everything it was sent stays as it was: data, network, budgets, backend.
+    for (const cls of ["data", "network", "compute"]) this.#el(`fieldset.${cls}`, HTMLFieldSetElement).disabled = remote !== null;
+    for (const cls of ["reset", "resample", "new-wave", "clear"]) this.#el(`button.${cls}`, HTMLButtonElement).disabled = remote !== null;
+
     const train = this.#el("button.train", HTMLButtonElement);
-    train.textContent = this.#training ? "Pause" : "Train";
+    train.textContent = remote ? (remote.stopping ? "Stopping…" : "Stop") : this.#training ? "Pause" : "Train";
     // aria-disabled rather than disabled: the button stays focusable, so a screen reader still reaches
     // it and reads its description (the centred hint, then the note line) saying why it can't train.
-    const ready = this.#ready() || this.#training;
+    const ready = remote ? !remote.stopping : this.#ready() || this.#training;
     train.setAttribute("aria-disabled", String(!ready));
     // Hidden elements referenced by aria-describedby still count toward the description, so a hidden
     // message is also emptied.
@@ -650,6 +748,7 @@ export class NnFit extends HTMLElement {
     hint.textContent = !empty ? "" : this.#dataset === "wave" ? "draw a curve, or press New random curve" : "draw a curve, or pick Random wave";
     const filled = this.#isCurve() && this.#curve !== null ? gaps(this.#truth) : [];
     const note = [
+      this.#remoteNote,
       this.#budgetLeft() ? "" : "Budget used up. Raise a budget or reset the weights to train again.",
       filled.length > 0 ? `Dashed parts were filled in: ${describeGaps(this.#truth)}.` : "",
     ].filter((m) => m !== "").join(" ");
@@ -667,6 +766,106 @@ export class NnFit extends HTMLElement {
     this.#updateLoop();
   }
 
+  // --- remote runs ---
+
+  // Send the current weights, optimizer state and data to the connected session and stream its ticks in.
+  // Everything a run depends on is fixed while it runs (the controls are disabled), so its end state lands
+  // on the same net it started from.
+  #startRemote(): void {
+    const runner = remoteRunner();
+    if (runner === null || !this.#ready()) return;
+    const isCurve = this.#isCurve();
+    const config = remoteConfig(this.#net, this.#opt, this.#task(),
+      { train: this.#train, test: isCurve ? this.#truthBatch : this.#heldOut, grid: isCurve ? CURVE_X : HEAT_XY },
+      { lr: at(LRS, this.#lrK), dtype: REMOTE_DTYPE, step: this.#steps, seconds: this.#trainMs / 1000, stepBudget: this.#stepBudget(), timeBudget: this.#timeBudget() });
+    const run: RemoteRun = { runner, fromStep: this.#steps, fromFlops: this.#flops, device: null, tick: null, end: null, stopping: false, failure: null };
+    this.#remote = run;
+    this.#training = true;
+    this.#remoteNote = "";
+    this.#announce(`Training remotely on ${runner.label}.`);
+    this.#syncControls();
+    let pending = "";
+    const onStdout = (text: string): void => {
+      const split = splitLines(pending, text);
+      pending = split.pending;
+      for (const line of split.lines) this.#onRemoteLine(run, line);
+    };
+    runner.run(remoteCode(config), onStdout).then(
+      (result) => { this.#remoteDone(run, result); },
+      (err: unknown) => { this.#remoteDone(run, { ok: false, error: `the session failed: ${String(err)}` }); },
+    );
+  }
+
+  // Take a finished run's weights and counters; returns why not, if its state doesn't fit this net.
+  #adoptRemote(run: RemoteRun, end: Extract<RemoteLine, { kind: "end" }> | null): string | null {
+    if (end === null) return "the remote run ended without its final state";
+    try {
+      loadState(this.#net, this.#opt, end.state);
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err);
+    }
+    this.#steps = end.step;
+    this.#trainMs = end.seconds * 1000;
+    this.#device = run.device ?? run.runner.label;
+    return null;
+  }
+
+  #stopRemote(): void {
+    const run = this.#remote;
+    if (run === null || run.stopping) return;
+    run.stopping = true;
+    this.#announce("Stopping the remote run.");
+    this.#syncControls();
+    run.runner.interrupt().catch((err: unknown) => {
+      if (this.#remote !== run) return;
+      run.stopping = false; // still running: Stop can be pressed again
+      this.#announce(`Couldn't stop the remote run: ${String(err)}`);
+      this.#syncControls();
+    });
+  }
+
+  // One line of the program's stdout. A line that doesn't parse stops the run: its output can't be trusted.
+  #onRemoteLine(run: RemoteRun, text: string): void {
+    if (this.#remote !== run || run.failure !== null) return;
+    let line: RemoteLine;
+    try {
+      line = parseLine(text);
+    } catch (err) {
+      run.failure = err instanceof Error ? err.message : String(err);
+      this.#stopRemote();
+      return;
+    }
+    switch (line.kind) {
+      case "start":
+        run.device = line.device === "cpu" ? `cpu · ${run.runner.label}` : `${line.device} · ${line.deviceName}`;
+        break;
+      case "tick":
+        run.tick = line;
+        this.#steps = line.step;
+        this.#trainMs = line.seconds * 1000;
+        this.#flops = run.fromFlops + (line.step - run.fromStep) * 6 * paramCount(this.#net) * this.#train.n;
+        break;
+      case "end":
+        run.end = line;
+        break;
+    }
+    this.#paint();
+  }
+
+  // The run's code finished (or the session failed). Keep its final weights if it said what they were.
+  #remoteDone(run: RemoteRun, result: RunResult): void {
+    if (this.#remote !== run) return;
+    const end = run.end;
+    const failure = run.failure ?? (result.ok ? null : result.error) ?? this.#adoptRemote(run, end);
+    this.#remote = null;
+    this.#training = false;
+    if (failure !== null) console.error(`<nn-fit> remote run failed on ${run.runner.label}:\n${failure}`);
+    this.#remoteNote = failure === null ? "" : `Remote run failed: ${lastLine(failure)}`;
+    this.#announce(failure === null && end !== null ? `Remote run stopped: ${stopText(end.reason)}.` : this.#remoteNote);
+    this.#syncControls();
+    this.#paint();
+  }
+
   #announce(message: string): void {
     this.#el("[role=status]", HTMLParagraphElement).textContent = message;
     this.#lastAria = 0; // describe the new state right away
@@ -675,7 +874,7 @@ export class NnFit extends HTMLElement {
   // --- loop ---
 
   #updateLoop(): void {
-    const run = this.#training && this.#onScreen && !document.hidden;
+    const run = this.#training && this.#remote === null && this.#onScreen && !document.hidden;
     if (run && this.#frame === 0) this.#frame = requestAnimationFrame((t) => { this.#tick(t); });
     if (!run) this.#stopLoop();
   }
@@ -699,6 +898,7 @@ export class NnFit extends HTMLElement {
         trainStep(this.#net, task, batch, this.#opt, lr);
         this.#steps++;
         this.#flops += flopsPerStep;
+        this.#device = BROWSER;
       }
     }
     if (!this.#budgetLeft()) {
@@ -828,17 +1028,15 @@ export class NnFit extends HTMLElement {
       ctx.restore();
     }
 
-    // The network's curve, sampled every 2 CSS px across the whole width.
-    const f = predictor(this.#net, "regression");
-    const input = new Float64Array(1);
+    // The network's curve: the browser's net sampled every 2 CSS px across the whole width, or during a
+    // remote run, its latest predictions (on CURVE_X).
     ctx.strokeStyle = c.net;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    for (let sx = 0; sx <= w; sx += 2) {
-      input[0] = ((sx / w) * 2 - 1) * INPUT_SCALE;
-      const sy = Math.max(-h, Math.min(2 * h, py(f(input))));
-      if (sx === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
-    }
+    this.#netCurve(w).forEach(([x, y], i) => {
+      const sy = Math.max(-h, Math.min(2 * h, py(y)));
+      if (i === 0) ctx.moveTo(px(x), sy); else ctx.lineTo(px(x), sy);
+    });
     ctx.stroke();
 
     // Training samples on top.
@@ -854,13 +1052,45 @@ export class NnFit extends HTMLElement {
     }
   }
 
-  #paintSpiral(ctx: CanvasRenderingContext2D, w: number, h: number): void {
-    const c = this.#colors();
-    // Heatmap: P(class A) on a grid x grid raster, mixed from the background toward the winning
-    // class's colour by confidence, then scaled up with smoothing.
+  // (plot x, y-hat) points along the network's curve.
+  #netCurve(w: number): [number, number][] {
+    const tick = this.#remote?.tick;
+    if (tick) return Array.from(tick.pred, (y, i) => [get(CURVE_X, i) / INPUT_SCALE, y]);
+    const f = predictor(this.#net, "regression");
+    const input = new Float64Array(1);
+    const points: [number, number][] = [];
+    for (let sx = 0; sx <= w; sx += 2) {
+      const x = (sx / w) * 2 - 1;
+      input[0] = x * INPUT_SCALE;
+      points.push([x, f(input)]);
+    }
+    return points;
+  }
+
+  // P(class A) on a grid x grid raster (row-major, top row first): the browser's net at about one cell per
+  // HEAT_PX, or during a remote run, its latest predictions (on HEAT_XY).
+  #heatValues(w: number): { grid: number; p: Float64Array } {
+    const tick = this.#remote?.tick;
+    if (tick) return { grid: HEAT_GRID, p: tick.pred };
     const f = predictor(this.#net, "binary");
     const input = new Float64Array(2);
     const grid = Math.min(HEATMAP_MAX, Math.max(16, Math.ceil(w / HEAT_PX)));
+    const p = new Float64Array(grid * grid);
+    for (let j = 0; j < grid; j++) {
+      for (let i = 0; i < grid; i++) {
+        input[0] = (((i + 0.5) / grid) * 2 - 1) * INPUT_SCALE;
+        input[1] = (1 - ((j + 0.5) / grid) * 2) * INPUT_SCALE;
+        p[j * grid + i] = f(input);
+      }
+    }
+    return { grid, p };
+  }
+
+  #paintSpiral(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    const c = this.#colors();
+    // Heatmap: P(class A) mixed from the background toward the winning class's colour by confidence, then
+    // scaled up with smoothing.
+    const { grid, p: heat } = this.#heatValues(w);
     this.#heat.width = grid;
     this.#heat.height = grid;
     const hctx = this.#heat.getContext("2d");
@@ -868,9 +1098,7 @@ export class NnFit extends HTMLElement {
     const img = hctx.createImageData(grid, grid);
     for (let j = 0; j < grid; j++) {
       for (let i = 0; i < grid; i++) {
-        input[0] = (((i + 0.5) / grid) * 2 - 1) * INPUT_SCALE;
-        input[1] = (1 - ((j + 0.5) / grid) * 2) * INPUT_SCALE;
-        const p = f(input);
+        const p = get(heat, j * grid + i);
         const toward = p >= 0.5 ? c.aRgb : c.bRgb;
         const t = Math.abs(2 * p - 1) * 0.45;
         const o = 4 * (j * grid + i);
@@ -919,6 +1147,7 @@ export class NnFit extends HTMLElement {
       `${s.seconds.toFixed(1)} s${of(s.timeBudget, " s")}`,
       `~${formatFlops(s.flops)}`,
       arch,
+      `on ${s.device}`,
     ];
     this.#el(".metrics", HTMLSpanElement).innerHTML = metrics.join(" · ");
     this.#el(".usage", HTMLSpanElement).innerHTML = usage.join(" · ");
