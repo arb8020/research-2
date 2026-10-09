@@ -78,7 +78,11 @@ let state: SessionState = { passed: {}, wasm: {} };
 const syntax = (lang: string): Extension => (lang === "c" ? cpp() : python());
 
 // Token colours come from page.css (.tok-* classes), so light/dark follow the page's CSS variables.
+// The font has to be a theme: CodeMirror's base theme (.ͼ1 .cm-scroller { font-family: monospace }) outranks a
+// plain .cm-scroller rule in page.css, and a theme is scoped and mounted after it, so this one wins.
+const monoFont = EditorView.theme({ ".cm-scroller": { fontFamily: "var(--font-mono)" } });
 const look = (label: string): Extension[] => [
+  monoFont,
   syntaxHighlighting(classHighlighter),
   EditorView.contentAttributes.of({ "aria-label": label }),
 ];
