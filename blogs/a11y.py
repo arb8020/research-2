@@ -44,6 +44,6 @@ with sync_playwright() as p:
         for scheme in ("light", "dark"):
             violations = audit(browser, theme, scheme)
             report(f"{theme} {scheme}", violations)
-        found += len(violations)
+            found += len(violations)
     browser.close()
 sys.exit(1 if found else 0)
