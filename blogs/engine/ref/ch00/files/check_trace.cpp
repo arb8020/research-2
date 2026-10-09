@@ -4,6 +4,8 @@
 //   step <budget> -> <id>:<tokens> ...   run a step; expect exactly this batch (then requeue it)
 //   done <id>                            generated += 1 (decode progress)
 // Prints "ok N steps", or the first mismatch as "<trace>:<line>: ..." and exits 1.
+// With an <out> path it also writes the replay as a trace: every line copied, except that each step's "-> ..." is
+// the batch sched_step actually produced (the checker diffs it against the expected trace).
 #include <cstring>
 #include "loop.h"
 
@@ -38,8 +40,8 @@ static bool expect_batch(const char* trace, int lineno, int steps, char* want, c
 }
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        fprintf(stderr, "usage: check_trace <trace>\n");
+    if (argc != 2 && argc != 3) {
+        fprintf(stderr, "usage: check_trace <trace> [<out>]\n");
         return 2;
     }
     setvbuf(stdout, nullptr, _IOLBF, 0); // line-buffered: the page streams each line as it comes
@@ -48,6 +50,15 @@ int main(int argc, char** argv) {
     if (f == nullptr) {
         perror(trace);
         return 2;
+    }
+    FILE* out = nullptr;
+    if (argc == 3) {
+        out = fopen(argv[2], "w");
+        if (out == nullptr) {
+            perror(argv[2]);
+            return 2;
+        }
+        setvbuf(out, nullptr, _IOLBF, 0); // a crash mid-replay still leaves every line written so far
     }
     Ring waiting;
     ring_init(&waiting, storage, RING_CAP);
@@ -59,6 +70,8 @@ int main(int argc, char** argv) {
         unsigned a = 0;
         unsigned b = 0;
         unsigned c = 0;
+        bool is_step = strncmp(line, "step ", 5) == 0;
+        if (out != nullptr && !is_step) fputs(line, out);
         if (line[0] == '#' || line[0] == '\n') continue;
         if (sscanf(line, "req %u %u %u", &a, &b, &c) == 3) {
             ASSERT(a < MAX_REQS);
@@ -76,6 +89,11 @@ int main(int argc, char** argv) {
         if (sscanf(line, "step %u", &a) == 1) {
             Batch got;
             sched_step(reqs, &waiting, a, &got);
+            if (out != nullptr) {
+                fprintf(out, "step %u -> ", a);
+                for (u32 i = 0; i < got.n; i++) fprintf(out, i == 0 ? "%u:%u" : " %u:%u", got.ids[i], got.tokens[i]);
+                fputc('\n', out);
+            }
             char* arrow = strstr(line, "->");
             char* want = arrow != nullptr ? arrow + 2 : line + strlen(line);
             if (!expect_batch(trace, lineno, steps, want, &got)) return 1;
@@ -87,6 +105,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     fclose(f);
+    if (out != nullptr) fclose(out);
     printf("ok %d steps\n", steps);
     return 0;
 }

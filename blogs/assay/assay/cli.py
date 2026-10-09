@@ -16,7 +16,7 @@ stdout, one JSON object per line:
     {"kind":"selftest",...}                          with --selftest
     {"kind":"summary","outcome":"pass|fail|blocked|error","counts":{...},"run":"<session id>","isolation":...}
 
-ch01 goes through the warm process (zygote.py) unless --spawn / ASSAY_SPAWN=1: this process stays stdlib-only and
+ch01 goes through the warm process (core.py, a fork server) unless --spawn / ASSAY_SPAWN=1: this process stays stdlib-only and
 copies the trusted worker's lines through, so a check does not pay torch's import.
 """
 
@@ -36,8 +36,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
-from assay import sandbox
-from assay.store import Store
+from assay import core
 
 CHAPTERS = {"ch00": "assay.ch00", "ch01": "assay.ch01.suite"}
 NEEDS_TORCH = {"ch01"}
@@ -73,17 +72,15 @@ def main(argv: list[str] | None = None) -> int:
 
 def client(argv: list[str]) -> int:
     """Hand the check to a fork of the warm process; copy its JSON lines to stdout; exit code from its summary."""
-    from assay import zygote
-
     def log(text: str) -> None:
         print(json.dumps({"kind": "log", "text": text}), flush=True)
 
     try:
-        path = zygote.ensure(log)
+        path = core.ensure_warm(log)
         read_end, write_end = os.pipe()
         try:
-            env = {**os.environ, "ASSAY_ZYGOTE": str(path)}
-            zygote.request(path, {"kind": "trusted", "argv": argv, "cwd": os.getcwd(), "env": env,
+            env = {**os.environ, "ASSAY_WARM": str(path)}
+            core.warm_request(path, {"kind": "trusted", "argv": argv, "cwd": os.getcwd(), "env": env,
                                   "pythonpath": str(Path(__file__).resolve().parents[1]),
                                   "client_pid": os.getpid()}, [write_end, sys.stderr.fileno()])
         finally:
@@ -129,15 +126,15 @@ def worker(argv: list[str], *, out_fd: int, client_pid: int | None) -> int:
     emit = Emitter(out_fd)
     if client_pid is not None:
         threading.Thread(target=_watchdog, args=(client_pid,), daemon=True).start()
-    store = Store.from_env()
-    iso = sandbox.isolation()
-    zygote = Path(os.environ["ASSAY_ZYGOTE"]) if os.environ.get("ASSAY_ZYGOTE") and client_pid else None
+    store = core.Store.from_env()
+    iso = core.isolation()
+    warm = Path(os.environ["ASSAY_WARM"]) if os.environ.get("ASSAY_WARM") and client_pid else None
     emit.log(f"{args.chapter}: isolation {iso.mode} (child user {iso.user}); store {store.root}; "
-             f"{'forked from the warm process' if zygote else 'spawned'}")
+             f"{'forked from the warm process' if warm else 'spawned'}")
     chapter = importlib.import_module(CHAPTERS[args.chapter])
     records: list[dict[str, Any]] = []
     try:
-        for record in chapter.checks(args, store, iso, emit.log, zygote):
+        for record in chapter.checks(args, store, iso, emit.log, warm):
             records.append(record)
             emit(record)
     except Exception as exc:  # noqa: BLE001 -- infrastructure: never graded, exit 2 (smevals' failed Run)
@@ -175,14 +172,14 @@ def summarize(records: list[dict[str, Any]], selftest: bool) -> tuple[str, dict[
 
 def _watchdog(client_pid: int) -> None:
     """The client (run_checks, killed by a Stop or a timeout) is gone: kill our children and exit."""
-    while sandbox.pid_alive(client_pid):
+    while core.pid_alive(client_pid):
         time.sleep(0.25)
     _abandon()
 
 
 def _abandon() -> None:
-    for pid in list(sandbox.LIVE):
-        sandbox.kill_group(pid)
+    for pid in list(core.LIVE):
+        core.kill_group(pid)
     os._exit(EXIT["error"])
 
 
