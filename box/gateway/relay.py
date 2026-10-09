@@ -19,16 +19,18 @@ per request. What it keeps:
 
 A Relay owns all of that (boots and their threads, event streams, clients); Handler is HTTP only.
 
-    POST /sessions                {provider, token, gpu, labels}  -> 202 {session_id, status}
+    POST /sessions                {provider, token, gpu, labels, lease_s}  -> 202 {session_id, status}
     GET  /sessions/{id}           X-Box-Token: id:secret          -> {session_id, status} | 404
     POST /sessions/{id}/end       X-Box-Token                     -> {session_id, status}
+    POST /sessions/{id}/extend    X-Box-Token, {until}            -> {session_id, status} | 409 while booting
     GET  /sessions/{id}/events    ?token=id:secret (EventSource)  -> SSE: step | log | status
 
 The session's machine runs one service (Session.serve): Jupyter Server on PORT, behind box's expose(PORT) (on
 Modal an encrypted tunnel). Its token is derived, never stored: HMAC(reader's token secret, session
-id), so any relay holding the reader's token can say it again. Once Jupyter answers, the relay
-releases the session's lease: the supervisor then ends it when idle (no connection to the port for
-idle_timeout_s), at its deadline, or on POST /end. Nothing here holds a session open.
+id), so any relay holding the reader's token can say it again. The session is box's from the start
+(detached): its lease (lease_s from the page, extended by POST /extend up to READER_CEILING_S from
+creation) ends it, or idle (no connection to the port for idle_timeout_s), or POST /end. Nothing
+here holds a session open.
 """
 
 from __future__ import annotations
@@ -39,6 +41,7 @@ import functools
 import hashlib
 import hmac
 import json
+import math
 import re
 import sys
 import threading
@@ -63,7 +66,10 @@ KERNEL_IMAGE = str(HERE / "kernel.Dockerfile")
 PORT = 8888  # Jupyter Server, on the machine
 LABEL_GPU = "relay.gpu"  # what the session was launched with, so a stateless GET can say it
 LABEL_PORT = "relay.port"
-DEADLINE_S = 20 * 60  # the session's lifetime; box adds a 10 min provider backstop (30 min hard stop)
+LABEL_LEASE = "relay.lease_s"  # the first lease the page asked for, so a stateless GET can say it before the machine can
+READER_CEILING_S = 12 * 3600  # no reader session outlives this, from creation, however it is extended
+LEASE_S = 90 * 60  # POST /sessions' lease_s when the page sends none
+MIN_LEASE_S, MAX_LEASE_S = 60, READER_CEILING_S  # what lease_s may be: a minute, up to the whole ceiling
 IDLE_TIMEOUT_S = 5 * 60  # no connection to Jupyter (the page keeps a websocket open) for this long ends it
 BOOT_TIMEOUT_S = 10 * 60  # sandbox scheduled + supervisor up (a cold image build happens before, in sdk.create)
 JUPYTER_READY_S = 3 * 60  # Jupyter answering, after the supervisor is up
@@ -79,10 +85,10 @@ STREAM_POLL_S = 2.0  # how often an event stream asks the machine (once Jupyter 
 SSE_PING_S = 15.0
 PROBE_TIMEOUT_S = 5.0
 CLOSE_TIMEOUT_S = 60.0
-# The supervisor's end reasons, in the contract's words. released: nobody holds the lease and the
-# Jupyter service exited, so the kernel the page used is gone ("the machine went away").
-REASONS = {"stopped": "stopped", "deadline": "deadline", "idle": "idle", "lease_lost": "lease_lost",
-           "released": "machine_lost", "machine_lost": "machine_lost"}  # fmt: skip
+# The supervisor's end reasons, in the contract's words. released: someone holding the reader's
+# credential released it (box release): to the page, it was stopped.
+REASONS = {"lease": "lease", "released": "stopped", "stopped": "stopped", "idle": "idle", "machine_lost": "machine_lost"}
+JUPYTER_GONE = "machine_lost"  # Jupyter exited on its own: the kernel the page used is gone
 RECORD_VOLUME = "box-sessions"  # a Modal Volume in the reader's workspace: every session's record
 LOCAL_ORIGIN = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 
@@ -110,7 +116,6 @@ class Config:
     python: str = "python3"  # on the machine
     ip: str = "0.0.0.0"  # Jupyter's bind address on the machine
     port: Callable[[], int] = lambda: PORT
-    deadline_s: int = DEADLINE_S
     idle_timeout_s: float = IDLE_TIMEOUT_S
 
 
@@ -119,6 +124,7 @@ class CreateRequest:
     token: ModalToken
     gpu: str | None
     labels: dict[str, str]
+    lease_s: int
 
 
 @dataclass
@@ -130,7 +136,7 @@ class Boot:
     token_digest: str
     gpu: str | None
     created_at: float
-    deadline_at: float
+    lease: sdk.Lease  # the first one, as this relay reckons it until the machine says
     events: list[dict[str, Any]] = field(default_factory=list)
     dropped: int = 0
     status: dict[str, Any] | None = None  # the latest status event's
@@ -172,6 +178,10 @@ class BadRequest(Exception):
     """The caller sent something this API does not take (400)."""
 
 
+class Conflict(Exception):
+    """The session is not in a state this call can act on (extend while booting): 409."""
+
+
 class Busy(Exception):
     """This relay is at one of its limits (boots, streams, readers' clients): 429, try again later."""
 
@@ -207,7 +217,22 @@ def parse_create(body: bytes, gpus: tuple[str | None, ...]) -> CreateRequest:
         raise BadRequest(f"at most {MAX_LABELS} labels")
     if mine := [k for k in labels if k.startswith((*sdk.RESERVED, "relay."))]:
         raise BadRequest(f"labels {mine} are set by box or the relay")
-    return CreateRequest(ModalToken(token["id"], token["secret"]), gpu, labels)
+    lease_s = raw.get("lease_s", LEASE_S)
+    if type(lease_s) is not int or not MIN_LEASE_S <= lease_s <= MAX_LEASE_S:  # type(): a JSON true is not 1 s
+        raise BadRequest(f"lease_s must be an integer from {MIN_LEASE_S} to {MAX_LEASE_S}, got {lease_s!r}")
+    return CreateRequest(ModalToken(token["id"], token["secret"]), gpu, labels, lease_s)
+
+
+def parse_extend(body: bytes) -> float:
+    """POST /extend's {until}: a unix time, in seconds."""
+    try:
+        raw = json.loads(body)
+    except ValueError as e:
+        raise BadRequest(f"body is not JSON: {e}") from None
+    until = raw.get("until") if isinstance(raw, dict) else None
+    if type(until) not in (int, float) or not math.isfinite(until):
+        raise BadRequest(f"expected {{until: unix seconds}}, got {raw!r}")
+    return float(until)
 
 
 def kernel_token(token: ModalToken, session_id: str) -> str:
@@ -223,8 +248,9 @@ def digest(token: ModalToken) -> str:
 # ---- the contract's status object ----
 
 
-def wire(state: str, gpu: str | None, started_at: float, deadline: float, **extra: Any) -> dict[str, Any]:
-    return {"state": state, "gpu": gpu, "started_at": started_at, "deadline": deadline, **extra}
+def wire(state: str, gpu: str | None, started_at: float, lease: sdk.Lease, **extra: Any) -> dict[str, Any]:
+    """The contract's status. deadline: lease_until under its old name, for pages from before the lease."""
+    return {"state": state, "gpu": gpu, "started_at": started_at, "deadline": lease.until, "lease_until": lease.until, "ceiling": lease.ceiling, **extra}
 
 
 def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: bool) -> dict[str, Any]:
@@ -232,12 +258,14 @@ def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: boo
     is probed: running means the kernel is reachable, not just the supervisor up)."""
     labels = s.machine.labels
     gpu = labels.get(LABEL_GPU) or None
-    deadline = float(labels[sdk.LABEL_DEADLINE])
-    # times only matter while it runs (the pill's uptime); once ended, the label's deadline stands in for both
-    ended = functools.partial(wire, "ended", gpu, deadline - cfg.deadline_s, deadline)
+    ceiling = float(labels[sdk.LABEL_CEILING])
+    created_at = ceiling - READER_CEILING_S
+    first = sdk.Lease(until=created_at + float(labels[LABEL_LEASE]), ceiling=ceiling)
+    # times only matter while it runs (the pill's uptime, the lease's countdown); before and after, the labels stand in
+    ended = functools.partial(wire, "ended", gpu, created_at, first)
     match s.status():
         case Booting():
-            return wire("booting", gpu, time.time(), deadline)
+            return wire("booting", gpu, time.time(), first)
         case Running() as running:
             try:
                 return running_status(s, token, running, ready=ready, gpu=gpu, ended=ended)
@@ -257,12 +285,12 @@ def running_status(  # noqa: PLR0913 (the session, what the supervisor said, how
     nothing starts another); else still booting. Gone if the machine goes meanwhile."""
     kernel = {"url": s.expose(int(s.machine.labels[LABEL_PORT])).url, "token": kernel_token(token, s.id)}
     if ready or jupyter_ready(kernel):
-        return wire("running", gpu, running.started_at, running.deadline_at, kernel=kernel)
+        return wire("running", gpu, running.started_at, running.lease, kernel=kernel)
     jupyter = kernel_service(s)
     match Queued() if jupyter is None else jupyter.status():
-        case Done(ending=ending):  # the session's reason, or Jupyter's own end (then the session's is "released")
-            return ended(reason=REASONS.get(ending.reason, REASONS["released"]))
-    return wire("booting", gpu, running.started_at, running.deadline_at)
+        case Done(ending=ending):  # the session's reason, or Jupyter's own end (exited, killed)
+            return ended(reason=REASONS.get(ending.reason, JUPYTER_GONE))
+    return wire("booting", gpu, running.started_at, running.lease)
 
 
 def jupyter_ready(kernel: dict[str, str]) -> bool:
@@ -301,7 +329,8 @@ def jupyter_cmd(cfg: Config, port: int, origin: str) -> str:
 
 
 def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str) -> None:
-    """Launch, start Jupyter, wait until it answers, release."""
+    """Launch, start Jupyter, wait until it answers. The session is detached from the start: if
+    this relay dies mid-boot, its lease (or idle) ends it."""
     t0 = time.monotonic()
     session: sdk.Session | None = None
     try:
@@ -311,9 +340,9 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
         rec.step("gateway", f"creating sandbox: gpu {rec.gpu or 'none'} (a workspace's first connect builds the image: minutes)")
         created_at = time.monotonic()
         made = sdk.create(
-            access.provider, session_id=rec.session_id, record=access.record, deadline_s=cfg.deadline_s, gpu=rec.gpu, image=cfg.image,
-            labels={**cfg.labels, **req.labels, LABEL_GPU: rec.gpu or "", LABEL_PORT: str(port)},
-            idle_timeout_s=cfg.idle_timeout_s, ports=(port,),
+            access.provider, session_id=rec.session_id, record=access.record, lease_s=req.lease_s, ceiling_s=READER_CEILING_S,
+            gpu=rec.gpu, image=cfg.image, labels={**cfg.labels, **req.labels, LABEL_GPU: rec.gpu or "", LABEL_PORT: str(port),
+            LABEL_LEASE: str(req.lease_s)}, idle_timeout_s=cfg.idle_timeout_s, ports=(port,),  # idle stays on: a closed tab ends it
         )  # fmt: skip
         rec.step("gateway", f"sandbox {made.machine.id} created in {time.monotonic() - created_at:.1f} s; waiting for it to start")
         try:
@@ -321,7 +350,6 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
         except BaseException:
             made.machine.terminate()  # no supervisor up to end it (as launch does)
             raise
-        made.hold()
         session = made
         rec.step("machine", f"supervisor up ({time.monotonic() - t0:.1f} s since connect)")
         if rec.cancelled:
@@ -334,26 +362,25 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
         wait_for_jupyter(rec, job, kernel)
         if rec.cancelled:
             raise Cancelled
-        session.release()  # from here the supervisor alone ends it: idle, deadline, or POST /end
         running = session.status()
-        if not isinstance(running, Running):  # it ended as it came up (its deadline, an idle timeout shorter than the boot)
+        if not isinstance(running, Running):  # it ended as it came up (its lease, an idle timeout shorter than the boot)
             raise RuntimeError(f"{rec.session_id}: {running} as Jupyter came up")
-        status = wire("running", rec.gpu, running.started_at, running.deadline_at, kernel=kernel)
+        status = wire("running", rec.gpu, running.started_at, running.lease, kernel=kernel)
         rec.step("machine", f"Jupyter Server ready ({time.monotonic() - t0:.1f} s since connect)")
         rec.finish(status)
     except Cancelled:
         rec.step("gateway", "ended while booting")
         end_quietly(session)
-        rec.finish(wire("ended", rec.gpu, rec.created_at, rec.deadline_at, reason="stopped"))
+        rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="stopped"))
     except Exception as e:  # noqa: BLE001 (any failure ends the boot; the reader sees why)
         if rec.cancelled:  # POST /end closed the machine under us: that is the end, not a failure
             rec.step("gateway", "ended while booting")
-            rec.finish(wire("ended", rec.gpu, rec.created_at, rec.deadline_at, reason="stopped"))
+            rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="stopped"))
             return
         print(f"relay: boot {rec.session_id} failed: {e!r}", file=sys.stderr)
         rec.step("gateway", f"boot failed: {type(e).__name__}: {e}")
         end_quietly(session)
-        rec.finish(wire("ended", rec.gpu, rec.created_at, rec.deadline_at, reason="boot_failed"))
+        rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="boot_failed"))
 
 
 class Cancelled(Exception):
@@ -473,7 +500,7 @@ class Relay:
     threads), its open event streams (at most MAX_STREAMS), and its readers' clients (Accesses).
     close() ends all of it: in-flight boots are cancelled (their sessions end, as POST /end would)
     and joined, streams told to stop and waited for, clients closed. A booted session is not the
-    relay's: it outlives the relay (idle, deadline, or POST /end on any relay end it)."""
+    relay's: it outlives the relay (its lease, idle, or POST /end on any relay end it)."""
 
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
@@ -488,13 +515,13 @@ class Relay:
         """Start a boot on its own thread; returns the session's first (booting) status at once."""
         now = time.time()
         sid = sdk.new_session_id()
-        rec = Boot(sid, digest(req.token), req.gpu, now, now + self.cfg.deadline_s)
+        rec = Boot(sid, digest(req.token), req.gpu, now, sdk.Lease(until=now + req.lease_s, ceiling=now + READER_CEILING_S))
         thread = threading.Thread(target=self._boot, args=(rec, req, origin), name=f"boot-{sid}")
         with self._changed:
             self._forget_old_boots()
             if len(self._boots) >= MAX_BOOTS:
                 raise Busy(f"{MAX_BOOTS} sessions booting or just booted on this relay; try again in a minute")
-            rec.emit("status", status=wire("booting", req.gpu, rec.created_at, rec.deadline_at))  # before anyone can find it
+            rec.emit("status", status=wire("booting", req.gpu, rec.created_at, rec.lease))  # before anyone can find it
             self._boots[sid] = rec
             self._threads[sid] = thread
         thread.start()
@@ -517,12 +544,31 @@ class Relay:
             except LookupError:
                 if rec is None:
                     raise
-                return wire("ended", rec.gpu, rec.created_at, rec.deadline_at, reason="stopped")
+                return wire("ended", rec.gpu, rec.created_at, rec.lease, reason="stopped")
             s.close(timeout_s=CLOSE_TIMEOUT_S)
             status = machine_status(self.cfg, s, token, ready=False)
         if status["state"] != "ended":  # close() terminated it, but the provider still answers for it
             raise RuntimeError(f"{sid}: still {status['state']} after close")
         return status
+
+    def extend(self, sid: str, token: ModalToken, until: float) -> dict[str, Any]:
+        """Move the session's lease to until, clamped to its ceiling, never shorter (sdk
+        Session.extend); returns its status after. Conflict while its supervisor is not up yet."""
+        rec = self._boot_of(sid, token)
+        with self._accesses.use(token) as access:
+            try:
+                s = attach(access, sid)
+            except LookupError:
+                if rec is None or rec.ended_at is not None:
+                    raise
+                raise Conflict(f"{sid} is still booting: extend once it is running") from None
+            match s.status():
+                case Booting():
+                    raise Conflict(f"{sid} is still booting: extend once it is running")
+                case Running():
+                    with contextlib.suppress(sdk.Gone):  # it went meanwhile: the status says ended
+                        s.extend(until)
+            return machine_status(self.cfg, s, token, ready=False)
 
     def events(self, sid: str, token: ModalToken, last_id: str, start: Callable[[], Sse]) -> None:
         """SSE: the boot's events from memory (ids b<n>), then the machine's (ids o<out>.<err>, the
@@ -562,7 +608,7 @@ class Relay:
                 boot(self.cfg, access, rec, req, origin)
         except Busy as e:
             rec.step("gateway", f"boot failed: {e}")
-            rec.finish(wire("ended", rec.gpu, rec.created_at, rec.deadline_at, reason="boot_failed"))
+            rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="boot_failed"))
 
     @contextlib.contextmanager
     def _stream_slot(self) -> Iterator[None]:
@@ -728,6 +774,9 @@ class Handler(BaseHTTPRequestHandler):
                 code, body = 200, {"session_id": sid, "status": relay.get(sid, parse_token(self.headers.get("X-Box-Token", "")))}
             elif sid is not None and route == ("POST", 3, "end"):
                 code, body = 200, {"session_id": sid, "status": relay.end(sid, parse_token(self.headers.get("X-Box-Token", "")))}
+            elif sid is not None and route == ("POST", 3, "extend"):
+                until = parse_extend(self.body())
+                code, body = 200, {"session_id": sid, "status": relay.extend(sid, parse_token(self.headers.get("X-Box-Token", "")), until)}
             elif sid is not None and route == ("GET", 3, "events"):
                 self.events(t0, sid, parse_token((parse_qs(url.query).get("token") or [""])[0]))
                 return
@@ -739,13 +788,16 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(code, body)
         self.wide(code, t0, session=sid or body.get("session_id"), **({"error": body["error"]} if "error" in body else {}))
 
-    def create_request(self) -> tuple[CreateRequest, str]:
+    def body(self) -> bytes:
         raw = self.headers.get("Content-Length", "0")
         if not raw.isdigit():  # also refuses a negative one
             raise BadRequest(f"Content-Length {raw!r} is not a byte count")
         if int(raw) > MAX_BODY:
             raise BadRequest(f"body over {MAX_BODY} bytes")
-        req = parse_create(self.rfile.read(int(raw)), self.server.relay.cfg.gpus)
+        return self.rfile.read(int(raw))
+
+    def create_request(self) -> tuple[CreateRequest, str]:
+        req = parse_create(self.body(), self.server.relay.cfg.gpus)
         origin = self.headers.get("Origin", "")
         if origin and not self.server.relay.cfg.origins.fullmatch(origin):
             raise BadRequest(f"origin {origin!r} is not one this relay serves")
@@ -778,12 +830,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def error_code(e: Exception) -> int:
-    """BadRequest 400, LookupError (no such session) 404, Busy 429, anything else (Modal, the machine) 502."""
+    """BadRequest 400, LookupError (no such session) 404, Conflict 409, Busy 429, anything else (Modal, the machine) 502."""
     match e:
         case BadRequest():
             return 400
         case LookupError():
             return 404
+        case Conflict():
+            return 409
         case Busy():
             return 429
         case _:
@@ -803,7 +857,7 @@ def modal_access(token: ModalToken, region: str) -> Access:
 def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...]) -> Config:
     return Config(
         access=lambda token: modal_access(token, a.region), image=KERNEL_IMAGE, gpus=gpus, labels=dict(a.label),
-        origins=re.compile(LOCAL_ORIGIN), deadline_s=a.deadline_s, idle_timeout_s=a.idle_timeout_s,
+        origins=re.compile(LOCAL_ORIGIN), idle_timeout_s=a.idle_timeout_s,
     )  # fmt: skip
 
 
@@ -842,19 +896,16 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8790)
     ap.add_argument("--gpus", default="T4", help="comma-separated GPUs a reader may ask for (CPU, gpu null, always)")
     ap.add_argument("--region", default="us", help="Modal region for every session")
-    ap.add_argument("--deadline-s", type=int, default=DEADLINE_S, help="a session's lifetime (box adds a 600 s provider backstop)")
     ap.add_argument("--idle-timeout-s", type=float, default=IDLE_TIMEOUT_S, help="no connection to Jupyter for this long ends a session")
     ap.add_argument("--label", type=label, action="append", default=[("box.purpose", "reader-path-dev")],
                     help="key=value stamped on every session (default box.purpose=reader-path-dev, for sweeps)")  # fmt: skip
     a = ap.parse_args()
     gpus = (None, *[g for g in a.gpus.split(",") if g])
-    if a.deadline_s + 600 > 24 * 3600:
-        ap.error("--deadline-s: Modal caps a sandbox at 24 h, and box adds a 600 s backstop")
     cfg = modal_config(a, gpus)
     server = serve(cfg, a.port)
     print(f"relay on http://localhost:{a.port} (modal, region {a.region}, gpus {list(gpus)}, labels {dict(a.label)}, "
-          f"deadline {a.deadline_s} s, idle {a.idle_timeout_s} s)", flush=True)  # fmt: skip
-    with contextlib.suppress(KeyboardInterrupt):  # booted sessions outlive the relay: idle/deadline end them
+          f"leases {MIN_LEASE_S}-{MAX_LEASE_S} s (default {LEASE_S}), ceiling {READER_CEILING_S} s, idle {a.idle_timeout_s} s)", flush=True)  # fmt: skip
+    with contextlib.suppress(KeyboardInterrupt):  # booted sessions outlive the relay: their lease or idle ends them
         server.serve_forever()
     server.server_close()  # in-flight boots end (cancelled), streams stop, readers' clients close
 

@@ -65,8 +65,9 @@ def call(url: str, method: str = "GET", body: dict | None = None, headers: dict 
         return e.code, json.loads(e.read()), dict(e.headers)
 
 
-def create(gw: str) -> str:
-    code, body, _ = call(f"{gw}/sessions", "POST", {"provider": "modal", "token": TOKEN, "gpu": None, "labels": {"box.caller": "blogs"}}, {"Origin": ORIGIN})
+def create(gw: str, **extra: object) -> str:
+    body = {"provider": "modal", "token": TOKEN, "gpu": None, "labels": {"box.caller": "blogs"}, **extra}
+    code, body, _ = call(f"{gw}/sessions", "POST", body, {"Origin": ORIGIN})
     assert code == 202, body
     assert body["status"]["state"] == "booting"
     return body["session_id"]
@@ -335,3 +336,45 @@ def test_a_machine_gone_between_two_asks_is_ended_not_an_error(tmp_path: Path) -
     server.shutdown()
     server.server_close()
     assert (code, after["state"], after["reason"]) == (200, "ended", "machine_lost"), after
+
+
+def extend(gw: str, sid: str, body: object) -> tuple[int, dict]:
+    code, got, _ = call(f"{gw}/sessions/{sid}/extend", "POST", body, {"X-Box-Token": AUTH})
+    return code, got.get("status", got)
+
+
+def test_lease_s_is_an_integer_minute_to_twelve_hours(make_relay: Callable[..., str]) -> None:
+    gw = make_relay()
+    body = {"provider": "modal", "token": TOKEN, "gpu": None}
+    for bad in (59, 43201, "90", True, 90.5, None, -60):
+        code, got, _ = call(f"{gw}/sessions", "POST", {**body, "lease_s": bad})
+        assert (code, "lease_s" in got["error"]) == (400, True), bad
+    sid = create(gw, lease_s=60)
+    events(gw, sid, "running")
+    running = status(gw, sid)[1]
+    assert running["ceiling"] - running["lease_until"] == pytest.approx(relay.READER_CEILING_S - 60, abs=2)
+    assert running["deadline"] == running["lease_until"]  # the old name, for older pages
+    assert running["ceiling"] - running["started_at"] <= relay.READER_CEILING_S  # 12 h from creation, not from boot
+
+
+def test_extend_clamps_at_the_ceiling_and_never_shortens(make_relay: Callable[..., str]) -> None:
+    gw = make_relay()
+    sid = create(gw, lease_s=600)
+    events(gw, sid, "running")
+    first = status(gw, sid)[1]
+    code, longest = extend(gw, sid, {"until": time.time() + 10 * 24 * 3600})
+    assert (code, longest["state"]) == (200, "running")
+    assert longest["lease_until"] == longest["ceiling"] == first["ceiling"]  # clamped
+    assert extend(gw, sid, {"until": time.time() + 120}) == (200, longest)  # shorter: no change
+    assert status(gw, sid) == (200, longest)
+    for bad in ({}, {"until": "soon"}, {"until": True}, [1]):
+        assert extend(gw, sid, bad)[0] == 400, bad
+    assert extend(gw, "s-000000000000", {"until": time.time() + 60})[0] == 404
+
+
+def test_a_session_ends_when_its_lease_does(make_relay: Callable[..., str]) -> None:
+    gw = make_relay()
+    sid = create(gw, lease_s=relay.MIN_LEASE_S)
+    got = events(gw, sid, "ended", timeout_s=relay.MIN_LEASE_S + 60)  # the page keeps no kernel open: idle is 300 s here
+    assert got[-1][1]["status"]["reason"] == "lease"
+    assert status(gw, sid) == (200, got[-1][1]["status"])
