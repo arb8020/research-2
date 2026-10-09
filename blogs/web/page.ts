@@ -1,4 +1,5 @@
-import { EditorView, basicSetup } from "codemirror";
+import { EditorView, basicSetup, minimalSetup } from "codemirror";
+import { lineNumbers } from "@codemirror/view";
 import { EditorState, Compartment } from "@codemirror/state";
 import type { Extension } from "@codemirror/state";
 import { cpp } from "@codemirror/lang-cpp";
@@ -102,7 +103,12 @@ class CodeView extends HTMLElement {
     const doc = must(this, "pre", HTMLPreElement).textContent;
     this.innerHTML = "";
     const lang = attr(this, "data-lang");
-    const view = new EditorView({ parent: this, state: EditorState.create({ doc, extensions: [basicSetup, syntax(lang), look(`given code (${lang})`), EditorState.readOnly.of(true)] }) });
+    // An excerpt (data-first-line) numbers its lines as in the source file; `given` code numbers from 1.
+    const first = Number(this.getAttribute("data-first-line") ?? "1");
+    const setup = this.hasAttribute("data-first-line")
+      ? [minimalSetup, lineNumbers({ formatNumber: (n) => String(n + first - 1) })]
+      : [basicSetup];
+    const view = new EditorView({ parent: this, state: EditorState.create({ doc, extensions: [...setup, syntax(lang), look(this.getAttribute("data-label") ?? `given code (${lang})`), EditorState.readOnly.of(true)] }) });
     view.scrollDOM.tabIndex = 0;
   }
 }
