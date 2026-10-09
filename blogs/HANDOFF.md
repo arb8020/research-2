@@ -3,10 +3,19 @@
 Branch `blogs/flappy`, worktree `worktrees/blogs-flappy`. The page-builder spike is merged in.
 
 ## Next session
-1. **Embedding things in the prose (the author's next ask).** The author finds the opening prose too dense before the first code or diagram, and plans to add paragraphs himself. The open question is *how to usefully embed things*: diagrams (agent -> action -> env -> reward/obs), more play/watch widgets, colour-coded equations (Migdal's KaTeX `\htmlClass`, see notes/research/inspiration), sidenotes. Start by interviewing the author on what he wants to embed and where. Then he writes prose for the later sections (policy -> sample -> logprob -> loss/derivation -> train).
-2. **Merge `blogs/build-split`** (worktree `worktrees/blogs-build-split`; commits 7dc24844 + 2c6a92d5 `mutants.sh`). It has been reviewed in summary only, not merged. It branches from e58176d8, so expect conflicts in `rl/01-flappy.md` (its `budget=flappy` block vs the later stub pre-fill) and `HANDOFF.md`. After merging, run `./mutants.sh`, `check.py`, `build_web.py --diff` and `verify_page.py`. Note that its `build_page.py` adds `budget=` to the hidden roles, and this branch's `build_page.py` has since changed (data-not-typeset, new assets).
-3. **`cell=policy`.** Prose slots before it: "can something autonomous play this?" and "a policy network". Order: policy -> sample -> logprob -> loss -> train, each with a check already written. `check=policy` pins `init_policy(obs_dim, n_actions, hidden, seed) -> dict[str, Tensor]` and `policy_probs(params, obs)`. Same mode as `puf_step`: the author drives, Claude asks one line at a time.
-4. **Small open items.** Should drafts in locked or unpassed cells survive a reload (open question 5; more visible now that locked cells are editable)? Commit the `notes/research/media/` keyframes and tweet text without the 5.5 MB mp4? Hints: probably just a "show solution" button (unconfirmed).
+1. **Land `blogs/lint`** (worktree `worktrees/blogs-lint`, a subagent built it 2026-10-08). Page JS -> TypeScript (`web/page.ts`, `web/settings.ts`, two bundles so settings still apply before first paint), npm + lockfile + esbuild, CDN importmap removed, `blogs/ruff.toml` + `web/eslint.base.js` copied from `~/dotfiles/lint` (sync.sh drift check), one gate `npm run lint` (tsc + eslint + ruff) plus a pre-commit hook. Review, then merge into `blogs/flappy`.
+2. **After lint lands, in this order (all decided with the author 2026-10-08):**
+   - **Structured run result.** `POST /run` streams JSON lines: `{"out": ...}` repeated, then exactly one `{"result": {"passed", "message"}}`. The page stops reading PASS/FAIL off the last text line. (Not a live bug: the server always appends the verdict last, so reader prints can't fake a pass.) Typed end to end in `page.ts`.
+   - **Drafts survive reload.** localStorage per cell. On reload the editor shows the draft; a "revert to last passing" button restores the session's last passing source. Downstream cells still use the last passing version only.
+   - **Show solution button.** Flips the cell to a read-only view of the solution, with select/copy blocked (friction, not security). The solution is fetched from the session server on click, so the page stays solution-free and `build_page.py`'s leak assert keeps no exceptions.
+3. **Embeds: deferred until the prose needs them.** The author writes `[placeholder]` notes in the prose (e.g. `[make an excalidraw to put here]`); embeds get built once we see what's asked for. When building them, add an extension point (one file per embed kind) instead of more regex branches in `build_page.py` + `page.js` (dune rule 5).
+4. **check.py split (deferred).** Split along its four jobs: chapter format (`parse`, roles, `HIDDEN`, a reader view vs an author view), C build (`compile_c`, `BUILDS`, sanitizers), runner (`run_cell`, `run_phase`, worker; returns a `CellResult` record), thin CLI. Otter-grader spike (borrow: parse once -> two views, checks-on-solutions as part of the build, runner sees only the reader view, result records, show the failing line; don't borrow: notebooks, scoring, hidden tests, single-kernel isolation). Note that `session.py` chains the reader's latest passing code, not the solutions.
+5. **`cell=policy`.** Prose slots before it: "can something autonomous play this?" and "a policy network". Order: policy -> sample -> logprob -> loss -> train, each with a check already written. `check=policy` pins `init_policy(obs_dim, n_actions, hidden, seed) -> dict[str, Tensor]` and `policy_probs(params, obs)`. Same mode as `puf_step`: the author drives, Claude asks one line at a time.
+
+## Done 2026-10-08 (late)
+- `blogs/build-split` merged (971adeba). One conflict in `build_page.py` (kept data-not-typeset/data-lang markup + `HIDDEN`); `verify_page.py` inject point moved to `// increment env by a tick`. check.py, --stub, mutants.sh, build_web.py --diff and verify_page.py all pass. The build-split worktree/branch can be removed.
+- **Decided: the reference play wasm (compiled from `solution=flappy`) shipping to readers is fine;** flappy is simple.
+- `notes/research/media/` deleted (not needed).
 
 ## Page (2026-10-08)
 - Prose uses shadcn's `typeset.css` (vendored verbatim, MIT, `web/typeset.css`), driven by `--font-body --font-mono --size --leading --flow --measure`. Cells, the widget and todo boxes opt out with `data-not-typeset`.
@@ -14,7 +23,7 @@ Branch `blogs/flappy`, worktree `worktrees/blogs-flappy`. The page-builder spike
 - `page.css` tokens are scheme x theme. `paper` is ported from `observe/dashboard/src/theme.css` (loom's skin). A shared personal tokens/components library (shadcn registry) is deferred, with a comment at the top of `page.css`.
 - The editor has CSS-variable syntax colours (`.tok-*`) and a per-page vim toggle (`@replit/codemirror-vim`). Locked cells disable Run only. Arrow keys don't scroll the page from the play iframe.
 - `uv run --with playwright a11y.py`: axe lint over every theme x scheme. All four are clean.
-- References: `~/dotfiles/docs/raw/frontend/raw/shadcn_typeset.md` and `notes/research/media/` (typeset tweet video + keyframes, uncommitted).
+- Reference: `~/dotfiles/docs/raw/frontend/raw/shadcn_typeset.md`.
 
 ## Run it
 ```
@@ -58,7 +67,7 @@ uv run --with playwright a11y.py                    # axe accessibility lint, li
   - Measured (asserts on, noisy laptop): none ~390M, 3 action asserts ~314M, plus invariants ~201M steps/s. Budget 50M. Irrelevant once prod uses `-DNDEBUG`.
   - Research: `notes/research/asserts-tigerbeetle-matklad.md` (TigerBeetle's `constants.verify` tier, its 5% prod / 5x test cost policy, what to assert in hot loops).
 - **Flappy stub: readers write logic, we write the checks (2026-10-08).** The stub's `puf_step` pre-fills the entry checks (`assert_invariants(&env->flappy_env)` + 3 action asserts, written with long paths so they don't give away `Agent* agent = &env->agents[0]`). The reader writes the logic under the outline comments, with no exit checks. Deferred: whether this holds series-wide or only for flappy (it conflicts with "readers write asserts" above).
-- **Hints: probably no ladder for flappy.** The outline comments are already in the stub, so a ladder would just repeat them. Leaning towards a "show solution" button only, with no marker machinery until readers are seen to stall. Not yet confirmed by the author.
+- **Hints: no ladder; a "show solution" button only (confirmed 2026-10-08).** See Next session 2.
 - **Casts follow puffer.** No redundant casts. Float -> int stays implicit, with a comment saying so. Casts that change meaning (e.g. `(float)` for float division) stay.
 - **Logging.** `add_log(Env*)` is a ready-made helper in the stub and the solution. The reader calls it at episode end and keeps `episode_return += reward` themselves. `given` `Flappy.log()` wraps `vec_log`, and `check=flappy` verifies `n`, `episode_length`, `episode_return` and `perf`.
 - **Notes.** `notes/research/` holds the distilled research reports (inspiration + infra) and `notes/design-discussion.md` the why behind decisions, both recovered from session a9f505dc. The inspiration sections lack the author's own reasons and need their pass.
