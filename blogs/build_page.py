@@ -36,6 +36,27 @@ from check import HIDDEN, ROLES, cell_order, parse
 HERE = Path(__file__).parent
 
 
+def render_excerpt(chapter: Path, path: str, lang: str, body: str, line: int) -> str:
+    """```c excerpt=../vendor/x.h fence -> a read-only, cell-styled view of those lines of a real file.
+
+    The fence body is the code itself (so the author sees it in the chapter); the build fails unless it
+    appears verbatim, as whole consecutive lines, in the named file. Split a snippet by splitting the fence.
+    """
+    source = chapter.parent / path
+    assert source.is_file(), f"line {line}: excerpt={path} not found next to the chapter"
+    want = body.rstrip("\n").split("\n")
+    have = source.read_text().split("\n")
+    starts = [i for i in range(len(have) - len(want) + 1) if have[i : i + len(want)] == want]
+    assert starts, f"line {line}: this excerpt is not in {path} verbatim (lines changed upstream, or edited here?)"
+    first = starts[0] + 1
+    shown = source.resolve().relative_to(HERE.resolve())
+    where = f"{shown}:{first}" if len(want) == 1 else f"{shown}:{first}–{first + len(want) - 1}"
+    return (f'<figure class="excerpt" data-not-typeset><div class="cell-head"><span>{html.escape(source.name)} · {lang}</span>'
+            f'<span class="excerpt-src">{html.escape(where)} · read-only</span></div>'
+            f'<code-view data-lang="{lang}" data-first-line="{first}" data-label="{html.escape(where)} (read-only)">'
+            f'<pre>{html.escape(body.rstrip(chr(10)))}</pre></code-view></figure>\n')
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("chapter", type=Path)
@@ -69,6 +90,10 @@ def main() -> None:
                 return embed.render(data.read_text(), 1)
             except AssertionError as e:
                 raise AssertionError(f"{data}: {e}") from e
+        if excerpt := [v for k, _, v in (i.partition("=") for i in info) if k == "excerpt"]:
+            span = tokens[idx].map
+            assert span is not None, "markdown-it gave the excerpt fence no line numbers"
+            return render_excerpt(args.chapter, excerpt[0], lang, tokens[idx].content, span[0] + 1)
         role, name = next(((k, v) for k, _, v in (i.partition("=") for i in info) if k in ROLES), ("", ""))
         src = html.escape(tokens[idx].content)
         if role == "cell":
