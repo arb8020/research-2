@@ -18,21 +18,20 @@ import random
 import subprocess
 import sys
 import time
-import tomllib
 import urllib.request
 from pathlib import Path
 
 from box.gateway import kernel_client
+from box.modal_provider import ModalToken
 
 PROFILE = "arb8020"  # never herdora
 NN_FIT_SECONDS = 10.0  # each nn-fit benchmark run
 CONNECT_S = 15 * 60
 
 
-def token(profile: str = PROFILE) -> dict[str, str]:
+def token(profile: str = PROFILE) -> ModalToken:
     assert profile != "herdora", "this proof never runs on the herdora workspace"
-    p = tomllib.loads((Path.home() / ".modal.toml").read_text())[profile]
-    return {"id": p["token_id"], "secret": p["token_secret"]}
+    return ModalToken.from_profile(profile)
 
 
 def call(url: str, auth: str, method: str = "GET", body: dict | None = None) -> dict:
@@ -111,13 +110,13 @@ def nn_fit_local(program: Path) -> dict:
     return steps_per_s(json_lines(done.stdout))
 
 
-def hold(kernel: dict, sid: str, tok: dict, hold_s: float) -> dict:
+def hold(kernel: dict, sid: str, tok: ModalToken, hold_s: float) -> dict:
     """An open (quiet) kernel websocket keeps the session past its idle timeout; once closed, the session
     ends idle. Asks the machine through the SDK (exec), never through the tunnel, which would count as use."""
     from box import sdk
-    from box.modal_provider import Modal, ModalToken
+    from box.modal_provider import Modal
 
-    s = sdk.attach(Modal(token=ModalToken(tok["id"], tok["secret"]), region="us"), sid)
+    s = sdk.attach(Modal(token=tok, region="us"), sid)
     url = kernel_client.api(kernel, f"/api/kernels/{kernel_client.kernel_id(kernel)}/channels").replace("http", "ws", 1)
     with kernel_client.connect(url, open_timeout=60):
         time.sleep(hold_s)
@@ -138,13 +137,13 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path(".evidence/prove_modal.json"))
     a = ap.parse_args()
     tok = token()
-    auth = f"{tok['id']}:{tok['secret']}"
+    auth = f"{tok.id}:{tok.secret}"
     summary: dict = {"gateway": a.gateway, "gpu": a.gpu}
     t0 = time.monotonic()
     if a.attach:
         sid = a.attach
     else:
-        created = call(f"{a.gateway}/sessions", auth, "POST", {"provider": "modal", "token": tok, "gpu": a.gpu, "labels": {"box.caller": "prove_modal"}})
+        created = call(f"{a.gateway}/sessions", auth, "POST", {"provider": "modal", "token": {"id": tok.id, "secret": tok.secret}, "gpu": a.gpu, "labels": {"box.caller": "prove_modal"}})
         sid = created["session_id"]
         summary["post_ms"] = round(1000 * (time.monotonic() - t0))
         print(f"session {sid} (POST answered in {summary['post_ms']} ms)", flush=True)
