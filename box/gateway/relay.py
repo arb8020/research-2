@@ -76,7 +76,6 @@ STREAM_POLL_S = 2.0  # how often an event stream asks the machine (each ask: ~4 
 SSE_PING_S = 15.0
 PROBE_TIMEOUT_S = 5.0
 CLOSE_TIMEOUT_S = 60.0
-RECORD_LANDING_S = 30.0  # a gone machine's record may say Running for its heartbeat TTL (~10 s)
 # The supervisor's end reasons, in the contract's words. released: nobody holds the lease and the
 # Jupyter service exited, so the kernel the page used is gone ("the machine went away").
 REASONS = {"stopped": "stopped", "deadline": "deadline", "idle": "idle", "lease_lost": "lease_lost",
@@ -225,30 +224,28 @@ def wire(state: str, gpu: str | None, started_at: float, deadline: float, **extr
 
 def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: bool) -> dict[str, Any]:
     """What the machine says, in the contract's words. ready: Jupyter is known to answer (else it
-    is probed: running means the kernel is reachable, not just the supervisor up)."""
+    is probed: running means the kernel is reachable, not just the supervisor up). A session whose
+    Jupyter is done is ended, though its supervisor may not have written why yet: the kernel the
+    page used is gone, and nothing starts another."""
     labels = s.machine.labels
     gpu = labels.get(LABEL_GPU) or None
     deadline = float(labels[sdk.LABEL_DEADLINE])
+    # times only matter while it runs (the pill's uptime); once ended, the label's deadline stands in for both
+    ended = functools.partial(wire, "ended", gpu, deadline - cfg.deadline_s, deadline)
     match s.status():
         case Booting():
             return wire("booting", gpu, time.time(), deadline)
-        case Running() if isinstance(s.machine, sdk.Lost):  # gone; its record's end is still landing
-            return machine_status(cfg, s, token, ready=ready) if wait_out(s) else wire("ended", gpu, deadline - cfg.deadline_s, deadline, reason="machine_lost")
         case Running(started_at=started_at, deadline_at=deadline_at):
             kernel = {"url": s.expose(int(labels[LABEL_PORT])).url, "token": kernel_token(token, s.id)}
-            up = ready or jupyter_ready(kernel)
-            return wire("running" if up else "booting", gpu, started_at, deadline_at, **({"kernel": kernel} if up else {}))
+            if ready or jupyter_ready(kernel):
+                return wire("running", gpu, started_at, deadline_at, kernel=kernel)
+            jupyter = the_kernel_job(s)
+            done = None if jupyter is None else jupyter.status()
+            if done is not None and done["state"] == "done":  # the session's reason, or Jupyter's own end (then the session's is "released")
+                return ended(reason=REASONS.get(done["reason"], REASONS["released"]))
+            return wire("booting", gpu, started_at, deadline_at)
         case Ended(reason=reason):
-            # times only matter while it runs (the pill's uptime); the label's deadline stands in for both
-            return wire("ended", gpu, deadline - cfg.deadline_s, deadline, reason=REASONS[reason])
-
-
-def wait_out(s: sdk.Session) -> bool:
-    """A gone machine whose record still says Running: wait() waits out the record's heartbeat TTL
-    (seconds) for the recorded end. True once status() says Ended."""
-    with contextlib.suppress(TimeoutError):
-        s.wait(timeout_s=RECORD_LANDING_S)
-    return isinstance(s.status(), Ended)
+            return ended(reason=REASONS[reason])
 
 
 def jupyter_ready(kernel: dict[str, str]) -> bool:
@@ -271,12 +268,11 @@ def attach(cfg: Config, token: ModalToken, sid: str) -> sdk.Session:
     return sdk.attach(access.provider, sid, record=access.record)
 
 
-def the_kernel_job(s: sdk.Session) -> sdk.Job:
-    """The relay gives each session exactly one job: its Jupyter service."""
+def the_kernel_job(s: sdk.Session) -> sdk.Job | None:
+    """The session's Jupyter service: its first job (with --push, the forwarder is the second).
+    None before the boot has started it."""
     jobs = s.jobs()
-    if len(jobs) != 1:
-        raise RuntimeError(f"{s.id}: expected the one Jupyter service job, found {len(jobs)}")
-    return jobs[0]
+    return jobs[0] if jobs else None
 
 
 # ---- boot (a thread per POST /sessions) ----
@@ -339,7 +335,8 @@ def boot(cfg: Config, rec: Boot, req: CreateRequest, origin: str) -> None:
             raise Cancelled
         session.release()  # from here the supervisor alone ends it: idle, deadline, or POST /end
         running = session.status()
-        assert isinstance(running, Running), running
+        if not isinstance(running, Running):  # it ended as it came up (its deadline, an idle timeout shorter than the boot)
+            raise RuntimeError(f"{rec.session_id}: {running} as Jupyter came up")
         status = wire("running", rec.gpu, running.started_at, running.deadline_at, kernel=kernel)
         if cfg.push is not None:
             cmd, env = cfg.push.forwarder_service(rec.session_id, cfg.python, job.dir, rec.log_cursor, status, REASONS)
@@ -523,12 +520,11 @@ class Handler(BaseHTTPRequestHandler):
             if rec is None:
                 raise
             return 200, {"session_id": sid, "status": wire("ended", rec.gpu, rec.created_at, rec.deadline_at, reason="stopped")}
-        gpu = s.machine.labels.get(LABEL_GPU) or None
-        deadline = float(s.machine.labels[sdk.LABEL_DEADLINE])
         s.close(timeout_s=CLOSE_TIMEOUT_S)
-        ended = s.status()
-        assert isinstance(ended, Ended), ended
-        return 200, {"session_id": sid, "status": wire("ended", gpu, deadline - self.cfg.deadline_s, deadline, reason=REASONS[ended.reason])}
+        status = machine_status(self.cfg, s, token, ready=False)
+        if status["state"] != "ended":  # close() terminated it, but the provider still answers for it
+            raise RuntimeError(f"{sid}: still {status['state']} after close")
+        return 200, {"session_id": sid, "status": status}
 
     # -- the event stream --
 
@@ -607,12 +603,13 @@ class Stream:
         """The machine's word until it ends: Jupyter's log (live, or from the record once the
         machine is gone), and its status when it changes. Bounded by the session's deadline (plus
         the provider's backstop), like Session.wait()."""
-        job = the_kernel_job(s)
+        job = None
         ready = last is not None and last["state"] == "running"
         while True:
             status = machine_status(cfg, s, token, ready=ready)  # before the log: once ended, the log read next is all of it
             ready = status["state"] == "running"
-            for stream, text, end in log_lines(job, cursor):
+            job = job or the_kernel_job(s)  # None only while a boot (on some relay) has yet to start Jupyter
+            for stream, text, end in log_lines(job, cursor) if job else ():
                 self.send(f"o{end[0]}.{end[1]}", {"t": time.time(), "kind": "log", "source": "machine", "stream": stream, "text": text})
                 cursor = end
             if status != last:
@@ -692,7 +689,8 @@ def main() -> None:
     ap.add_argument("--push", metavar="URL", help="variants B/C: push events to this fan-out (box/gateway-do); env BOX_PUSH_SECRET")
     a = ap.parse_args()
     gpus = (None, *[g for g in a.gpus.split(",") if g])
-    assert a.deadline_s + 600 <= 24 * 3600, "Modal caps a sandbox at 24 h"
+    if a.deadline_s + 600 > 24 * 3600:
+        ap.error("--deadline-s: Modal caps a sandbox at 24 h, and box adds a 600 s backstop")
     push = None if a.push is None else push_to(a.push, os.environ.get("BOX_PUSH_SECRET", ""))
     cfg = modal_config(a, gpus, push)
     server = serve(cfg, a.port)
