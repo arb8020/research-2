@@ -1,0 +1,10 @@
+# blogs/ruff.toml (the canonical rules), plus what this project needs on top.
+extend = "../../../../ruff.toml"
+
+[lint.isort]
+known-first-party = ["harness", "specs", "candidates"]
+
+[lint.per-file-ignores]
+# jaxtyping's dim strings (`Float[Tensor, "rows hidden"]`) are not forward references;
+# ruff reads them as such (jaxtyping's FAQ recommends ignoring F722).
+"specs/*" = ["F722", "F821", "UP037"]
