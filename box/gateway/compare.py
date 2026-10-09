@@ -7,6 +7,7 @@ plus the static facts (5) token location and (6) code weight, read from the code
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 BOX = Path(__file__).resolve().parents[1]
@@ -62,7 +63,8 @@ def load(run: str) -> dict:
 
 
 def row(name: str, cells: dict[str, object]) -> str:
-    return f"| {name} | " + " | ".join(str(cells.get(v, "-")) for v in "ABC") + " |"
+    short = (re.sub(r"(\d+)\.\d{2,}(?= ms| /)", lambda m: m[1], str(cells.get(v, "-"))) for v in "ABC")  # ms to whole ms
+    return f"| {name} | " + " | ".join(short) + " |"
 
 
 def table(weight: dict, live: dict, deadline: dict, latency: dict) -> list[str]:
