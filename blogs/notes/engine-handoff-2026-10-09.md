@@ -54,6 +54,8 @@ Spike branch `spike/workspace-cells` (worktree `.claude/worktrees/agent-ab43b364
    - fold `ws` / `ref` / `manifest` into one workspace module; regions stay deferred
    - migrate flappy onto workspace cells (its C env is already a whole-file cell); retire `session.py`, the `/run` endpoint and `.session/` state; `page.ts` `BACKENDS` becomes one
    - all proof hangs off the `verify-blogs` skill (fold `verify_*.py` / `demo_tour.py` in)
+   - split the check runner smevals-style (github.com/prime-radiant-inc/smevals): `run` writes immutable Run dirs (inputs, outputs, fingerprints) from the isolated child; `grade` applies Graders (ordered Checks, each emitting score / metrics / notes; `required` halts) and can regrade stored Runs without re-running; `report` for per (op, impl, shape) tables. Each op declares a default grader stack generated from its metadata (dtype, named dims, kind: dense / attention / MoE / model forward), so thresholds are config, not code. Catch: output size (gpt2 at 1024 tokens is ~200 MB of logits per case); keep full outputs for small ops and failures, reduced artifacts (top-k logprobs, per-position stats) otherwise
+   - fold `engine/ch01-forward`'s `measure/metrics.py`, `mutants.py`, prompts and HF reference functions into the harness
 4. **compression pass on `box` code** (after the box team's merges of `box dev` + the Colab provider land): the box team already found `box dev` partially duplicating code paths; dedupe it
 5. chapter 1 page: cells over the workspace, checks via `run_checks ch1`
 6. kernel image toolchain line (patch from the workspace-cells branch; box gateway `kernel.Dockerfile`), then chapter 5's engine
