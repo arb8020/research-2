@@ -7,6 +7,8 @@ dependencies = ["modal>=1.5", "requests", "research"]
 
 [project.optional-dependencies]
 dev = ["pytest", "jupyter_server~=2.17", "ipykernel~=7.1", "websockets>=13"]
+# --provider colab: the official Colab CLI's modules (box/providers/colab.py reads their internals; pinned)
+colab = ["google-colab-cli==0.7.4; python_version >= '3.12'"]  # it needs 3.12+
 
 [project.scripts]
 box = "box.cli:main"
