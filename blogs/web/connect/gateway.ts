@@ -37,8 +37,11 @@ export type GatewayEvent =
 export class GatewayError extends Error {}
 
 const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+// Error text reaches the panel (screenshots, screen shares): never the kernel's token or a reader's secret in it.
+export const redacted = (raw: unknown): string =>
+  JSON.stringify(raw, (k, v: unknown) => (k === "token" || k === "secret" ? "[redacted]" : v));
 const fail = (what: string, raw: unknown): never => {
-  throw new GatewayError(`gateway: expected ${what}, got ${JSON.stringify(raw).slice(0, 300)}`);
+  throw new GatewayError(`gateway: expected ${what}, got ${redacted(raw).slice(0, 300)}`);
 };
 const isReason = (x: unknown): x is EndedReason => ENDED_REASONS.some((r) => r === x);
 

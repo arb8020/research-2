@@ -342,10 +342,13 @@ def ended_elsewhere(browser: Browser, url: str, token: tuple[str, str], gateway:
     sid = page.evaluate("JSON.parse(localStorage.getItem('connect.session')).session_id")
 
     # Reattach (reload) against a gateway that leaves lease_until out: no guessing from deadline.
+    kernel_tokens: list[str] = []
+
     def strip(route: Route) -> None:
         response = route.fetch()
         body = response.json()
         del body["status"]["lease_until"]
+        kernel_tokens.append(body["status"]["kernel"]["token"])  # running: the status carries Jupyter's token
         route.fulfill(response=response, json=body)
 
     pattern = re.compile(rf"/sessions/{re.escape(sid)}$")
@@ -355,6 +358,8 @@ def ended_elsewhere(browser: Browser, url: str, token: tuple[str, str], gateway:
     open_menu(page)
     failure = page.locator(".connect-failure").inner_text()
     assert "lease_until" in failure and "gateway" in failure, failure
+    assert kernel_tokens and all(t not in failure for t in kernel_tokens), "the panel shows the kernel's token"
+    assert "[redacted]" in failure, failure
     page.screenshot(path=LEASE_OUT / "7-no-lease-until.png")
     print(f"  status without lease_until: {failure!r}")
     page.unroute(pattern)
