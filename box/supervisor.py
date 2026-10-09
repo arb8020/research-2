@@ -36,7 +36,9 @@ there every FLUSH_S (sooner past FLUSH_BYTES of new output), so it outlives the 
     DIR/heartbeat.json          every flush: {at, ttl_s}; older than ttl_s, the recorder has stopped
     DIR/jobs/<id>/spec.json     \\ as under ROOT (env: names only), copied when they change
     DIR/jobs/<id>/status.json   /
-    DIR/jobs/<id>/<stream>.<n>  closed chunks of new output, n = 1, 2, ... per job across both streams
+    DIR/jobs/<id>/<stream>.<n>.<end>  closed chunks of new output, n = 1, 2, ... per job across both
+                                streams; end = the stream's bytes up to the chunk's last (a reader
+                                resuming at a byte offset skips chunks without reading them)
     DIR/ended.json              as ROOT/ended.json, written (and synced) before ROOT/ended.json
 
 Every file is whole (tmp + rename) and never changes once a reader could have seen it, except the
@@ -417,7 +419,7 @@ class Recorder:
             n = self.chunks.get(job, 0) + 1
             if n > MAX_CHUNKS:
                 raise RuntimeError(f"{job}: more than {MAX_CHUNKS} chunks of output")
-            put(self.dest / "jobs" / job / f"{stream}.{n:0{CHUNK_DIGITS}d}", data[:cut])
+            put(self.dest / "jobs" / job / f"{stream}.{n:0{CHUNK_DIGITS}d}.{offset + cut}", data[:cut])
             self.chunks[job] = n
             self.offsets[(job, stream)] = offset + cut
             if not final:

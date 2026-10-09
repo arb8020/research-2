@@ -3,7 +3,7 @@
     with box.launch(provider, gpu="L4", image=IMAGE, deadline_s=3600) as s:   # a Session
         s.put("robots", "/work/robots")
         job = s.run("cd /work && python robots/train.py", on_exit="upload.sh")
-        for stream, text in job.logs(follow=True): ...
+        for chunk in job.logs(follow=True): ...   # LogChunk(stream, text, end)
         ending = job.wait()                  # Ending(reason="exited", exit_code=0, ...)
         s.get("/work/runs", "runs")
     # leaving the block ends the session: a running job is killed and its hook still runs
@@ -19,8 +19,8 @@
 
     s = box.launch(provider, deadline_s=3600, record=store)   # the supervisor records into store (box/store.py)
     box.attach(provider, s.id, record=store).wait()           # works after the machine is gone too
+    job.logs(after=chunk.end)                # resumes where a reader left off, live or from the record
     r = box.read_record(store, s.id)         # Record: no machine, no provider needed
-    for n, stream, text in r.logs(job_id, after=0): ...
 
 A provider only rents raw machines (Machine: exec, write, read, terminate). Everything else is
 here, built from those four calls and the supervisor (box/supervisor.py), which every machine
@@ -58,6 +58,8 @@ POLL_S = 0.5
 RECORD_PATH = "record"  # where a session's record is mounted on its machine, under the supervisor's root
 SESSION_ID = re.compile(r"s-[0-9a-f]{12}")  # new_session_id()'s shape
 T = TypeVar("T")
+STREAMS = ("stdout", "stderr")
+LogCursor = tuple[int, int]  # bytes of (stdout, stderr) a reader has had: where it resumes, live or from the record
 
 
 class Gone(Exception):
@@ -359,8 +361,14 @@ class Session:
             tar.extractall(local, filter="data")
 
     def jobs(self) -> list[Job]:
-        """Every job this session was given, oldest first (from any process)."""
-        out = self._check(f"ls {self._path('jobs')}")
+        """Every job this session was given, oldest first (from any process); once the machine is
+        gone, every job its record has."""
+        try:
+            out = self._check(f"ls {self._path('jobs')}")
+        except Gone:
+            if self.record is None:
+                raise
+            return [Job(self, job_id) for job_id in read_record(self.record, self.id).jobs()]
         return [Job(self, name) for name in sorted(out.split()) if not name.endswith(".tmp")]
 
     def _read_ended(self) -> Ended | None:
@@ -434,23 +442,50 @@ class Job:
         """Kill this job (its whole process group); its hook runs; the session goes on."""
         self.session._touch(f"jobs/{self.id}/kill")
 
-    def logs(self, *, follow: bool = False, start: tuple[int, int] = (0, 0)) -> Iterator[tuple[str, str]]:
-        """(stream, text) chunks of the job's output from byte offsets start (stdout, stderr), the
-        job's start by default; follow=True until it is done. A reader that resumes (a reconnecting
-        browser) passes the bytes it has already seen, so it never re-reads them."""
-        offsets = {"stdout": start[0], "stderr": start[1]}
+    def logs(self, *, after: LogCursor = (0, 0), follow: bool = False) -> Iterator[LogChunk]:
+        """The job's output past `after` (the job's start by default); follow=True until it is done.
+        A reader that resumes (a reconnecting browser) passes the last chunk's end, so it never
+        re-reads a byte. Once the machine is gone, from the session's record (with follow, once the
+        record has the session's end, so it is all of the output there will be)."""
+        cursor = after
         while True:
-            if follow:
-                self.session._watch()
-            finished = self.done()  # read before the logs, so nothing written before "done" is missed
-            for stream in offsets:
-                rc, text, _ = self.session.machine.exec(f"tail -c +{offsets[stream] + 1} {self.dir}/{stream} 2>/dev/null")
-                if rc == 0 and text:
-                    offsets[stream] += len(text.encode())
-                    yield stream, text
+            try:
+                if follow:
+                    self.session._watch()
+                finished = self.done()  # read before the logs, so nothing written before "done" is missed
+                chunks = self._tails(cursor)
+            except Gone:
+                if self.session.record is None:
+                    raise
+                if follow:
+                    self.session.wait()
+                yield from read_record(self.session.record, self.session.id).logs(self.id, after=cursor)
+                return
+            for chunk in chunks:
+                cursor = chunk.end
+                yield chunk
             if finished or not follow:
                 return
             time.sleep(POLL_S)
+
+    def _tails(self, after: LogCursor) -> list[LogChunk]:
+        """Each stream's output past after, stdout first; each chunk's end counts the ones before it."""
+        out, err = after
+        rc, text, _ = self.session.machine.exec(f"tail -c +{out + 1} {self.dir}/stdout 2>/dev/null")
+        stdout = LogChunk("stdout", text, (out + len(text.encode()), err)) if rc == 0 and text else None
+        out = stdout.end[0] if stdout else out
+        rc, text, _ = self.session.machine.exec(f"tail -c +{err + 1} {self.dir}/stderr 2>/dev/null")
+        stderr = LogChunk("stderr", text, (out, err + len(text.encode()))) if rc == 0 and text else None
+        return [c for c in (stdout, stderr) if c is not None]
+
+
+@dataclass(frozen=True)
+class LogChunk:
+    """Some of a job's output, and the cursor just past it (pass it as after= to read on)."""
+
+    stream: Literal["stdout", "stderr"]
+    text: str
+    end: LogCursor
 
 
 def run_job(
@@ -464,9 +499,9 @@ def run_job(
             s.put(local, remote)
         job = s.run(cmd, on_exit=on_exit)
         sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
-        for stream, text in job.logs(follow=True):
-            sinks[stream].write(text)
-            sinks[stream].flush()
+        for chunk in job.logs(follow=True):
+            sinks[chunk.stream].write(chunk.text)
+            sinks[chunk.stream].flush()
         ending = job.wait()
         for remote, local in get:
             s.get(remote, local)
@@ -547,23 +582,35 @@ class Record:
         except FileNotFoundError:
             return None
 
-    def logs(self, job_id: str, after: int = 0) -> Iterator[tuple[int, str, str]]:
-        """(chunk number, stream, text) for each recorded chunk of the job's output numbered past
-        `after`, in order: pass the last number seen to read on. Output that is not UTF-8 is
-        decoded with replacement characters."""
+    def logs(self, job_id: str, after: LogCursor = (0, 0)) -> Iterator[LogChunk]:
+        """The job's recorded output past `after`, in the order it was recorded, as Job.logs gives
+        it. Only chunks past the cursor are read. Output that is not UTF-8 is decoded with
+        replacement characters."""
         prefix = f"{record_prefix(self.session_id)}/jobs/{job_id}/"
-        chunks = sorted(parse_chunk(key[len(prefix) :]) + (key,) for key in self.store.list(prefix) if CHUNK.fullmatch(key[len(prefix) :]))
-        for n, stream, key in chunks:
-            if n > after:
-                yield n, stream, self.store.get(key).decode(errors="replace")
+        names = [key[len(prefix) :] for key in self.store.list(prefix)]
+        chunks = sorted((*parse_chunk(name), name) for name in names if CHUNK.fullmatch(name))
+        cursor = dict(zip(STREAMS, after, strict=True))
+        begins = dict.fromkeys(STREAMS, 0)  # where the next chunk of each stream starts: the previous one's end
+        for _n, stream, end, name in chunks:
+            begin, begins[stream] = begins[stream], end
+            if end <= cursor[stream]:
+                continue  # the reader has all of it
+            key = prefix + name
+            data = self.store.get(key)
+            if len(data) != end - begin:
+                raise ValueError(f"{self.store.uri}: {key} holds {len(data)} bytes; its name says {end - begin}")
+            text = data[max(0, cursor[stream] - begin) :].decode(errors="replace")
+            cursor[stream] = end
+            yield LogChunk(stream, text, (cursor["stdout"], cursor["stderr"]))
 
 
-CHUNK = re.compile(r"(stdout|stderr)\.(\d+)")  # a chunk's name in the record (box/supervisor.py)
+CHUNK = re.compile(r"(stdout|stderr)\.(\d+)\.(\d+)")  # a chunk's name in the record: <stream>.<n>.<end> (box/supervisor.py)
 
 
-def parse_chunk(name: str) -> tuple[int, str]:
-    stream, n = CHUNK.fullmatch(name).groups()
-    return int(n), stream
+def parse_chunk(name: str) -> tuple[int, str, int]:
+    """(n, stream, end): end is the stream's byte count just past the chunk."""
+    stream, n, end = CHUNK.fullmatch(name).groups()
+    return int(n), stream, int(end)
 
 
 def read_record(store: Store, session_id: str) -> Record:

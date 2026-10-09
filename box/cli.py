@@ -84,9 +84,9 @@ def cmd_logs(a: argparse.Namespace) -> int:
         return 2
     sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
     try:
-        for stream, text in jobs[-1].logs(follow=a.follow):
-            sinks[stream].write(text)
-            sinks[stream].flush()
+        for chunk in jobs[-1].logs(follow=a.follow):
+            sinks[chunk.stream].write(chunk.text)
+            sinks[chunk.stream].flush()
         status = jobs[-1].status() or {}
     except sdk.Gone:
         print(f"box: {a.id} is gone (its logs went with it)", file=sys.stderr)

@@ -172,9 +172,9 @@ def follow(s: sdk.Session, job: sdk.Job) -> int:
     """The job's output on this terminal until it ends; the machine ends however this returns."""
     sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
     with s:
-        for stream, text in job.logs(follow=True):
-            sinks[stream].write(text)
-            sinks[stream].flush()
+        for chunk in job.logs(follow=True):
+            sinks[chunk.stream].write(chunk.text)
+            sinks[chunk.stream].flush()
         ending = job.wait()
     print(f"kelpie remote: {s.id} {ending.reason}, exit {ending.exit_code}", file=sys.stderr)
     return ending.exit_code if ending.reason == "exited" and ending.exit_code is not None else 1

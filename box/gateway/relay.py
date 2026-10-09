@@ -131,7 +131,7 @@ class Boot:
     events: list[dict[str, Any]] = field(default_factory=list)
     dropped: int = 0
     status: dict[str, Any] | None = None  # the latest status event's
-    log_offsets: tuple[int, int] = (0, 0)  # Jupyter's (stdout, stderr) bytes already in events
+    log_cursor: sdk.LogCursor = (0, 0)  # how much of Jupyter's log is already in events
     ended_at: float | None = None  # monotonic; set once the boot is over (running or failed)
     cancelled: bool = False
     changed: threading.Condition = field(default_factory=threading.Condition)
@@ -342,7 +342,7 @@ def boot(cfg: Config, rec: Boot, req: CreateRequest, origin: str) -> None:
         assert isinstance(running, Running), running
         status = wire("running", rec.gpu, running.started_at, running.deadline_at, kernel=kernel)
         if cfg.push is not None:
-            cmd, env = cfg.push.forwarder_service(rec.session_id, cfg.python, job.dir, rec.log_offsets, status, REASONS)
+            cmd, env = cfg.push.forwarder_service(rec.session_id, cfg.python, job.dir, rec.log_cursor, status, REASONS)
             session.run(cmd, service=True, env=env)
             rec.step("machine", "forwarder started: the machine pushes its log to the fan-out from here")
         rec.step("machine", f"Jupyter Server ready ({time.monotonic() - t0:.1f} s since connect)")
@@ -391,21 +391,22 @@ def wait_for_jupyter(rec: Boot, job: sdk.Job, kernel: dict[str, str]) -> None:
 
 
 def forward_logs(rec: Boot, job: sdk.Job) -> None:
-    for stream, text, offsets in log_lines(job, rec.log_offsets):
+    for stream, text, cursor in log_lines(job, rec.log_cursor):
         rec.emit("log", source="machine", stream=stream, text=text)
-        rec.log_offsets = offsets
+        rec.log_cursor = cursor
 
 
-def log_lines(job: sdk.Job, start: tuple[int, int]) -> Iterator[tuple[str, str, tuple[int, int]]]:
-    """The job's output after `start`, a line per item, with the offsets just past it."""
-    out, err = start
-    for stream, chunk in job.logs(start=start):
-        for line in chunk.splitlines(keepends=True):
-            if stream == "stdout":
+def log_lines(job: sdk.Job, after: sdk.LogCursor) -> Iterator[tuple[str, str, sdk.LogCursor]]:
+    """The job's output past `after` (live, or from the record once the machine is gone), a line
+    per item, with the cursor just past it."""
+    out, err = after
+    for chunk in job.logs(after=after):
+        for line in chunk.text.splitlines(keepends=True):
+            if chunk.stream == "stdout":
                 out += len(line.encode())
             else:
                 err += len(line.encode())
-            yield stream, line.rstrip("\n"), (out, err)
+            yield chunk.stream, line.rstrip("\n"), (out, err)
 
 
 # ---- HTTP ----
@@ -532,9 +533,10 @@ class Handler(BaseHTTPRequestHandler):
     # -- the event stream --
 
     def events(self, sid: str, token: ModalToken) -> int:
-        """SSE: the boot's events from memory (ids b<n>), then the machine's (ids m<out>.<err>, the
-        Jupyter log's byte offsets): its log and its status whenever that changes. Ends after an
-        ended status. Last-Event-ID resumes either part. Returns how many events it sent."""
+        """SSE: the boot's events from memory (ids b<n>), then the machine's (ids o<out>.<err>, the
+        Jupyter log's cursor): its log, live or from the record, and its status whenever that
+        changes. Ends after an ended status. Last-Event-ID resumes either part. Returns how many
+        events it sent."""
         rec = booting(sid, token)
         if rec is None:
             attach(self.cfg, token, sid)  # 404 before the stream starts, as GET /sessions/{id}
@@ -550,15 +552,15 @@ class Handler(BaseHTTPRequestHandler):
             stream = Stream(self, 0)
             last = self.headers.get("Last-Event-ID", "")
             boot_from = int(last[1:]) + 1 if re.fullmatch(r"b\d+", last) else 0
-            offsets = tuple(map(int, last[1:].split("."))) if re.fullmatch(r"m\d+\.\d+", last) else None
-            if rec is not None and offsets is None:
+            cursor = tuple(map(int, last[1:].split("."))) if re.fullmatch(r"o\d+\.\d+", last) else None
+            if rec is not None and cursor is None:
                 last_status = stream.replay_boot(rec, boot_from)
                 if last_status is None or last_status["state"] == "ended":
                     return stream.sent
-                offsets = rec.log_offsets
+                cursor = rec.log_cursor
             else:
                 last_status = None
-            stream.follow_machine(self.cfg, attach(self.cfg, token, sid), token, offsets or (0, 0), last_status)
+            stream.follow_machine(self.cfg, attach(self.cfg, token, sid), token, cursor or (0, 0), last_status)
         except (BrokenPipeError, ConnectionResetError):
             pass  # the tab went away
         except Exception as e:  # noqa: BLE001 (headers are sent: all that is left is to say so and close)
@@ -601,40 +603,20 @@ class Stream:
                 return rec.status
             self.ping()
 
-    def replay_record(self, cfg: Config, s: sdk.Session, token: ModalToken, offsets: tuple[int, int]) -> None:
-        """A session whose machine is gone: its recorded Jupyter log past offsets (bytes of stdout,
-        stderr this stream already sent), then its (ended) status."""
-        assert s.record is not None, "relay sessions are always recorded"
-        record = sdk.read_record(s.record, s.id)
-        seen = dict(zip(("stdout", "stderr"), offsets, strict=True))
-        read = {"stdout": 0, "stderr": 0}
-        for job_id in record.jobs():
-            for n, stream, chunk in record.logs(job_id):
-                for line in chunk.splitlines(keepends=True):
-                    read[stream] += len(line.encode())
-                    if read[stream] > seen[stream]:
-                        self.send(f"r{n}", {"t": time.time(), "kind": "log", "source": "machine", "stream": stream, "text": line.rstrip("\n")})
-        self.send("r-end", {"t": time.time(), "kind": "status", "status": machine_status(cfg, s, token, ready=False)})
-
-    def follow_machine(self, cfg: Config, s: sdk.Session, token: ModalToken, offsets: tuple[int, int], last: dict[str, Any] | None) -> None:
-        """The machine's word until it ends: Jupyter's log, and its status when it changes. Bounded
-        by the session's deadline (plus the provider's backstop), like Session.wait()."""
-        if isinstance(s.machine, sdk.Lost):
-            self.replay_record(cfg, s, token, offsets)
-            return
+    def follow_machine(self, cfg: Config, s: sdk.Session, token: ModalToken, cursor: sdk.LogCursor, last: dict[str, Any] | None) -> None:
+        """The machine's word until it ends: Jupyter's log (live, or from the record once the
+        machine is gone), and its status when it changes. Bounded by the session's deadline (plus
+        the provider's backstop), like Session.wait()."""
         job = the_kernel_job(s)
         ready = last is not None and last["state"] == "running"
         while True:
-            try:
-                lines = list(log_lines(job, offsets))
-            except sdk.Gone:
-                lines = []  # it ended under us: the status below says how
-            for stream, text, offsets in lines:
-                self.send(f"m{offsets[0]}.{offsets[1]}", {"t": time.time(), "kind": "log", "source": "machine", "stream": stream, "text": text})
-            status = machine_status(cfg, s, token, ready=ready)
+            status = machine_status(cfg, s, token, ready=ready)  # before the log: once ended, the log read next is all of it
             ready = status["state"] == "running"
+            for stream, text, end in log_lines(job, cursor):
+                self.send(f"o{end[0]}.{end[1]}", {"t": time.time(), "kind": "log", "source": "machine", "stream": stream, "text": text})
+                cursor = end
             if status != last:
-                self.send(f"m{offsets[0]}.{offsets[1]}", {"t": time.time(), "kind": "status", "status": status})
+                self.send(f"o{cursor[0]}.{cursor[1]}", {"t": time.time(), "kind": "status", "status": status})
                 last = status
             if status["state"] == "ended":
                 return

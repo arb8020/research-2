@@ -94,9 +94,9 @@ def main() -> int:
             s.put(ROOT / d, f"{remote}/{d}", ignore=IGNORE)
         j = s.run(job, on_exit=on_exit)
         sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
-        for stream, text in j.logs(follow=True):
-            sinks[stream].write(text)
-            sinks[stream].flush()
+        for chunk in j.logs(follow=True):
+            sinks[chunk.stream].write(chunk.text)
+            sinks[chunk.stream].flush()
         ending = j.wait()
         if s.machine.exec(f"test -d {remote}/runs")[0] == 0:
             s.get(f"{remote}/runs", ROOT / "runs")

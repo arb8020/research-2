@@ -30,7 +30,7 @@ from box.tests import providers
 # gate; run live with pytest -n (each test owns its machine); share one machine across the tests
 # that don't end their session. The runpod suite has not been seen green on the current sdk.
 def output(job: sdk.Job) -> str:
-    return "".join(text for stream, text in job.logs() if stream == "stdout")
+    return "".join(c.text for c in job.logs() if c.stream == "stdout")
 
 
 def gone(provider: Provider, s: sdk.Session) -> bool:
@@ -180,7 +180,7 @@ def test_another_process_can_attach_and_read_logs_and_status(launch: Callable, p
         first.wait()
         again = sdk.attach(provider, s.id)
         assert s.machine.id in {m.id for m in provider.list()}
-        logs = list(sdk.Job(again, first.id).logs())  # a job id is all another process needs
+        logs = [(c.stream, c.text) for c in sdk.Job(again, first.id).logs()]  # a job id is all another process needs
     assert ("stdout", "hello\n") in logs and ("stderr", "oops\n") in logs
 
 
@@ -277,7 +277,7 @@ def test_following_a_released_session_sees_its_last_line_and_exit(launch: Callab
     job = s.run(f"sleep {1 * scale}; echo last; exit 4")
     s.release()  # detached: the machine ends itself right after the job
     follower = sdk.Job(sdk.attach(provider, s.id), job.id)
-    assert "".join(t for _, t in follower.logs(follow=True)) == "last\n"
+    assert "".join(c.text for c in follower.logs(follow=True)) == "last\n"
     assert follower.wait() == Ending("exited", 4)  # still readable: the machine lingers while we read
     eventually(lambda: gone(provider, s), timeout_s=60)
 
@@ -316,7 +316,8 @@ def test_logs_resume_from_byte_offsets(launch: Callable) -> None:
     with launch(deadline_s=600) as s:
         job = s.run("printf 'héllo\\n'; printf 'oops\\n' >&2")
         job.wait()
-        assert list(job.logs(start=(len("hé".encode()), 2))) == [("stdout", "llo\n"), ("stderr", "ps\n")]
+        out = len("hé".encode())
+        assert list(job.logs(after=(out, 2))) == [sdk.LogChunk("stdout", "llo\n", (7, 2)), sdk.LogChunk("stderr", "ps\n", (7, 5))]
 
 
 def test_a_caller_can_name_the_session_before_launch_returns(launch: Callable, provider: Provider) -> None:
