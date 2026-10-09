@@ -188,7 +188,10 @@ class ModalMachine:
             return rc, out, err
 
         rc, out, err = self._live(run)
-        if (rc is None or rc == -1) and self._ends():  # Modal's code for an exec it killed
+        # None, -1: Modal's code for an exec it killed. 137: an exec in a sandbox mid-death (seen live
+        # after `kill -9 1`: "FetchSpec failed: loading container: file does not exist"). box's own
+        # execs never exit 137 on a live sandbox, so the ENDING_S wait that rules it out is rare.
+        if rc in (None, -1, 137) and self._ends():
             raise Gone(f"{self.id}: sandbox ended (exit {self.sandbox.returncode}) under `{cmd}`")
         return rc, out, err
 
