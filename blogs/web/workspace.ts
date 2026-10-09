@@ -1,18 +1,18 @@
-// The reader's workspace in the connected sandbox (ws.py there; blogs/ws.py here). Files go through the Contents API
-// (connect/contents.ts); ws.py runs on the kernel: status and boot as short cells, checks as background jobs.
+// The reader's workspace in the connected sandbox (workspace.py there; blogs/workspace.py here). Files go through the Contents API
+// (connect/contents.ts); workspace.py runs on the kernel: status and boot as short cells, checks as background jobs.
 //
-//   boot  on every kernel attach: upload ws.py + this chapter's ref bundle (both served next to the page), then
-//         `ws.py boot`: the repo as it is, restored from the persisted bundle, or seeded from the chapter's start
+//   boot  on every kernel attach: upload workspace.py + this chapter's ref bundle (both served next to the page), then
+//         `workspace.py boot`: the repo as it is, restored from the persisted bundle, or seeded from the chapter's start
 //   status  pass tags -> which cells passed / are locked; the one source of gating (not DOM order)
-//   check   `ws.py check <chapter> <cell> -- <command>` as a job; its output streams to the cell that started it
+//   check   `workspace.py check <chapter> <cell> -- <command>` as a job; its output streams to the cell that started it
 import { makeDir, readText, writeBytes, writeText } from "./connect/contents";
 import { killJob, onKernelState, runCode, runJob } from "./connect/kernel";
 import type { JobResult } from "./connect/kernel";
 
-const DIR = "workspace"; // ws.py's REPO, relative to Jupyter's root (the kernel's cwd)
+const DIR = "workspace"; // workspace.py's REPO, relative to Jupyter's root (the kernel's cwd)
 // Not a dot-dir: the Contents API refuses hidden paths (ContentsManager.allow_hidden is off), and its error replies
 // carry no CORS headers, so the page would only see "Failed to fetch".
-const TOOL = "_blogs/ws.py";
+const TOOL = "_blogs/workspace.py";
 const REF = "_blogs/ref.bundle";
 
 export interface CellStatus {
@@ -37,7 +37,7 @@ export type Created = "seeded" | "restored" | "restored-previous" | "existing";
 export interface Boot { created: Created; ms: number; status: WorkspaceStatus }
 
 const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
-const fail = (what: string, raw: unknown): never => { throw new Error(`ws.py: expected ${what}, got ${JSON.stringify(raw).slice(0, 300)}`); };
+const fail = (what: string, raw: unknown): never => { throw new Error(`workspace.py: expected ${what}, got ${JSON.stringify(raw).slice(0, 300)}`); };
 
 function parseCell(raw: unknown): CellStatus {
   if (!isRecord(raw)) return fail("a cell status", raw);
@@ -68,17 +68,17 @@ function parseBoot(raw: unknown): Boot {
   return { created, ms: raw["ms"], status: parseStatus(raw["status"]) };
 }
 
-// `ws.py <args>` as a short cell; its last stdout line is JSON. A failure raises in the kernel with ws.py's stderr.
+// `workspace.py <args>` as a short cell; its last stdout line is JSON. A failure raises in the kernel with workspace.py's stderr.
 async function wsJson(args: string[]): Promise<unknown> {
   const code = `import subprocess as _s, sys as _y
 _r = _s.run([_y.executable, ${JSON.stringify(TOOL)}, *${JSON.stringify(args)}], capture_output=True, text=True)
 if _r.returncode != 0:
-    raise RuntimeError(f"ws.py ${args[0] ?? ""} exited {_r.returncode}:\\n{_r.stdout[-2000:]}{_r.stderr[-4000:]}")
+    raise RuntimeError(f"workspace.py ${args[0] ?? ""} exited {_r.returncode}:\\n{_r.stdout[-2000:]}{_r.stderr[-4000:]}")
 print(_r.stdout.strip().splitlines()[-1])`;
   let out = "";
   const result = await runCode(code, (t) => { out += t; });
   if (result.status === "error") throw new Error(`${result.ename}: ${result.evalue}`);
-  if (result.status === "aborted") throw new Error(`ws.py ${args[0] ?? ""}: ${result.reason}`);
+  if (result.status === "aborted") throw new Error(`workspace.py ${args[0] ?? ""}: ${result.reason}`);
   return JSON.parse(out);
 }
 
@@ -96,12 +96,12 @@ function publish(s: WorkspaceStatus): void {
 }
 
 async function doBoot(chapter: string): Promise<Boot> {
-  const [tool, ref] = await Promise.all([fetch("./ws.py"), fetch("./ref.bundle")]);
-  if (!tool.ok || !ref.ok) throw new Error(`the page's ws.py / ref.bundle: HTTP ${String(tool.status)} / ${String(ref.status)}`);
+  const [tool, ref] = await Promise.all([fetch("./workspace.py"), fetch("./ref.bundle")]);
+  if (!tool.ok || !ref.ok) throw new Error(`the page's workspace.py / ref.bundle: HTTP ${String(tool.status)} / ${String(ref.status)}`);
   await makeDir("_blogs");
   await Promise.all([writeText(TOOL, await tool.text()), writeBytes(REF, new Uint8Array(await ref.arrayBuffer()))]);
   const boot = parseBoot(await wsJson(["boot", chapter, "--ref", REF]));
-  if (boot.status.chapter !== chapter) throw new Error(`ws.py booted ${boot.status.chapter}, not ${chapter}`);
+  if (boot.status.chapter !== chapter) throw new Error(`workspace.py booted ${boot.status.chapter}, not ${chapter}`);
   document.documentElement.dataset["workspaceBoot"] = `${boot.created} ${String(boot.ms)}ms`; // for debugging and verify_workspace.py
   publish(boot.status);
   return boot;

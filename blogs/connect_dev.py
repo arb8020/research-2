@@ -16,9 +16,9 @@ the "checking your Modal token" step (to see the failure UI). The session's toke
 call (X-Box-Token: id:secret, or ?token= on /events, which EventSource can't set headers for).
 The real relay (variant A over box) slots in at the same URL.
 
-Workspace pages (ws.py): --root DIR makes Jupyter's root_dir (and the kernel's cwd) a directory that outlives the
+Workspace pages (workspace.py): --root DIR makes Jupyter's root_dir (and the kernel's cwd) a directory that outlives the
 session, so a reload or a new session finds the same workspace; without it each session gets a temp dir, removed
-at its end. --persist DIR is what the sandbox sees as $BLOGS_WS_PERSIST: where ws.py keeps the workspace bundle
+at its end. --persist DIR is what the sandbox sees as $BLOGS_WS_PERSIST: where workspace.py keeps the workspace bundle
 (on Modal, a Volume). A fresh --root with the same --persist is a new sandbox restoring from the bundle.
 
 --attach-kernel/--attach-token: every session reports that Jupyter (e.g. one in a Modal sandbox, started with the
@@ -359,7 +359,7 @@ def main() -> None:
     ap.add_argument("--boot-delay", type=float, default=0.6, help="seconds between fake boot steps")
     ap.add_argument("--deadline", type=float, default=3600, help="session lifetime in seconds")
     ap.add_argument("--root", type=Path, help="Jupyter's root_dir for every session, kept after it (default: a temp dir per session)")
-    ap.add_argument("--persist", type=Path, help="$BLOGS_WS_PERSIST in the sandbox: where ws.py keeps the workspace bundle")
+    ap.add_argument("--persist", type=Path, help="$BLOGS_WS_PERSIST in the sandbox: where workspace.py keeps the workspace bundle")
     ap.add_argument("--attach-kernel", help="a running Jupyter's URL to report instead of starting one (needs --attach-token)")
     ap.add_argument("--attach-token")
     args = ap.parse_args()

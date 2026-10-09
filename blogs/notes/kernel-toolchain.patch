@@ -9,9 +9,9 @@ elsewhere). Proven by `uv run --with playwright --with modal verify_workspace.py
    - a Modal Volume in the reader's own workspace (e.g. "blogs-workspace", v2), mounted in the session's sandbox
      (e.g. at /vol), created on first use;
    - $BLOGS_WS_PERSIST=/vol/<something per reader or per series> in the Jupyter Server's env (jupyter_cmd's job env),
-     so ws.py writes workspace.bundle there and restores from it at boot;
-   - nothing else: ws.py already runs `sync <dir>` after each bundle rename on Linux (the Volume v2 commit; spike exp5).
-   Jupyter flags stay as they are. Hidden paths are not needed (ws.py keeps its state in _blogs/, not a dot-dir:
+     so workspace.py writes workspace.bundle there and restores from it at boot;
+   - nothing else: workspace.py already runs `sync <dir>` after each bundle rename on Linux (the Volume v2 commit; spike exp5).
+   Jupyter flags stay as they are. Hidden paths are not needed (workspace.py keeps its state in _blogs/, not a dot-dir:
    the Contents API refuses hidden paths and its error replies carry no CORS headers).
 
 --- a/box/gateway/kernel.Dockerfile
@@ -20,7 +20,7 @@ elsewhere). Proven by `uv run --with playwright --with modal verify_workspace.py
  # ipykernel. bash + python3 (conda's) are what box's supervisor needs. T4 is sm_75: torch 2.5 still ships it.
  FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
  RUN pip install --no-cache-dir "jupyter_server~=2.17" "ipykernel~=7.1"
-+# Workspace cells (blogs/ws.py): git for the reader's workspace repo; g++ (checks build with it), make, clang +
++# Workspace cells (blogs/workspace.py): git for the reader's workspace repo; g++ (checks build with it), make, clang +
 +# ccache (later: clangd for inline diagnostics; ccache once builds get heavier). +35 s build once, ~400 MB.
 +RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git clang make ccache g++ libc6-dev \
 +    && rm -rf /var/lib/apt/lists/*

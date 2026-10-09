@@ -1,16 +1,16 @@
 """The reader's workspace: a git repo in their sandbox that the page's cells are views onto. Stdlib only: the page
-uploads this file to the sandbox (_blogs/ws.py) and runs it there; it never runs on the page's server.
+uploads this file to the sandbox (_blogs/workspace.py) and runs it there; it never runs on the page's server.
 
-    python3 _blogs/ws.py boot ch00 --ref _blogs/ref.bundle    restore the repo from the persisted bundle, or seed it
+    python3 _blogs/workspace.py boot ch00 --ref _blogs/ref.bundle    restore the repo from the persisted bundle, or seed it
                                                               from the chapter's start; prints {created, ms, status}
-    python3 _blogs/ws.py status ch00                          {chapter, cells: [{name, file, passed, locked, why,
+    python3 _blogs/workspace.py status ch00                          {chapter, cells: [{name, file, passed, locked, why,
                                                               draft}], persist}; JSON on stdout
-    python3 _blogs/ws.py check ch00 ring -- run_checks ch00 ring
+    python3 _blogs/workspace.py check ch00 ring -- run_checks ch00 ring
                                                               the latest passing tree + only ring's file -> build +
                                                               check, streamed; pass -> commit + tag pass/ch00/ring +
                                                               bundle. Exit 0 pass, 1 fail, 2 refused (locked, busy)
-    python3 _blogs/ws.py save                                 bundle the repo into the persist dir now
-    python3 _blogs/ws.py advance ch00 ch01                    (not yet: splice into the next chapter; see advance())
+    python3 _blogs/workspace.py save                                 bundle the repo into the persist dir now
+    python3 _blogs/workspace.py advance ch00 ch01                    (not yet: splice into the next chapter; see advance())
 
 Layout under the root (the cwd: Jupyter's root_dir, where the kernel runs):
 
@@ -76,7 +76,7 @@ def persist_dir() -> Path | None:
 
 
 def say(text: str) -> None:
-    print(f"ws: {text}", flush=True)
+    print(f"workspace: {text}", flush=True)
 
 
 def ms(t0: float) -> int:

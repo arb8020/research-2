@@ -10,7 +10,7 @@ connect_dev logs; locally also the two Jupyter roots and the persist dir (root1/
 Phases (the shape a verify-blogs skill can call one by one):
   launch   build the page; serve dist/; start sandbox 1 (local root1, or a Modal sandbox with Jupyter on the relay's
            flags and the persist dir on a Volume) and connect_dev.py in front of it
-  doctor   g++ / make / git in the sandbox; the page ships ws.py + ref.bundle; after Connect the workspace is
+  doctor   g++ / make / git in the sandbox; the page ships workspace.py + ref.bundle; after Connect the workspace is
            seeded (tag ref/ch00/start) and only the first cell is unlocked
   drive    the story:
              1  ring.cpp with a missing ';' -> Run -> the compiler error streams in; its ring.cpp:L:C link moves the
@@ -167,7 +167,7 @@ def run_cell(page: Page, cell: str) -> tuple[str, str, float]:
 
 
 def bundle_note(output: str) -> tuple[float, int]:
-    """(KiB, ms) from ws.py's PASS line: 'bundle 8.8 KiB saved in 36 ms'."""
+    """(KiB, ms) from workspace.py's PASS line: 'bundle 8.8 KiB saved in 36 ms'."""
     m = re.search(r"bundle ([\d.]+) KiB saved in (\d+) ms", output)
     assert m, f"no bundle line in the output:\n{output}"
     return float(m[1]), int(m[2])
@@ -270,9 +270,9 @@ class Gateway:
 
 def doctor_page() -> str:
     dist = HERE / "dist" / PAGE
-    for f in ("index.html", "page.js", "ws.py", "ref.bundle"):
+    for f in ("index.html", "page.js", "workspace.py", "ref.bundle"):
         assert (dist / f).is_file(), f"the built page lacks {f}"
-    return "doctor: the page ships ws.py + ref.bundle"
+    return "doctor: the page ships workspace.py + ref.bundle"
 
 
 def doctor_box(box: Box) -> str:
