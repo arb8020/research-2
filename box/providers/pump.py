@@ -6,13 +6,14 @@ import os
 import queue
 import select
 import shlex
+import subprocess
 import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
 from typing import IO
 
-from box.sdk import Dropped, Refused
+from box.sdk import Dropped, Gone, Refused
 
 QUEUE_CHUNKS = 64
 PUT_TICK_S = 0.1
@@ -21,6 +22,7 @@ JOIN_S = 10.0
 READ_BYTES = 64 * 1024
 MAX_SEND_BYTES = 64 * 1024
 SEND_TIMEOUT_S = 10.0
+KILL_FAILURES = (Gone, OSError, subprocess.TimeoutExpired)
 
 Emit = Callable[[str, bytes], None]
 Reader = Callable[[Emit], None]
@@ -118,17 +120,19 @@ class Pumped:
             self._closed.set()
         with contextlib.suppress(queue.Full):
             self._queue.put_nowait(_WAKE)
-        if not self._finished:
-            try:
-                self._kill()
-            except Exception as e:  # MUST KILL: swallows any kill failure (was noqa BLE001); catch the providers' kill errors only
-                print(f"box: {self.label}: killing a stream's command failed: {e!r}", file=sys.stderr)
-        give_up = time.monotonic() + JOIN_S
-        for t in self._threads:
-            if t is not threading.current_thread():
-                t.join(max(0.0, give_up - time.monotonic()))
-        if stuck := [t.name for t in self._threads if t.is_alive()]:
-            print(f"box: {self.label}: stream readers {stuck} still running {JOIN_S:.0f} s after close", file=sys.stderr)
+        try:
+            if not self._finished:
+                try:
+                    self._kill()
+                except KILL_FAILURES as e:
+                    print(f"box: {self.label}: killing a stream's command failed: {e!r}", file=sys.stderr)
+        finally:
+            give_up = time.monotonic() + JOIN_S
+            for t in self._threads:
+                if t is not threading.current_thread():
+                    t.join(max(0.0, give_up - time.monotonic()))
+            if stuck := [t.name for t in self._threads if t.is_alive()]:
+                print(f"box: {self.label}: stream readers {stuck} still running {JOIN_S:.0f} s after close", file=sys.stderr)
 
     def _pump(self, reader: Reader) -> None:
         item: _Eof | BaseException
