@@ -53,7 +53,7 @@ from typing import Any
 #     <root>/index.jsonl                  one line per entry ever written (kind, key, created, summary)
 #     <root>/tmp/                         entries being written; renamed into place when done
 #
-# Kinds used: "expected" (a trusted reference run), "run" (the candidate's outputs), "grade" (a grader applied to a run),
+# Kinds used: "truth" + "expected" (a trusted reference run), "run" (the candidate's outputs), "grade" (a grader applied to a run),
 # "session" (one run_checks invocation: which runs and grades it produced). An entry is never rewritten: a different
 # input is a different key. A dir without meta.json is an interrupted write and reads as missing.
 #
@@ -741,6 +741,15 @@ def warm_alive(path: Path) -> bool:
         return False
 
 
+def stop_warm() -> bool:
+    """Ask the current warm process to exit (tests, or after an upgrade). False if none was running."""
+    path = warm_socket()
+    if not warm_alive(path):
+        return False
+    warm_request(path, {"kind": "stop"}, [])
+    return True
+
+
 def ensure_warm(log: Any = None) -> Path:
     """The warm process's socket, starting the server if nothing answers there (one starter at a time)."""
     path = warm_socket()
@@ -750,6 +759,11 @@ def ensure_warm(log: Any = None) -> Path:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if warm_alive(path):
             return path
+        for stale in path.parent.glob("warm-*.sock"):  # servers of older code / packages: stop them
+            if stale != path:
+                with contextlib.suppress(OSError, RuntimeError, ValueError):
+                    warm_request(stale, {"kind": "stop"}, [])
+                stale.unlink(missing_ok=True)
         if log is not None:
             log("starting the warm check process (imports torch + transformers once; later checks fork from it)")
         server_log = (path.parent / f"{path.stem}.log").open("ab")
@@ -791,7 +805,11 @@ def serve_warm(path_str: str) -> None:
             path.unlink(missing_ok=True)
             return
         with conn:
-            _handle(listener, conn)
+            try:
+                _handle(listener, conn)
+            except SystemExit:
+                path.unlink(missing_ok=True)
+                return
 
 
 def _handle(listener: socket.socket, conn: socket.socket) -> None:
@@ -807,15 +825,17 @@ def _handle(listener: socket.socket, conn: socket.socket) -> None:
         while len(msg) < MAX_REQUEST and (more := conn.recv(65536)):  # the rest of the request, up to EOF
             msg += more
         header = json.loads(msg)
-        if header["kind"] == "ping":
+        if header["kind"] in ("ping", "stop"):
             conn.sendall(b'{"ok": true}')
+            if header["kind"] == "stop":
+                raise SystemExit(0)  # out of serve_warm's loop: the server exits
             return
         assert header["kind"] in ("trusted", "untrusted"), header["kind"]
         pid = os.fork()
         if pid == 0:
             _in_fork(header, fds, keep=set(fds), close=(listener, conn))
         conn.sendall(json.dumps({"pid": pid}).encode())
-    except Exception as exc:  # noqa: BLE001 -- a bad request never takes the server down
+    except Exception as exc:  # noqa: BLE001 -- a bad request never takes the server down (SystemExit = stop)
         with contextlib.suppress(OSError):
             conn.sendall(json.dumps({"error": f"{type(exc).__name__}: {exc}"}).encode())
     finally:
@@ -846,9 +866,8 @@ def _in_fork(header: dict[str, Any], fds: list[int], keep: set[int], close: tupl
         os.environ.update(header["env"])
         if sys.platform == "darwin":  # macOS: the system proxy lookup (urllib -> _scproxy) segfaults after fork
             os.environ.setdefault("no_proxy", "*")
-        import tempfile
-
         tempfile.tempdir = None  # recomputed from the new TMPDIR
+        sys.dont_write_bytecode = True  # no __pycache__ in the reader's tree (the env var only counts at startup)
         sys.path.insert(0, header["pythonpath"])
         if header["kind"] == "untrusted":
             code = _untrusted(header, fds)
