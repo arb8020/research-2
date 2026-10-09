@@ -29,6 +29,40 @@ function parseState(raw: unknown): SessionState {
   return { passed, wasm };
 }
 
+// POST {SESSION}/run (session.py) streams one JSON object per line: {"out"} as output arrives, then
+// exactly one {"result"}. The verdict comes only from "result"; reader code can only print into "out".
+interface RunResult {
+  passed: boolean;
+  message: string;
+}
+type RunLine = { kind: "out"; text: string } | { kind: "result"; result: RunResult };
+
+function parseRunLine(raw: unknown): RunLine {
+  if (typeof raw === "object" && raw !== null) {
+    if ("out" in raw && typeof raw.out === "string") return { kind: "out", text: raw.out };
+    if ("result" in raw && typeof raw.result === "object" && raw.result !== null) {
+      const r = raw.result;
+      if ("passed" in r && typeof r.passed === "boolean" && "message" in r && typeof r.message === "string") {
+        return { kind: "result", result: { passed: r.passed, message: r.message } };
+      }
+    }
+  }
+  throw new Error(`session /run: expected {out} or {result: {passed, message}}, got ${JSON.stringify(raw)}`);
+}
+
+// Yields each complete line of a text stream (the last one even without a trailing newline).
+async function* lines(body: ReadableStream<Uint8Array<ArrayBuffer>>): AsyncGenerator<string> {
+  const reader = body.pipeThrough(new TextDecoderStream()).getReader();
+  let buf = "";
+  for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+    buf += chunk.value;
+    const parts = buf.split("\n");
+    buf = parts.pop() ?? "";
+    yield* parts;
+  }
+  if (buf !== "") yield buf;
+}
+
 function sessionUrl(): string {
   const fromQuery = new URLSearchParams(location.search).get("session");
   return fromQuery !== null && fromQuery !== "" ? fromQuery : must(document, 'meta[name="session-url"]', HTMLMetaElement).content;
@@ -140,25 +174,34 @@ class CodeCell extends HTMLElement {
     out.className = "cell-out";
     this.status("running…", "");
     button.disabled = true;
+    let result: RunResult | undefined;
     try {
       const res = await fetch(`${SESSION}/run`, { method: "POST", body: JSON.stringify({ cell: name, source: this.view.state.doc.toString() }) });
-      if (res.body === null) throw new Error(`POST /run answered ${String(res.status)} with no body`);
-      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-      for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-        out.textContent += chunk.value;
-        out.scrollTop = out.scrollHeight;
+      if (!res.ok || res.body === null) throw new Error(`POST /run answered ${String(res.status)}${res.body === null ? " with no body" : ""}`);
+      for await (const text of lines(res.body)) {
+        if (text === "") continue;
+        const line = parseRunLine(JSON.parse(text));
+        if (line.kind === "result") {
+          result = line.result;
+        } else {
+          out.textContent += line.text;
+          out.scrollTop = out.scrollHeight;
+        }
       }
+      result ??= { passed: false, message: "the session stopped before giving a result" };
     } catch (e) {
-      out.textContent += `\n[session unreachable: ${String(e)}]\nFAIL\n`;
+      // fetch and a dropped stream throw TypeError; a malformed line throws from JSON.parse / parseRunLine.
+      const message = e instanceof TypeError ? "session unreachable" : "the session sent a reply the page can't read";
+      out.textContent += `\n[${message}: ${String(e)}]\n`;
+      result = { passed: false, message };
     }
-    const ok = out.textContent.trimEnd().split("\n").pop() === "PASS";
-    out.classList.add(ok ? "pass" : "fail");
+    out.classList.add(result.passed ? "pass" : "fail");
     const fallback = name in state.passed ? "; later cells keep using your last passing version" : "";
     this.restored = true;
-    this.verdict = ok ? ["passed", "pass"] : [`failed${fallback}`, "fail"];
+    this.verdict = result.passed ? [result.message, "pass"] : [`${result.message}${fallback}`, "fail"];
     this.status(...this.verdict);
     button.disabled = false;
-    if (ok) await refresh();
+    if (result.passed) await refresh();
   }
 }
 customElements.define("code-cell", CodeCell);

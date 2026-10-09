@@ -70,31 +70,32 @@ with sync_playwright() as p:
         page.evaluate("([n, s]) => { const v = document.querySelector(`code-cell[name=\"${n}\"]`).view;"
                       " v.dispatch({changes: {from: 0, to: v.state.doc.length, insert: s}}); }", [name, src])  # fmt: skip
 
-    def run(name: str) -> list[str]:
+    def run(name: str) -> bool:
+        """Click Run; the verdict is the page's (the .pass/.fail it put on the output from the result line)."""
         start = time.perf_counter()
         cell(name).locator(".run").click()
         page.wait_for_selector(f'code-cell[name="{name}"] .cell-out:is(.pass, .fail)', timeout=60_000)
-        out = cell(name).locator(".cell-out").inner_text().strip().splitlines()
-        print(f"  run {name}: {time.perf_counter() - start:.1f}s -> {out[-2][:110]!r} / {out[-1]}")
+        passed = cell(name).locator(".cell-out.pass").count() == 1
+        status = cell(name).locator(".cell-status").inner_text()
+        print(f"  run {name}: {time.perf_counter() - start:.1f}s -> {'PASS' if passed else 'FAIL'} | status: {status[:110]!r}")
         cell(name).locator(".cell-out").scroll_into_view_if_needed()
-        return out
+        return passed
 
-    run("flappy")
+    assert not run("flappy")
     cell("flappy").locator(".cell-out").screenshot(path=SHOTS / "1-flappy-stub-fails.png")
     cell("flappy").screenshot(path=SHOTS / "1-flappy-stub-fails-full.png")
 
     paste("flappy", SOLUTION)
-    out = run("flappy")
-    assert out[-1] == "PASS"
+    assert run("flappy")
     cell("flappy").locator(".cell-head").scroll_into_view_if_needed()
     page.screenshot(path=SHOTS / "2-flappy-passes.png")
     cell("flappy").locator(".cell-out").screenshot(path=SHOTS / "2-flappy-passes-output.png")
 
     page.wait_for_selector('code-cell[name="policy"]:not(.locked)')
-    run("policy")
+    assert not run("policy")
     cell("policy").screenshot(path=SHOTS / "3-policy-unlocked-stub-fails.png")
     paste("policy", POLICY)
-    assert run("policy")[-1] == "PASS"
+    assert run("policy")
     page.wait_for_selector('code-cell[name="sample"]:not(.locked)')
     cell("policy").screenshot(path=SHOTS / "3-policy-passes.png")
     print("  sample unlocked:", not cell("sample").locator(".run").is_disabled())
@@ -113,12 +114,12 @@ with sync_playwright() as p:
     play.screenshot(path=SHOTS / "4-play-your-env.png")
 
     paste("flappy", STUB.replace(INJECT, "volatile int *p = 0;\n    *p = 1;"))
-    assert run("flappy")[-1] == "FAIL"
-    assert run("policy")[-1] == "PASS", "a failing upstream edit must not propagate"
+    assert not run("flappy")
+    assert run("policy"), "a failing upstream edit must not propagate"
     cell("flappy").screenshot(path=SHOTS / "5-flappy-segfault.png")
 
     paste("flappy", STUB.replace(INJECT, "while (1) {}"))
-    assert run("flappy")[-1] == "FAIL"
+    assert not run("flappy")
 
     page.reload()
     page.wait_for_selector('code-cell[name="sample"]:not(.locked)')
