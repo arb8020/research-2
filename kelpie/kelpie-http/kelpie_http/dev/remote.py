@@ -17,6 +17,7 @@ library, box and its provider; the job (job.py, setup.py) runs on the box, which
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import os
 import shlex
@@ -136,12 +137,12 @@ def make_provider(name: str, volume: str) -> sdk.Provider:
     raise SystemExit(f"kelpie remote: unknown provider {name!r}; known: modal, local")
 
 
-def start(a: argparse.Namespace, cmd: str) -> tuple[sdk.Session, sdk.Job]:
+def start(a: argparse.Namespace, cmd: str, provider: sdk.Provider) -> tuple[sdk.Session, sdk.Job]:
     """launch, put the trees, queue the job. A failure after launch closes the machine: one with
     no job would idle until its ceiling."""
     local = a.provider == "local"
     s = sdk.launch(
-        make_provider(a.provider, a.volume),
+        provider,
         gpu=None if local else a.gpu,
         image=None if local else dockerfile(KELPIE),
         ceiling_s=a.timeout + GRACE_S,
@@ -231,9 +232,10 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     a = parser().parse_args(argv)
     cmd = " ".join(a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd) or "nvidia-smi"
-    s, job = start(a, cmd)
-    if not a.detach:
-        return follow(s, job)
+    with contextlib.closing(make_provider(a.provider, a.volume)) as provider:  # Modal: joins its loop thread
+        s, job = start(a, cmd, provider)
+        if not a.detach:
+            return follow(s, job)
     print(s.id)
     print(
         f"box logs {s.id} -f    # follow (exits with the job's status)\nbox kill {s.id}       # stop",
