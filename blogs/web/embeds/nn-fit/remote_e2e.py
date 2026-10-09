@@ -1,85 +1,30 @@
-"""<nn-fit> remote backend, end to end: the built page in headless Chromium, training on a local Jupyter kernel.
+"""<nn-fit> remote backend, end to end: the built page in headless Chromium, Connect to a local fake gateway
+(connect_dev.py, its kernel a local Jupyter with torch, CPU), then train <nn-fit> remotely on it.
 
-    uv run build_page.py dl/neural-nets.md
-    uv run --with playwright --with jupyter_server --with ipykernel python web/embeds/nn-fit/remote_e2e.py
+    uv run --with playwright python web/embeds/nn-fit/remote_e2e.py
 
-Starts a Jupyter server (torch from this project, CPU) and a static server for dist/, then drives the page. The
-page's Connect client doesn't exist on this branch yet, so the test publishes a RemoteRunner itself (JUPYTER_RUNNER
-below: a minimal Jupyter kernel client), the same way the Connect client will (web/remote-runner.ts).
+Builds dl/neural-nets.md, starts connect_dev.py (with torch added to its env, so the kernel can import it) and a
+static server for dist/, then drives the page through the real Connect UI and kernel client (web/connect/).
 Writes screenshots and a video to .evidence/nn-fit-remote/ (gitignored). Exits 1 on the first failed check.
 """
 
-import os
-import secrets
+import shutil
 import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 from playwright.sync_api import Locator, Page, sync_playwright
 
 BLOGS = Path(__file__).resolve().parents[3]
 EVIDENCE = BLOGS / ".evidence" / "nn-fit-remote"
-SERVER_START_SECONDS = 60  # jupyter_server's first start (kernel specs, extensions) can take a while
+SERVER_START_SECONDS = 120  # connect_dev.py's first start installs jupyter_server (+ torch from uv's cache)
+CONNECT_SECONDS = 120  # the fake boot, then a local Jupyter Server and kernel
 RUN_SECONDS = 2.0  # how long the Stop case lets a remote run train
-
-# A RemoteRunner over a Jupyter kernel: REST to start/interrupt it, its websocket channel to execute code.
-JUPYTER_RUNNER = """
-async ({ base, token, label }) => {
-  const headers = { Authorization: `token ${token}`, "Content-Type": "application/json" };
-  const kernel = await (await fetch(`${base}/api/kernels`, { method: "POST", headers, body: JSON.stringify({ name: "python3" }) })).json();
-  const ws = new WebSocket(`${base.replace("http", "ws")}/api/kernels/${kernel.id}/channels?token=${token}`);
-  await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject; });
-  const session = crypto.randomUUID();
-  const runs = new Map(); // execute_request msg_id -> { onStdout, resolve, error }
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    const run = runs.get(msg.parent_header?.msg_id);
-    if (!run || msg.channel !== "iopub") return;
-    const type = msg.header.msg_type;
-    if (type === "stream" && msg.content.name === "stdout") run.onStdout(msg.content.text);
-    if (type === "error") run.error = msg.content.traceback.join("\\n").replace(/\\x1b\\[[0-9;]*m/g, "");
-    if (type === "status" && msg.content.execution_state === "idle") {
-      runs.delete(msg.parent_header.msg_id);
-      run.resolve(run.error === null ? { ok: true } : { ok: false, error: run.error });
-    }
-  };
-  const runner = {
-    label,
-    run(code, onStdout) {
-      return new Promise((resolve) => {
-        const msg_id = crypto.randomUUID();
-        runs.set(msg_id, { onStdout, resolve, error: null });
-        ws.send(JSON.stringify({
-          header: { msg_id, session, username: "e2e", msg_type: "execute_request", version: "5.3", date: new Date().toISOString() },
-          parent_header: {}, metadata: {}, channel: "shell",
-          content: { code, silent: false, store_history: false, user_expressions: {}, allow_stdin: false, stop_on_error: true },
-        }));
-      });
-    },
-    async interrupt() { await fetch(`${base}/api/kernels/${kernel.id}/interrupt`, { method: "POST", headers }); },
-  };
-  window.blogsRemoteRunner = runner;
-  window.dispatchEvent(new Event("remote-runner-change"));
-}
-"""
-
-# A runner whose code always fails, as a kernel reports a Python exception.
-FAILING_RUNNER = """
-() => {
-  window.blogsRemoteRunner = {
-    label: "failing kernel",
-    run: async () => ({ ok: false, error: "Traceback (most recent call last):\\n  ...\\nValueError: config: lr = 99 is outside 0..10" }),
-    interrupt: async () => {},
-  };
-  window.dispatchEvent(new Event("remote-runner-change"));
-}
-"""
-
-DISCONNECT = "() => { window.blogsRemoteRunner = null; window.dispatchEvent(new Event('remote-runner-change')); }"
+FAKE_TOKEN = ("ak-nn-fit-remote-e2e", "as-nn-fit-remote-e2e")  # connect_dev.py boots any id starting "ak-"
 STATS = "document.querySelector('nn-fit').stats"
 
 
@@ -96,6 +41,7 @@ def free_port() -> int:
 
 
 def wait_for_http(url: str, proc: subprocess.Popen, seconds: float) -> None:
+    """Until `url` answers at all (an HTTP error status counts: the server is up)."""
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
         if proc.poll() is not None:
@@ -103,9 +49,22 @@ def wait_for_http(url: str, proc: subprocess.Popen, seconds: float) -> None:
         try:
             with urlopen(url, timeout=2):
                 return
+        except HTTPError:
+            return
         except (URLError, ConnectionError):
             time.sleep(0.2)
     raise SystemExit(f"FAIL {url} not up after {seconds} s")
+
+
+def connect(page: Page) -> None:
+    """Connect through the header pill, as a reader would: token, GPU, go; wait for the kernel."""
+    page.locator(".connect-pill").click()
+    page.fill("input[name=token-id]", FAKE_TOKEN[0])
+    page.fill("input[name=token-secret]", FAKE_TOKEN[1])
+    page.select_option("select[name=gpu]", "T4")
+    page.locator(".connect-go").click()
+    page.wait_for_selector("connect-pill[data-phase=connected]", timeout=CONNECT_SECONDS * 1000)
+    page.keyboard.press("Escape")
 
 
 def is_disabled(locator: Locator) -> bool:
@@ -134,13 +93,13 @@ def curve_run(page: Page) -> None:
     page.click(nn(page, "button.train"))  # Stop -> kernel interrupt
     after = stopped(page)
     print(f"  wave: loss {before['loss']:.3g} -> {mid['loss']:.3g} (step {mid['steps']}) -> {after['loss']:.3g} at step {after['steps']} on {after['device']}")
-    check(mid["device"] == "cpu · local kernel", f"remote run: reports where it ran ({mid['device']!r})")
+    check(mid["device"] == "cpu (remote)", f"remote run: reports where it ran ({mid['device']!r})")
     check(after["loss"] < before["loss"] / 10, "remote run: the loss fell by 10x or more")
     check(after["steps"] >= mid["steps"] and after["device"] == mid["device"], "stop: the final state is from the remote run")
     status = page.locator("nn-fit [role=status]").text_content() or ""
     check("Remote run stopped: stopped" in status, f"stop: announced ({status!r})")
     text = page.locator(nn(page, ".usage")).text_content() or ""
-    check("on cpu · local kernel" in text, f"readout names the backend ({text!r})")
+    check("on cpu (remote)" in text, f"readout names the backend ({text!r})")
     page.locator("nn-fit").screenshot(path=EVIDENCE / "wave-remote-stopped.png")
 
     # Back in the browser, training continues from the remote's weights (not from scratch).
@@ -171,67 +130,74 @@ def spiral_run(page: Page) -> None:
     page.locator("nn-fit").screenshot(path=EVIDENCE / "spiral-remote-done.png")
 
 
-def failure_and_disconnect(page: Page) -> None:
-    page.evaluate(FAILING_RUNNER)
+def disconnect_mid_run(page: Page) -> None:
+    """Disconnect while a remote run trains: the run fails with the reason, the weights stay, remote goes away."""
     page.click(nn(page, "button.reset"))
-    page.select_option(nn(page, "select.backend"), "remote")
+    page.locator(nn(page, "input.step-budget")).evaluate("(el) => { el.value = '7'; el.dispatchEvent(new Event('input')); }")  # off
     page.click(nn(page, "button.train"))
-    stopped(page)
+    page.wait_for_function(f"{STATS}.steps > 0", timeout=60_000)
+    page.locator(".connect-pill").click()
+    page.locator(".connect-end").click()
+    end = stopped(page)
     need = page.locator(nn(page, "p.need")).text_content() or ""
-    check("Remote run failed: ValueError: config: lr = 99" in need, f"a failing run says why under the plot ({need!r})")
-    check(page.evaluate(STATS)["steps"] == 0, "a failing run leaves the weights alone")
-    page.evaluate(DISCONNECT)
+    # The reason depends on which goes first, the page's detach or the gateway's kernel: "disconnected" or
+    # "the connection to the kernel dropped".
+    check(need.startswith("Remote run failed: ") and len(need) > len("Remote run failed: "), f"disconnect mid-run: the run fails and says why ({need!r})")
+    check(end["steps"] == 0 and end["device"] == "this browser", "disconnect mid-run: the weights are left as they were")
     option = page.locator(nn(page, "select.backend option[value=remote]"))
-    check(is_disabled(option) and (option.text_content() or "") == "remote (connect first)", "disconnect: remote is offered only when connected")
-    check(page.evaluate(STATS)["backend"] == "browser", "disconnect: the widget falls back to the browser")
+    check(is_disabled(option) and (option.text_content() or "") == "remote (Connect first)", "disconnected: remote is offered only when connected")
+    check(page.evaluate(STATS)["backend"] == "browser", "disconnected: the widget falls back to the browser")
+    page.locator("nn-fit").screenshot(path=EVIDENCE / "disconnected-mid-run.png")
 
 
-def drive(page_url: str, jupyter_url: str, token: str) -> None:
+def drive(page_url: str) -> None:
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
-        context = browser.new_context(viewport={"width": 900, "height": 1100}, record_video_dir=str(EVIDENCE), record_video_size={"width": 900, "height": 1100})
+        context = browser.new_context(viewport={"width": 900, "height": 1100}, record_video_dir=str(EVIDENCE / "video"),
+                                      record_video_size={"width": 900, "height": 1100})  # fmt: skip
         page = context.new_page()
         errors: list[str] = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(page_url)
-        page.locator("nn-fit").scroll_into_view_if_needed()
         option = page.locator(nn(page, "select.backend option[value=remote]"))
-        check(is_disabled(option), "no session: remote is disabled")
-        page.evaluate(JUPYTER_RUNNER, {"base": jupyter_url, "token": token, "label": "local kernel"})
-        check(not is_disabled(option) and option.text_content() == "remote: local kernel", "session published: remote is offered")
+        check(is_disabled(option), "not connected: remote is disabled")
+        connect(page)
+        page.locator("nn-fit").scroll_into_view_if_needed()
+        check(not is_disabled(option), "connected: remote is offered")
         curve_run(page)
         spiral_run(page)
-        failure_and_disconnect(page)
+        disconnect_mid_run(page)
         check(errors == [], f"no page errors ({errors})")
         video = page.video
-        context.close()
+        assert video is not None
+        context.close()  # finishes the video file
+        recorded = Path(video.path())
         browser.close()
-        if video is not None:
-            print(f"  video: {video.path()}")
+    webm = EVIDENCE / "nn-fit-remote.webm"
+    recorded.rename(webm)
+    recorded.parent.rmdir()
+    if shutil.which("ffmpeg"):
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", webm, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                        EVIDENCE / "nn-fit-remote.mp4"], check=True)  # fmt: skip
+    print(f"ok: {EVIDENCE}/ ({', '.join(sorted(p.name for p in EVIDENCE.iterdir()))})")
 
 
 def main() -> None:
-    EVIDENCE.mkdir(parents=True, exist_ok=True)
-    dist = BLOGS / "dist"
-    if not (dist / "neural-nets" / "index.html").exists():
-        raise SystemExit("build the page first: uv run build_page.py dl/neural-nets.md")
-    token = secrets.token_hex(16)
-    jport, sport = free_port(), free_port()
-    env = {**os.environ, "JUPYTER_RUNTIME_DIR": str(EVIDENCE / "jupyter-runtime")}  # keep its files out of ~
-    jupyter = subprocess.Popen(
-        [sys.executable, "-m", "jupyter_server", "--no-browser", f"--port={jport}", f"--IdentityProvider.token={token}",
-         "--ServerApp.allow_origin=*", "--ServerApp.disable_check_xsrf=True", f"--ServerApp.root_dir={EVIDENCE}"],
-        cwd=BLOGS, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )  # fmt: skip
-    static = subprocess.Popen([sys.executable, "-m", "http.server", str(sport), "-d", str(dist)],
+    shutil.rmtree(EVIDENCE, ignore_errors=True)
+    EVIDENCE.mkdir(parents=True)
+    subprocess.run(["uv", "run", "build_page.py", "dl/neural-nets.md"], cwd=BLOGS, check=True, stdout=subprocess.DEVNULL)
+    gport, sport = free_port(), free_port()
+    log = (EVIDENCE / "connect_dev.log").open("wb")
+    gateway = subprocess.Popen(["uv", "run", "--with", "torch", "connect_dev.py", "--port", str(gport), "--boot-delay", "0.2"],
+                               cwd=BLOGS, stdout=log, stderr=log)  # fmt: skip
+    static = subprocess.Popen([sys.executable, "-m", "http.server", str(sport), "-d", str(BLOGS / "dist")],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # fmt: skip
     try:
-        jupyter_url = f"http://127.0.0.1:{jport}"
-        wait_for_http(f"{jupyter_url}/api/status?token={token}", jupyter, SERVER_START_SECONDS)
+        wait_for_http(f"http://127.0.0.1:{gport}/sessions/none", gateway, SERVER_START_SECONDS)
         wait_for_http(f"http://127.0.0.1:{sport}/neural-nets/", static, SERVER_START_SECONDS)
-        drive(f"http://127.0.0.1:{sport}/neural-nets/", jupyter_url, token)
+        drive(f"http://127.0.0.1:{sport}/neural-nets/?gateway=http://127.0.0.1:{gport}")
     finally:
-        for proc in (jupyter, static):
+        for proc in (gateway, static):
             proc.terminate()
             proc.wait(timeout=20)
 

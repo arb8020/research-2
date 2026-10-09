@@ -8,11 +8,12 @@
 //   stages="1..4" seed="1" step-budget="2000" time-budget="5"
 // Read-only `stats` exposes the live numbers (tests and any host page can read them).
 //
-// Backends: training runs in this browser (mlp.ts), or, when the page has a connected session (remote-runner.ts),
-// on it: remote_train.py in torch, from the same weights on the same data, streaming ticks into the same plot.
+// Backends: training runs in this browser (mlp.ts), or, while the page is connected (Connect, connect/kernel.ts),
+// on the session's kernel: remote_train.py in torch, from the same weights on the same data, streaming ticks into
+// the same plot.
+import { interrupt, kernelState, onKernelState, runCode } from "../../connect/kernel";
+import type { RunResult } from "../../connect/kernel";
 import { must } from "../../dom";
-import type { RemoteRunner, RunResult } from "../../remote-runner";
-import { onRemoteRunnerChange, remoteRunner } from "../../remote-runner";
 import type { Activation, Adam, Batch, Mlp, Task } from "./mlp";
 import { ACTIVATIONS, evaluate, get, initMlp, makeAdam, paramCount, predictor, seeded, trainStep } from "./mlp";
 import type { DrawBuffer, Point, WaveParams, WaveStage } from "./datasets";
@@ -30,6 +31,7 @@ export type Dataset = "draw" | "wave" | "spiral";
 const DATASETS: readonly Dataset[] = ["draw", "wave", "spiral"];
 export type Backend = "browser" | "remote";
 const BROWSER = "this browser"; // what `device` says after a browser run
+const connected = (): boolean => kernelState() === "idle" || kernelState() === "busy";
 
 export interface NnFitStats {
   readonly dataset: Dataset;
@@ -53,8 +55,9 @@ export interface NnFitStats {
 
 // A remote run in flight: its latest tick is what the plot and readout show until it ends.
 interface RemoteRun {
-  readonly runner: RemoteRunner;
-  readonly fromStep: number; // the widget's counters when it started, for the FLOP estimate
+  // The widget's counters when it started: ticks count on from them, and a failed run puts them back.
+  readonly fromStep: number;
+  readonly fromMs: number;
   readonly fromFlops: number;
   device: string | null; // from its "start" line
   tick: RemoteTick | null;
@@ -265,6 +268,14 @@ const stopText = (reason: StopReason): string =>
   reason === "steps" ? "step budget used up" : reason === "time" ? "time budget used up" : "stopped";
 // A Python traceback's last line says what went wrong; the rest is in the browser console.
 const lastLine = (error: string): string => error.trim().split("\n").at(-1) ?? error;
+
+function runFailure(result: RunResult): string | null {
+  switch (result.status) {
+    case "ok": return null;
+    case "error": return result.traceback === "" ? `${result.ename}: ${result.evalue}` : result.traceback;
+    case "aborted": return result.reason;
+  }
+}
 
 export class NnFit extends HTMLElement {
   #root = this.attachShadow({ mode: "open" });
@@ -486,13 +497,13 @@ export class NnFit extends HTMLElement {
       if (backend.value !== "browser" && backend.value !== "remote") return;
       if (this.#training) this.#setTraining(false); // a browser run pauses; the select is disabled during a remote run
       this.#backend = backend.value;
-      this.#announce(backend.value === "remote" ? `Train runs remotely, on ${remoteRunner()?.label ?? "the connected session"}.` : "Train runs in this browser.");
+      this.#announce(backend.value === "remote" ? "Train runs remotely, on the connected session." : "Train runs in this browser.");
       this.#syncControls();
       this.#paint();
     });
     // The page's session comes and goes (Connect / disconnect): remote is offered only while there is one.
-    this.#cleanup.push(onRemoteRunnerChange(() => {
-      if (remoteRunner() === null && this.#backend === "remote" && this.#remote === null) {
+    this.#cleanup.push(onKernelState(() => {
+      if (!connected() && this.#backend === "remote" && this.#remote === null) {
         this.#backend = "browser";
         this.#announce("The remote session went away; Train runs in this browser.");
       }
@@ -725,10 +736,9 @@ export class NnFit extends HTMLElement {
     this.#renderWidths();
 
     const remote = this.#remote;
-    const runner = remoteRunner();
     const option = this.#el("select.backend option[value=remote]", HTMLOptionElement);
-    option.disabled = runner === null;
-    option.textContent = runner === null ? "remote (connect first)" : `remote: ${runner.label}`;
+    option.disabled = !connected();
+    option.textContent = connected() ? "remote (the connected session)" : "remote (Connect first)";
     this.#el("select.backend", HTMLSelectElement).value = this.#backend;
     // While a remote run trains, everything it was sent stays as it was: data, network, budgets, backend.
     for (const cls of ["data", "network", "compute"]) this.#el(`fieldset.${cls}`, HTMLFieldSetElement).disabled = remote !== null;
@@ -772,17 +782,16 @@ export class NnFit extends HTMLElement {
   // Everything a run depends on is fixed while it runs (the controls are disabled), so its end state lands
   // on the same net it started from.
   #startRemote(): void {
-    const runner = remoteRunner();
-    if (runner === null || !this.#ready()) return;
+    if (!connected() || !this.#ready()) return;
     const isCurve = this.#isCurve();
     const config = remoteConfig(this.#net, this.#opt, this.#task(),
       { train: this.#train, test: isCurve ? this.#truthBatch : this.#heldOut, grid: isCurve ? CURVE_X : HEAT_XY },
       { lr: at(LRS, this.#lrK), dtype: REMOTE_DTYPE, step: this.#steps, seconds: this.#trainMs / 1000, stepBudget: this.#stepBudget(), timeBudget: this.#timeBudget() });
-    const run: RemoteRun = { runner, fromStep: this.#steps, fromFlops: this.#flops, device: null, tick: null, end: null, stopping: false, failure: null };
+    const run: RemoteRun = { fromStep: this.#steps, fromMs: this.#trainMs, fromFlops: this.#flops, device: null, tick: null, end: null, stopping: false, failure: null };
     this.#remote = run;
     this.#training = true;
     this.#remoteNote = "";
-    this.#announce(`Training remotely on ${runner.label}.`);
+    this.#announce("Training remotely, on the connected session.");
     this.#syncControls();
     let pending = "";
     const onStdout = (text: string): void => {
@@ -790,9 +799,11 @@ export class NnFit extends HTMLElement {
       pending = split.pending;
       for (const line of split.lines) this.#onRemoteLine(run, line);
     };
-    runner.run(remoteCode(config), onStdout).then(
+    // stderr (library warnings) goes to the console, not the line parser: only the program's stdout is protocol.
+    const onStderr = (text: string): void => { console.warn(`<nn-fit> remote stderr: ${text}`); };
+    runCode(remoteCode(config), onStdout, onStderr).then(
       (result) => { this.#remoteDone(run, result); },
-      (err: unknown) => { this.#remoteDone(run, { ok: false, error: `the session failed: ${String(err)}` }); },
+      (err: unknown) => { this.#remoteDone(run, { status: "aborted", reason: String(err) }); }, // runCode resolves its failures; this is a bug
     );
   }
 
@@ -806,7 +817,7 @@ export class NnFit extends HTMLElement {
     }
     this.#steps = end.step;
     this.#trainMs = end.seconds * 1000;
-    this.#device = run.device ?? run.runner.label;
+    this.#device = run.device ?? "remote";
     return null;
   }
 
@@ -816,7 +827,7 @@ export class NnFit extends HTMLElement {
     run.stopping = true;
     this.#announce("Stopping the remote run.");
     this.#syncControls();
-    run.runner.interrupt().catch((err: unknown) => {
+    interrupt().catch((err: unknown) => {
       if (this.#remote !== run) return;
       run.stopping = false; // still running: Stop can be pressed again
       this.#announce(`Couldn't stop the remote run: ${String(err)}`);
@@ -837,7 +848,7 @@ export class NnFit extends HTMLElement {
     }
     switch (line.kind) {
       case "start":
-        run.device = line.device === "cpu" ? `cpu · ${run.runner.label}` : `${line.device} · ${line.deviceName}`;
+        run.device = line.device === "cpu" ? "cpu (remote)" : `${line.device} · ${line.deviceName}`;
         break;
       case "tick":
         run.tick = line;
@@ -852,14 +863,19 @@ export class NnFit extends HTMLElement {
     this.#paint();
   }
 
-  // The run's code finished (or the session failed). Keep its final weights if it said what they were.
+  // The run's code finished (or never ran, or the session went away). Keep its final weights if it said them.
   #remoteDone(run: RemoteRun, result: RunResult): void {
     if (this.#remote !== run) return;
     const end = run.end;
-    const failure = run.failure ?? (result.ok ? null : result.error) ?? this.#adoptRemote(run, end);
+    const failure = run.failure ?? runFailure(result) ?? this.#adoptRemote(run, end);
+    if (failure !== null) { // the weights are still the ones it started from: so are the counters
+      this.#steps = run.fromStep;
+      this.#trainMs = run.fromMs;
+      this.#flops = run.fromFlops;
+    }
     this.#remote = null;
     this.#training = false;
-    if (failure !== null) console.error(`<nn-fit> remote run failed on ${run.runner.label}:\n${failure}`);
+    if (failure !== null) console.error(`<nn-fit> remote run failed:\n${failure}`);
     this.#remoteNote = failure === null ? "" : `Remote run failed: ${lastLine(failure)}`;
     this.#announce(failure === null && end !== null ? `Remote run stopped: ${stopText(end.reason)}.` : this.#remoteNote);
     this.#syncControls();
