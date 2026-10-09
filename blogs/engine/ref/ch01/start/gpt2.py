@@ -79,51 +79,51 @@ def load(dtype: torch.dtype, checkpoint: str = CHECKPOINT) -> tuple[Weights, Con
 # region: linear
 def linear(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor) -> torch.Tensor:
     """x [rows, in] -> [rows, out]; weight is [out, in]."""
-    raise NotImplementedError("TODO: linear")
+    raise NotImplementedError("linear: write this in the linear cell")
 # endregion
 
 
 # region: gelu
 def gelu_tanh(x: torch.Tensor) -> torch.Tensor:
     """GPT-2's GELU, the tanh approximation: 0.5 x (1 + tanh(sqrt(2/pi) (x + 0.044715 x^3)))."""
-    raise NotImplementedError("TODO: gelu_tanh")
+    raise NotImplementedError("gelu_tanh: write this in the gelu cell")
 # endregion
 
 
 # region: layer_norm
 def layer_norm(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float) -> torch.Tensor:
     """(x - mean) / sqrt(var + eps) * weight + bias over the last dim; biased variance."""
-    raise NotImplementedError("TODO: layer_norm")
+    raise NotImplementedError("layer_norm: write this in the layer_norm cell")
 # endregion
 
 
 # region: attention
 def causal_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
     """softmax(q k^T / sqrt(head_dim)) v, each position seeing itself and the past. [..., seq, head_dim]."""
-    raise NotImplementedError("TODO: causal_attention")
+    raise NotImplementedError("causal_attention: write this in the attention cell")
 
 
 def attention(x: torch.Tensor, w: Weights, i: int, cfg: Config) -> torch.Tensor:
     """Causal multi-head self-attention of block i. x: [T, D] -> [T, D]."""
-    raise NotImplementedError("TODO: attention")
+    raise NotImplementedError("attention: write this in the attention cell")
 # endregion
 
 
 # region: block
 def mlp(x: torch.Tensor, w: Weights, i: int) -> torch.Tensor:
-    raise NotImplementedError("TODO: mlp")
+    raise NotImplementedError("mlp: write this in the block cell")
 
 
 def block(x: torch.Tensor, w: Weights, i: int, cfg: Config) -> torch.Tensor:
     """Transformer block i (pre-norm): x + attention(ln_1(x)), then + mlp(ln_2(.)). [T, D] -> [T, D]."""
-    raise NotImplementedError("TODO: block")
+    raise NotImplementedError("block: write this in the block cell")
 # endregion
 
 
 # region: forward
 def forward(w: Weights, cfg: Config, tokens: torch.Tensor) -> torch.Tensor:
     """tokens [T] (int64) -> logits [T, vocab]: row t predicts token t + 1."""
-    raise NotImplementedError("TODO: forward")
+    raise NotImplementedError("forward: write this in the forward cell")
 # endregion
 
 
@@ -131,5 +131,5 @@ def forward(w: Weights, cfg: Config, tokens: torch.Tensor) -> torch.Tensor:
 @torch.no_grad()
 def generate(w: Weights, cfg: Config, prompt_ids: list[int], n: int) -> list[int]:
     """Greedy decode n tokens, recomputing the whole sequence every step."""
-    raise NotImplementedError("TODO: generate")
+    raise NotImplementedError("generate: write this in the generate cell")
 # endregion

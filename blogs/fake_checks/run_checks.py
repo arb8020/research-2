@@ -6,7 +6,9 @@ It grades nothing numerically. Replace it by pointing ref.TRUSTED_SRC at the rea
 
 ch01 (any chapter with ops): per requested op (default: every op in checks/<chapter>.json)
   - every Python file a cell names must parse: a SyntaxError -> each op BLOCKED with where {file, line, region}
-  - the op's function (OP_FUNCTIONS) must exist and not raise NotImplementedError -> else FAIL
+  - the op's function (OP_FUNCTIONS) must exist, and neither it nor any function of the file it calls (transitively)
+    may raise NotImplementedError -> else FAIL with where = that stub's raise line (running forward before attention
+    is written fails at attention's stub, the way the real check would see the exception)
   - otherwise PASS for float32 (a made-up err_ratio), and a visible SKIP for bfloat16 ("chip" cpu can't test it)
   - a file containing the line `# fake: infra` -> exit 2 (an infrastructure error; lets a proof check it never commits)
 ch00 (the toy, whose cells have no ops): runs the tree's own legacy `run_checks <chapter> <cell>` and passes its
@@ -56,13 +58,29 @@ def region_of(lines: list[str], lineno: int) -> str | None:
     return current
 
 
-def stubbed(fn: ast.FunctionDef) -> bool:
+def stub_raise(fn: ast.FunctionDef) -> ast.Raise | None:
     for node in ast.walk(fn):
         if isinstance(node, ast.Raise) and node.exc is not None:
             target = node.exc.func if isinstance(node.exc, ast.Call) else node.exc
             if isinstance(target, ast.Name) and target.id == "NotImplementedError":
-                return True
-    return False
+                return node
+    return None
+
+
+def first_stub(fn: ast.FunctionDef, fns: dict[str, ast.FunctionDef]) -> tuple[str, ast.Raise] | None:
+    """The first NotImplementedError reachable from fn through calls to the file's own functions (depth first)."""
+    seen: set[str] = set()
+    todo = [fn]
+    while todo:
+        f = todo.pop()
+        if f.name in seen:
+            continue
+        seen.add(f.name)
+        if (r := stub_raise(f)) is not None:
+            return f.name, r
+        calls = [n.func.id for n in ast.walk(f) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
+        todo += [fns[c] for c in reversed(calls) if c in fns]
+    return None
 
 
 def legacy(chapter: str, cells: list[dict[str, Any]], wanted: list[str]) -> int:
@@ -122,10 +140,16 @@ def main() -> int:
                 emit(kind="verdict", op=op, case=case, dtype=dtype, chip=CHIP, outcome="skip", metrics={},
                      notes=f"{CHIP} can't honestly test {dtype} (capability table)")  # fmt: skip
                 continue
-            if fn is None or stubbed(fn):
+            stub = first_stub(fn, fns) if fn is not None else None
+            if fn is None or stub is not None:
                 counts["fail"] += 1
-                why = f"no function {fn_name}() in {cell['file']}" if fn is None else f"{fn_name}() still raises NotImplementedError"
-                where = {"file": cell["file"], "line": fn.lineno if fn else 1, "region": cell["region"]}
+                if stub is None:
+                    why, line = f"no function {fn_name}() in {cell['file']}", 1
+                else:
+                    exc = stub[1].exc
+                    msg = exc.args[0].value if isinstance(exc, ast.Call) and exc.args and isinstance(exc.args[0], ast.Constant) else ""
+                    why, line = f"NotImplementedError: {msg}" if msg else f"{stub[0]}() raises NotImplementedError", stub[1].lineno
+                where = {"file": cell["file"], "line": line, "region": region_of(source.split("\n"), line)}
                 emit(kind="verdict", op=op, case=case, dtype=dtype, chip=CHIP, outcome="fail", score=0.0,
                      metrics={"err_ratio": None}, notes=why, where=where)  # fmt: skip
                 continue

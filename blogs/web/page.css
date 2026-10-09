@@ -116,6 +116,36 @@ code-cell, scratch-cell, ws-cell { display: block; margin: 1.6em -16px; border: 
 /* workspace cells (```cpp cell=X file=F): output links jump to a file's editor. */
 .cell-out a.out-link { color: var(--fg); text-decoration: underline; text-decoration-color: var(--muted); }
 .cell-out a.out-link:hover { text-decoration-color: var(--fg); }
+/* workspace cells over regions: one shared doc per file; the cell shows its region (highlighted) in a bounded
+ * height (--cell-h, set by ws-cell.ts), or the whole file when expanded. */
+.cell-editor.bounded .cm-editor { height: var(--cell-h, 360px); max-height: none; }
+.cell-editor.expanded .cm-editor { max-height: none; }
+.cm-editor .cm-region { background: var(--active); }
+.cm-editor .cm-region.cm-activeLine { background: var(--select); }
+.expand { font: inherit; padding: 3px 8px; border: 1px solid var(--rule); border-radius: 4px; background: none; color: var(--muted); cursor: pointer; }
+.expand[aria-pressed="true"] { color: var(--fg); background: var(--active); border-color: var(--muted); }
+.expand[hidden] { display: none; }
+.cell-note { margin: 0; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); border-bottom: 1px dashed var(--rule); }
+.cell-conflict { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 10px; font-size: 12.5px;
+                 border-bottom: 1px solid var(--rule); border-left: 3px solid var(--tok-meta); }
+.cell-conflict[hidden] { display: none; }
+.cell-conflict button { font: inherit; padding: 2px 8px; border: 1px solid var(--rule); border-radius: 4px; background: var(--bg); color: var(--fg); cursor: pointer; }
+ws-cell[data-queued] .run { border-style: dashed; }
+/* a check's JSON lines (check-output.ts): verdict rows, a summary, then the log */
+div.cell-out { white-space: normal; }
+.cell-out .check-log { margin: 0; white-space: pre-wrap; font: inherit; }
+.cell-out .check-log:empty { display: none; }
+.cell-out table.verdicts { border-collapse: collapse; width: 100%; margin-bottom: 6px; font-size: 12px; }
+.cell-out table.verdicts th { text-align: left; font-weight: normal; color: var(--muted); padding: 2px 8px 2px 0; border-bottom: 1px solid var(--rule); }
+.cell-out table.verdicts td { padding: 2px 8px 2px 0; vertical-align: top; }
+.cell-out tr.verdict .outcome { font-weight: 600; }
+.cell-out tr.verdict.pass .outcome { color: var(--pass); }
+.cell-out tr.verdict.fail .outcome, .cell-out tr.verdict.blocked .outcome { color: var(--fail); }
+.cell-out tr.verdict.skip { color: var(--muted); font-style: italic; }
+.cell-out tr.verdict.skip .outcome { color: var(--muted); }
+.cell-out tr.verdict.blocked td { background: var(--active); }
+.cell-out .check-summary { margin: 0 0 6px; font-weight: 600; }
+.cell-out .check-summary.pass { color: var(--pass); } .cell-out .check-summary.fail, .cell-out .check-summary.blocked { color: var(--fail); }
 
 figure.excerpt { margin: 1.6em -16px; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
 .excerpt-src { margin-left: auto; }
