@@ -92,10 +92,37 @@ Colab (`.../infra/colab-architecture.md`):
 - spike-modal REPORT.md never written; its numbers live only in blogs HANDOFF and `.evidence/`.
 - Modal tokens have no sandbox-only scope: a pasted reader token can do anything in that workspace (`vmux-modal-auth.md`).
 
-## Open questions for the author
+## Decided with the author (2026-10-09)
 
-1. Is the thing you keep rewriting the batch lease, the interactive session, or both? Point at the most recent duplicate.
-2. Who is the client: you on a laptop, a reader's browser through a relay, or both?
-3. Colab: a backend readers connect to (free GPU), or the experience to copy?
-4. SF autoresearch owns the entrypoint and is H100-only. Is a provider that supports only part of the interface acceptable?
-5. Does box grow `connect(port)` / `serve` / `get_by_name` / per-reader credentials, or does the interactive half live beside it on a shared machine layer?
+- **One SDK, two clients.** The box Python SDK is the only way to get a session. The CLI is sugar over it (you on the laptop); the blogs relay calls the same SDK on behalf of a reader in the browser.
+- **Credentials are an explicit argument everywhere**, e.g. `Modal(token=...)`, even when the value comes from `~/.modal.toml`. No ambient lookups inside providers.
+- **Option 1 + (a) + (b): the machine is the session.**
+  - The supervisor on the machine stays the single source of truth (jobs, logs, lease, deadline). Fail-stop: a session dies with its machine.
+  - (a) Anything in front of it (a Durable Object, a relay) is only a rebuildable fan-out for live logs. It never owns the lease or deadline and never stores a reader token.
+  - (b) The supervisor also writes status + logs to durable storage (Modal volume / object storage), so a dead machine is still inspectable. Recovery is an explicit "new session from what was recorded", never automatic replay.
+  - Why: ~/dotfiles/docs lean this way (Goedecke "minimise stateful components", "one owner per state", "caches are state"; telos "no new daemon without a concrete failure mode"; Tiger Style fail-stop). The gaps they expose in today's box are telos "durable, inspectable authority" and structured concurrency's "awaitable terminal state", which (b) and `wait()` close.
+- **Two-way door, kept open by:** sessions get their own id (not the Modal sandbox id, even if 1:1 today); every caller goes through the SDK, never supervisor files; the persisted status/log format stays small; don't promise readers "we never store your token" in prose.
+- **Durable-Object-as-session (vmux style) is deferred** until a concrete failure earns it, e.g. machine loss mid-run being common and costly. It would also need idempotent job ids and storing the reader's token.
+
+Starting scope for the box session:
+```
+Session                                  # own id; same API for CLI and relay
+  status() -> Running | Ended(reason)
+  logs(follow=True)                      # polling today; push later without API change
+  wait() -> Ending                       # awaitable terminal state
++ expose(port) -> Endpoint               # NEW: token-gated URL (Modal tunnel / connect token), for kernels + previews
+Provider(..., token=...)                 # NEW: explicit credentials
++ supervisor: status + logs -> durable storage   # NEW: (b)
+```
+First customer: `<nn-fit>` "run bigger" (streams a loss curve back; no C build, low stakes). Pick a dataset that needs a GPU (mod-arithmetic grokking or CIFAR) if the slice should also prove the GPU path. The in-browser widget stays the default.
+
+## vmux (a friend's tool) for comparison
+
+`vmux exec --create --gpu H100 "cmd"`; later calls by job id hit the same sandbox; a Cloudflare Durable Object per session holds canonical state + a log ring buffer + a token-gated preview proxy; `vmux claude install` gives Claude/Codex a skill to grep logs and send commands; real shell attach; runs on vmux's own Modal account with GitHub sign-in. Our gaps vs it: push streaming, preview URLs (`expose`), shell attach, an agent skill, explicit credentials. Deliberate differences: the reader's own workspace and token (not ours), and the machine (not a DO) owns the session.
+
+## Still open
+
+1. Has losing a machine mid-run (and its logs) actually hurt? Decides whether a DO-owned session is ever earned.
+2. Colab: a backend readers connect to (free GPU), or the experience to copy?
+3. SF autoresearch owns the entrypoint and is H100-only. Is a provider that supports only part of the interface acceptable?
+4. The websocket keep-alive contradiction above: settle before relying on `idle_timeout` for browser sessions.
