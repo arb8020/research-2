@@ -55,7 +55,7 @@ def supervise_main(argv: list[str]) -> None:
     p.add_argument("--ceiling", type=float, required=True, help="unix time no lease can pass")
     p.add_argument("--host", required=True, help="the creating client's host, for the lease audit")
     p.add_argument("--pid", type=int, required=True, help="the creating client's pid, for the lease audit")
-    p.add_argument("--session-id", default="", help="written into ROOT/up: whose supervisor is up (a snapshot can hold another's)")
+    p.add_argument("--session-id", required=True, help="written into ROOT/up: whose supervisor is up (a snapshot can hold another's)")
     p.add_argument("--idle-timeout-s", type=float, default=0.0, help="end after this long with no job and no connection; 0 = never")
     p.add_argument("--ports", type=lambda s: [int(p) for p in s.split(",") if p], default=[], help="exposed ports, comma-separated")
     p.add_argument("--record", default="", help="record the session into this directory (a mounted store), relative to --root")
