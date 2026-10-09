@@ -3,6 +3,7 @@
     uv run check.py rl/01-flappy.md              # every cell, in file order
     uv run check.py rl/01-flappy.md sample       # one cell
     uv run check.py rl/01-flappy.md sample --stub
+    uv run check.py rl/01-flappy.md flappy --build prod    # check=flappy without asserts/sanitizers
 
 A chapter is one Markdown file. Fenced blocks carry their role in the info string:
 
@@ -10,40 +11,75 @@ A chapter is one Markdown file. Fenced blocks carry their role in the info strin
     ```python cell=X         what the reader starts with
     ```python solution=X     hidden reference
     ```python check=X        plain asserts; passing = no exception
+    ```python budget=X       speed/memory asserts, run against prod builds (optional)
 
 A c cell/solution is a whole PufferLib env header. Instead of executing it, the runner compiles
-it with shim.c against vendor/pufferlib and puts the library path in ENV_SO[X] for the Python that follows.
+it with shim.c against vendor/pufferlib and puts the library path in ENV_SO[X] for the Python that
+follows. There are two builds (BUILDS):
 
-Checking cell X executes, in one namespace: given blocks, the solutions of every
-cell before X, then X (solution, or stub with --stub), then X's check.
+    check  asserts on, ASan + UBSan, -Wall -Wextra -Werror on the reader's code (vendor headers are -isystem)
+    prod   -O2 -DNDEBUG, asserts stripped: budgets, training and the wasm play widget use this
+
+Checking cell X runs, in a fresh Python subprocess and one namespace: given blocks, the solutions of
+every cell before X, then X (solution, or stub with --stub), then check=X. If X is a C cell, ENV_SO[X]
+is its check build and the subprocess has the sanitizer runtime preloaded (sanitizer_env). Then
+budget=X, if any, runs the same steps in a second, clean subprocess where every ENV_SO is a prod
+build: ASan's interceptors slow down even uninstrumented code (the memsets in vec_step), so timing
+and peak memory only mean something without them. C cells before X are always prod builds.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import platform
 import re
+import signal
 import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import time
 import traceback
 import urllib.request
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
+from functools import cache
 from pathlib import Path
 
 FENCE = re.compile(r"^```(\w+)[ \t]+([^\n]*)\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
-ROLES = ("given", "cell", "solution", "check")
+ROLES = ("given", "cell", "solution", "check", "budget")
+HIDDEN = ("solution", "check", "budget")  # never on the reader's page
 HERE = Path(__file__).resolve().parent
 PUFFER = HERE / "vendor" / "pufferlib"
 LINUX = platform.system() == "Linux"
 RAYLIB = HERE / "vendor" / ("raylib-5.5_linux_amd64" if LINUX else "raylib-5.5_macos")
-CFLAGS = [
-    "-O2", "-shared", "-fPIC", "-Wall", "-Wno-narrowing", "-Wno-unreachable-code", "-Wno-unused-function",
+# Upstream PufferLib 5.0 build.sh CLANG_WARN, plus -Wno-unused-function (pufferenv.h's puf_web_vsync stub).
+WARN = [
+    "-Wall", "-Wno-narrowing", "-Wno-unreachable-code", "-Wno-unused-function",
     "-Werror=incompatible-pointer-types", "-Werror=return-type",
-    "-Wno-incompatible-pointer-types-discards-qualifiers", "-DPLATFORM_DESKTOP", "-DPRECISION_FLOAT",
+    "-Wno-incompatible-pointer-types-discards-qualifiers",
 ]  # fmt: skip
+# macOS's assert(e) puts e in parentheses, which hides `assert(a = b)` from -Wparentheses. glibc's
+# assert doesn't, so Linux already warns; include/assert.h redefines macOS's the glibc way.
+ASSERT_SHIM = [] if LINUX else ["-isystem", str(HERE / "include")]
+BUILDS = {
+    # Upstream's --debug is -O0 -g + these sanitizers; -O1 is ASan's recommended level and keeps codegen
+    # closer to prod, with the same reports. -fno-sanitize-recover: UBSan stops instead of printing and
+    # passing. -Wextra/-Werror reach only the reader's header and shim.c, since vendor dirs are -isystem.
+    # -Wno-unused-parameter is puffer's convention (SKILL_ISSUES.md), e.g. puf_close(Env* env).
+    "check": [
+        "-O1", "-g", "-fno-omit-frame-pointer",
+        "-fsanitize=address,undefined,bounds,pointer-overflow", "-fno-sanitize-recover=all",
+        *(["-shared-libasan"] if LINUX else []),
+        *WARN, "-Wextra", "-Werror", "-Wno-unused-parameter", *ASSERT_SHIM,
+    ],
+    # Differs from upstream (which keeps asserts in prod) on purpose: asserts are a testing tool.
+    "prod": ["-O2", "-DNDEBUG", *WARN],
+}  # fmt: skip
+SANITIZER_EXIT = 86
 
 
 @dataclass
@@ -84,10 +120,10 @@ def fetch_raylib() -> None:
         (Path(tmp) / RAYLIB.name).rename(RAYLIB)
 
 
-def compile_c(block: Block, out: Path) -> tuple[str, str]:
+def compile_c(block: Block, out: Path, build: str = "prod") -> tuple[str, str]:
     """PufferLib env header -> shared library via shim.c. Returns (path, "") or ("", errors)."""
     fetch_raylib()
-    header, so = out / f"{block.name}.h", out / f"_{block.name}_{block.role}.so"
+    header, so = out / f"{block.name}.h", out / f"_{block.name}_{block.role}_{build}.so"
     header.write_text(f'#line 1 "{block.role}={block.name}"\n' + block.source)
     lib = RAYLIB / "lib"
     if LINUX:
@@ -95,7 +131,8 @@ def compile_c(block: Block, out: Path) -> tuple[str, str]:
     else:
         link = [f"-L{lib}", "-lraylib", f"-Wl,-rpath,{lib}", "-lm"]
     cmd = [
-        "clang", *CFLAGS, f'-DENV_HEADER="{header}"', f"-I{PUFFER}", f"-I{RAYLIB / 'include'}",
+        "clang", "-shared", "-fPIC", *BUILDS[build], "-DPLATFORM_DESKTOP", "-DPRECISION_FLOAT",
+        f'-DENV_HEADER="{header}"', "-isystem", str(PUFFER), "-isystem", str(RAYLIB / "include"),
         str(HERE / "shim.c"), "-o", str(so), *link,
     ]  # fmt: skip
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -104,11 +141,38 @@ def compile_c(block: Block, out: Path) -> tuple[str, str]:
     return str(so), ""
 
 
+@cache
+def sanitizer_env() -> dict[str, str]:
+    """Env vars for a Python that dlopens a check build: the ASan runtime must load before anything else.
+
+    macOS: DYLD_INSERT_LIBRARIES. SIP strips it when exec'ing /usr/bin binaries (env, system python),
+    so start the interpreter directly; uv's python isn't SIP-protected.
+    Linux: the .so links the shared runtime (-shared-libasan) and Python gets it via LD_PRELOAD.
+    """
+    # Linux: older clangs name it per arch; newer ones (per-target runtime dirs) don't.
+    if LINUX:
+        names = [f"libclang_rt.asan-{platform.machine()}.so", "libclang_rt.asan.so"]
+    else:
+        names = ["libclang_rt.asan_osx_dynamic.dylib"]
+    found = [subprocess.run(["clang", f"-print-file-name={n}"], capture_output=True, text=True, check=True) for n in names]
+    path = next((f.stdout.strip() for f in found if Path(f.stdout.strip()).is_file()), "")
+    assert path, f"clang has no ASan runtime; looked for {names}"
+    # detect_leaks=0: CPython doesn't free everything at exit. exitcode: tells a report from a check FAIL.
+    # print_legend, dump_registers: shorter reports for the reader.
+    opts = f"halt_on_error=1:abort_on_error=0:detect_leaks=0:exitcode={SANITIZER_EXIT}"
+    opts += ":print_legend=0:dump_registers=0"
+    return {
+        "LD_PRELOAD" if LINUX else "DYLD_INSERT_LIBRARIES": path,
+        "ASAN_OPTIONS": opts,
+        "UBSAN_OPTIONS": f"{opts}:print_stacktrace=1",
+    }
+
+
 def cell_order(blocks: list[Block]) -> list[str]:
     order = [b.name for b in blocks if b.role == "cell"]
     assert len(order) == len(set(order)), f"duplicate cell names: {order}"
     for b in blocks:
-        if b.role in ("solution", "check"):
+        if b.role in HIDDEN:
             assert b.name in order, f"line {b.line}: {b.role}={b.name} has no cell={b.name}"
     return order
 
@@ -119,39 +183,104 @@ def find(blocks: list[Block], role: str, name: str) -> Block:
     return found[0]
 
 
-def run_cell(blocks: list[Block], order: list[str], out: Path, target: str, stub: bool) -> bool:
-    ns: dict = {"__name__": f"chapter.{target}", "ENV_SO": {}}
+def echo(text: str) -> None:
+    print(text, end="", flush=True)
+
+
+def run_cell(
+    blocks: list[Block], order: list[str], out: Path, target: str, stub: bool,
+    emit: Callable[[str], None] = echo, timeout: float | None = None, build: str = "check",
+) -> bool:  # fmt: skip
+    """Check cell X: compile the C, then run check=X and budget=X, each in a fresh subprocess.
+
+    build="prod" gives check=X the prod build too (no asserts, no sanitizers): for seeing what they catch.
+    """
     steps = [b for b in blocks if b.role == "given"]
     steps += [find(blocks, "solution", name) for name in order[: order.index(target)]]
     steps.append(find(blocks, "cell" if stub else "solution", target))
-    steps.append(find(blocks, "check", target))
+    budgets = [b for b in blocks if b.role == "budget" and b.name == target]
+    assert len(budgets) <= 1, f"more than one budget={target}"
 
-    start = time.perf_counter()
+    prod: dict[str, str] = {}
+    check_so = ""
     for b in steps:
-        if b.lang == "c":
-            path, errors = compile_c(b, out)
-            if errors:
-                print(f"{target:<12} FAIL: {b.role}={b.name} does not compile:\n{errors}")
-                return False
-            ns["ENV_SO"][b.name] = path
+        if b.lang != "c":
             continue
+        if b is steps[-1] and build == "check":
+            check_so, errors = compile_c(b, out, "check")
+            if errors:
+                emit(f"{target:<12} FAIL: {b.role}={b.name} does not compile (warnings count as errors):\n{errors}")
+                return False
+        prod[b.name], errors = compile_c(b, out, "prod")
+        if errors:
+            emit(f"{target:<12} FAIL: {b.role}={b.name} does not compile (prod build):\n{errors}")
+            return False
+
+    python = [b for b in steps if b.lang != "c"]
+    check = python + [find(blocks, "check", target)]
+    phases = [(target, check, {**prod, target: check_so}, sanitizer_env()) if check_so else (target, check, prod, {})]
+    phases += [(f"{target} budget", python + budgets, prod, {}) for _ in budgets]
+    return all(run_phase(label, ps, env_so, env, out, emit, timeout) for label, ps, env_so, env in phases)
+
+
+def run_phase(
+    label: str, steps: list[Block], env_so: dict[str, str], env: dict[str, str], out: Path,
+    emit: Callable[[str], None], timeout: float | None,
+) -> bool:  # fmt: skip
+    """One subprocess execs steps into one namespace. A crash or hang ends only that process."""
+    job = out / f"job_{label.replace(' ', '_')}.json"
+    job.write_text(json.dumps({"label": label, "steps": [asdict(b) for b in steps], "env_so": env_so}))
+    proc = subprocess.Popen(
+        [sys.executable, "-u", __file__, "--worker", str(job)], cwd=HERE, env={**os.environ, **env},
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )  # fmt: skip
+    timer = threading.Timer(timeout, proc.kill) if timeout else None
+    if timer:
+        timer.start()
+    for line in proc.stdout:
+        emit(line)
+    if timer:
+        timer.cancel()
+    rc = proc.wait()
+    if rc == SANITIZER_EXIT and env:
+        emit(f"{label:<12} FAIL: the sanitizer stopped your C at a memory or undefined-behaviour bug; "
+             "its report is above (look for the frames in cell=...)\n")  # fmt: skip
+    elif rc == -signal.SIGKILL and timeout:
+        emit(f"{label:<12} FAIL: killed after {timeout:.0f}s: an infinite loop, or just too slow?\n")
+    elif rc == -signal.SIGABRT:
+        emit(f"{label:<12} FAIL: your code aborted (SIGABRT); a failed assert prints its condition and line above\n")
+    elif rc < 0:
+        emit(f"{label:<12} FAIL: your code crashed the process: {signal.Signals(-rc).name}\n")
+    return rc == 0
+
+
+def worker(job_path: str) -> None:
+    """Subprocess side of run_phase: exec each block into one namespace; exit 0 iff all pass."""
+    job = json.loads(Path(job_path).read_text())
+    label = job["label"]
+    ns: dict = {"__name__": f"chapter.{label.split()[0]}", "ENV_SO": job["env_so"]}
+    start = time.perf_counter()
+    for b in (Block(**b) for b in job["steps"]):
         try:
             exec(compile(b.source, f"<{b.role}={b.name or 'given'} line {b.line}>", "exec"), ns)
         except Exception as e:  # noqa: BLE001 - any failure in reader-facing code is a FAIL, reported verbatim
-            label = "FAIL" if b.role == "check" else f"ERROR in {b.role}={b.name or 'given'}"
-            print(f"{target:<12} {label}: {type(e).__name__}: {e}")
+            what = "FAIL" if b.role in ("check", "budget") else f"ERROR in {b.role}={b.name or 'given'}"
+            print(f"{label:<12} {what}: {type(e).__name__}: {e}")
             if not isinstance(e, AssertionError):
                 traceback.print_exc(limit=-3)
-            return False
-    print(f"{target:<12} PASS ({time.perf_counter() - start:.2f}s)")
-    return True
+            sys.exit(1)
+    print(f"{label:<12} PASS ({time.perf_counter() - start:.2f}s)")
+    sys.exit(0)
 
 
 def main() -> None:
+    if sys.argv[1:2] == ["--worker"]:
+        worker(sys.argv[2])
     ap = argparse.ArgumentParser()
     ap.add_argument("chapter", type=Path)
     ap.add_argument("cell", nargs="?")
     ap.add_argument("--stub", action="store_true", help="run checks against the reader stubs instead of solutions")
+    ap.add_argument("--build", choices=BUILDS, default="check", help="the build check=X sees (budget=X is always prod)")
     args = ap.parse_args()
 
     blocks = parse(args.chapter.read_text())
@@ -161,7 +290,7 @@ def main() -> None:
         assert t in order, f"no cell={t}; cells are {order}"
 
     with tempfile.TemporaryDirectory() as tmp:
-        results = [run_cell(blocks, order, Path(tmp), t, args.stub) for t in targets]
+        results = [run_cell(blocks, order, Path(tmp), t, args.stub, build=args.build) for t in targets]
     sys.exit(0 if all(results) else 1)
 
 
