@@ -18,9 +18,8 @@ Everything goes through files under ROOT (no sockets), so a client only needs th
     ROOT/jobs/<id>/kill         client wrote it: kill the job (its hook runs), the session goes on
     ROOT/services/<id>/...      a service: spec.json {cmd, env}, then as a job (no hook, no max duration)
     ROOT/watch                  a log follower (its tail, each beat) or job waiter (each poll) touches it (the machine lingers for it)
-    ROOT/exposed/<port>         a client exposed this undeclared port (Session.expose): watched for connections as --ports are
     ROOT/activity               mtime = when the session was last used. The supervisor touches it at start, when a job
-                                ends, and while a connection to an exposed port is open; a client's keepalive while
+                                ends, and while a connection to a declared port is open; a client's keepalive while
                                 a stream, shell or port proxy of its runs, and a sync. Not a log follower: reading
                                 is not use (that is ROOT/watch)
     ROOT/supervisor.py          this file, installed by the boot: `supervisor.py lease` changes the lease, `supervisor.py tail` feeds a log follower
@@ -30,12 +29,12 @@ Everything goes through files under ROOT (no sockets), so a client only needs th
 A session ends at min(lease.until, ceiling) (reason "lease", or "released" if a client released
 it), on stop ("stopped"), or idle timeout ("idle"). Nothing ends it because a client went away:
 the lease is the guarantee. Idle is one check: no job running, and ROOT/activity untouched for the
-idle timeout. Everything that is use touches it: a job ending, an established TCP connection to an
-exposed port (--ports and ROOT/exposed, seen each tick), and a client's streams, shells, port proxies and syncs. The
-supervisor owns idleness, since a provider's own idle timer (Modal's) sees only connections, never
-work in the box. Whatever ends it, a running job is killed (whole
-process group) and its on_exit hook still runs, for up to its hook_budget_s but never past the
-ceiling. A job is killed at min(its start + max_duration_s ("timeout"), the lease's end minus its
+idle timeout. Everything that is use touches it: a job ending, an established TCP connection to a
+port declared at create (--ports, seen each tick; not a port reached by a token route: see
+sdk.Session.expose), and a client's streams, shells, port proxies and syncs. The supervisor owns
+idleness, since a provider's own idle timer (Modal's) sees only connections, never work in the
+box. Whatever ends it, a running job is killed (whole process group) and its on_exit hook still
+runs, for up to its hook_budget_s but never past the ceiling. A job is killed at min(its start + max_duration_s ("timeout"), the lease's end minus its
 hook_budget_s ("lease")), so its hook fits inside the lease.
 
 A service (ROOT/services/<id>) is a long-lived server, e.g. a Jupyter Server behind an exposed
@@ -97,7 +96,6 @@ CHUNK_DIGITS = 7  # flushes come at most every TICK_S: a job over a whole MAX_CE
 MAX_CHUNKS = 10**CHUNK_DIGITS - 1
 assert 2 * MAX_CEILING_S / TICK_S < MAX_CHUNKS, "a chunk number that fits CHUNK_DIGITS for a whole session"
 MAX_SERVICES = 8  # a session's long-lived servers; more is a client bug, not a workload
-MAX_EXPOSED = 16  # ports exposed beyond the declared ones (ROOT/exposed/<port>); the rest are ignored, never scanned
 KINDS = ("jobs", "services")  # ROOT/<kind>/<id>: what a client queues and what it serves
 LEASE_OPS = ("create", "extend", "release")  # what lease-audit.json records; create is the supervisor's own
 MAX_LEASE_AUDIT = 1024  # entries; a run of one op from one process is one entry (n counts it), so this is runs, not calls
@@ -259,7 +257,7 @@ def supervise(root: Path, idle_timeout_s: float, ports: list[int]) -> str:
     services: dict[Path, subprocess.Popen] = {}  # every service started, running or not
     while (end := session_end(root, idle_timeout_s)) is None:  # bounded: the lease ends by the ceiling
         tend_services(root, services)
-        if idle_timeout_s and connected([*ports, *exposed_ports(root)]):
+        if idle_timeout_s and connected(ports):
             (root / "activity").touch()  # someone is using an exposed port: not idle
         job_dir = next_job(root, done)
         if job_dir is None:
@@ -328,13 +326,6 @@ def session_end(root: Path, idle_timeout_s: float) -> str | None:
 def connected(ports: list[int]) -> bool:
     """Does any established TCP connection end at one of ports on this machine?"""
     return bool(ports) and any(port in ports for port in established_local_ports())
-
-
-def exposed_ports(root: Path) -> list[int]:
-    """The ports a client exposed beyond the declared ones (ROOT/exposed/<port>), at most MAX_EXPOSED."""
-    exposed = root / "exposed"
-    names = sorted(p.name for p in exposed.iterdir()) if exposed.is_dir() else []
-    return [int(n) for n in names[:MAX_EXPOSED] if n.isdigit()]
 
 
 def established_local_ports() -> list[int]:

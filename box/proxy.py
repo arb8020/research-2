@@ -161,7 +161,9 @@ def _handler(proxy: Proxy, upstream: object) -> type[BaseHTTPRequestHandler]:
             try:
                 proxy._track(self.connection, add=True)
                 body = self.rfile.read(length)
-                headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP_BY_HOP} | proxy.endpoint.headers
+                # Connection: close, so nothing upstream pools a connection to the machine's port after
+                # this request (seen live: Modal's connect-token edge holds a keep-alive one 5+ min).
+                headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP_BY_HOP} | proxy.endpoint.headers | {"Connection": "close"}
                 conn.connect()
                 proxy._track(conn.sock, add=True)
                 conn.request(self.command, upstream.path.rstrip("/") + self.path, body=body or None, headers=headers)  # type: ignore[attr-defined]
