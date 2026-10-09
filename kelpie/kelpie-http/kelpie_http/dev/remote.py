@@ -125,9 +125,9 @@ def job_cmd(where: Where, *, submodule_sha: str, models: list[str], timeout: int
 def make_provider(name: str, volume: str) -> sdk.Provider:
     """modal: the volume at /data. local: no volume (it tests the wiring, not the GPU)."""
     if name == "modal":
-        from box.modal_provider import Modal
+        from box.modal_provider import Modal, ModalToken
 
-        return Modal(volumes={DATA: volume})
+        return Modal(token=ModalToken.from_config(), volumes={DATA: volume})
     if name == "local":
         from box.local_provider import Local
 
