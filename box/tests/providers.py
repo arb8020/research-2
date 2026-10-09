@@ -1,19 +1,29 @@
-"""Which provider the feature tests run against: `pytest --provider local` (default), `modal`, or
-`runpod`. Each provider says what a test machine is (gpu, image) and how slow it is (SCALE
-multiplies every timing in the tests, since a cloud exec takes ~0.5 s and a local one ~5 ms)."""
+"""Which provider the feature tests run against: `pytest --provider local` (default), `modal`,
+`runpod`, or `colab-fake` (box/providers/colab.py on a fake Colab account: tests/fake_colab.py).
+Each provider says what a test machine is (gpu, image) and how slow it is (SCALE multiplies every
+timing in the tests, since a cloud exec takes ~0.5 s and a local one ~5 ms), and what it cannot do
+(CANNOT: a test marked @pytest.mark.needs("ports") is skipped on a provider that cannot)."""
 
 from __future__ import annotations
 
 import contextlib
 import os
+import shlex
 import signal
 from pathlib import Path
 
+from box.providers.colab import ColabMachine
 from box.sdk import Gone, Machine, Provider
 from box.store import DirStore, Store
 
 IMAGE = "python:3.13-slim"  # any image with bash + python3 is a box image
-SCALE = {"local": 1.0, "modal": 10.0, "runpod": 30.0}  # runpod: ~30 s boot comes out of the lease (it counts from create)
+SCALE = {"local": 1.0, "modal": 10.0, "runpod": 30.0, "colab-fake": 3.0}  # runpod: ~30 s boot comes out of the lease (it counts from create); colab-fake: each exec is a `python -c`
+CANNOT = {
+    "colab-fake": {
+        "ports": "Colab's terms forbid web services and proxies: no ports, no expose",
+        "record": "Colab has no volumes: a Colab session has no durable record",
+    },
+}
 PURPOSE = {"box.purpose": os.environ.get("BOX_TEST_PURPOSE", "reader-path-dev")}  # every test machine carries it, so a sweep finds strays
 MAX_BACKSTOP_S = 900  # a test machine whose supervisor fails is still gone (and unbilled) after 15 min
 
@@ -37,6 +47,11 @@ def _make(name: str, base: Path) -> Provider:
         from box.providers.runpod import RunPod
 
         return RunPod.from_env()
+    if name == "colab-fake":
+        from box.providers.colab import Colab
+        from box.tests.fake_colab import FakeBackend
+
+        return Colab(FakeBackend(base / "account"), root=str(base / "content" / "{machine}" / "box"))
     raise ValueError(f"unknown provider {name!r}")
 
 
@@ -56,10 +71,13 @@ RECORD_VOLUME = "box-sessions"  # a v2 Volume in the tester's own Modal workspac
 
 def kill_supervisor(machine: Machine) -> None:
     """SIGKILL the machine's supervisor: no ended.json, no final flush. A local machine's
-    supervisor is the pid it launched; elsewhere it is the machine's PID 1."""
+    supervisor is the pid it launched; a Colab one's, a child of its kernel's cell (found by its
+    root); elsewhere it is the machine's PID 1."""
     pid_file = getattr(machine, "dir", None)
     if pid_file is not None:
         os.kill(int((pid_file / "pid").read_text()), signal.SIGKILL)
+    elif isinstance(machine, ColabMachine):
+        machine.exec(by_root(machine, "KILL"))
     else:
         with contextlib.suppress(Gone):  # the exec may die with it
             machine.exec("kill -9 1")
@@ -75,9 +93,19 @@ def freeze_supervisor(machine: Machine) -> None:
     pid_file = getattr(machine, "dir", None)
     if pid_file is not None:
         os.kill(int((pid_file / "pid").read_text()), signal.SIGSTOP)
+    elif isinstance(machine, ColabMachine):
+        rc, _, err = machine.exec(by_root(machine, "STOP"))
+        assert rc == 0, err
     else:
         rc, _, err = machine.exec(STOP_SUPERVISOR)
         assert rc == 0, err
+
+
+def by_root(machine: Machine, signal_name: str) -> str:
+    """bash: signal the supervisor running under machine.root (on colab-fake, every test's machine is a
+    process on this computer, so never PID 1 and never a pattern another test's supervisor matches).
+    [s]: pkill must not match the shell that runs it."""
+    return f"pkill -{signal_name} -f {shlex.quote(machine.root + '/[s]upervisor.py --root')}"
 
 
 class Tested:
@@ -98,6 +126,8 @@ def launch_kw(name: str) -> dict:
     """gpu/image a test machine is launched with (the local provider takes neither)."""
     if name == "runpod":  # a CPU pod ($0.06/hr; gpu=None) on RunPod's base image (bash, python3, sshd)
         return {"gpu": None, "image": "runpod/base:1.4.0-ubuntu2404"}
+    if name == "colab-fake":  # the accelerator only names the fake runtime
+        return {"gpu": "T4", "image": None}
     if name == "modal":  # a CPU sandbox: boots in ~2 s; an L4 took 5-375 s to be scheduled, past short test deadlines
         return {"gpu": None, "image": IMAGE}
     return {} if name == "local" else {"gpu": "L4", "image": IMAGE}
