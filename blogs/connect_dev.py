@@ -5,6 +5,7 @@
 """A fake Connect gateway for UI work: box/CONTRACT-gateway.md with no cloud. Not the real relay.
 
     uv run connect_dev.py [--port 8790] [--boot-delay 0.6] [--deadline 3600] [--root DIR] [--persist DIR]
+    uv run connect_dev.py --attach-kernel URL --attach-token TOKEN     # report a Jupyter that already runs elsewhere
 
 POST /sessions emits a few gateway/machine "step" events with delays, then starts a local Jupyter Server
 (this script's env has jupyter_server + ipykernel) and reports it as the session's kernel. Its stderr becomes
@@ -19,6 +20,9 @@ Workspace pages (ws.py): --root DIR makes Jupyter's root_dir (and the kernel's c
 session, so a reload or a new session finds the same workspace; without it each session gets a temp dir, removed
 at its end. --persist DIR is what the sandbox sees as $BLOGS_WS_PERSIST: where ws.py keeps the workspace bundle
 (on Modal, a Volume). A fresh --root with the same --persist is a new sandbox restoring from the bundle.
+
+--attach-kernel/--attach-token: every session reports that Jupyter (e.g. one in a Modal sandbox, started with the
+relay's flags by verify_workspace.py --modal) instead of starting one here; ending the session leaves it running.
 """
 
 from __future__ import annotations
@@ -136,6 +140,7 @@ class Machine:
     delay: float
     root: Path | None
     persist: Path | None
+    attach: dict[str, str] | None  # {url, token} of a Jupyter running elsewhere: report it, start nothing
 
 
 def boot(session: Session, machine: Machine) -> None:
@@ -151,6 +156,9 @@ def boot(session: Session, machine: Machine) -> None:
     time.sleep(delay)
     session.step("machine", "booting image blogs-kernel (cached)")
     time.sleep(delay)
+    if machine.attach is not None:
+        attach_running(session, machine.attach)
+        return
     port, jtoken = free_port(), secrets.token_hex(16)
     env = {**os.environ, "PATH": f"{machine.shim_dir}{os.pathsep}{os.environ['PATH']}", "JUPYTER_TOKEN": jtoken}
     if machine.persist is not None:
@@ -181,6 +189,24 @@ def boot(session: Session, machine: Machine) -> None:
             session.end("deadline")
         elif session.proc.poll() is not None:
             session.end("machine_lost")
+        time.sleep(1)
+
+
+def attach_running(session: Session, kernel: dict[str, str]) -> None:
+    """A session whose machine is someone else's Jupyter: wait for it to answer, report it, keep the deadline."""
+    session.step("machine", f"attaching to the Jupyter at {kernel['url']}")
+    if not wait_for_jupyter(kernel["url"], kernel["token"], session):
+        session.step("machine", "that Jupyter never answered")
+        session.end("boot_failed")
+        return
+    with session.changed:
+        if session.state == "ended":
+            return
+        session.state, session.kernel = "running", dict(kernel)
+    session.emit("status", status=session.status())
+    while session.state != "ended":
+        if time.time() > session.deadline:
+            session.end("deadline")
         time.sleep(1)
 
 
@@ -334,7 +360,11 @@ def main() -> None:
     ap.add_argument("--deadline", type=float, default=3600, help="session lifetime in seconds")
     ap.add_argument("--root", type=Path, help="Jupyter's root_dir for every session, kept after it (default: a temp dir per session)")
     ap.add_argument("--persist", type=Path, help="$BLOGS_WS_PERSIST in the sandbox: where ws.py keeps the workspace bundle")
+    ap.add_argument("--attach-kernel", help="a running Jupyter's URL to report instead of starting one (needs --attach-token)")
+    ap.add_argument("--attach-token")
     args = ap.parse_args()
+    if (args.attach_kernel is None) != (args.attach_token is None):
+        ap.error("--attach-kernel and --attach-token go together")
     for d in (args.root, args.persist):
         if d is not None:
             d.mkdir(parents=True, exist_ok=True)
@@ -345,7 +375,8 @@ def main() -> None:
     smi.chmod(0o755)
     root = args.root.resolve() if args.root else None
     persist = args.persist.resolve() if args.persist else None
-    Handler.machine, Handler.deadline_s = Machine(shim_dir, args.boot_delay, root, persist), args.deadline
+    attach = {"url": args.attach_kernel.rstrip("/"), "token": args.attach_token} if args.attach_kernel else None
+    Handler.machine, Handler.deadline_s = Machine(shim_dir, args.boot_delay, root, persist, attach), args.deadline
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.daemon_threads = True
     signal.signal(signal.SIGTERM, stop)  # `kill` and uv (which forwards TERM, not a non-tty INT) end sessions too
