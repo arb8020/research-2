@@ -123,6 +123,10 @@ class RunPod:
             raise SystemExit("runpod: set RUNPOD_API_KEY (or put it in a .env above box/)")
         return cls(key)
 
+    def close(self) -> None:
+        """Closes the HTTP session's pooled connections (requests reopens them if used after)."""
+        self.http.close()
+
     def api(self, method: str, path: str, body: dict | None = None) -> dict | None:
         """The response's JSON (None for 204 No Content, or a 404 on GET/DELETE)."""
         r = self.http.request(method, API + path, json=body, timeout=60)

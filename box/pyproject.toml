@@ -3,7 +3,7 @@ name = "box"
 version = "0.1.0"
 description = "Rent a GPU machine, run jobs on it, bring results back, never leave it billing."
 requires-python = ">=3.11"
-dependencies = ["modal>=1.5", "requests", "research"]
+dependencies = ["anyio>=4.10", "modal>=1.5", "requests", "research"]  # anyio: the Modal provider's loop (4.10: start_blocking_portal(name=))
 
 [project.optional-dependencies]
 dev = ["pytest", "jupyter_server~=2.17", "ipykernel~=7.1", "websockets>=13"]

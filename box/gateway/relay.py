@@ -917,7 +917,7 @@ def modal_access(token: ModalToken, region: str) -> Access:
     from box.providers.modal import Modal, ModalVolumeStore
 
     provider = Modal(token=token, region=region)
-    return Access(provider, ModalVolumeStore(RECORD_VOLUME, client=provider.client), close=provider.close)
+    return Access(provider, ModalVolumeStore(RECORD_VOLUME, provider=provider), close=provider.close)  # close joins its loop thread
 
 
 def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...]) -> Config:

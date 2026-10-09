@@ -14,6 +14,7 @@ from REMOTE. Attached, REMOTE/runs comes home into runs/ of this checkout; detac
 from __future__ import annotations
 
 import argparse
+import contextlib
 import shlex
 import subprocess
 import sys
@@ -77,8 +78,14 @@ def main() -> int:
     job = " && ".join(steps)
     on_exit = f"cd {remote} && {a.on_exit}" if a.on_exit else None
 
+    with contextlib.closing(make_provider(a.provider)) as provider:  # Modal: joins its loop thread
+        return launch(a, provider, cmd, job, remote, on_exit)
+
+
+def launch(a: argparse.Namespace, provider: sdk.Provider, cmd: str, job: str, remote: str, on_exit: str | None) -> int:  # noqa: PLR0913
+    local = a.provider == "local"
     s = sdk.launch(
-        make_provider(a.provider), gpu=None if local else a.gpu, image=None if local else IMAGE,
+        provider, gpu=None if local else a.gpu, image=None if local else IMAGE,
         ceiling_s=a.timeout, labels={"box.cmd": cmd[:200], "box.tree": str(ROOT), "box.user": user()},
         idle_timeout_s=DETACH_IDLE_S if a.detach else 0.0,  # detached: idle ends it once the job (and hook) is done
     )  # fmt: skip
