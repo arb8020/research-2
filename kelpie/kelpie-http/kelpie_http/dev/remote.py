@@ -126,11 +126,11 @@ def job_cmd(where: Where, *, submodule_sha: str, models: list[str], timeout: int
 def make_provider(name: str, volume: str) -> sdk.Provider:
     """modal: the volume at /data. local: no volume (it tests the wiring, not the GPU)."""
     if name == "modal":
-        from box.modal_provider import Modal, ModalToken
+        from box.providers.modal import Modal, ModalToken
 
         return Modal(token=ModalToken.from_config(), region=None, volumes={DATA: volume})  # unpinned, as before
     if name == "local":
-        from box.local_provider import Local
+        from box.providers.local import Local
 
         return Local()
     raise SystemExit(f"kelpie remote: unknown provider {name!r}; known: modal, local")

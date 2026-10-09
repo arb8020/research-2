@@ -46,7 +46,7 @@ GPU_ARCHES: dict[str, tuple[int, int]] = {
     "H100": (9, 0),
 }
 DEFAULT_VOLUME = "kelpie-a1"
-# box/modal_provider.py (the box SDK's Modal provider, which `kelpie remote` uses) creates every sandbox
+# box/providers/modal.py (the box SDK's Modal provider, which `kelpie remote` uses) creates every sandbox
 # under `modal.App.lookup("box")`.
 MODAL_SANDBOX_APP = "box"
 # kelpie_http/dev/setup.py Layout: HF_HOME is <volume>/hf, so the hub cache is hf/hub on the volume.

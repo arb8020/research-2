@@ -22,7 +22,7 @@ import urllib.request
 from pathlib import Path
 
 from box.gateway import kernel_client
-from box.modal_provider import ModalToken
+from box.providers.modal import ModalToken
 
 PROFILE = "arb8020"  # never herdora
 NN_FIT_SECONDS = 10.0  # each nn-fit benchmark run
@@ -114,7 +114,7 @@ def hold(kernel: dict, sid: str, tok: ModalToken, hold_s: float) -> dict:
     """An open (quiet) kernel websocket keeps the session past its idle timeout; once closed, the session
     ends idle. Asks the machine through the SDK (exec), never through the tunnel, which would count as use."""
     from box import sdk
-    from box.modal_provider import Modal
+    from box.providers.modal import Modal
 
     s = sdk.attach(Modal(token=tok, region="us"), sid)
     url = kernel_client.api(kernel, f"/api/kernels/{kernel_client.kernel_id(kernel)}/channels").replace("http", "ws", 1)

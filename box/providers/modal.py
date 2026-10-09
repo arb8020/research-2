@@ -11,7 +11,7 @@ Credentials are an argument, never looked up here: every Modal call goes through
 from the token the caller passes (the CLI reads ~/.modal.toml with ModalToken.from_config).
 
     Modal(token=ModalToken.from_config(), volumes={"/data": "kelpie-a1"})  # volumes: {mount path: name}, created if missing
-    ModalVolumeStore("box-sessions", client=modal_provider.client)       # a Store (box/store.py): launch(record=)
+    ModalVolumeStore("box-sessions", client=provider.client)    # a Store (box/store.py): launch(record=)
 """
 
 from __future__ import annotations

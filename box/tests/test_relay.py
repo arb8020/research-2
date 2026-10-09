@@ -19,7 +19,7 @@ import pytest
 
 from box import sdk
 from box.gateway import kernel_client, relay
-from box.local_provider import Local
+from box.providers.local import Local
 from box.store import DirStore
 
 TOKEN = {"id": "ak-relay-test", "secret": "as-relay-test-secret"}

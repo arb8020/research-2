@@ -21,7 +21,7 @@ from pathlib import Path
 
 from box.gateway import relay
 from box.gateway.push import Push, parse_secret
-from box.local_provider import Local
+from box.providers.local import Local
 from box.store import DirStore
 
 MACHINES = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local-stack"
