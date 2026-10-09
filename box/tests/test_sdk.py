@@ -3,12 +3,18 @@ would see, and none names a provider: `pytest --provider modal` runs the same ca
 
 from __future__ import annotations
 
+import shlex
+import socket
+import ssl
 import subprocess
 import sys
 import textwrap
 import time
+import urllib.error
+import urllib.request
 from collections.abc import Callable
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -47,6 +53,43 @@ def output(job: sdk.Job) -> str:
 
 def gone(provider: Provider, s: sdk.Session) -> bool:
     return s.machine.id not in {m.id for m in provider.list()}
+
+
+def free_port() -> int:
+    """A port nothing on this computer listens on (the local provider shares its network)."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def fetch(endpoint: sdk.Endpoint) -> str | None:
+    """GET endpoint's root; None until something answers 200 there."""
+    try:
+        with urllib.request.urlopen(urllib.request.Request(endpoint.url + "/", headers=endpoint.headers), timeout=10) as r:
+            return r.read().decode()
+    except (urllib.error.URLError, ConnectionError, TimeoutError):
+        return None
+
+
+def connect(endpoint: sdk.Endpoint) -> socket.socket:
+    """A TCP connection to endpoint (TLS for https) that has sent a request and stays open."""
+    url = urlsplit(endpoint.url)
+    raw = socket.create_connection((url.hostname, url.port or (443 if url.scheme == "https" else 80)), timeout=10)
+    conn = ssl.create_default_context().wrap_socket(raw, server_hostname=url.hostname) if url.scheme == "https" else raw
+    conn.sendall(f"GET / HTTP/1.1\r\nHost: {url.hostname}\r\n\r\n".encode())
+    return conn
+
+
+# Accepts connections on PORT and holds them open (never answers) for LIFE s: a client that stays.
+HOLD = """
+import socket, time
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("0.0.0.0", {port})); s.listen(); s.settimeout(1)
+held, end = [], time.time() + {life}
+while time.time() < end:
+    try: held.append(s.accept()[0])
+    except TimeoutError: pass
+"""
 
 
 def eventually(predicate: Callable[[], bool], timeout_s: float = 10.0) -> None:
@@ -203,6 +246,30 @@ def test_a_machine_gone_without_a_word_is_machine_lost(launch: Callable) -> None
 def test_waiting_on_a_session_is_bounded(launch: Callable) -> None:
     with launch(deadline_s=600) as s, pytest.raises(TimeoutError):
         s.wait(timeout_s=1)
+
+
+def test_a_port_declared_at_launch_is_reachable_through_expose(launch: Callable, scale: float) -> None:
+    port = free_port()
+    with launch(deadline_s=600, ports=(port,)) as s:
+        s.run(f"mkdir -p www && echo hello from the box > www/index.html && exec python3 -m http.server {port} --directory www")
+        endpoint = s.expose(port)
+        eventually(lambda: fetch(endpoint) == "hello from the box\n", timeout_s=30 * scale)
+        with pytest.raises(ValueError, match="not declared"):
+            s.expose(port + 1)
+
+
+def test_an_open_connection_to_an_exposed_port_is_not_idle(launch: Callable, scale: float) -> None:
+    port, idle_s = free_port(), 3 * scale
+    s = launch(deadline_s=600, idle_timeout_s=idle_s, ports=(port,))
+    hold = HOLD.format(port=port, life=int(10 * idle_s))
+    s.machine.exec(f"nohup python3 -c {shlex.quote(hold)} >/dev/null 2>&1 &")  # not a job: a job is never idle
+    eventually(lambda: s.machine.exec(f"python3 -c 'import socket; socket.create_connection((\"127.0.0.1\", {port}), 1)'")[0] == 0)
+    conn = connect(s.expose(port))
+    time.sleep(2 * idle_s)  # no job all along: only the connection keeps it from idling
+    assert isinstance(s.status(), Running)
+    conn.close()
+    assert s.wait(timeout_s=10 * idle_s) == Ended("idle")
+    s.close()
 
 
 def test_run_job_is_launch_put_run_get_close(name: str, provider: Provider, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:

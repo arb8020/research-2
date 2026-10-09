@@ -15,7 +15,10 @@ Everything goes through files under ROOT (no sockets), so a client only needs th
     ROOT/ended.json             supervisor writes it last: {reason}; then it lingers up to LINGER_S
                                 while someone is still reading (see linger)
 
-A session ends on: stop, deadline, lease lost, idle timeout, or (released) no job left. Whatever
+A session ends on: stop, deadline, lease lost, idle timeout, or (released) no job left. Idle means
+no job running and no established TCP connection to an exposed port (--ports): the supervisor owns
+idleness, since a provider's own idle timer (Modal's) sees only connections, never work in the box.
+Whatever
 ends it, a running job is killed (whole process group) and its on_exit hook still runs, inside
 the time left before the deadline. The job is killed hook_budget_s before the deadline for that.
 """
@@ -36,6 +39,8 @@ TICK_S = 0.2
 KILL_GRACE_S = 10.0  # SIGTERM -> SIGKILL
 LINGER_S = 30.0  # after the session ends, the most a reader still there gets to finish reading
 WATCH_TTL_S = 5.0  # a log follower touches ROOT/watch each poll; older than this, nobody is following
+PROC_TCP = ("/proc/net/tcp", "/proc/net/tcp6")
+TCP_ESTABLISHED = "01"  # /proc/net/tcp's st column (include/net/tcp_states.h)
 
 
 # TODO(handoff): if the supervisor itself dies, nothing writes ended.json or runs BOX_ON_SHUTDOWN;
@@ -46,7 +51,8 @@ def main() -> None:
     p.add_argument("--root", required=True)
     p.add_argument("--deadline-s", type=float, required=True, help="the session's lifetime, from now")
     p.add_argument("--lease-ttl-s", type=float, default=60.0, help="lost if not touched for this long")
-    p.add_argument("--idle-timeout-s", type=float, default=0.0, help="end after this long with no job; 0 = never")
+    p.add_argument("--idle-timeout-s", type=float, default=0.0, help="end after this long with no job and no connection; 0 = never")
+    p.add_argument("--ports", type=lambda s: [int(p) for p in s.split(",") if p], default=[], help="exposed ports, comma-separated")
     p.add_argument(
         "--on-shutdown", default=os.environ.get("BOX_ON_SHUTDOWN", ""),
         help="bash run last, to end the machine itself (a provider sets BOX_ON_SHUTDOWN, e.g. its API's delete)",
@@ -57,7 +63,7 @@ def main() -> None:
     started_at = time.time()
     write_json(root / "session.json", {"started_at": started_at, "deadline_at": started_at + a.deadline_s})
     (root / "lease").touch()  # last: a client takes the lease as "the supervisor is up"
-    reason = supervise(root, time.monotonic() + a.deadline_s, a.lease_ttl_s, a.idle_timeout_s)
+    reason = supervise(root, time.monotonic() + a.deadline_s, a.lease_ttl_s, a.idle_timeout_s, a.ports)
     write_json(root / "ended.json", {"reason": reason, "at": time.time()})
     linger(root, reason, a.lease_ttl_s)
     if a.on_shutdown:
@@ -80,12 +86,14 @@ def linger(root: Path, reason: str, lease_ttl_s: float) -> None:
         time.sleep(TICK_S)
 
 
-def supervise(root: Path, deadline: float, lease_ttl_s: float, idle_timeout_s: float) -> str:
+def supervise(root: Path, deadline: float, lease_ttl_s: float, idle_timeout_s: float, ports: list[int]) -> str:
     """Run jobs one at a time until the session ends; returns why it ended."""
     done: set[str] = set()
     idle_since = time.monotonic()
     while True:
         now = time.monotonic()
+        if idle_timeout_s and ports and connected(ports):
+            idle_since = now  # someone is using an exposed port: not idle
         if (end := session_end(root, now, deadline, lease_ttl_s, idle_timeout_s, idle_since)) is not None:
             return end
         job_dir = next_job(root, done)
@@ -117,6 +125,24 @@ def lease_lost(root: Path, lease_ttl_s: float) -> bool:
     if (root / "released").exists():
         return False
     return time.time() - (root / "lease").stat().st_mtime > lease_ttl_s
+
+
+def connected(ports: list[int]) -> bool:
+    """Does any established TCP connection end at one of ports on this machine?"""
+    return any(port in ports for port in established_local_ports())
+
+
+def established_local_ports() -> list[int]:
+    """The local port of every established TCP connection. Linux: /proc/net/tcp{,6} (local address
+    "HEXADDR:HEXPORT", state 01 = ESTABLISHED). Elsewhere (the local provider on macOS): netstat,
+    whose local address ends ".PORT"."""
+    if sys.platform == "linux":
+        tables = [Path(f).read_text().splitlines()[1:] for f in PROC_TCP if Path(f).exists()]
+        rows = [line.split() for table in tables for line in table]
+        return [int(r[1].rsplit(":", 1)[1], 16) for r in rows if r[3] == TCP_ESTABLISHED]
+    out = subprocess.run(["netstat", "-an", "-p", "tcp"], capture_output=True, text=True, check=True).stdout
+    local = [line.split()[3] for line in out.splitlines() if line.endswith("ESTABLISHED")]
+    return [int(address.rsplit(".", 1)[1]) for address in local]
 
 
 def next_job(root: Path, done: set[str]) -> Path | None:

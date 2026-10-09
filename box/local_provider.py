@@ -16,7 +16,7 @@ import signal
 import subprocess
 from pathlib import Path
 
-from box.sdk import LABEL_BY, Gone
+from box.sdk import LABEL_BY, Endpoint, Gone
 
 BASE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local"
 
@@ -29,7 +29,7 @@ class Local:
 
     def launch(
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
-        labels: dict[str, str], timeout_s: int,
+        labels: dict[str, str], timeout_s: int, ports: list[int],
     ) -> LocalMachine:  # fmt: skip
         del timeout_s  # the supervisor's deadline is the only clock here; a VM provider enforces this
         if gpu or image:
@@ -37,6 +37,7 @@ class Local:
         m = LocalMachine(self.base / f"local-{secrets.token_hex(4)}")
         m.dir.mkdir(parents=True)
         (m.dir / "labels.json").write_text(json.dumps(labels))
+        (m.dir / "ports.json").write_text(json.dumps(ports))
         with (m.dir / "supervisor.log").open("wb") as log:
             proc = subprocess.Popen(
                 entrypoint, cwd=m.dir, env={**os.environ, **env, "BOX_ROOT": m.root},
@@ -80,6 +81,15 @@ class LocalMachine:
     def read(self, path: str) -> bytes:
         self._check_alive()
         return Path(path).read_bytes()
+
+    def expose(self, port: int) -> Endpoint:
+        """This computer's own port: a local machine shares its network. Declared ports only, as
+        on a cloud machine."""
+        self._check_alive()
+        declared = json.loads((self.dir / "ports.json").read_text())
+        if port not in declared:
+            raise ValueError(f"local provider: port {port} was not declared at launch (ports={declared})")
+        return Endpoint(f"http://127.0.0.1:{port}")
 
     def _check_alive(self) -> None:
         """Like a real machine: once its supervisor has exited, it and its files are gone."""

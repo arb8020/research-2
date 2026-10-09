@@ -2,7 +2,9 @@
 
 A sandbox lives exactly as long as its entrypoint, so when the supervisor exits the sandbox ends
 by itself (no BOX_ON_SHUTDOWN needed), and its files go with it. Sandbox.create's `timeout` is
-Modal's hard backstop past the supervisor's deadline (Modal caps it at 24 h). labels are sandbox
+Modal's hard backstop past the supervisor's deadline (Modal caps it at 24 h). No Modal
+`idle_timeout`, on purpose: Modal counts only connections and execs as activity, never work inside
+the sandbox, so it would reap a long job nobody watches; the supervisor owns idleness. labels are sandbox
 tags; list()/get() only see sandboxes tagged box.by=box under the "box" app.
 
 Credentials are an argument, never looked up here: every Modal call goes through a client built
@@ -27,7 +29,7 @@ from typing import TypeVar
 import modal
 
 from box import gpus
-from box.sdk import LABEL_BY, Gone
+from box.sdk import LABEL_BY, Endpoint, Gone
 
 APP = "box"
 # TODO(handoff): T below is a TypeVar (ruff UP047); left for the generics/TypeVar decision.
@@ -91,11 +93,12 @@ class Modal:
 
     def launch(
         self, *, gpu: str | None, image: str | None, entrypoint: list[str], env: dict[str, str],
-        labels: dict[str, str], timeout_s: int,
+        labels: dict[str, str], timeout_s: int, ports: list[int],
     ) -> ModalMachine:  # fmt: skip
         sandbox = modal.Sandbox.create(
             *entrypoint, app=self.app, image=resolve_image(image), gpu=modal_gpu(gpu), region=self.region,
             env={**env, "BOX_ROOT": ROOT}, tags=labels, timeout=min(timeout_s, MAX_TIMEOUT_S), client=self.client,
+            encrypted_ports=ports,
             volumes={path: modal.Volume.from_name(v, create_if_missing=True, client=self.client) for path, v in self.volumes.items()},
         )  # fmt: skip
         return ModalMachine(sandbox, labels, booting=True)
@@ -151,6 +154,15 @@ class ModalMachine:
         """Idempotent: terminating an ended sandbox is a no-op on Modal."""
         with contextlib.suppress(modal.exception.NotFoundError):
             self.sandbox.terminate()
+
+    def expose(self, port: int) -> Endpoint:
+        """The port's Modal tunnel (encrypted_ports at create): an open https URL, websockets too.
+        Not Sandbox.create_connect_token, which needs no declaring but gates every request on a
+        token (header or ?_modal_connect_token=); see box/NOTES-sessions.md."""
+        tunnels = self._live(self.sandbox.tunnels)
+        if port not in tunnels:
+            raise ValueError(f"modal provider: port {port} was not declared at launch (ports={sorted(tunnels)})")
+        return Endpoint(tunnels[port].url)
 
     def _live(self, call: Callable[[], T]) -> T:
         """call, bounded in time, with Modal's 'this sandbox has ended' errors raised as Gone. Once it
