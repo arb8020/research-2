@@ -27,6 +27,8 @@ CHROME = sorted(glob.glob(os.path.expanduser(
 BLOCKS = parse((HERE / "rl" / "01-flappy.md").read_text())
 SOLUTION = next(b.source for b in BLOCKS if b.role == "solution" and b.name == "flappy")
 STUB = next(b.source for b in BLOCKS if b.role == "cell" and b.name == "flappy")
+INJECT = "// increment env by a tick"
+assert INJECT in STUB, "verify_page injects crash/hang code at a stub comment that is gone"
 POLICY = """def init_policy(obs_dim: int, n_actions: int, hidden: int, seed: int) -> dict[str, torch.Tensor]:
     g = torch.Generator().manual_seed(seed)
     w1 = (torch.randn(obs_dim, hidden, generator=g) / obs_dim**0.5).requires_grad_()
@@ -106,12 +108,12 @@ with sync_playwright() as p:
         time.sleep(1.1)
     play.screenshot(path=SHOTS / "4-play-your-env.png")
 
-    paste("flappy", STUB.replace("// write stub here", "volatile int *p = 0;\n    *p = 1;"))
+    paste("flappy", STUB.replace(INJECT, "volatile int *p = 0;\n    *p = 1;"))
     assert run("flappy")[-1] == "FAIL"
     assert run("policy")[-1] == "PASS", "a failing upstream edit must not propagate"
     cell("flappy").screenshot(path=SHOTS / "5-flappy-segfault.png")
 
-    paste("flappy", STUB.replace("// write stub here", "while (1) {}"))
+    paste("flappy", STUB.replace(INJECT, "while (1) {}"))
     assert run("flappy")[-1] == "FAIL"
 
     page.reload()
