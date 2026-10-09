@@ -16,6 +16,7 @@ import signal
 import subprocess
 from pathlib import Path
 
+from box.providers.pump import JOIN_S, Pumped, pipe_reader
 from box.sdk import LABEL_BY, Endpoint, Gone
 from box.store import DirStore, Mount
 
@@ -80,6 +81,25 @@ class LocalMachine:
         self._check_alive()
         done = subprocess.run(["bash", "-c", cmd], cwd=self.dir, capture_output=True, text=True, check=False)
         return done.returncode, done.stdout, done.stderr
+
+    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None) -> Pumped:
+        """cmd's output as it arrives: two pipes, a reader thread each. Its own process group, so a
+        close kills all of it. Gone, while it runs too, once the supervisor has exited (nothing on
+        this computer ends the command with it, as a cloud machine's end does)."""
+        self._check_alive()
+        proc = subprocess.Popen(
+            ["bash", "-c", cmd], cwd=self.dir, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            start_new_session=True,
+        )  # fmt: skip
+
+        def kill() -> None:
+            _killpg(proc.pid)
+            proc.wait(JOIN_S)
+
+        return Pumped(
+            [pipe_reader("stdout", proc.stdout), pipe_reader("stderr", proc.stderr)], kill=kill, wait=lambda: proc.wait(JOIN_S),
+            timeout_s=timeout_s, quiet_s=quiet_s, check=self._check_alive, label=self.id,
+        )  # fmt: skip
 
     def write(self, path: str, data: bytes) -> None:
         self._check_alive()
