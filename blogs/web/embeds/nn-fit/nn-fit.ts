@@ -12,8 +12,8 @@ import type { Activation, Adam, Batch, Mlp, Task } from "./mlp";
 import { ACTIVATIONS, evaluate, initMlp, makeAdam, paramCount, predictor, seeded, trainStep } from "./mlp";
 import type { DrawBuffer, Point, WaveParams, WaveStage } from "./datasets";
 import {
-  INPUT_SCALE, MAX_STAGES, MAX_WIGGLES, SAMPLE_COUNTS, columnX, curveSamples, describeGaps, drawSamples, fillWave,
-  filledColumns, gaps, makeDrawBuffer, paintStroke, spiral, waveFormula, waveStages,
+  INPUT_SCALE, MAX_STAGES, MAX_WIGGLES, SAMPLE_COUNTS, columnX, completeCurve, curveSamples, describeGaps, drawSamples, fillWave,
+  gaps, makeDrawBuffer, paintStroke, spiral, waveFormula, waveStages,
 } from "./datasets";
 
 export type Dataset = "draw" | "wave" | "spiral";
@@ -34,7 +34,7 @@ export interface NnFitStats {
   readonly stepBudget: number; // Infinity = off
   readonly timeBudget: number; // seconds, Infinity = off
   readonly training: boolean; // the reader pressed Train (it may still be paused offscreen)
-  readonly ready: boolean; // Train is enabled: data is complete and budget remains
+  readonly ready: boolean; // Train is enabled: something is drawn (or spiral) and budget remains
 }
 
 // Judgement calls (see the report). Training: full-batch Adam, up to STEPS_PER_FRAME steps per animation
@@ -92,9 +92,11 @@ const STYLE = `
 canvas { display: block; width: 100%; aspect-ratio: 2 / 1; background: var(--code-bg); border: 1px solid var(--rule);
          border-radius: 6px; touch-action: none; cursor: crosshair; }
 .stage.spiral canvas { aspect-ratio: 1 / 1; cursor: default; touch-action: auto; }
-.hint { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--muted); pointer-events: none; }
+.hint { position: absolute; top: 50%; left: 50%; translate: -50% -50%; max-width: calc(100% - 32px); margin: 0; padding: 6px 12px;
+        text-align: center; font-size: 13px; color: var(--fg); background: var(--code-bg); border: 1px solid var(--rule);
+        border-radius: 4px; pointer-events: none; }
 [hidden] { display: none !important; }
-.need { margin: 6px 0 0; color: var(--fg); text-wrap: pretty; }
+.need { margin: 6px 0 0; color: var(--muted); text-wrap: pretty; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; color: var(--muted); }
 .legend span::before { content: ""; display: inline-block; width: 14px; height: 0; margin-right: 6px; vertical-align: middle;
                        border-top: 2.5px solid var(--swatch); }
@@ -140,7 +142,7 @@ const range = (cls: string, label: string, max: number): string =>
 const TEMPLATE = `
 <div class="stage">
   <canvas role="img"></canvas>
-  <p class="hint" aria-hidden="true">draw a function here, edge to edge</p>
+  <p class="hint" id="hint"></p>
 </div>
 <p class="need" id="need"></p>
 <p class="legend">
@@ -152,7 +154,7 @@ const TEMPLATE = `
 </p>
 <p class="readout"><span class="metrics"></span><br><span class="usage"></span></p>
 <div class="buttons">
-  <button type="button" class="train" aria-describedby="need">Train</button>
+  <button type="button" class="train" aria-describedby="hint need">Train</button>
   <button type="button" class="reset">Reset weights</button>
   <button type="button" class="resample">New samples</button>
   <button type="button" class="new-wave wave-only">New random curve</button>
@@ -254,7 +256,7 @@ export class NnFit extends HTMLElement {
   // Data: the true curve (drawn or generated), the training sample drawn from it, the spiral's held-out set.
   #truth: DrawBuffer = makeDrawBuffer(COLUMNS);
   #truthBatch: Batch = EMPTY;
-  #complete = false;
+  #curve: DrawBuffer | null = null; // the drawing with gaps filled (completeCurve); null when empty
   #train: Batch = EMPTY;
   #heldOut: Batch = EMPTY;
   #waveStages: WaveStage[] = [];
@@ -296,6 +298,11 @@ export class NnFit extends HTMLElement {
       training: this.#training,
       ready: this.#ready(),
     };
+  }
+
+  // The curve the net is trained and scored against (the drawing with gaps filled), or null when empty.
+  get curve(): Float64Array | null {
+    return this.#curve === null ? null : Float64Array.from(this.#curve);
   }
 
   connectedCallback(): void {
@@ -527,7 +534,7 @@ export class NnFit extends HTMLElement {
 
   // Train is enabled when the data is usable and budget remains.
   #dataReady(): boolean {
-    return !this.#isCurve() || this.#complete;
+    return !this.#isCurve() || this.#curve !== null;
   }
 
   #ready(): boolean {
@@ -562,13 +569,13 @@ export class NnFit extends HTMLElement {
 
   // The true curve changed (drawn, cleared, generated) or the dataset switched.
   #dataChanged(): void {
-    this.#truthBatch = drawSamples(this.#truth);
-    const was = this.#complete;
-    this.#complete = gaps(this.#truth).length === 0;
-    if (this.#isCurve() && this.#complete && !was && this.#dataset === "draw") this.#announce("The drawing spans the whole width. Train is ready.");
-    if (this.#isCurve() && !this.#complete && this.#training) {
+    const had = this.#curve !== null;
+    this.#curve = completeCurve(this.#truth);
+    this.#truthBatch = this.#curve === null ? EMPTY : drawSamples(this.#curve);
+    if (this.#isCurve() && this.#curve !== null && !had && this.#dataset === "draw") this.#announce("Train is ready. Gaps in the drawing are filled in.");
+    if (this.#isCurve() && this.#curve === null && this.#training) {
       this.#setTraining(false);
-      this.#announce("Paused: the drawing no longer spans the whole width.");
+      this.#announce("Paused: the drawing is empty.");
     }
     this.#resample();
   }
@@ -578,7 +585,7 @@ export class NnFit extends HTMLElement {
     const n = at(SAMPLE_COUNTS, this.#samplesK);
     const sigma = at(NOISES, this.#noiseK);
     if (this.#isCurve()) {
-      this.#train = this.#complete ? curveSamples(this.#truth, n, sigma, seeded(this.#sampleSeed)) : EMPTY;
+      this.#train = this.#curve === null ? EMPTY : curveSamples(this.#curve, n, sigma, seeded(this.#sampleSeed));
       this.#heldOut = EMPTY;
     } else {
       this.#train = spiral(n, sigma * SPIRAL_JITTER, seeded(this.#sampleSeed));
@@ -632,14 +639,23 @@ export class NnFit extends HTMLElement {
     const train = this.#el("button.train", HTMLButtonElement);
     train.textContent = this.#training ? "Pause" : "Train";
     // aria-disabled rather than disabled: the button stays focusable, so a screen reader still reaches
-    // it and reads its description (the .need line) saying why it can't train.
+    // it and reads its description (the centred hint, then the note line) saying why it can't train.
     const ready = this.#ready() || this.#training;
     train.setAttribute("aria-disabled", String(!ready));
+    // Hidden elements referenced by aria-describedby still count toward the description, so a hidden
+    // message is also emptied.
+    const empty = this.#isCurve() && this.#curve === null;
+    const hint = this.#el(".hint", HTMLParagraphElement);
+    hint.hidden = !empty;
+    hint.textContent = !empty ? "" : this.#dataset === "wave" ? "draw a curve, or press New random curve" : "draw a curve, or pick Random wave";
+    const filled = this.#isCurve() && this.#curve !== null ? gaps(this.#truth) : [];
+    const note = [
+      this.#budgetLeft() ? "" : "Budget used up. Raise a budget or reset the weights to train again.",
+      filled.length > 0 ? `Dashed parts were filled in: ${describeGaps(this.#truth)}.` : "",
+    ].filter((m) => m !== "").join(" ");
     const need = this.#el(".need", HTMLParagraphElement);
-    need.hidden = ready;
-    need.textContent = ready ? ""
-      : !this.#dataReady() ? `Draw across the whole width to train. Missing: ${describeGaps(this.#truth)}.`
-        : "Budget used up. Raise a budget or reset the weights to train again.";
+    need.hidden = note === "";
+    need.textContent = note;
   }
 
   #setTraining(on: boolean): void {
@@ -757,7 +773,6 @@ export class NnFit extends HTMLElement {
     const h = canvas.height / dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    this.#el(".hint", HTMLParagraphElement).hidden = this.#dataset !== "draw" || this.#truthBatch.n > 0;
     if (this.#isCurve()) this.#paintCurve(ctx, w, h);
     else this.#paintSpiral(ctx, w, h);
     this.#paintReadout(now);
@@ -773,33 +788,6 @@ export class NnFit extends HTMLElement {
     ctx.moveTo(0, py(0)); ctx.lineTo(w, py(0));
     ctx.moveTo(px(0), 0); ctx.lineTo(px(0), h);
     ctx.stroke();
-
-    // Undrawn x ranges: a hatched band plus a dashed baseline (pattern, not just colour).
-    ctx.save();
-    ctx.strokeStyle = c.muted;
-    for (const { from, to } of gaps(this.#truth)) {
-      const x0 = (from / COLUMNS) * w;
-      const x1 = ((to + 1) / COLUMNS) * w;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x0, 0, x1 - x0, h);
-      ctx.clip();
-      ctx.globalAlpha = 0.3;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let d = x0 - h; d < x1; d += 8) { ctx.moveTo(d, h); ctx.lineTo(d + h, 0); }
-      ctx.stroke();
-      ctx.restore();
-      ctx.globalAlpha = 0.9;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(x0, py(0));
-      ctx.lineTo(x1, py(0));
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-    ctx.restore();
 
     // The true curve, faint: one polyline per run of known columns.
     ctx.save();
@@ -820,6 +808,25 @@ export class NnFit extends HTMLElement {
     });
     ctx.stroke();
     ctx.restore();
+
+    // Filled-in parts of the curve (completeCurve): dashed and muted, joined to the drawn ends.
+    const curve = this.#curve;
+    if (curve !== null) {
+      ctx.save();
+      ctx.strokeStyle = c.muted;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      for (const { from, to } of gaps(this.#truth)) {
+        ctx.beginPath();
+        for (let i = Math.max(0, from - 1); i <= Math.min(COLUMNS - 1, to + 1); i++) {
+          const x = i === 0 ? 0 : i === COLUMNS - 1 ? w : px(columnX(COLUMNS, i));
+          const y = py(curve[i] ?? 0);
+          if (i === Math.max(0, from - 1)) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
 
     // The network's curve, sampled every 2 CSS px across the whole width.
     const f = predictor(this.#net, "regression");
@@ -921,9 +928,9 @@ export class NnFit extends HTMLElement {
     const lossText = s.loss === null ? "no loss yet" : `training loss ${formatLoss(s.loss)}`;
     const net = `a ${s.sizes.join("-")} network with ${this.#activation} hidden units, ${lossText} after ${String(s.steps)} steps`;
     const label = this.#isCurve()
-      ? !this.#complete && filledColumns(this.#truth) === 0
-        ? `Empty drawing area. Draw a function with a pointer, or choose Random wave. The plot shows ${net}.`
-        : `${this.#dataset === "wave" ? "A random wave" : "Your drawn function"} (faint), ${String(s.samples)} training samples as dots, and the fit of ${net}${s.trueError === null ? "" : `; error against the true curve ${formatLoss(s.trueError)}`}.`
+      ? this.#curve === null
+        ? `Empty drawing area. Draw a curve with a pointer, or choose Random wave. The plot shows ${net}.`
+        : `${this.#dataset === "wave" ? "A random wave" : "Your drawn function"} (faint${gaps(this.#truth).length > 0 ? `; filled in, dashed: ${describeGaps(this.#truth)}` : ""}), ${String(s.samples)} training samples as dots, and the fit of ${net}${s.trueError === null ? "" : `; error against the true curve ${formatLoss(s.trueError)}`}.`
       : `Spiral of ${String(s.samples)} training points in two classes, background shaded by the prediction of ${net}, training accuracy ${formatPct(s.accuracy ?? 0)}, held-out accuracy ${formatPct(s.heldOutAccuracy ?? 0)}.`;
     this.#el("canvas", HTMLCanvasElement).setAttribute("aria-label", label);
   }

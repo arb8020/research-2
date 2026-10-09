@@ -204,8 +204,27 @@ export function curveSamples(buf: DrawBuffer, n: number, sigma: number, rng: Rng
   return { n, x, y };
 }
 
-// Undrawn column ranges [from, to] (inclusive), left to right. Training needs none: the drawn
-// function must span the whole x axis, otherwise the net is free to do anything over a gap.
+// The drawn curve with every gap filled: interior gaps linearly interpolated between the nearest drawn
+// columns on each side; before the first / after the last drawn column, the nearest drawn y held flat to
+// the edge (no extrapolation). Returns a new buffer, or null if nothing is drawn.
+export function completeCurve(buf: DrawBuffer): DrawBuffer | null {
+  const drawn: number[] = [];
+  buf.forEach((y, c) => { if (!Number.isNaN(y)) drawn.push(c); });
+  const first = drawn[0];
+  const last = drawn[drawn.length - 1];
+  if (first === undefined || last === undefined) return null;
+  const out = Float64Array.from(buf);
+  out.fill(get(buf, first), 0, first);
+  out.fill(get(buf, last), last + 1);
+  for (let i = 0; i + 1 < drawn.length; i++) {
+    const a = drawn[i] ?? 0, b = drawn[i + 1] ?? 0;
+    const ya = get(buf, a), yb = get(buf, b);
+    for (let c = a + 1; c < b; c++) out[c] = ya + ((c - a) / (b - a)) * (yb - ya);
+  }
+  return out;
+}
+
+// Undrawn column ranges [from, to] (inclusive), left to right: the parts completeCurve fills in.
 export function gaps(buf: DrawBuffer): { from: number; to: number }[] {
   const out: { from: number; to: number }[] = [];
   let start = -1;
