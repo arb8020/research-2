@@ -274,6 +274,7 @@ def test_waiting_on_a_session_is_bounded(launch: Callable) -> None:
         s.wait(timeout_s=1)
 
 
+@pytest.mark.needs("ports")
 def test_a_port_declared_at_launch_is_reachable_through_expose(launch: Callable, scale: float) -> None:
     port = free_port()
     with launch(ceiling_s=600, ports=(port,)) as s:
@@ -284,6 +285,7 @@ def test_a_port_declared_at_launch_is_reachable_through_expose(launch: Callable,
             s.expose(port + 1)
 
 
+@pytest.mark.needs("ports")
 def test_an_open_connection_to_an_exposed_port_is_not_idle(launch: Callable, scale: float) -> None:
     port, idle_s = free_port(), 3 * scale
     s = launch(ceiling_s=600, idle_timeout_s=idle_s, ports=(port,))
@@ -325,6 +327,7 @@ def test_following_a_session_that_ends_after_its_job_sees_its_last_line_and_exit
     eventually(lambda: gone(provider, s), timeout_s=60)
 
 
+@pytest.mark.needs("ports")
 def test_a_service_runs_beside_the_queue_and_is_not_work_for_idleness(launch: Callable, scale: float) -> None:
     port, idle_s = free_port(), 3 * scale
     s = launch(ceiling_s=600, idle_timeout_s=idle_s, ports=(port,))
