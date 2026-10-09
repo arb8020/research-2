@@ -133,11 +133,11 @@ code-cell, scratch-cell, ws-cell { display: block; margin: 1.6em -16px; border: 
 ws-cell[data-queued] .run { border-style: dashed; }
 /* a check's JSON lines (check-output.ts): verdict rows, a summary, then the log */
 div.cell-out { white-space: normal; }
-.cell-out .check-log { margin: 0; white-space: pre-wrap; font: inherit; }
+.cell-out .check-log { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .cell-out .check-log:empty { display: none; }
 .cell-out table.verdicts { border-collapse: collapse; width: 100%; margin-bottom: 6px; font-size: 12px; }
 .cell-out table.verdicts th { text-align: left; font-weight: normal; color: var(--muted); padding: 2px 8px 2px 0; border-bottom: 1px solid var(--rule); }
-.cell-out table.verdicts td { padding: 2px 8px 2px 0; vertical-align: top; }
+.cell-out table.verdicts td { padding: 2px 8px 2px 0; vertical-align: top; overflow-wrap: anywhere; }
 .cell-out tr.verdict .outcome { font-weight: 600; }
 .cell-out tr.verdict.pass .outcome { color: var(--pass); }
 .cell-out tr.verdict.fail .outcome, .cell-out tr.verdict.blocked .outcome { color: var(--fail); }
