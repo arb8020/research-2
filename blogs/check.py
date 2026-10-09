@@ -91,6 +91,22 @@ class Block:
     line: int
 
 
+@dataclass(frozen=True)
+class Result:
+    """A cell's verdict: the full story went to emit; message is one short line for a status bar."""
+
+    passed: bool
+    message: str
+
+
+PASSED = Result(True, "passed")
+
+
+def one_line(text: str, limit: int = 160) -> str:
+    first = text.strip().splitlines()[0] if text.strip() else ""
+    return first if len(first) <= limit else first[: limit - 1] + "…"
+
+
 def parse(text: str) -> list[Block]:
     blocks = []
     for m in FENCE.finditer(text):
@@ -190,7 +206,7 @@ def echo(text: str) -> None:
 def run_cell(
     blocks: list[Block], order: list[str], target: str, stub: bool,
     emit: Callable[[str], None] = echo, timeout: float | None = None, build: str = "check",
-) -> bool:  # fmt: skip
+) -> Result:  # fmt: skip
     """Check cell X: compile the C, then run check=X and budget=X, each in a fresh subprocess.
 
     build="prod" gives check=X the prod build too (no asserts, no sanitizers): for seeing what they catch.
@@ -212,26 +228,33 @@ def run_cell(
             if b is steps[-1] and build == "check":
                 check_so, errors = compile_c(b, out, "check")
                 if errors:
-                    emit(f"{target:<12} FAIL: {b.role}={b.name} does not compile (warnings count as errors):\n{errors}")
-                    return False
+                    why = f"{b.role}={b.name} does not compile (warnings count as errors)"
+                    emit(f"{target:<12} FAIL: {why}:\n{errors}")
+                    return Result(False, why)
             prod[b.name], errors = compile_c(b, out, "prod")
             if errors:
-                emit(f"{target:<12} FAIL: {b.role}={b.name} does not compile (prod build):\n{errors}")
-                return False
+                why = f"{b.role}={b.name} does not compile (prod build)"
+                emit(f"{target:<12} FAIL: {why}:\n{errors}")
+                return Result(False, why)
 
         python = [b for b in steps if b.lang != "c"]
         check = python + [find(blocks, "check", target)]
         phases = [(target, check, {**prod, target: check_so}, sanitizer_env()) if check_so else (target, check, prod, {})]
         phases += [(f"{target} budget", python + budgets, prod, {}) for _ in budgets]
-        return all(run_phase(label, ps, env_so, env, out, emit, timeout) for label, ps, env_so, env in phases)
+        for label, ps, env_so, env in phases:
+            result = run_phase(label, ps, env_so, env, out, emit, timeout)
+            if not result.passed:
+                return result if label == target else Result(False, f"{label.removeprefix(target).strip()}: {result.message}")
+        return PASSED
 
 
 def run_phase(
     label: str, steps: list[Block], env_so: dict[str, str], env: dict[str, str], out: Path,
     emit: Callable[[str], None], timeout: float | None,
-) -> bool:  # fmt: skip
+) -> Result:  # fmt: skip
     """One subprocess execs steps into one namespace. A crash or hang ends only that process."""
     job = out / f"job_{label.replace(' ', '_')}.json"
+    verdict = job.with_suffix(".verdict")  # the worker writes its one-line FAIL reason here
     job.write_text(json.dumps({"label": label, "steps": [asdict(b) for b in steps], "env_so": env_so}))
     proc = subprocess.Popen(
         [sys.executable, "-u", __file__, "--worker", str(job)], cwd=HERE, env={**os.environ, **env},
@@ -245,16 +268,23 @@ def run_phase(
     if timer:
         timer.cancel()
     rc = proc.wait()
+    if rc == 0:
+        return PASSED
     if rc == SANITIZER_EXIT and env:
-        emit(f"{label:<12} FAIL: the sanitizer stopped your C at a memory or undefined-behaviour bug; "
-             "its report is above (look for the frames in cell=...)\n")  # fmt: skip
+        why = "the sanitizer stopped your C at a memory or undefined-behaviour bug"
+        emit(f"{label:<12} FAIL: {why}; its report is above (look for the frames in cell=...)\n")
     elif rc == -signal.SIGKILL and timeout:
-        emit(f"{label:<12} FAIL: killed after {timeout:.0f}s: an infinite loop, or just too slow?\n")
+        why = f"killed after {timeout:.0f}s: an infinite loop, or just too slow?"
+        emit(f"{label:<12} FAIL: {why}\n")
     elif rc == -signal.SIGABRT:
-        emit(f"{label:<12} FAIL: your code aborted (SIGABRT); a failed assert prints its condition and line above\n")
+        why = "your code aborted (SIGABRT), e.g. a failed assert"
+        emit(f"{label:<12} FAIL: {why}; a failed assert prints its condition and line above\n")
     elif rc < 0:
-        emit(f"{label:<12} FAIL: your code crashed the process: {signal.Signals(-rc).name}\n")
-    return rc == 0
+        why = f"your code crashed the process: {signal.Signals(-rc).name}"
+        emit(f"{label:<12} FAIL: {why}\n")
+    else:
+        why = verdict.read_text() if verdict.exists() else f"the check process exited with code {rc}"
+    return Result(False, why)
 
 
 def worker(job_path: str) -> None:
@@ -269,6 +299,7 @@ def worker(job_path: str) -> None:
         except Exception as e:  # noqa: BLE001 - any failure in reader-facing code is a FAIL, reported verbatim
             what = "FAIL" if b.role in ("check", "budget") else f"ERROR in {b.role}={b.name or 'given'}"
             print(f"{label:<12} {what}: {type(e).__name__}: {e}")
+            Path(job_path).with_suffix(".verdict").write_text(one_line(f"{what}: {type(e).__name__}: {e}"))
             if not isinstance(e, AssertionError):
                 traceback.print_exc(limit=-3)
             sys.exit(1)
@@ -293,7 +324,7 @@ def main() -> None:
         assert t in order, f"no cell={t}; cells are {order}"
 
     results = [run_cell(blocks, order, t, args.stub, build=args.build) for t in targets]
-    sys.exit(0 if all(results) else 1)
+    sys.exit(0 if all(r.passed for r in results) else 1)
 
 
 if __name__ == "__main__":

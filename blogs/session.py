@@ -2,14 +2,18 @@
 
     uv run session.py rl/01-flappy.md [--port 8787] [--timeout 30]
 
-    POST /run {cell, source}   streams text/plain; the last line is PASS or FAIL
+    POST /run {cell, source}   streams NDJSON (application/x-ndjson), one object per line:
+                                 {"out": "..."}                                  repeated, as output arrives
+                                 {"result": {"passed": bool, "message": "..."}}  exactly once, last
+                               message is one short line: "passed", the FAIL reason, "locked: X has not passed yet"
     GET  /state                {"passed": {cell: latest passing source}, "wasm": {cell: "/wasm/<hash>/<cell>.js"}}
     GET  /wasm/<hash>/<file>   play widget built from a reader's passing C cell
 
 Running cell X: check.run_cell with the given blocks, the reader's latest passing source for every
 cell before X, the posted source as X, then X's check (and budget). run_cell runs each in a fresh
-subprocess, so a crash or a hang in reader code kills only that subprocess. Only a PASS updates
-.session/<chapter>/state.json.
+subprocess, so a crash or a hang in reader code kills only that subprocess, and returns a check.Result
+whose message becomes the result line. Reader code can only print into "out", so it can't fake a pass.
+Only a pass updates .session/<chapter>/state.json.
 """
 
 from __future__ import annotations
@@ -19,13 +23,14 @@ import hashlib
 import json
 import tempfile
 import time
+import traceback
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import build_web
-from check import Block, cell_order, find, parse, run_cell
+from check import PASSED, Block, Result, cell_order, find, one_line, parse, run_cell
 
 HERE = Path(__file__).parent
 TYPES = {".js": "text/javascript", ".wasm": "application/wasm", ".html": "text/html"}
@@ -55,14 +60,15 @@ def main() -> None:
     def load() -> dict:
         return json.loads(state_path.read_text()) if state_path.exists() else {"passed": {}, "wasm": {}}
 
-    def run(cell: str, source: str, emit: Callable[[str], None]) -> bool:
+    def run(cell: str, source: str, emit: Callable[[str], None]) -> Result:
         blocks = parse(args.chapter.read_text())
         order = cell_order(blocks)
         state = load()
         upstream = order[: order.index(cell)]
         if missing := [n for n in upstream if n not in state["passed"]]:
-            emit(f"locked: {missing[0]} has not passed yet\n")
-            return False
+            why = f"locked: {missing[0]} has not passed yet"
+            emit(why + "\n")
+            return Result(False, why)
         stub = find(blocks, "cell", cell)
         target = Block(stub.lang, "cell", cell, source, stub.line)
         job = [b for b in blocks if b.role == "given" or (b.role in ("check", "budget") and b.name == cell)]
@@ -73,8 +79,8 @@ def main() -> None:
         wasm = POOL.submit(build_wasm, target, store) if target.lang == "c" else None
         store.mkdir(parents=True, exist_ok=True)
         start = time.perf_counter()
-        if not run_cell(job, order, cell, stub=True, emit=emit, timeout=args.timeout):
-            return False
+        if not (result := run_cell(job, order, cell, stub=True, emit=emit, timeout=args.timeout)).passed:
+            return result
 
         state = load()
         state["passed"][cell] = source
@@ -87,7 +93,7 @@ def main() -> None:
             except SystemExit as e:
                 emit(f"play widget could not be rebuilt (it keeps the previous env):\n{e}\n")
         state_path.write_text(json.dumps(state, indent=1))
-        return True
+        return PASSED
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -117,14 +123,22 @@ def main() -> None:
 
         def do_POST(self) -> None:
             req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-            self.head(200, "text/plain; charset=utf-8")
+            self.head(200, "application/x-ndjson")
 
-            def emit(text: str) -> None:
-                data = text.encode()
+            def line(obj: dict) -> None:
+                data = json.dumps(obj).encode() + b"\n"
                 self.wfile.write(b"%x\r\n%s\r\n" % (len(data), data))
                 self.wfile.flush()
 
-            emit("PASS\n" if run(req["cell"], req["source"], emit) else "FAIL\n")
+            def emit(text: str) -> None:
+                line({"out": text})
+
+            try:
+                result = run(req["cell"], req["source"], emit)
+            except Exception as e:  # noqa: BLE001 - a session bug still ends the stream with a result
+                emit(traceback.format_exc())
+                result = Result(False, one_line(f"session error: {type(e).__name__}: {e}"))
+            line({"result": {"passed": result.passed, "message": result.message}})
             self.wfile.write(b"0\r\n\r\n")
 
     print(f"session for {args.chapter} on http://localhost:{args.port}, state in {state_path}")
