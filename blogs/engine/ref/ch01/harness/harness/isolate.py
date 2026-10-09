@@ -144,7 +144,10 @@ class Child:
             return TimedOut(self.call_timeout)
         try:
             header, tensors = self._receive()
-        except (EOFError, ProtocolError) as exc:
+        except EOFError:
+            self.process.join(EXIT_GRACE_S)
+            return Died(f"child exited mid-call (exit code {self.process.exitcode})")
+        except ProtocolError as exc:
             return Died(f"bad reply: {exc}")
         seconds = time.perf_counter() - started
         if header["kind"] == "raised":

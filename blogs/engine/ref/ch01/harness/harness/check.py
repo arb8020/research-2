@@ -76,6 +76,21 @@ class Record:
 
 
 @dataclass(frozen=True)
+class MustFail:
+    """A self-test: grading `candidate` on `op` must produce a failing record whose
+    "<check>: <reason>" text contains `caught_by` -- caught, and for the right reason."""
+
+    op: str
+    candidate: str
+    caught_by: str
+    call_timeout: float = 60.0
+
+    def caught(self, records: list[Record]) -> bool:
+        return any(self.caught_by in f"{r.check}: {r.outcome.reason}" for r in records
+                   if r.outcome.verdict == "fail")
+
+
+@dataclass(frozen=True)
 class Prepared:
     """A case with everything the parent computes before the candidate exists."""
 
