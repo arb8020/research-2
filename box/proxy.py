@@ -10,7 +10,7 @@ from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-from box.sdk import Endpoint
+from box.sdk import Endpoint, Gone
 
 CHUNK = 65536
 UPSTREAM_TIMEOUT_S = 3600.0
@@ -79,7 +79,11 @@ class Proxy:
             if due:
                 self._used_at = time.monotonic()
         if due:
-            self._use()
+            try:
+                self._use()
+            except BaseException:
+                self._end()
+                raise
         return True
 
     def _end(self) -> None:
@@ -100,7 +104,7 @@ class Proxy:
         assert self._on_use is not None
         try:
             self._on_use()
-        except Exception as e:  # MUST KILL: swallows every Exception from on_use (was noqa BLE001); catch only the session-ended errors
+        except (Gone, OSError) as e:
             print(f"box proxy: marking the session used failed: {e!r}", file=sys.stderr)
 
     def _track(self, sock: socket.socket | None, *, add: bool) -> None:

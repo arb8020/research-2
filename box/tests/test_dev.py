@@ -5,6 +5,7 @@ test names a provider: `pytest --provider modal` runs them on Modal CPU boxes.""
 from __future__ import annotations
 
 import concurrent.futures
+import http.client
 import hashlib
 import os
 import shlex
@@ -401,3 +402,40 @@ def test_a_sync_is_use_and_a_run_sees_the_synced_code(dev: Callable, repo: Path,
     job = s.run(f"cd {shlex.quote(s.machine.work)}/repo && cat pkg/a.txt", max_duration_s=JOB_S)
     assert job.wait() == Ending("exited", 0)
     assert "".join(c.text for c in job.logs()) == "a\n"
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_the_proxy_serves_on_after_its_session_is_gone_but_not_after_a_bug_in_marking_it_used(capsys: pytest.CaptureFixture) -> None:
+    import http.server
+
+    class Ok(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(200)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    upstream = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Ok)
+    threading.Thread(target=upstream.serve_forever, daemon=True).start()
+    endpoint = sdk.Endpoint(f"http://127.0.0.1:{upstream.server_address[1]}")
+    try:
+        for failure, served in ((sdk.Gone("the machine is gone"), True), (KeyError("a bug"), False)):
+
+            def on_use(e: BaseException = failure) -> None:
+                raise e
+
+            with Proxy(endpoint, on_use=on_use, every_s=3600) as proxy:
+                try:
+                    with urllib.request.urlopen(proxy.url + "/", timeout=10) as r:
+                        got = r.read() == b"ok"
+                except (urllib.error.URLError, ConnectionError, http.client.RemoteDisconnected):
+                    got = False
+                assert got is served, failure
+                assert proxy._inflight == 0
+    finally:
+        upstream.shutdown()
+        upstream.server_close()
+    assert "marking the session used failed: Gone" in capsys.readouterr().err
