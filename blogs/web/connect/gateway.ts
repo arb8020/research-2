@@ -7,13 +7,28 @@ export interface Token {
   secret: string;
 }
 
-export const ENDED_REASONS = ["stopped", "deadline", "idle", "lease_lost", "boot_failed", "machine_lost"] as const;
+// The contract's reasons, exactly. "lease": the session length ran out. "stopped": POST /end, from this tab or
+// another, or the session released from outside (the relay says box's "released" as "stopped").
+export const ENDED_REASONS = ["stopped", "lease", "idle", "boot_failed", "machine_lost"] as const;
 export type EndedReason = (typeof ENDED_REASONS)[number];
 
+// Session length (POST /sessions lease_s): the gateway accepts 60..43200 s and caps extends at start + 12 h.
+export const LEASE_MIN_S = 60;
+export const LEASE_MAX_S = 12 * 3600;
+export const LEASE_DEFAULT_S = 90 * 60; // what the relay uses when the page sends none; the length picker (blogs/lease) is not taken yet
+
+// leaseUntil: when the session ends unless extended (unix s). ceiling: the latest an extend can push it to
+// (start + 12 h). Both required: a status without them is from a gateway older than the lease, and an error.
+interface Times {
+  gpu: string | null;
+  startedAt: number;
+  leaseUntil: number;
+  ceiling: number;
+}
 export type Status =
-  | { state: "booting"; gpu: string | null; startedAt: number; deadline: number }
-  | { state: "running"; gpu: string | null; startedAt: number; deadline: number; kernel: KernelAddress }
-  | { state: "ended"; gpu: string | null; startedAt: number; deadline: number; reason: EndedReason };
+  | ({ state: "booting" } & Times)
+  | ({ state: "running"; kernel: KernelAddress } & Times)
+  | ({ state: "ended"; reason: EndedReason } & Times);
 
 export type GatewayEvent =
   | { t: number; kind: "step"; source: "gateway" | "machine"; text: string }
@@ -30,11 +45,12 @@ const isReason = (x: unknown): x is EndedReason => ENDED_REASONS.some((r) => r =
 
 export function parseStatus(raw: unknown): Status {
   if (!isRecord(raw)) return fail("a status object", raw);
-  const { state, gpu, started_at: startedAt, deadline } = raw;
-  if ((gpu !== null && typeof gpu !== "string") || typeof startedAt !== "number" || typeof deadline !== "number") {
-    return fail("status {gpu: string | null, started_at: number, deadline: number}", raw);
-  }
-  const base = { gpu, startedAt, deadline };
+  const { state, gpu, started_at: startedAt, lease_until: leaseUntil, ceiling } = raw;
+  if ((gpu !== null && typeof gpu !== "string") || typeof startedAt !== "number") return fail("status {gpu: string | null, started_at: number}", raw);
+  // No fallback to the old "deadline": a gateway without the lease is one this page doesn't speak to.
+  if (typeof leaseUntil !== "number" || typeof ceiling !== "number") return fail("status {lease_until: number, ceiling: number} (a gateway with session leases)", raw);
+  if (ceiling < startedAt) return fail("status ceiling: a unix time after started_at", raw);
+  const base = { gpu, startedAt, leaseUntil, ceiling };
   if (state === "booting") return { state, ...base };
   if (state === "running") {
     const k = raw["kernel"];
@@ -67,11 +83,13 @@ async function call(url: string, init: RequestInit): Promise<unknown> {
   return body;
 }
 
-export async function createSession(gateway: string, token: Token, gpu: string | null): Promise<{ id: string; status: Status }> {
+export async function createSession(gateway: string, token: Token, gpu: string | null, leaseS: number): Promise<{ id: string; status: Status }> {
+  if (!Number.isInteger(leaseS)) throw new Error(`createSession: lease_s must be whole seconds, got ${String(leaseS)}`);
+  if (leaseS < LEASE_MIN_S || leaseS > LEASE_MAX_S) throw new Error(`createSession: lease_s ${String(leaseS)} outside ${String(LEASE_MIN_S)}..${String(LEASE_MAX_S)}`);
   const body = await call(`${gateway}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider: "modal", token, gpu, labels: { "box.caller": "blogs" } }),
+    body: JSON.stringify({ provider: "modal", token, gpu, lease_s: leaseS, labels: { "box.caller": "blogs" } }),
   });
   if (!isRecord(body) || typeof body["session_id"] !== "string") return fail("{session_id, status}", body);
   return { id: body["session_id"], status: parseStatus(body["status"]) };
@@ -92,10 +110,33 @@ export async function endSession(gateway: string, id: string, token: Token): Pro
   await call(`${gateway}/sessions/${encodeURIComponent(id)}/end`, { method: "POST", headers: { "X-Box-Token": auth(token) } });
 }
 
-// SSE subscription; EventSource resumes with Last-Event-ID by itself. Returns close().
-export function subscribe(gateway: string, id: string, token: Token, onEvent: (e: GatewayEvent) => void, onBroken: () => void): () => void {
+// Push the lease to `until` (unix s). The gateway clamps it to the status's ceiling; the returned status says where it landed.
+export async function extendSession(gateway: string, id: string, token: Token, until: number): Promise<Status> {
+  const body = await call(`${gateway}/sessions/${encodeURIComponent(id)}/extend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Box-Token": auth(token) },
+    body: JSON.stringify({ until }),
+  });
+  return isRecord(body) ? parseStatus(body["status"]) : fail("{status}", body);
+}
+
+// SSE subscription; EventSource resumes with Last-Event-ID by itself. Returns close(). onBadEvent: an event this
+// page can't parse (a GatewayError); the stream is closed first, since what follows can't be trusted either.
+export function subscribe(
+  gateway: string, id: string, token: Token, onEvent: (e: GatewayEvent) => void, onBroken: () => void, onBadEvent: (e: GatewayError) => void,
+): () => void {
   const source = new EventSource(`${gateway}/sessions/${encodeURIComponent(id)}/events?token=${encodeURIComponent(auth(token))}`);
-  source.onmessage = (m) => { onEvent(parseEvent(JSON.parse(String(m.data)))); };
+  source.onmessage = (m) => {
+    let event: GatewayEvent;
+    try {
+      event = parseEvent(JSON.parse(String(m.data)));
+    } catch (e) {
+      source.close();
+      onBadEvent(e instanceof GatewayError ? e : new GatewayError(`gateway: an event that is not JSON: ${String(m.data).slice(0, 300)}`, { cause: e }));
+      return;
+    }
+    onEvent(event);
+  };
   source.onerror = () => { if (source.readyState === EventSource.CLOSED) onBroken(); }; // CONNECTING = it retries itself
   return () => { source.close(); };
 }
