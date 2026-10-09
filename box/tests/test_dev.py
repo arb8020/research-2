@@ -292,14 +292,15 @@ def test_a_log_follow_does_not_keep_a_session_from_going_idle(dev: Callable, sca
 
 
 @pytest.mark.needs("shell")
-def test_shell_argv_gives_a_shell_in_cwd_that_keeps_the_session_used(dev: Callable, name: str) -> None:
+def test_shell_gives_a_shell_in_cwd_that_keeps_the_session_used(dev: Callable, name: str) -> None:
     if name != "local":
-        pytest.skip("runs the argv with a pipe for its terminal; `modal shell` wants a real one")
+        pytest.skip("runs the shell with a pipe for its terminal; `modal shell` wants a real one")
     s = dev(ceiling_s=600, idle_timeout_s=8)
     remote(s, f"mkdir -p {s.machine.work}/here")
     before = float(remote(s, f"stat -f %m {s.machine.root}/activity || stat -c %Y {s.machine.root}/activity"))
     time.sleep(1.1)
-    done = subprocess.run(s.shell_argv(cwd=f"{s.machine.work}/here"), input="pwd; exit 3\n", capture_output=True, text=True, timeout=60)
+    shell = s.shell(cwd=f"{s.machine.work}/here")
+    done = subprocess.run(shell.argv, env={**os.environ, **shell.env}, input="pwd; exit 3\n", capture_output=True, text=True, timeout=60)
     assert done.returncode == 3, done.stderr
     assert done.stdout.strip().endswith("/work/here")
     after = float(remote(s, f"stat -f %m {s.machine.root}/activity || stat -c %Y {s.machine.root}/activity"))

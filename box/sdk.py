@@ -95,7 +95,7 @@ class Machine(Protocol):
     def read(self, path: str) -> bytes: ...
     def terminate(self) -> None: ...
     def expose(self, port: int) -> Endpoint: ...
-    def shell_argv(self, cmd: str) -> list[str]: ...
+    def shell(self, cmd: str) -> Shell: ...
     def gone(self) -> bool: ...
 
 
@@ -143,6 +143,12 @@ def snapshot_ref(provider: str, snapshot_id: str) -> str:
     ref = f"{provider}-snapshot:{snapshot_id}"
     assert parse_image(ref) == SnapshotImage(provider, snapshot_id), ref
     return ref
+
+
+@dataclass(frozen=True)
+class Shell:
+    argv: list[str]
+    env: dict[str, str] = field(default_factory=dict, repr=False)
 
 
 @dataclass(frozen=True)
@@ -565,10 +571,10 @@ class Session:
         then = f"exec bash -c {shlex.quote(inner)}"
         return self.machine.stream(self._keepalive(then, until=time.time() + timeout_s), timeout_s=timeout_s, quiet_s=quiet_s, pty=pty)
 
-    def shell_argv(self, cwd: str | None = None) -> list[str]:
+    def shell(self, cwd: str | None = None) -> Shell:
         running = self._running_now()
         start = f"cd {shlex.quote(cwd)} && " if cwd else ""
-        return self.machine.shell_argv(self._keepalive(f"{start}exec bash -l", until=running.lease.ceiling))
+        return self.machine.shell(self._keepalive(f"{start}exec bash -l", until=running.lease.ceiling))
 
     def sync(self, repo: str | Path, *, paths: tuple[str, ...] = (), force: bool = False) -> Synced:
         from box import gitsync
@@ -942,7 +948,7 @@ class Lost:
     def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Stream:
         raise Gone(f"{self.id}: gone (known from its record)")
 
-    def shell_argv(self, cmd: str) -> list[str]:
+    def shell(self, cmd: str) -> Shell:
         raise Gone(f"{self.id}: gone (known from its record)")
 
     def write(self, path: str, data: bytes) -> None:
