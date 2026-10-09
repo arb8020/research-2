@@ -1,40 +1,48 @@
 """The supervisor: the first process on every box. Stdlib only; providers copy this file onto the
-box and run it as the entrypoint. It holds the session, runs jobs one at a time, and ends the box.
+box (ROOT/supervisor.py) and run it as the entrypoint. It holds the session, runs jobs one at a
+time, and ends the box.
 
 Everything goes through files under ROOT (no sockets), so a client only needs the provider's exec:
 
-    ROOT/session.json           supervisor writes it first: {started_at, deadline_at} (unix times, this clock)
-    ROOT/lease                  client touches it to hold the session (mtime = last heartbeat)
-    ROOT/released               client wrote it: stop checking the lease; end when no job is left
+    ROOT/supervisor.py          this file; a client changes the lease with `python3 ROOT/supervisor.py lease ...`
+    ROOT/session.json           supervisor writes it first: {started_at, created_at, ceiling} (unix times)
+    ROOT/lease.json             {until, ceiling, released}: the session ends at until (<= ceiling). The
+                                supervisor writes the first one; after that only `lease` changes it
+    ROOT/lease-audit.json       every change of the lease: [{op, until, at, host, pid, n}] (debugging only)
+    ROOT/up                     supervisor writes it last at start: a client takes it as "the supervisor is up"
     ROOT/stop                   client wrote it: kill any job, run its hook, end
-    ROOT/jobs/<id>/spec.json    client writes it (atomically) to queue a job: {cmd, on_exit, hook_budget_s, env}
+    ROOT/jobs/<id>/spec.json    client writes it (atomically) to queue a job: {cmd, on_exit, hook_budget_s, max_duration_s, env}
     ROOT/jobs/<id>/stdout       \\ the job's output
     ROOT/jobs/<id>/stderr       /
     ROOT/jobs/<id>/status.json  supervisor writes it: {state, reason, exit_code, hook_exit_code, started, ended}
     ROOT/jobs/<id>/kill         client wrote it: kill the job (its hook runs), the session goes on
-    ROOT/services/<id>/...      a service: spec.json {cmd, env}, then as a job (no hook)
+    ROOT/services/<id>/...      a service: spec.json {cmd, env}, then as a job (no hook, no max duration)
     ROOT/watch                  a log follower or job waiter touches it each poll (the machine lingers for it)
-    ROOT/ended.json             supervisor writes it last: {reason}; then it lingers up to LINGER_S
+    ROOT/ended.json             supervisor writes it last: {reason, at}; then it lingers up to LINGER_S
                                 while someone is still reading (see linger)
 
-A session ends on: stop, deadline, lease lost, idle timeout, or (released) no job or service left.
-Idle means no job running and no established TCP connection to an exposed port (--ports): the
-supervisor owns idleness, since a provider's own idle timer (Modal's) sees only connections, never
-work in the box. Whatever ends it, a running job is killed (whole process group) and its on_exit
-hook still runs, inside the time left before the deadline. The job is killed hook_budget_s before
-the deadline for that.
+A session ends at min(lease.until, ceiling) (reason "lease", or "released" if a client released
+it), on stop ("stopped"), or idle timeout ("idle"). Nothing ends it because a client went away:
+the lease is the guarantee. Idle means no job running and no established TCP connection to an
+exposed port (--ports): the supervisor owns idleness, since a provider's own idle timer (Modal's)
+sees only connections, never work in the box. Whatever ends it, a running job is killed (whole
+process group) and its on_exit hook still runs, for up to its hook_budget_s but never past the
+ceiling. A job is killed at min(its start + max_duration_s ("timeout"), the lease's end minus its
+hook_budget_s ("lease")), so its hook fits inside the lease.
 
 A service (ROOT/services/<id>) is a long-lived server, e.g. a Jupyter Server behind an exposed
 port. It starts at once, beside the job queue (never waits for a job, never holds one up), and it
-is not work for idleness: its connections are what count. It keeps a released session alive (it
-is something left), has no hook, and is killed (whole group) when the session ends; its
-status.json says why, as a job's does. A session runs at most MAX_SERVICES: past that a service
-spec ends at once with reason "refused" (the client refuses first; this covers two racing clients).
+is not work for idleness: its connections are what count. It has no hook and no max duration,
+and is killed (whole group) when the session ends; its status.json says why, as a job's does. A
+session runs at most MAX_SERVICES: past that a service spec ends at once with reason "refused"
+(the client refuses first; this covers two racing clients).
 
 With --record DIR (a store mounted on the machine, box/store.py), a Recorder copies the session
 there every FLUSH_S (sooner past FLUSH_BYTES of new output), so it outlives the machine:
 
-    DIR/session.json            as ROOT/session.json, at start
+    DIR/session.json            \\ as under ROOT, at start and whenever they change
+    DIR/lease.json              |
+    DIR/lease-audit.json        /
     DIR/heartbeat.json          every flush: {at, ttl_s}; older than ttl_s, the recorder has stopped
     DIR/jobs/<id>/spec.json     \\ as under ROOT (env: names only), copied when they change;
     DIR/jobs/<id>/status.json   /  services the same, under DIR/services/<id>
@@ -52,6 +60,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import fcntl
 import json
 import os
 import signal
@@ -73,10 +82,14 @@ FLUSH_S = 2.0  # the record lags the machine by at most this (plus a sync)
 FLUSH_BYTES = 256 * 1024  # new output past this flushes sooner
 CHUNK_BYTES = 4 * 1024 * 1024  # one chunk per stream per flush, at most this: more waits (backpressure, never dropped)
 HEARTBEAT_TTL_S = 5 * FLUSH_S  # a reader takes a heartbeat older than this as "the recorder stopped"
-CHUNK_DIGITS = 6  # flushes come at most every TICK_S, so a 24 h session (Modal's cap) has < 2 * 432000 chunks
+MAX_CEILING_S = 48 * 3600  # the longest a session may be asked to live, from its creation
+CHUNK_DIGITS = 7  # flushes come at most every TICK_S: a job over a whole MAX_CEILING_S session has < 2 * 864000 chunks
 MAX_CHUNKS = 10**CHUNK_DIGITS - 1
+assert 2 * MAX_CEILING_S / TICK_S < MAX_CHUNKS, "a chunk number that fits CHUNK_DIGITS for a whole session"
 MAX_SERVICES = 8  # a session's long-lived servers; more is a client bug, not a workload
 KINDS = ("jobs", "services")  # ROOT/<kind>/<id>: what a client queues and what it serves
+LEASE_OPS = ("create", "extend", "release")  # what lease-audit.json records; create is the supervisor's own
+MAX_LEASE_AUDIT = 1024  # entries; a run of one op from one process is one entry (n counts it), so this is runs, not calls
 
 
 # TODO(handoff): if the supervisor itself dies, nothing writes ended.json or runs BOX_ON_SHUTDOWN;
@@ -85,10 +98,16 @@ KINDS = ("jobs", "services")  # ROOT/<kind>/<id>: what a client queues and what 
 # With --record, the record still has everything up to the last flush, and its stale heartbeat plus
 # the machine's absence read as machine_lost (sdk.Record.status).
 def main() -> None:
+    if sys.argv[1:2] == ["lease"]:
+        lease_main(sys.argv[2:])
+        return
     p = argparse.ArgumentParser()
     p.add_argument("--root", required=True)
-    p.add_argument("--deadline-s", type=float, required=True, help="the session's lifetime, from now")
-    p.add_argument("--lease-ttl-s", type=float, default=60.0, help="lost if not touched for this long")
+    p.add_argument("--created-at", type=float, required=True, help="unix time the client created the session")
+    p.add_argument("--lease-until", type=float, required=True, help="unix time the session's first lease ends")
+    p.add_argument("--ceiling", type=float, required=True, help="unix time no lease can pass")
+    p.add_argument("--host", required=True, help="the creating client's host, for the lease audit")
+    p.add_argument("--pid", type=int, required=True, help="the creating client's pid, for the lease audit")
     p.add_argument("--idle-timeout-s", type=float, default=0.0, help="end after this long with no job and no connection; 0 = never")
     p.add_argument("--ports", type=lambda s: [int(p) for p in s.split(",") if p], default=[], help="exposed ports, comma-separated")
     p.add_argument("--record", default="", help="record the session into this directory (a mounted store), relative to --root")
@@ -98,63 +117,145 @@ def main() -> None:
         help="bash run last, to end the machine itself (a provider sets BOX_ON_SHUTDOWN, e.g. its API's delete)",
     )  # fmt: skip
     a = p.parse_args()
+    # pair of sdk.create's assertions: the times it parsed the caller's durations into
+    assert a.created_at < a.lease_until, (a.created_at, a.lease_until)
+    assert a.lease_until <= a.ceiling, (a.lease_until, a.ceiling)
+    assert a.ceiling <= a.created_at + MAX_CEILING_S, (a.created_at, a.ceiling)
     root = Path(a.root)
     for kind in KINDS:
         (root / kind).mkdir(parents=True, exist_ok=True)
-    started_at = time.time()
-    write_json(root / "session.json", {"started_at": started_at, "deadline_at": started_at + a.deadline_s})
+    write_json(root / "session.json", {"started_at": time.time(), "created_at": a.created_at, "ceiling": a.ceiling})
+    write_json(root / "lease.json", {"until": a.lease_until, "ceiling": a.ceiling, "released": False})
+    write_json(root / "lease-audit.json", [audit_entry("create", a.lease_until, a.created_at, a.host, a.pid)])
     recorder = Recorder(root, root / a.record, sync=a.record_sync) if a.record else None
-    if recorder:
-        recorder.start()  # the record has session.json before anyone is told the supervisor is up
-    (root / "lease").touch()  # last: a client takes the lease as "the supervisor is up"
-    reason = supervise(root, time.monotonic() + a.deadline_s, a.lease_ttl_s, a.idle_timeout_s, a.ports)
-    ended = {"reason": reason, "at": time.time()}
-    if recorder:
-        recorder.finish(ended)  # first: a closer terminates the machine once it reads ROOT/ended.json
+    try:
+        if recorder:
+            recorder.start()  # the record has session.json and the lease before anyone is told the supervisor is up
+        (root / "up").touch()  # last: a client takes it as "the supervisor is up"
+        reason = supervise(root, a.idle_timeout_s, a.ports)
+        ended = {"reason": reason, "at": time.time()}
+        if recorder:
+            recorder.finish(ended)  # first: a closer terminates the machine once it reads ROOT/ended.json
+    finally:
+        if recorder:
+            recorder.close()  # its owner joins it, even if supervise() crashed (else this process never exits)
     write_json(root / "ended.json", ended)
-    linger(root, reason, a.lease_ttl_s)
+    linger(root)
     if a.on_shutdown:
         subprocess.run(["bash", "-c", a.on_shutdown], check=False)
 
 
-def linger(root: Path, reason: str, lease_ttl_s: float) -> None:
-    """Keep the machine up to LINGER_S after the session ended, while someone is still reading:
-    the holder (lease fresh) after an end it did not ask for (deadline, idle), or a follower of the
-    logs or a waiter on a job (ROOT/watch touched within WATCH_TTL_S) after any end. A closer
-    does not wait this out: it terminates the machine once ended.json exists."""
+# ---- the lease ----
+
+
+def lease_main(argv: list[str]) -> None:
+    """`python3 ROOT/supervisor.py lease --root ROOT --op extend|release --until T --host H --pid P`:
+    a client's change to the lease, in one exec. Prints the lease after it (lease.json's shape)."""
+    p = argparse.ArgumentParser(prog="supervisor.py lease")
+    p.add_argument("--root", required=True)
+    p.add_argument("--op", choices=("extend", "release"), required=True)
+    p.add_argument("--until", type=float, required=True, help="extend: unix time asked for; release: ignored")
+    p.add_argument("--host", required=True)
+    p.add_argument("--pid", type=int, required=True)
+    a = p.parse_args(argv)
+    print(json.dumps(change_lease(Path(a.root), a.op, a.until, a.host, a.pid)))
+
+
+def change_lease(root: Path, op: str, until: float, host: str, pid: int) -> dict:
+    """Apply op to ROOT/lease.json under a lock (two clients extending at once never lose one), and
+    audit it if it changed anything. The clock is this machine's: the one the supervisor ends by."""
+    with (root / "lease.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)  # released when the file closes
+        lease = read_lease(root)
+        now = time.time()
+        changed = next_lease(lease, op, until, now)
+        if changed != lease:
+            write_json(root / "lease.json", changed)
+            audit = json.loads((root / "lease-audit.json").read_text())
+            write_json(root / "lease-audit.json", next_audit(audit, audit_entry(op, changed["until"], now, host, pid)))
+    return changed
+
+
+def next_lease(lease: dict, op: str, until: float, now: float) -> dict:
+    """The lease after op, at now. extend clamps to the ceiling and never shortens: a shorter ask is
+    a no-op, as SF Compute's "a shorter re-ask never cuts a hold". release ends it now. A lease that
+    has run out (or was released) stays over: the session ends within a TICK_S, nothing revives it."""
+    assert op in ("extend", "release"), op
+    assert lease["until"] <= lease["ceiling"], lease
+    if lease["released"] or lease["until"] <= now:
+        return lease
+    if op == "release":
+        return {**lease, "until": now, "released": True}
+    # the clamp is the contract (the caller reads what it got from the returned lease), not a fallback
+    extended = {**lease, "until": max(lease["until"], min(until, lease["ceiling"]))}
+    assert extended["until"] >= lease["until"], (lease, extended)
+    assert extended["until"] <= lease["ceiling"], (lease, extended)
+    return extended
+
+
+def audit_entry(op: str, until: float, at: float, host: str, pid: int) -> dict:
+    assert op in LEASE_OPS, op
+    return {"op": op, "until": until, "at": at, "host": host, "pid": pid, "n": 1}
+
+
+def next_audit(audit: list[dict], entry: dict) -> list[dict]:
+    """audit plus entry. A run of the same op from the same process (keep()'s renewals) is one entry
+    whose n counts it, so the audit stays small. Past MAX_LEASE_AUDIT entries the change is refused
+    (a data limit: the lease still ends when it says, and the caller hears why)."""
+    last = audit[-1] if audit else None
+    if last is not None and (last["op"], last["host"], last["pid"]) == (entry["op"], entry["host"], entry["pid"]):
+        return [*audit[:-1], {**entry, "n": last["n"] + 1}]
+    if len(audit) >= MAX_LEASE_AUDIT:
+        raise RuntimeError(f"lease audit full ({MAX_LEASE_AUDIT} entries): refusing {entry['op']}")
+    return [*audit, entry]
+
+
+def read_lease(root: Path) -> dict:
+    """ROOT/lease.json, parsed: {until, ceiling, released}, until <= ceiling."""
+    raw = json.loads((root / "lease.json").read_text())
+    lease = {"until": float(raw["until"]), "ceiling": float(raw["ceiling"]), "released": bool(raw["released"])}
+    if lease["until"] > lease["ceiling"]:
+        raise ValueError(f"{root}/lease.json: until {lease['until']} past ceiling {lease['ceiling']}")
+    return lease
+
+
+def lease_end(lease: dict) -> tuple[float, str]:
+    """When the lease ends the session, and the reason it will give."""
+    return min(lease["until"], lease["ceiling"]), "released" if lease["released"] else "lease"
+
+
+# ---- the session ----
+
+
+def linger(root: Path) -> None:
+    """Keep the machine up to LINGER_S after the session ended, while a follower of the logs or a
+    waiter on a job is still reading (ROOT/watch touched within WATCH_TTL_S). A closer does not
+    wait this out: it terminates the machine once ended.json exists."""
 
     def reading() -> bool:
-        holder = reason in ("deadline", "idle") and not lease_lost(root, lease_ttl_s)
         watch = root / "watch"
-        return holder or (watch.exists() and time.time() - watch.stat().st_mtime < WATCH_TTL_S)
+        return watch.exists() and time.time() - watch.stat().st_mtime < WATCH_TTL_S
 
     until = time.monotonic() + LINGER_S
     while time.monotonic() < until and reading():
         time.sleep(TICK_S)
 
 
-def supervise(root: Path, deadline: float, lease_ttl_s: float, idle_timeout_s: float, ports: list[int]) -> str:
+def supervise(root: Path, idle_timeout_s: float, ports: list[int]) -> str:
     """Run jobs one at a time (services beside them) until the session ends; returns why it ended."""
     done: set[str] = set()
     services: dict[Path, subprocess.Popen] = {}  # every service started, running or not
-    end = None
     idle_since = time.monotonic()
-    while end is None:
+    while (end := session_end(root, idle_timeout_s, idle_since)) is None:  # bounded: the lease ends by the ceiling
         tend_services(root, services)
-        now = time.monotonic()
         if idle_timeout_s and ports and connected(ports):
-            idle_since = now  # someone is using an exposed port: not idle
-        if (end := session_end(root, now, deadline, lease_ttl_s, idle_timeout_s, idle_since)) is not None:
-            break
+            idle_since = time.monotonic()  # someone is using an exposed port: not idle
         job_dir = next_job(root, done)
         if job_dir is None:
-            if (root / "released").exists() and all(child.poll() is not None for child in services.values()):
-                end = "released"
-                break
             time.sleep(TICK_S)
             continue
         done.add(job_dir.name)
-        end = run_job(root, job_dir, deadline, lease_ttl_s, lambda: tend_services(root, services))
+        run_job(root, job_dir, lambda: tend_services(root, services))
         idle_since = time.monotonic()
     stop_services(services, end)
     return end
@@ -200,22 +301,15 @@ def service_state(job_dir: Path) -> str:
     return json.loads((job_dir / "status.json").read_text())["state"]
 
 
-def session_end(root: Path, now: float, deadline: float, lease_ttl_s: float, idle_timeout_s: float, idle_since: float) -> str | None:
+def session_end(root: Path, idle_timeout_s: float, idle_since: float) -> str | None:
     if (root / "stop").exists():
         return "stopped"
-    if now >= deadline:
-        return "deadline"
-    if lease_lost(root, lease_ttl_s):
-        return "lease_lost"
-    if idle_timeout_s and now - idle_since >= idle_timeout_s:
+    end_at, reason = lease_end(read_lease(root))
+    if time.time() >= end_at:
+        return reason
+    if idle_timeout_s and time.monotonic() - idle_since >= idle_timeout_s:
         return "idle"
     return None
-
-
-def lease_lost(root: Path, lease_ttl_s: float) -> bool:
-    if (root / "released").exists():
-        return False
-    return time.time() - (root / "lease").stat().st_mtime > lease_ttl_s
 
 
 def connected(ports: list[int]) -> bool:
@@ -242,49 +336,53 @@ def next_job(root: Path, done: set[str]) -> Path | None:
     return min(pending, key=lambda d: (d / "spec.json").stat().st_mtime, default=None)
 
 
-def run_job(root: Path, job_dir: Path, deadline: float, lease_ttl_s: float, tick: Callable[[], None]) -> str | None:
-    """Run one job and its hook, calling tick (services) while it runs. Returns the session's end
-    reason if the session ended meanwhile, else None (the job finished on its own; the session goes on)."""
+def job_end(root: Path, job_dir: Path, killed_at: float, budget: float) -> str | None:
+    """Why the running job must stop now, if it must. killed_at: its start + max_duration_s
+    (monotonic). The lease's end is read each time: an extend moves it, a release brings it to now."""
+    if (root / "stop").exists():
+        return "stopped"
+    end_at, reason = lease_end(read_lease(root))
+    if time.time() >= end_at - budget:
+        return reason  # in time for the hook to finish inside the lease
+    if time.monotonic() >= killed_at:
+        return "timeout"
+    if (job_dir / "kill").exists():
+        return "killed"
+    return None
+
+
+def run_job(root: Path, job_dir: Path, tick: Callable[[], None]) -> None:
+    """Run one job and its hook, calling tick (services) while it runs. The session goes on after
+    it: the main loop sees whatever ended the session (stop, the lease) on its next look."""
     spec = json.loads((job_dir / "spec.json").read_text())
     spec["env"] = {**spec.get("env", {}), "BOX_JOB_ID": job_dir.name, "BOX_JOB_DIR": str(job_dir)}
     budget = float(spec.get("hook_budget_s", 300)) if spec.get("on_exit") else 0.0  # time kept for the hook
+    max_duration_s = float(spec["max_duration_s"])
+    assert 0 < max_duration_s <= MAX_CEILING_S, max_duration_s  # pair of Session.run's check
     child = spawn(spec["cmd"], spec["env"], job_dir, stdout=job_dir / "stdout", stderr=job_dir / "stderr")
+    killed_at = time.monotonic() + max_duration_s
     status = {"state": "running", "started": time.time(), "pgid": child.pid}
     write_json(job_dir / "status.json", status)
 
-    session_ended = None
-    while (code := child.poll()) is None:
-        now = time.monotonic()
-        if (root / "stop").exists():
-            session_ended = "stopped"
-        elif now >= deadline - budget:
-            session_ended = "deadline"
-        elif lease_lost(root, lease_ttl_s):
-            session_ended = "lease_lost"
-        elif (job_dir / "kill").exists():
-            kill_group(child)
-            code, reason = child.returncode, "killed"
-            break
-        if session_ended:
+    reason = None
+    while (code := child.poll()) is None:  # bounded: killed_at, and the lease ends by the ceiling
+        if (reason := job_end(root, job_dir, killed_at, budget)) is not None:
             kill_group(child)
             code = child.returncode
             break
         tick()
         time.sleep(TICK_S)
-    else:
-        reason = "exited"
-    if session_ended:
-        reason = session_ended
+    reason = reason or "exited"
 
     status.update(state="hook" if spec.get("on_exit") else "done", reason=reason, exit_code=code, ended=time.time())
     write_json(job_dir / "status.json", status)
     if spec.get("on_exit"):
         env = {**spec["env"], "BOX_EXIT_CODE": str(code), "BOX_REASON": reason}
-        timeout = max(0.0, min(budget, deadline - time.monotonic()))
+        # the ceiling, not the lease: a release (until = now) still leaves a stopped job its hook
+        timeout = max(0.0, min(budget, read_lease(root)["ceiling"] - time.time()))
         status["hook_exit_code"] = run_hook(spec["on_exit"], env, job_dir, timeout)
         status["state"] = "done"
         write_json(job_dir / "status.json", status)
-    return session_ended
 
 
 def spawn(cmd: str, env: dict[str, str], job_dir: Path, *, stdout: Path, stderr: Path) -> subprocess.Popen:
@@ -337,7 +435,9 @@ def recorded_spec(raw: bytes) -> bytes:
 class Recorder:
     """Copies the session under root into dest (a store mounted on the machine) every FLUSH_S, on
     its own thread, so the session outlives the machine (layout: module docstring). main owns it:
-    start() before the lease, finish() before ROOT/ended.json. A recording that fails (the store
+    start() before ROOT/up, finish() before ROOT/ended.json, and close() (joins the thread) on any
+    way out, a crash included: the thread is not a daemon, so an unjoined one would keep the
+    supervisor from ever exiting. A recording that fails (the store
     unreachable, disk full) is reported on stderr and stops; the session goes on (fail-open: the
     job is the point), and readers see the heartbeat go stale."""
 
@@ -349,16 +449,22 @@ class Recorder:
         self.chunks: dict[str, int] = {}  # "<kind>/<id>" -> chunks written (numbered from 1)
         self.copied: dict[str, bytes] = {}  # rel path -> what was last copied there
         self.stop = threading.Event()
-        self.thread = threading.Thread(target=self.run, daemon=True, name="box-recorder")
+        self.thread = threading.Thread(target=self.run, daemon=False, name="box-recorder")  # owned: main joins it
 
     def start(self) -> None:
         self.dest.mkdir(parents=True, exist_ok=True)
         self.flush(final=False)  # session.json + a first heartbeat, synced
         self.thread.start()
 
-    def finish(self, ended: dict) -> None:
+    def close(self) -> None:
+        """Stop the thread and join it (idempotent)."""
         self.stop.set()
-        self.thread.join()
+        if self.thread.is_alive():
+            self.thread.join()
+        assert not self.thread.is_alive()
+
+    def finish(self, ended: dict) -> None:
+        self.close()
         try:
             self.flush(final=True)
             put(self.dest / "ended.json", json.dumps(ended).encode())
@@ -381,7 +487,8 @@ class Recorder:
     def flush(self, *, final: bool) -> None:
         """Everything new since the last flush, then the heartbeat, then a sync. final: drain all
         output (the session has ended, nothing is written any more)."""
-        self.copy("session.json", (self.root / "session.json").read_bytes())
+        for name in ("session.json", "lease.json", "lease-audit.json"):  # the lease: as often as it changes
+            self.copy(name, (self.root / name).read_bytes())
         for job_dir in self.job_dirs():
             self.flush_job(job_dir, final=final)
         put(self.dest / "heartbeat.json", json.dumps({"at": time.time(), "ttl_s": HEARTBEAT_TTL_S}).encode())
@@ -458,7 +565,7 @@ def put(path: Path, data: bytes) -> None:
     tmp.replace(path)
 
 
-def write_json(path: Path, data: dict) -> None:
+def write_json(path: Path, data: dict | list) -> None:
     """Atomically: readers never see half a file."""
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data))
