@@ -21,8 +21,10 @@ Start here for the next session. The plan of record is `blogs/engine/00-plan.md`
 | `worktree-agent-a7fdb11404b864483` | `box dev` (held Modal A100, git sync, streamed runs, ports) | done, verified live; someone else is merging the box work |
 | `worktree-agent-aad0b243b3c6f22cd` | `box --provider colab` | done; needs the user's live smoke run (`box/tests/smoke_colab`) |
 | `spike/workspace-cells` | spike of the workspace-cell uncertainties | done: see "spike findings" below |
-| `engine/ch01-forward` | gpt2 torch functional forward + HF measurement harness (planted bugs) under `ref/ch01/` | running at time of writing |
-| `engine/ch01-harness` | chapter 1 correctness machinery under `ref/ch01/harness/`: `@op` registry, case generator, coverage check, fp64 budget + logprob checks, isolation runner, `run_checks` | running at time of writing; merge with `engine/ch01-forward` after both land |
+| `engine/ch01-forward` (`.claude/worktrees/agent-a27cc2b04f8fb4c70`) | gpt2 torch functional forward (`ref/ch01/gpt2.py`, 136 lines) + measurement harness (`measure/`, `RESULTS.md`: fp32, bf16, planted bugs, per-layer) | done |
+| `engine/ch01-harness` (`.claude/worktrees/agent-a43b8eed00c64ea96`) | `ref/ch01/harness/`: `@op` registry (jaxtyping named dims), case generator, coverage check, fp64 budget + greedy top-k, isolated child, records, `run_checks ch1 [--selftest]`; 9 planted bugs + 8 cheats all caught | done; merge with ch01-forward; plug the real forward in (one-line adapter); check it passes budget + KL at long prompts (it's 4e-3 vs HF there) |
+| `blogs/workspace-cells` (`.claude/worktrees/agent-ae617ce64fed7b39d`) | workspace-backed cells slice: toy `ch00` (C++ ring + loop, Python budget), `ref.py`, `ws.py`, `<ws-cell>`, Contents API, job mode, error links, bundle persistence, `verify_workspace.py` (local + `--modal`) | done, re-verified locally; `ws.py advance` (splice) stubbed; relay side in `notes/kernel-toolchain.patch` (toolchain line + Volume mount + `$BLOGS_WS_PERSIST`) |
+| `blogs/verify-skill` (`.claude/worktrees/agent-ae6dbcfc78563525c`) | `blogs/.claude/skills/verify-blogs/` (`vb` launch / doctor / drive / cleanup; 6 features: build, plan, cells, embeds, links, connect) | done, end-to-end run passed; possible product bug: flappy's play iframe takes focus at load (Escape goes to the game) |
 
 ## spike findings
 
@@ -60,6 +62,11 @@ Spike branch `spike/workspace-cells` (worktree `.claude/worktrees/agent-ab43b364
 4. **compression pass on `box` code** (after the box team's merges of `box dev` + the Colab provider land): the box team already found `box dev` partially duplicating code paths; dedupe it
 5. chapter 1 page: cells over the workspace, checks via `run_checks ch1`
 6. kernel image toolchain line (patch from the workspace-cells branch; box gateway `kernel.Dockerfile`), then chapter 5's engine
+
+## proposed, not yet decided
+
+- cache keys are recipe (Nix-style) with comment-insensitive code fingerprints; Bazel-style early cutoff for grades off at first
+- zero JIT at runtime: the certification sweep compiles every specialization / autotune config / graph capture once; compile caches (Triton, inductor, FlashInfer, DeepGEMM, extension .so) keyed by code fp + GPU arch + toolchain + versions; autotune pinned from certification records; a "no JIT after warmup" health check (Triton compiles, dynamo recompiles, FlashInfer builds count as failures); runtime-varying ints (sequence lengths) marked `do_not_specialize` or passed as tensors. Belongs in chapters 8 and 12
 
 ## open
 
