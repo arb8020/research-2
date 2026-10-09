@@ -1,3 +1,5 @@
 vendor/raylib-*/
 dist/
 .session/
+web/build/
+web/node_modules/
