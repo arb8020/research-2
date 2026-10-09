@@ -12,6 +12,8 @@ motivation: get the forward pass working
 
 desc:
 - torch functional forward + full-recompute `generate()`
+- introduces the correctness machinery the whole series reuses: a reference, per-dtype tolerances, a shape / input sweep, and planted bugs (wrong attention scale, missing final layernorm, exact vs tanh GELU, causal mask off by one) showing which checks catch which
+- the reader *uses* the machinery (given), and doesn't write it, for now; revisit later
 
 check:
 - logits within tolerance of the HuggingFace reference on fixed prompts, fp32 on CPU (~1e-4 to 1e-3)
