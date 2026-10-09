@@ -3,10 +3,18 @@
 Branch `blogs/flappy`, worktree `worktrees/blogs-flappy`. The page-builder spike is merged in.
 
 ## Next session
-1. **`cell=policy`.** The prose slots just before it are "can something autonomous play this?" and "a policy network, obs in, action probabilities out". Deriving the policy gradient comes later, before `cell=loss`. Order: policy → sample → logprob → loss → train, each with a check already written (validated against a throwaway reference). Stubs and solutions are the author's to write; `check=policy` pins the API: `init_policy(obs_dim, n_actions, hidden, seed) -> dict[str, Tensor]` and `policy_probs(params, obs) -> (N, n_actions)`. Same mode as `puf_step`: the author drives, Claude asks questions one line at a time and doesn't hand over answers.
-2. **Build split** is on branch `blogs/build-split` (worktree `worktrees/blogs-build-split`), done by a background agent started 2026-10-08. Check its commit and report (mutant table, judgement calls) before merging into `blogs/flappy`. If the agent died with the session, its branch shows how far it got.
-3. **`puf_step` is done.** The reference is the author's version, the stub is a todo with pre-filled entry checks, and the concepts it took are in git history (e112f513..0d43ff80).
-4. **Hint ladder:** probably dropped for flappy (see Decisions). Confirm with the author.
+1. **Embedding things in the prose (the author's next ask).** The author finds the opening prose too dense before the first code or diagram, and plans to add paragraphs himself. The open question is *how to usefully embed things*: diagrams (agent -> action -> env -> reward/obs), more play/watch widgets, colour-coded equations (Migdal's KaTeX `\htmlClass`, see notes/research/inspiration), sidenotes. Start by interviewing the author on what he wants to embed and where. Then he writes prose for the later sections (policy -> sample -> logprob -> loss/derivation -> train).
+2. **Merge `blogs/build-split`** (worktree `worktrees/blogs-build-split`; commits 7dc24844 + 2c6a92d5 `mutants.sh`). It has been reviewed in summary only, not merged. It branches from e58176d8, so expect conflicts in `rl/01-flappy.md` (its `budget=flappy` block vs the later stub pre-fill) and `HANDOFF.md`. After merging, run `./mutants.sh`, `check.py`, `build_web.py --diff` and `verify_page.py`. Note that its `build_page.py` adds `budget=` to the hidden roles, and this branch's `build_page.py` has since changed (data-not-typeset, new assets).
+3. **`cell=policy`.** Prose slots before it: "can something autonomous play this?" and "a policy network". Order: policy -> sample -> logprob -> loss -> train, each with a check already written. `check=policy` pins `init_policy(obs_dim, n_actions, hidden, seed) -> dict[str, Tensor]` and `policy_probs(params, obs)`. Same mode as `puf_step`: the author drives, Claude asks one line at a time.
+4. **Small open items.** Should drafts in locked or unpassed cells survive a reload (open question 5; more visible now that locked cells are editable)? Commit the `notes/research/media/` keyframes and tweet text without the 5.5 MB mp4? Hints: probably just a "show solution" button (unconfirmed).
+
+## Page (2026-10-08)
+- Prose uses shadcn's `typeset.css` (vendored verbatim, MIT, `web/typeset.css`), driven by `--font-body --font-mono --size --leading --flow --measure`. Cells, the widget and todo boxes opt out with `data-not-typeset`.
+- `web/settings.js` holds the corner controls. Light/dark is Lea Verou's two-state toggle (`~/dotfiles/docs/raw/frontend/raw/lea_verou_dark_mode_toggles.md`). The Aa panel (theme classic/paper, fonts, size, leading, flow, measure, Shuffle, Reset) is open to readers on purpose, with no dev/reader split for now. Settings are saved in localStorage and applied before first paint.
+- `page.css` tokens are scheme x theme. `paper` is ported from `observe/dashboard/src/theme.css` (loom's skin). A shared personal tokens/components library (shadcn registry) is deferred, with a comment at the top of `page.css`.
+- The editor has CSS-variable syntax colours (`.tok-*`) and a per-page vim toggle (`@replit/codemirror-vim`). Locked cells disable Run only. Arrow keys don't scroll the page from the play iframe.
+- `uv run --with playwright a11y.py`: axe lint over every theme x scheme. All four are clean.
+- References: `~/dotfiles/docs/raw/frontend/raw/shadcn_typeset.md` and `notes/research/media/` (typeset tweet video + keyframes, uncommitted).
 
 ## Run it
 ```
