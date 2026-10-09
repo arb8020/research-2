@@ -7,7 +7,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-10-01T06:13:28.227234Z"
+exclude-newer = "2026-10-01T19:14:38.742299Z"
 exclude-newer-span = "P8D"
 
 [[package]]
@@ -297,6 +297,7 @@ name = "box"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "modal" },
     { name = "requests" },
     { name = "research" },
@@ -312,6 +313,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4.5" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = "~=7.1" },
     { name = "jupyter-server", marker = "extra == 'dev'", specifier = "~=2.17" },
     { name = "modal", specifier = ">=1.5" },
