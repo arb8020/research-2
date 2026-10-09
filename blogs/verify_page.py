@@ -1,4 +1,4 @@
-"""Drive the built page in headless Chromium against a running session; write screenshots/page-builder/.
+"""Drive the built page in headless Chromium against a running session; write .evidence/verify_page/ (gitignored).
 
     uv run session.py rl/01-flappy.md --timeout 20      # in one tmux pane
     python3 -m http.server 8010 -d dist                # in another
@@ -23,7 +23,7 @@ from playwright.sync_api import Locator, sync_playwright
 from check import parse
 
 HERE = Path(__file__).parent
-SHOTS = HERE / "screenshots" / "page-builder"
+SHOTS = HERE / ".evidence" / "verify_page"
 PAGE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8010/01-flappy/"
 CHROME = sorted(glob.glob(os.path.expanduser(
     "~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")))[-1]  # fmt: skip
