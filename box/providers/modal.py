@@ -188,7 +188,10 @@ class ModalMachine:
             return rc, out, err
 
         rc, out, err = self._live(run)
-        if (rc is None or rc == -1) and self._ends():  # Modal's code for an exec it killed
+        # None, -1: Modal's code for an exec it killed. 137: an exec in a sandbox mid-death (seen live
+        # after `kill -9 1`: "FetchSpec failed: loading container: file does not exist"). box's own
+        # execs never exit 137 on a live sandbox, so the ENDING_S wait that rules it out is rare.
+        if rc in (None, -1, 137) and self._ends():
             raise Gone(f"{self.id}: sandbox ended (exit {self.sandbox.returncode}) under `{cmd}`")
         return rc, out, err
 
@@ -254,6 +257,14 @@ class ModalMachine:
         """Idempotent: terminating an ended sandbox is a no-op on Modal."""
         with contextlib.suppress(modal.exception.NotFoundError):
             self.sandbox.terminate()
+
+    def gone(self) -> bool:
+        """Modal has a return code for the sandbox (poll(): it has finished, by exiting or by
+        terminate), or no longer knows it (NotFoundError, as Gone). Bounded as every call is (_live)."""
+        try:
+            return self._live(self.sandbox.poll.aio) is not None
+        except Gone:
+            return True
 
     def expose(self, port: int) -> Endpoint:
         """The port's Modal tunnel (encrypted_ports at create): an open https URL, websockets too.

@@ -264,14 +264,10 @@ def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: boo
     is probed: running means the kernel is reachable, not just the supervisor up)."""
     labels = s.machine.labels
     gpu = labels.get(LABEL_GPU) or None
-    ceiling = float(labels[sdk.LABEL_CEILING])
-    created_at = ceiling - READER_CEILING_S
-    first = sdk.Lease(until=created_at + float(labels[LABEL_LEASE]), ceiling=ceiling)
-    # times only matter while it runs (the pill's uptime, the lease's countdown); before and after, the labels stand in
-    ended = functools.partial(wire, "ended", gpu, created_at, first)
+    ended = ended_wire(labels)
     match s.status():
         case Booting():
-            return wire("booting", gpu, time.time(), first)
+            return wire("booting", gpu, time.time(), first_lease(labels))
         case Running() as running:
             try:
                 return running_status(s, token, running, ready=ready, gpu=gpu, ended=ended)
@@ -281,6 +277,19 @@ def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: boo
                 return ended(reason=REASONS[gone.reason])
         case Ended(reason=reason):
             return ended(reason=REASONS[reason])
+
+
+def first_lease(labels: dict[str, str]) -> sdk.Lease:
+    """The session's lease as created, from its labels."""
+    ceiling = float(labels[sdk.LABEL_CEILING])
+    return sdk.Lease(until=ceiling - READER_CEILING_S + float(labels[LABEL_LEASE]), ceiling=ceiling)
+
+
+def ended_wire(labels: dict[str, str]) -> Callable[..., dict[str, Any]]:
+    """The contract's ended status, but for its reason. Times only matter while it runs (the pill's
+    uptime, the lease's countdown); before and after, the labels stand in."""
+    first = first_lease(labels)
+    return functools.partial(wire, "ended", labels.get(LABEL_GPU) or None, first.ceiling - READER_CEILING_S, first)
 
 
 def running_status(  # noqa: PLR0913 (the session, what the supervisor said, how to say ended)
@@ -551,11 +560,10 @@ class Relay:
                 if rec is None:
                     raise
                 return wire("ended", rec.gpu, rec.created_at, rec.lease, reason="stopped")
-            s.close(timeout_s=CLOSE_TIMEOUT_S)
-            status = machine_status(self.cfg, s, token, ready=False)
-        if status["state"] != "ended":  # close() terminated it, but the provider still answers for it
-            raise RuntimeError(f"{sid}: still {status['state']} after close")
-        return status
+            # the receipt is the answer: the supervisor's end, and Modal's word the sandbox is gone
+            # (else close raises NotGone: a 502, never an "ended" the provider has not confirmed)
+            receipt = s.close(timeout_s=CLOSE_TIMEOUT_S)
+        return ended_wire(s.machine.labels)(reason=REASONS[receipt.ended.reason])
 
     def extend(self, sid: str, token: ModalToken, until: float) -> dict[str, Any]:
         """Move the session's lease to until, clamped to its ceiling, never shorter (sdk
