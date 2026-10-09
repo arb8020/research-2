@@ -560,11 +560,14 @@ class Session:
 
     def wait(self, timeout_s: float | None = None) -> Ended:
         give_up = None if timeout_s is None else time.monotonic() + timeout_s
-        while not (self._watch() or isinstance(status := self.status(), Ended)):  # MUST KILL: `self._watch() or ...` calls a None-returning function inside the loop condition for its side effect; make the touch its own statement
+        while True:
+            self._watch()
+            status = self.status()
+            if isinstance(status, Ended):
+                return status
             if give_up is not None and time.monotonic() > give_up:
                 raise TimeoutError(f"{self.id}: still {status} after {timeout_s:.0f} s")
             time.sleep(POLL_S)
-        return status
 
     def run(  # noqa: PLR0913
         self, cmd: str, *, max_duration_s: float = 1800.0, on_exit: str | None = None, hook_budget_s: float = 300.0,
