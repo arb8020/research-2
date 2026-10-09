@@ -8,6 +8,9 @@ import { syntaxHighlighting } from "@codemirror/language";
 import { classHighlighter } from "@lezer/highlight";
 import { vim } from "@replit/codemirror-vim";
 import { attr, must } from "./dom";
+import { interrupt, kernelState, onKernelState, runCode } from "./connect/kernel";
+import type { RunResult as KernelResult } from "./connect/kernel";
+import "./connect/ui";
 import "./page-link";
 
 // GET {SESSION}/state (session.py): the reader's latest passing source per cell, and per C cell the
@@ -78,6 +81,8 @@ function sessionUrl(): string {
 const SESSION = sessionUrl();
 let state: SessionState = { passed: {}, wasm: {} };
 
+const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g; // eslint-disable-line no-control-regex
+
 const syntax = (lang: string): Extension => (lang === "c" ? cpp() : python());
 
 // Token colours come from page.css (.tok-* classes), so light/dark follow the page's CSS variables.
@@ -107,6 +112,35 @@ async function refresh(): Promise<void> {
   state = parseState(await (await fetch(`${SESSION}/state`)).json());
   document.dispatchEvent(new Event("session-state"));
 }
+
+
+// ---- Where each cell kind runs: the one place to change when a kind moves (e.g. checked cells to the GPU). ----
+
+// POST {SESSION}/run on the local session (session.py): the cell's code plus its hidden checks -> a verdict.
+async function runOnSession(name: string, source: string, onOut: (text: string) => void): Promise<RunResult> {
+  try {
+    const res = await fetch(`${SESSION}/run`, { method: "POST", body: JSON.stringify({ cell: name, source }) });
+    if (!res.ok || res.body === null) throw new Error(`POST /run answered ${String(res.status)}${res.body === null ? " with no body" : ""}`);
+    let result: RunResult | undefined;
+    for await (const text of lines(res.body)) {
+      if (text === "") continue;
+      const line = parseRunLine(JSON.parse(text));
+      if (line.kind === "result") result = line.result;
+      else onOut(line.text);
+    }
+    return result ?? { passed: false, message: "the session stopped before giving a result" };
+  } catch (e) {
+    // fetch and a dropped stream throw TypeError; a malformed line throws from JSON.parse / parseRunLine.
+    const message = e instanceof TypeError ? "session unreachable" : "the session sent a reply the page can't read";
+    onOut(`\n[${message}: ${String(e)}]\n`);
+    return { passed: false, message };
+  }
+}
+
+// The Connect session's Jupyter kernel (connect/kernel.ts): plain code, no checks; stdout and stderr interleave.
+const runOnKernel = (source: string, onOut: (text: string) => void): Promise<KernelResult> => runCode(source, onOut, onOut);
+
+const BACKENDS = { checked: runOnSession, scratch: runOnKernel } as const;
 
 class CodeView extends HTMLElement {
   connectedCallback(): void {
@@ -146,7 +180,7 @@ class CodeCell extends HTMLElement {
       <div class="cell-head"><span>${name} · ${lang}</span>
         <span class="cell-status"></span><button class="vim-toggle" aria-pressed="${String(vimOn)}">vim</button><button class="run">Run</button></div>
       <div class="cell-editor"></div>
-      <pre class="cell-out" hidden></pre>`;
+      <pre class="cell-out" tabindex="0" aria-label="${name} output" hidden></pre>`;
     this.view.setState(EditorState.create({ doc: stub, extensions: [
       vimMode.of(vimOn ? vim() : []), basicSetup, syntax(lang),
       look(`${name} code (${lang})`),
@@ -194,27 +228,10 @@ class CodeCell extends HTMLElement {
     out.className = "cell-out";
     this.status("running…", "");
     button.disabled = true;
-    let result: RunResult | undefined;
-    try {
-      const res = await fetch(`${SESSION}/run`, { method: "POST", body: JSON.stringify({ cell: name, source: this.view.state.doc.toString() }) });
-      if (!res.ok || res.body === null) throw new Error(`POST /run answered ${String(res.status)}${res.body === null ? " with no body" : ""}`);
-      for await (const text of lines(res.body)) {
-        if (text === "") continue;
-        const line = parseRunLine(JSON.parse(text));
-        if (line.kind === "result") {
-          result = line.result;
-        } else {
-          out.textContent += line.text;
-          out.scrollTop = out.scrollHeight;
-        }
-      }
-      result ??= { passed: false, message: "the session stopped before giving a result" };
-    } catch (e) {
-      // fetch and a dropped stream throw TypeError; a malformed line throws from JSON.parse / parseRunLine.
-      const message = e instanceof TypeError ? "session unreachable" : "the session sent a reply the page can't read";
-      out.textContent += `\n[${message}: ${String(e)}]\n`;
-      result = { passed: false, message };
-    }
+    const result = await BACKENDS.checked(name, this.view.state.doc.toString(), (text) => {
+      out.textContent += text;
+      out.scrollTop = out.scrollHeight;
+    });
     out.classList.add(result.passed ? "pass" : "fail");
     const fallback = name in state.passed ? "; later cells keep using your last passing version" : "";
     this.restored = true;
@@ -225,6 +242,75 @@ class CodeCell extends HTMLElement {
   }
 }
 customElements.define("code-cell", CodeCell);
+
+// ```python scratch: an editable cell that runs on the Connect session's kernel. No checks, no gating: it is
+// disabled only while nothing is connected ("Connect to run" opens the Connect panel).
+class ScratchCell extends HTMLElement {
+  readonly view = new EditorView(); // verify_connect.py drives it as `.view`, like code-cell
+  private running = false;
+
+  connectedCallback(): void {
+    const lang = attr(this, "data-lang");
+    const code = must(this, "pre", HTMLPreElement).textContent;
+    this.innerHTML = `
+      <div class="cell-head"><span>scratch · ${lang}</span>
+        <span class="cell-status"></span><button class="connect-to-run" type="button">Connect to run</button>
+        <button class="vim-toggle" aria-pressed="${String(vimOn)}">vim</button><button class="run">Run</button></div>
+      <div class="cell-editor"></div>
+      <pre class="cell-out scratch-out" tabindex="0" aria-label="scratch output" hidden></pre>`;
+    this.view.setState(EditorState.create({ doc: code, extensions: [vimMode.of(vimOn ? vim() : []), basicSetup, syntax(lang), look(`scratch code (${lang})`)] }));
+    must(this, ".cell-editor", HTMLDivElement).append(this.view.dom);
+    this.view.scrollDOM.tabIndex = 0;
+    editors.push(this.view);
+    must(this, ".vim-toggle", HTMLButtonElement).onclick = () => { setVim(!vimOn); };
+    must(this, ".connect-to-run", HTMLButtonElement).onclick = () => { document.dispatchEvent(new Event("connect:open")); };
+    must(this, ".run", HTMLButtonElement).onclick = () => {
+      if (this.running) interrupt().catch((e: unknown) => { this.status(`interrupt failed: ${String(e)}`, "fail"); });
+      else void this.run();
+    };
+    onKernelState(() => { this.gate(); });
+    this.gate();
+  }
+
+  gate(): void {
+    const ready = kernelState() === "idle" || kernelState() === "busy";
+    must(this, ".run", HTMLButtonElement).disabled = !ready && !this.running;
+    must(this, ".connect-to-run", HTMLButtonElement).hidden = ready || this.running;
+    this.classList.toggle("locked", !ready);
+  }
+
+  status(text: string, cls: string): void {
+    const s = must(this, ".cell-status", HTMLSpanElement);
+    s.textContent = text;
+    s.className = `cell-status ${cls}`;
+  }
+
+  async run(): Promise<void> {
+    const out = must(this, ".cell-out", HTMLPreElement);
+    const button = must(this, ".run", HTMLButtonElement);
+    out.hidden = false;
+    out.textContent = "";
+    out.className = "cell-out scratch-out";
+    this.running = true;
+    button.textContent = "Stop";
+    this.status("running…", "");
+    const started = performance.now();
+    const result = await BACKENDS.scratch(this.view.state.doc.toString(), (text) => {
+      out.textContent += text.replace(ANSI, "");
+      out.scrollTop = out.scrollHeight;
+    });
+    const took = `${((performance.now() - started) / 1000).toFixed(2)}s`;
+    this.running = false;
+    button.textContent = "Run";
+    if (result.status === "error") out.textContent += `${out.textContent === "" ? "" : "\n"}${result.traceback}\n`;
+    const [text, cls] = result.status === "ok" ? [`done (${took})`, "pass"]
+      : result.status === "error" ? [`${result.ename}${result.evalue ? `: ${result.evalue}` : ""} (${took})`, "fail"] : [result.reason, "fail"];
+    out.classList.add(cls);
+    this.status(text, cls);
+    this.gate();
+  }
+}
+customElements.define("scratch-cell", ScratchCell);
 
 class EnvPlay extends HTMLElement {
   private url: string | undefined;
