@@ -342,3 +342,11 @@ def test_services_past_the_limit_are_refused_and_the_session_goes_on(launch: Cal
         assert extra.wait() == Ending("refused", None)
         assert isinstance(s.status(), Running)
         assert s.run("echo after").wait() == Ending("exited", 0)
+
+
+def test_a_character_split_across_reads_is_followed_whole(launch: Callable, scale: float) -> None:
+    with launch(deadline_s=600) as s:
+        job = s.run(rf"printf 'caf\xc3'; sleep {2 * scale}; printf '\xa9\n'")  # é = c3 a9, a read in between
+        chunks = list(job.logs(follow=True))
+    assert "".join(c.text for c in chunks) == "café\n"
+    assert chunks[-1].end == (len("café\n".encode()), 0)

@@ -247,3 +247,49 @@ def test_a_body_length_that_is_not_a_byte_count_is_refused(make_relay: Callable[
         with pytest.raises(urllib.error.HTTPError) as e:
             urllib.request.urlopen(req, timeout=30)
         assert e.value.code == 400, bad
+
+
+class Counted:
+    """A provider whose machines note the time of every call made on them."""
+
+    def __init__(self, inner: Local, calls: list[float]) -> None:
+        self.inner, self.calls, self.name = inner, calls, inner.name
+
+    def list(self, labels: dict[str, str] | None = None) -> list:
+        return [CountedMachine(m, self.calls) for m in self.inner.list(labels)]
+
+    def __getattr__(self, attr: str) -> object:
+        return getattr(self.inner, attr)
+
+
+class CountedMachine:
+    def __init__(self, inner: object, calls: list[float]) -> None:
+        self.inner, self.calls = inner, calls
+
+    def __getattr__(self, attr: str) -> object:
+        value = getattr(self.inner, attr)
+        if attr in ("exec", "read", "write", "expose"):
+            self.calls.append(time.monotonic())
+        return value
+
+
+def test_an_idle_event_stream_asks_the_machine_twice_a_poll(tmp_path: Path) -> None:
+    calls: list[float] = []
+    server = relay_on(tmp_path, lambda token: relay.Access(Counted(Local(tmp_path / "machines"), calls), DirStore(tmp_path / "records")))
+    gw = f"http://127.0.0.1:{server.server_address[1]}"
+    sid = create(gw)
+    give_up = time.monotonic() + 60
+    while status(gw, sid)[1]["state"] != "running":  # not a stream: one would poll on after we hang up (until its next ping)
+        assert time.monotonic() < give_up
+        time.sleep(0.5)
+    stream = threading.Thread(target=events, args=(gw, sid, "ended"), daemon=True)
+    stream.start()  # replays the boot from memory, then follows the machine
+    time.sleep(2 * relay.STREAM_POLL_S)  # past its first poll (which also finds the job, the tunnel)
+    window_from = time.monotonic()
+    time.sleep(3 * relay.STREAM_POLL_S)
+    in_window = [t for t in calls if t >= window_from]
+    call(f"{gw}/sessions/{sid}/end", "POST", headers={"X-Box-Token": AUTH})
+    stream.join(timeout=60)
+    server.shutdown()
+    server.server_close()
+    assert len(in_window) <= 2 * 4, f"{len(in_window)} calls in 3 polls"  # the session's status + one read of the log, per poll (4 polls fit)
