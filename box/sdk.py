@@ -436,7 +436,8 @@ class Session:
             raise Refused(f"every_s={every_s}: keep() renews every {MIN_KEEP_EVERY_S} to {MAX_KEEP_EVERY_S} s")
         lease = self.extend(time.time() + 2 * every_s)
         stop = threading.Event()
-        renewer = threading.Thread(target=self._renew, args=(every_s, stop), daemon=False, name=f"box-keep-{self.id}")
+        failed: list[Exception] = []
+        renewer = threading.Thread(target=self._renew, args=(every_s, stop, failed), daemon=False, name=f"box-keep-{self.id}")
         renewer.start()
         try:
             yield lease
@@ -448,16 +449,21 @@ class Session:
             finally:
                 renewer.join()
                 assert not renewer.is_alive()
+        if failed:
+            raise failed[0]
 
-    def _renew(self, every_s: float, stop: threading.Event) -> None:
+    def _renew(self, every_s: float, stop: threading.Event, failed: list[Exception]) -> None:
         while not stop.wait(every_s):
             try:
                 lease = self.extend(time.time() + 2 * every_s)
             except Gone:
                 return
-            except Exception as exc:  # MUST KILL: retries on any Exception (was noqa BLE001); narrow to the exec's transient errors
+            except (Dropped, TimeoutError) as exc:
                 print(f"box: {self.id}: renewing the lease failed, retrying: {exc!r}", file=sys.stderr)
                 continue
+            except Exception as exc:
+                failed.append(exc)
+                raise
             if lease.until <= time.time():
                 return
 

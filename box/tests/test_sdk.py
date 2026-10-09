@@ -221,6 +221,26 @@ def test_keep_holds_a_short_lease_and_releases_on_the_way_out(launch: Callable, 
         s.close()
 
 
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_keep_retries_a_dropped_renewal_and_raises_any_other_failure_on_the_way_out(launch: Callable, monkeypatch: pytest.MonkeyPatch, scale: float) -> None:
+    with launch(ceiling_s=600) as s:
+        extend, calls = s.extend, []
+
+        def renewing(until: float) -> sdk.Lease:
+            calls.append(until)
+            if len(calls) == 2:
+                raise sdk.Dropped("a blip")
+            if len(calls) == 3:
+                raise RuntimeError("not a blip")
+            return extend(until)
+
+        monkeypatch.setattr(s, "extend", renewing)
+        with pytest.raises(RuntimeError, match="not a blip"), s.keep(every_s=0.5):
+            eventually(lambda: len(calls) >= 3, timeout_s=10 * scale)
+        assert len(calls) == 3  # the renewer stopped at the failure
+        assert s.wait(timeout_s=10 * scale) == Ended("released")
+
+
 def test_a_job_past_its_max_duration_times_out_and_its_hook_runs(launch: Callable, scale: float) -> None:
     with launch(ceiling_s=600) as s:
         job = s.run("sleep 999", max_duration_s=1 * scale, on_exit="echo $BOX_REASON > $BOX_JOB_DIR/hook", hook_budget_s=30)
