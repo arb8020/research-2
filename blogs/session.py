@@ -19,6 +19,7 @@ import hashlib
 import json
 import tempfile
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -54,7 +55,7 @@ def main() -> None:
     def load() -> dict:
         return json.loads(state_path.read_text()) if state_path.exists() else {"passed": {}, "wasm": {}}
 
-    def run(cell: str, source: str, emit) -> bool:
+    def run(cell: str, source: str, emit: Callable[[str], None]) -> bool:
         blocks = parse(args.chapter.read_text())
         order = cell_order(blocks)
         state = load()
@@ -72,9 +73,8 @@ def main() -> None:
         wasm = POOL.submit(build_wasm, target, store) if target.lang == "c" else None
         store.mkdir(parents=True, exist_ok=True)
         start = time.perf_counter()
-        with tempfile.TemporaryDirectory() as tmp:
-            if not run_cell(job, order, Path(tmp), cell, stub=True, emit=emit, timeout=args.timeout):
-                return False
+        if not run_cell(job, order, cell, stub=True, emit=emit, timeout=args.timeout):
+            return False
 
         state = load()
         state["passed"][cell] = source
