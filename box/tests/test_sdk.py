@@ -278,3 +278,40 @@ def test_following_a_released_session_sees_its_last_line_and_exit(launch: Callab
     assert "".join(t for _, t in follower.logs(follow=True)) == "last\n"
     assert follower.wait() == Ending("exited", 4)  # still readable: the machine lingers while we read
     eventually(lambda: gone(provider, s), timeout_s=60)
+
+
+def test_a_service_runs_beside_the_queue_and_is_not_work_for_idleness(launch: Callable, scale: float) -> None:
+    port, idle_s = free_port(), 3 * scale
+    s = launch(deadline_s=600, idle_timeout_s=idle_s, ports=(port,))
+    server = s.run(f"exec python3 -m http.server {port}", service=True)
+    job = s.run("echo queued after a service")  # the service never holds the queue up
+    assert job.wait() == Ending("exited", 0)
+    eventually(lambda: fetch(s.expose(port)) is not None, timeout_s=30 * scale)
+    assert (server.status() or {}).get("state") == "running"
+    assert s.wait(timeout_s=20 * idle_s) == Ended("idle")  # nobody connected: idle, though the server still ran
+    assert server.wait() == Ending("idle", -15)  # killed (SIGTERM) when the session ended
+    s.close()
+
+
+def test_a_released_session_lives_while_its_service_does(launch: Callable, provider: Provider, scale: float) -> None:
+    s = launch(deadline_s=600, lease_ttl_s=2 * scale)
+    server = s.run("sleep 999", service=True)
+    eventually(lambda: (server.status() or {}).get("state") == "running", timeout_s=30 * scale)
+    s.release()
+    time.sleep(3 * scale)  # past the lease TTL: released, and a service is something left
+    assert isinstance(s.status(), Running)
+    server.kill()
+    assert server.wait().reason == "killed"
+    eventually(lambda: gone(provider, s), timeout_s=20 * scale)  # nothing left: ends as released
+
+
+def test_a_service_has_no_hook(launch: Callable) -> None:
+    with launch(deadline_s=600) as s, pytest.raises(ValueError, match="no on_exit"):
+        s.run("sleep 1", service=True, on_exit="true")
+
+
+def test_logs_resume_from_byte_offsets(launch: Callable) -> None:
+    with launch(deadline_s=600) as s:
+        job = s.run("printf 'héllo\\n'; printf 'oops\\n' >&2")
+        job.wait()
+        assert list(job.logs(start=(len("hé".encode()), 2))) == [("stdout", "llo\n"), ("stderr", "ps\n")]

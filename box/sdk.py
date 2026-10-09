@@ -301,18 +301,26 @@ class Session:
             time.sleep(POLL_S)
         return status
 
-    def run(self, cmd: str, *, on_exit: str | None = None, hook_budget_s: float = 300.0, env: dict[str, str] | None = None) -> Job:
+    def run(
+        self, cmd: str, *, on_exit: str | None = None, hook_budget_s: float = 300.0, env: dict[str, str] | None = None,
+        service: bool = False,
+    ) -> Job:  # fmt: skip
         """Queue cmd (bash). Jobs run one at a time, in order. on_exit (bash) runs after it ends
         however it ended, with BOX_EXIT_CODE, BOX_REASON, BOX_JOB_DIR set, within hook_budget_s;
-        the job is killed hook_budget_s before the session's deadline to leave the hook that time."""
+        the job is killed hook_budget_s before the session's deadline to leave the hook that time.
+        service=True: a long-lived server (e.g. behind an exposed port) that starts at once beside
+        the queue, is not work for idleness (connections to the ports are), keeps a released
+        session alive, has no hook, and is killed when the session ends. Its Job reads the same."""
         running = self.status()
         if not isinstance(running, Running):
             raise RuntimeError(f"{self.id}: cannot run a job on a session that is {running}")
+        if service and on_exit:
+            raise ValueError("a service has no on_exit hook (it ends with the session)")
         left = running.deadline_at - time.time()
         if on_exit and hook_budget_s >= left:
             raise ValueError(f"hook_budget_s={hook_budget_s} does not fit in the session's {left:.0f} s left")
         job = Job(self, f"{int(time.time())}-{secrets.token_hex(3)}")
-        spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "env": env or {}}
+        spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "env": env or {}, "service": service}
         tmp = self._path(f"jobs/{job.id}.spec.tmp")
         self.machine.write(tmp, json.dumps(spec).encode())
         self._check(f"mkdir -p {job.dir} && mv {tmp} {job.dir}/spec.json")  # atomic: never half a spec
@@ -414,9 +422,11 @@ class Job:
         """Kill this job (its whole process group); its hook runs; the session goes on."""
         self.session._touch(f"jobs/{self.id}/kill")
 
-    def logs(self, *, follow: bool = False) -> Iterator[tuple[str, str]]:
-        """(stream, text) chunks of the job's output from its start; follow=True until it is done."""
-        offsets = {"stdout": 0, "stderr": 0}
+    def logs(self, *, follow: bool = False, start: tuple[int, int] = (0, 0)) -> Iterator[tuple[str, str]]:
+        """(stream, text) chunks of the job's output from byte offsets start (stdout, stderr), the
+        job's start by default; follow=True until it is done. A reader that resumes (a reconnecting
+        browser) passes the bytes it has already seen, so it never re-reads them."""
+        offsets = {"stdout": start[0], "stderr": start[1]}
         while True:
             if follow:
                 self.session._watch()
