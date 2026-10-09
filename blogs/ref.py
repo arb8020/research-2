@@ -10,14 +10,22 @@ Layout (engine/ref/ by default; --root to point elsewhere):
     chNN/files/   every file this chapter adds or changes, as the reference has it (the solution)
     chNN/start/   the reader's starting version of this chapter's cell files (stubs); only cell files
 
-materialize(chN, "solution") stacks ch00..chN's files/ (a later chapter wins). materialize(chN, "start") is the
-solution of chN-1 with chN's files/ and then chN's start/ on top. The cells are listed in the tree itself, in
-checks/chNN.json (cell name, file, check steps), so the sandbox's run_checks and workspace.py read the same list.
+    chNN/STANDALONE  (optional) this chapter stacks on nothing and nothing stacks on it (ch00, the toy)
+
+materialize(chN, "solution") stacks the series' files/ up to chN (a later chapter wins; standalone chapters are left
+out). materialize(chN, "start") is the solution of the chapter before with chN's files/ and then chN's start/ on top.
+The cells are listed in the tree itself, in checks/chNN.json ({name, file, region, ops, cmd}), so workspace.py in the
+sandbox, the page and the check command read the same list. A cell's region names a `# region: <name>` ...
+`# endregion` block in its file (display only: the page scrolls to and highlights it); the build checks it exists.
+
+The check command (cmd[0], e.g. run_checks) is trusted code, not part of the tree: TRUSTED_SRC below is the one place
+that says which directory the page ships as _blogs/checks/ and `verify` runs from.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -29,8 +37,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+import workspace
+
 HERE = Path(__file__).resolve().parent
 REF = HERE / "engine" / "ref"
+# The trusted check code: shipped by the page as _blogs/checks/ (build_page.py), run by workspace.py. A FAKE that
+# speaks the run_checks contract until the real check core lands; then point this at it (its entry must be
+# run_checks.py at the top, or change workspace.COMMANDS).
+TRUSTED_SRC = HERE / "fake_checks"
 CHAPTER = re.compile(r"ch\d{2}")
 MAX_TREE_FILES = 2000  # a chapter tree past this is a mistake (build output copied in?)
 # Fixed identity and dates: the same reference always makes the same commits, so bundles are reproducible.
@@ -53,12 +67,35 @@ Tree = dict[str, File]  # tree-relative POSIX path -> file
 class Cell:
     name: str
     file: str
+    region: str | None
+    ops: tuple[str, ...]
+    cmd: tuple[str, ...]
 
 
 def chapters(root: Path = REF) -> list[str]:
     found = sorted(p.name for p in root.iterdir() if p.is_dir() and CHAPTER.fullmatch(p.name))
     assert found, f"no chNN folders under {root}"
     return found
+
+
+def lineage(chapter: str, root: Path = REF) -> list[str]:
+    """The chapters whose files make up `chapter`'s tree, oldest first: the series up to it, or just itself if it is
+    standalone."""
+    order = chapters(root)
+    assert chapter in order, f"no {chapter} under {root}; chapters are {order}"
+    if (root / chapter / "STANDALONE").exists():
+        return [chapter]
+    return [ch for ch in order[: order.index(chapter) + 1] if not (root / ch / "STANDALONE").exists()]
+
+
+def region_span(text: str, region: str) -> tuple[int, int] | None:
+    """1-based (first, last) lines of `# region: <region>` ... its `# endregion`, or None if either marker is missing."""
+    lines = text.split("\n")
+    starts = [i for i, line in enumerate(lines) if line.strip() == f"# region: {region}"]
+    if len(starts) != 1:
+        return None
+    ends = [i for i in range(starts[0] + 1, len(lines)) if lines[i].strip() == "# endregion"]
+    return (starts[0] + 1, ends[0] + 1) if ends else None
 
 
 def read_layer(folder: Path) -> Tree:
@@ -75,19 +112,21 @@ def cells(tree: Tree, chapter: str) -> list[Cell]:
     assert key in tree, f"{chapter}: the tree has no {key}"
     raw = json.loads(tree[key].data)
     assert raw["chapter"] == chapter, f"{key} says chapter {raw['chapter']!r}"
-    found = [Cell(c["name"], c["file"]) for c in raw["cells"]]
+    found = [Cell(c["name"], c["file"], c["region"], tuple(c["ops"]), tuple(c["cmd"])) for c in raw["cells"]]
     names = [c.name for c in found]
     assert len(names) == len(set(names)), f"{key}: duplicate cell names {names}"
     for c in found:
         assert c.file in tree, f"{key}: cell {c.name}'s file {c.file} is not in the tree"
+        assert c.cmd, f"{key}: cell {c.name} has no cmd"
+        if c.region is not None:
+            span = region_span(tree[c.file].data.decode(), c.region)
+            assert span is not None, f"{key}: cell {c.name}'s region {c.region!r} has no `# region: {c.region}` ... `# endregion` in {c.file}"
     return found
 
 
 def materialize(chapter: str, kind: Kind, root: Path = REF) -> Tree:
-    order = chapters(root)
-    assert chapter in order, f"no {chapter} under {root}; chapters are {order}"
     tree: Tree = {}
-    for ch in order[: order.index(chapter) + 1]:
+    for ch in lineage(chapter, root):
         tree.update(read_layer(root / ch / "files"))
     if kind == "solution":
         return tree
@@ -99,6 +138,7 @@ def materialize(chapter: str, kind: Kind, root: Path = REF) -> Tree:
         assert path in start, f"{chapter}: cell file {path} has no stub in {chapter}/start/"
         assert start[path].data != tree[path].data, f"{chapter}/start/{path} is the solution itself"
     tree.update(start)
+    cells(tree, chapter)  # the start file keeps every region's markers too
     return tree
 
 
@@ -137,8 +177,7 @@ def build_repo(out: Path, root: Path = REF, upto: str | None = None) -> Path:
     assert not out.exists() or not any(out.iterdir()), f"{out} is not empty"
     out.mkdir(parents=True, exist_ok=True)
     git(out, "init", "-q", "-b", "main")
-    order = chapters(root)
-    for ch in order[: order.index(upto) + 1] if upto else order:
+    for ch in lineage(upto, root) if upto else [c for c in chapters(root) if not (root / c / "STANDALONE").exists()]:
         commit_tree(out, materialize(ch, "start", root), f"{ch}: start", f"{ch}/start")
         commit_tree(out, materialize(ch, "solution", root), f"{ch}: solution", f"{ch}/solution")
     return out
@@ -158,23 +197,43 @@ def reader_bundle(chapter: str, out: Path, root: Path = REF) -> Path:
     return out
 
 
+def stage_trusted(out: Path) -> str:
+    """Write the trusted code the page ships into `out` (its _blogs/): workspace.py, TRUSTED_SRC as checks/, and
+    MANIFEST.sha256 over both. Returns the manifest's sha256 (the page passes it to every check)."""
+    assert not (out / "checks").exists(), f"{out}/checks already exists"
+    out.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(HERE / "workspace.py", out / "workspace.py")
+    shutil.copytree(TRUSTED_SRC, out / "checks", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    text = workspace.manifest_lines(out)
+    (out / workspace.TRUST_MANIFEST).write_text(text)
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def run_cell(cell: Cell, tree: Path, trusted: Path) -> int:
+    argv = workspace.command_argv(list(cell.cmd), trusted)
+    return subprocess.run(argv, cwd=tree, capture_output=True, text=True, check=False, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}).returncode
+
+
 def verify(chapter: str, root: Path = REF) -> bool:
-    """The reference passes its own chapter check; each start stub fails its cell's check (else it gives nothing to do)."""
+    """Every cell's check passes on the reference solution, and fails with that cell's start file swapped in (else the
+    stub gives the reader nothing to do). Runs the trusted check code (TRUSTED_SRC), as the sandbox would."""
     ok = True
     with tempfile.TemporaryDirectory() as tmp:
+        trusted = Path(tmp) / "_blogs"
+        stage_trusted(trusted)
+        solution_tree = materialize(chapter, "solution", root)
         solution = Path(tmp) / "solution"
-        write_tree(materialize(chapter, "solution", root), solution)
-        rc = subprocess.run([sys.executable, "run_checks", chapter], cwd=solution, capture_output=True, text=True, check=False)
-        print(f"{chapter} solution: run_checks {chapter} -> exit {rc.returncode}")
-        ok &= rc.returncode == 0
+        write_tree(solution_tree, solution)
         start_tree = materialize(chapter, "start", root)
         for cell in cells(start_tree, chapter):
-            # The stub on its own, on top of the solution: does this cell's check notice?
+            rc = run_cell(cell, solution, trusted)
+            print(f"{chapter} solution: {' '.join(cell.cmd)} -> exit {rc} (want 0)")
+            ok &= rc == 0
             one = Path(tmp) / f"start-{cell.name}"
-            write_tree({**materialize(chapter, "solution", root), cell.file: start_tree[cell.file]}, one)
-            rc = subprocess.run([sys.executable, "run_checks", chapter, cell.name], cwd=one, capture_output=True, text=True, check=False)
-            print(f"{chapter} start stub {cell.file}: run_checks {chapter} {cell.name} -> exit {rc.returncode} (want 1)")
-            ok &= rc.returncode == 1
+            write_tree({**solution_tree, cell.file: start_tree[cell.file]}, one)
+            rc = run_cell(cell, one, trusted)
+            print(f"{chapter} start {cell.file}: {' '.join(cell.cmd)} -> exit {rc} (want 1)")
+            ok &= rc == 1
     return ok
 
 

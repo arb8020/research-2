@@ -4,7 +4,7 @@
 //
 // Output arrives in chunks that split lines anywhere, so only complete lines are linkified (LineBuffer); the tail
 // waits for its newline or the end. Paths match by suffix on a "/" boundary: the sandbox prints absolute paths
-// (/root/_blogs/check/ring.cpp), make prints relative ones (ring.cpp), both mean the workspace's ring.cpp.
+// (/root/_blogs/tree/ring.cpp), make prints relative ones (ring.cpp), both mean the workspace's ring.cpp.
 import { EditorView } from "codemirror";
 
 // file.ext:LINE[:COL] anywhere in a line; only source-ish extensions ("Makefile:22", "0x6020...:1" stay text).

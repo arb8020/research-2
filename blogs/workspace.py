@@ -1,25 +1,36 @@
 """The reader's workspace: a git repo in their sandbox that the page's cells are views onto. Stdlib only: the page
-uploads this file to the sandbox (_blogs/workspace.py) and runs it there; it never runs on the page's server.
+uploads this file to the sandbox (_blogs/workspace.py, with the trusted check code and MANIFEST.sha256) and runs it
+there; it never runs on the page's server.
 
-    python3 _blogs/workspace.py boot ch00 --ref _blogs/ref.bundle    restore the repo from the persisted bundle, or seed it
-                                                              from the chapter's start; prints {created, ms, status}
-    python3 _blogs/workspace.py status ch00                          {chapter, cells: [{name, file, passed, locked, why,
-                                                              draft}], persist}; JSON on stdout
-    python3 _blogs/workspace.py check ch00 ring -- run_checks ch00 ring
-                                                              the latest passing tree + only ring's file -> build +
-                                                              check, streamed; pass -> commit + tag pass/ch00/ring +
-                                                              bundle. Exit 0 pass, 1 fail, 2 refused (locked, busy)
+    python3 _blogs/workspace.py boot ch01 --ref _blogs/ref.bundle    restore the repo from the persisted bundle, or
+                                                                     seed it from the chapter's start; prints
+                                                                     {created, ms, status}
+    python3 _blogs/workspace.py status ch01                          {chapter, head, cells: [{name, file, region, ops,
+                                                                     passed, stale, draft}], persist}; JSON on stdout
+    python3 _blogs/workspace.py check ch01 linear [--trusted SHA256]
+                                                                     verify _blogs/ against MANIFEST.sha256 (and the
+                                                                     manifest against SHA256), then run the cell's
+                                                                     cmd from checks/ch01.json on the passing tree +
+                                                                     the cell's whole working file; its JSON lines and
+                                                                     exit code pass through. 0 pass -> commit + tag
+                                                                     pass/ch01/linear + bundle; 1 fail/blocked; 2
+                                                                     infrastructure or refused (never commits)
     python3 _blogs/workspace.py save                                 bundle the repo into the persist dir now
-    python3 _blogs/workspace.py advance ch00 ch01                    (not yet: splice into the next chapter; see advance())
+    python3 _blogs/workspace.py advance ch00 ch01                    (not yet: splice into the next chapter)
 
 Layout under the root (the cwd: Jupyter's root_dir, where the kernel runs):
 
     workspace/            the repo. HEAD (branch main) is the latest passing tree; the working tree holds the
                           reader's drafts, written by the page through Jupyter's Contents API. The index always
                           equals HEAD: drafts are never staged, a pass commits exactly the bytes it checked.
-    _blogs/check/         where checks build and run: HEAD's tree + the one cell file being checked. Kept between
-                          checks so make only rebuilds what changed.
+    _blogs/workspace.py   this file   } trusted: shipped by the page, listed with their sha256 in
+    _blogs/checks/        check code  } _blogs/MANIFEST.sha256, verified before every check
+    _blogs/tree/          where checks run: HEAD's tree with the cell's file replaced by the reader's working copy
+                          (the whole file, as in the editor). Kept between checks so make only rebuilds what changed.
     _blogs/check.lock     one check at a time
+
+The manifest checks/<chapter>.json (in the repo, read at HEAD) lists the cells: {name, file, region, ops, cmd}. A
+cell's cmd[0] names a trusted command (COMMANDS); it never runs a program from the reader's tree.
 
 Persistence: $BLOGS_WS_PERSIST names a directory that outlives the sandbox (locally any directory; on Modal a
 Volume mount). Every pass writes workspace.bundle there (temp + rename; the previous one is kept as
@@ -30,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import io
 import json
 import os
@@ -44,19 +56,25 @@ from typing import Any
 ROOT = Path.cwd()
 REPO = ROOT / "workspace"
 STATE = ROOT / "_blogs"
-CHECK_TREE = STATE / "check"
+CHECK_TREE = STATE / "tree"
 LOCK = STATE / "check.lock"
+TRUST_MANIFEST = "MANIFEST.sha256"  # in STATE: `<sha256>  <path under _blogs/>` per trusted file
+TRUSTED = ("workspace.py", "checks")  # what the manifest must cover exactly: this file + the check code dir
+# A manifest cmd's argv[0] -> its entry script in the trusted check dir (run with this interpreter: files uploaded
+# through the Contents API are not executable). The one place a new trusted command is named.
+COMMANDS = {"run_checks": "checks/run_checks.py"}
 BRANCH = "main"
 BUNDLE = "workspace.bundle"
 PREV_BUNDLE = "workspace.prev.bundle"
-CHECK_TIMEOUT_S = 300  # run_checks bounds each step itself; this bounds the whole check
+CHECK_TIMEOUT_S = 600  # run_checks bounds each case itself; this bounds the whole check
 MAX_TREE_FILES = 5000
 IDENTITY = ["-c", "user.name=reader", "-c", "user.email=reader@blogs.local", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"]
 KEEP_IN_CHECK_TREE = ("build",)  # build products survive between checks (incremental builds)
+EXIT_PASS, EXIT_FAIL, EXIT_INFRA = 0, 1, 2  # the check command's contract (notes/ch01-design-2026-10-09.md)
 
 
 class Refused(Exception):
-    """The check can't start (cell locked, another check running): exit 2 with this message."""
+    """The check can't start (another check running, trusted code changed, no such cell): exit 2 with this message."""
 
 
 def git(*args: str, cwd: Path = REPO, stdin: bytes | None = None, env: dict[str, str] | None = None) -> bytes:
@@ -76,39 +94,97 @@ def persist_dir() -> Path | None:
 
 
 def say(text: str) -> None:
-    print(f"workspace: {text}", flush=True)
+    """A progress line, in the check command's JSON-lines shape so the page shows it with the check's own logs."""
+    print(json.dumps({"kind": "log", "text": f"workspace: {text}"}), flush=True)
 
 
 def ms(t0: float) -> int:
     return round((time.perf_counter() - t0) * 1000)
 
 
+# ---- the trusted code ----
+
+
+def trusted_files(state: Path = STATE) -> list[str]:
+    """Every file under the trusted paths, relative to _blogs/ (sorted). Anything here the manifest doesn't list is
+    a mismatch too (a planted module would otherwise be importable)."""
+    found: list[str] = []
+    for top in TRUSTED:
+        p = state / top
+        if p.is_file():
+            found.append(top)
+        elif p.is_dir():
+            found += sorted(f.relative_to(state).as_posix() for f in p.rglob("*") if f.is_file())
+    return sorted(found)
+
+
+def manifest_lines(state: Path) -> str:
+    """MANIFEST.sha256's text for the trusted files under `state` (build_page.py writes it with this, too)."""
+    return "".join(f"{hashlib.sha256((state / f).read_bytes()).hexdigest()}  {f}\n" for f in trusted_files(state))
+
+
+def verify_trusted(expected: str | None) -> str:
+    """_blogs/ must be exactly what the page shipped: MANIFEST.sha256 hashes to `expected` (the page computes it from
+    its own copy), and every trusted file matches its line, with none missing or extra. Returns the manifest's
+    sha256 (the trusted code's fingerprint). Raises Refused with every difference."""
+    path = STATE / TRUST_MANIFEST
+    if not path.is_file():
+        raise Refused(f"_blogs/{TRUST_MANIFEST} is missing (reconnect to re-upload the page's trusted code)")
+    raw = path.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    if expected is not None and digest != expected:
+        raise Refused(f"_blogs/{TRUST_MANIFEST} is not the page's (sha256 {digest[:12]}, want {expected[:12]})")
+    listed: dict[str, str] = {}
+    for line in raw.decode().splitlines():
+        want, _, name = line.partition("  ")
+        if len(want) != 64 or not name:
+            raise Refused(f"_blogs/{TRUST_MANIFEST}: bad line {line!r}")
+        listed[name] = want
+    have = trusted_files()
+    wrong = [f"{f} changed" for f in have if f in listed and hashlib.sha256((STATE / f).read_bytes()).hexdigest() != listed[f]]
+    wrong += [f"{f} is missing" for f in sorted(set(listed) - set(have))]
+    wrong += [f"{f} is not in the manifest" for f in sorted(set(have) - set(listed))]
+    if wrong:
+        raise Refused(f"the trusted code in _blogs/ differs from {TRUST_MANIFEST}: {'; '.join(wrong)} (reconnect to re-upload it)")
+    return digest
+
+
 # ---- reading the repo ----
 
 
 def manifest(chapter: str) -> list[dict[str, Any]]:
-    """checks/<chapter>.json from HEAD (the passing tree, not a draft): the chapter's cells in order."""
+    """checks/<chapter>.json from HEAD (the passing tree, not a draft): the chapter's cells in order, each
+    {name, file, region (or null), ops, cmd}."""
     raw = json.loads(git("show", f"HEAD:checks/{chapter}.json"))
     if raw.get("chapter") != chapter or not isinstance(raw.get("cells"), list):
         raise ValueError(f"checks/{chapter}.json: expected {{chapter: {chapter!r}, cells: [...]}}")
     for c in raw["cells"]:
-        if not (isinstance(c.get("name"), str) and isinstance(c.get("file"), str)):
-            raise ValueError(f"checks/{chapter}.json: a cell without a name and file: {c}")
+        ok = (isinstance(c.get("name"), str) and isinstance(c.get("file"), str) and isinstance(c.get("region"), (str, type(None)))
+              and isinstance(c.get("ops"), list) and all(isinstance(o, str) for o in c["ops"])
+              and isinstance(c.get("cmd"), list) and c["cmd"] and all(isinstance(a, str) for a in c["cmd"]))  # fmt: skip
+        if not ok:
+            raise ValueError(f"checks/{chapter}.json: a cell needs name, file, region (str or null), ops [str], cmd [str, ...]: {c}")
     return raw["cells"]
 
 
+def file_at(rev: str, path: str) -> bytes | None:
+    proc = subprocess.run(["git", "show", f"{rev}:{path}"], cwd=REPO, capture_output=True, check=False)
+    return proc.stdout if proc.returncode == 0 else None
+
+
 def status(chapter: str) -> dict[str, Any]:
-    """Which cells passed (a pass/<chapter>/<cell> tag), which are locked (an earlier cell hasn't), which have drafts."""
+    """Per cell: passed (a pass/<chapter>/<cell> tag exists), stale (its file at HEAD differs from the file it passed
+    with: a later pass of another cell committed changes to it), draft (the working file differs from HEAD's).
+    No gating: every cell can run."""
     passed = set(git_text("tag", "--list", f"pass/{chapter}/*").split())
     changed = set(git_text("diff", "--name-only", "HEAD").split())  # working tree vs the passing tree
     cells = []
-    blocker = None  # the first cell that hasn't passed: every later cell waits for it
     for c in manifest(chapter):
-        ok = f"pass/{chapter}/{c['name']}" in passed
-        cells.append({"name": c["name"], "file": c["file"], "passed": ok, "locked": blocker is not None,
-                      "why": f"locked until {blocker} passes" if blocker else "", "draft": c["file"] in changed})  # fmt: skip
-        if not ok and blocker is None:
-            blocker = c["name"]
+        tag = f"pass/{chapter}/{c['name']}"
+        ok = tag in passed
+        stale = ok and file_at(tag, c["file"]) != file_at("HEAD", c["file"])
+        cells.append({"name": c["name"], "file": c["file"], "region": c["region"], "ops": c["ops"], "passed": ok,
+                      "stale": stale, "draft": c["file"] in changed})  # fmt: skip
     vol = persist_dir()
     bundle = vol / BUNDLE if vol else None
     saved = {"dir": str(vol), "bundle_bytes": bundle.stat().st_size if bundle and bundle.exists() else 0} if vol else None
@@ -227,7 +303,7 @@ def head_tree() -> dict[str, tuple[bytes, int]]:
 
 
 def sync_check_tree(want: dict[str, tuple[bytes, int]]) -> list[str]:
-    """Make _blogs/check/ hold exactly `want` (build/ aside). Unchanged files keep their mtimes, so make rebuilds
+    """Make _blogs/tree/ hold exactly `want` (build/ aside). Unchanged files keep their mtimes, so make rebuilds
     only what changed. Returns the paths written."""
     CHECK_TREE.mkdir(parents=True, exist_ok=True)
     for p in sorted(CHECK_TREE.rglob("*"), reverse=True):
@@ -278,33 +354,48 @@ def commit_pass(chapter: str, cell: str, path: str, data: bytes, mode: int) -> s
     return commit
 
 
-def check(chapter: str, cell: str, command: list[str]) -> int:
-    """Build + check one cell: the latest passing tree with only this cell's draft swapped in. Streams output;
-    on pass commits, tags and saves the bundle. Exit 0 pass, 1 fail."""
+def command_argv(cmd: list[str], trusted: Path) -> list[str]:
+    """A manifest cmd -> the argv that runs it: cmd[0] must be a trusted command (COMMANDS), run from `trusted`
+    (the dir holding checks/: _blogs/ in the sandbox; ref.py passes the page's copy)."""
+    entry = COMMANDS.get(cmd[0])
+    if entry is None:
+        raise Refused(f"the manifest's command {cmd[0]!r} is not a trusted command ({sorted(COMMANDS)})")
+    return [sys.executable, str(trusted / entry), *cmd[1:]]
+
+
+def check(chapter: str, cell: str, expected_manifest: str | None) -> int:
+    """Check one cell: HEAD's tree with the cell's file replaced by the reader's working copy (whole), then the
+    cell's cmd from the manifest, its output passed through. Exit 0 pass -> commit the checked bytes + tag + bundle;
+    1 fail or blocked; 2 infrastructure (never commits)."""
     t0 = time.perf_counter()
-    st = status(chapter)
-    found = [c for c in st["cells"] if c["name"] == cell]
-    if not found:
-        raise Refused(f"{chapter} has no cell {cell!r}; its cells are {[c['name'] for c in st['cells']]}")
-    if found[0]["locked"]:
-        raise Refused(f"{cell} is {found[0]['why']}")
-    path = found[0]["file"]
+    fingerprint = verify_trusted(expected_manifest)
+    cells = {c["name"]: c for c in manifest(chapter)}
+    if cell not in cells:
+        raise Refused(f"{chapter} has no cell {cell!r}; its cells are {list(cells)}")
+    c = cells[cell]
+    argv = command_argv(c["cmd"], STATE)
+    path = c["file"]
     tree = head_tree()
     draft = (REPO / path).read_bytes()
     mode = tree[path][1] if path in tree else 0o100644
     written = sync_check_tree({**tree, path: (draft, mode)})
-    say(f"checking {chapter}/{cell}: passing tree {st['head']} + your {path}" + (f" ({len(written)} file(s) changed)" if written else ""))
+    head = git_text("rev-parse", "--short", "HEAD")
+    say(f"checking {chapter}/{cell} (ops {', '.join(c['ops']) or '-'}): passing tree {head} + your {path}"
+        + (f" ({len(written)} file(s) changed)" if written else "") + f"; trusted code {fingerprint[:12]}")  # fmt: skip
     t_run = time.perf_counter()
-    env = {**os.environ, "PATH": os.pathsep.join([str(CHECK_TREE), str(Path(sys.executable).parent), os.environ.get("PATH", "")])}
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1"}
     try:
-        rc = subprocess.run(command, cwd=CHECK_TREE, env=env, timeout=CHECK_TIMEOUT_S, check=False).returncode
+        rc = subprocess.run(argv, cwd=CHECK_TREE, env=env, timeout=CHECK_TIMEOUT_S, check=False).returncode
     except subprocess.TimeoutExpired:
-        say(f"FAIL {chapter}/{cell}: the check ran past {CHECK_TIMEOUT_S}s")
-        return 1
+        say(f"{chapter}/{cell}: the check ran past {CHECK_TIMEOUT_S}s; nothing committed (infrastructure)")
+        return EXIT_INFRA
     run_ms = ms(t_run)
-    if rc != 0:
-        say(f"FAIL {chapter}/{cell} (check exited {rc}; {run_ms} ms). Nothing committed; later cells keep using your last passing version.")
-        return 1
+    if rc == EXIT_FAIL:
+        say(f"{chapter}/{cell} did not pass ({run_ms} ms). Nothing committed.")
+        return EXIT_FAIL
+    if rc != EXIT_PASS:
+        say(f"{chapter}/{cell}: the check itself failed (exit {rc}, {run_ms} ms): infrastructure, not your code. Nothing committed.")
+        return EXIT_INFRA
     t_commit = time.perf_counter()
     commit = commit_pass(chapter, cell, path, draft, mode)
     commit_ms = ms(t_commit)
@@ -312,7 +403,7 @@ def check(chapter: str, cell: str, command: list[str]) -> int:
     where = f"bundle {saved['bytes'] / 1024:.1f} KiB saved in {saved['ms']} ms" if saved else "not persisted (BLOGS_WS_PERSIST unset)"
     say(f"PASS {chapter}/{cell} -> commit {commit[:7]}, tag pass/{chapter}/{cell}; {where} "
         f"(check {run_ms} ms, commit {commit_ms} ms, total {ms(t0)} ms)")  # fmt: skip
-    return 0
+    return EXIT_PASS
 
 
 def advance(chapter: str, to: str) -> None:
@@ -345,7 +436,7 @@ def main() -> int:
     c = sub.add_parser("check")
     c.add_argument("chapter")
     c.add_argument("cell")
-    c.add_argument("command", nargs=argparse.REMAINDER, help="after --: the check command, e.g. run_checks ch00 ring")
+    c.add_argument("--trusted", help=f"the sha256 of {TRUST_MANIFEST} as the page shipped it")
     sub.add_parser("save")
     a = sub.add_parser("advance")
     a.add_argument("chapter")
@@ -360,14 +451,11 @@ def main() -> int:
     elif args.cmd == "advance":
         advance(args.chapter, args.to)
     else:
-        command = args.command[1:] if args.command[:1] == ["--"] else args.command
-        if not command:
-            ap.error("check needs a command after --")
         try:
-            return locked(check, args.chapter, args.cell, command)
+            return locked(check, args.chapter, args.cell, args.trusted)
         except Refused as e:
             say(f"refused: {e}")
-            return 2
+            return EXIT_INFRA
     return 0
 
 
