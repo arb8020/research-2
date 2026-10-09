@@ -23,6 +23,8 @@ from box.tests.test_sdk import JOB_S, eventually, gone
 
 @pytest.fixture
 def store(name: str, provider: Provider, tmp_path: Path) -> Store:
+    if why := providers.CANNOT.get(name, {}).get("record"):
+        pytest.skip(why)
     return providers.make_store(name, tmp_path / "store", provider)
 
 
