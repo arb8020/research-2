@@ -141,6 +141,10 @@ def save() -> dict[str, Any] | None:
         os.fsync(dir_fd)
     finally:
         os.close(dir_fd)
+    if sys.platform == "linux":
+        # A Modal Volume (v2) mounted in a sandbox persists writes on `sync <mount>` (spike exp5: without it the next
+        # sandbox saw a broken repo). On a plain Linux dir this is one more fsync.
+        subprocess.run(["sync", str(vol)], check=True)
     return {"bytes": (vol / BUNDLE).stat().st_size, "ms": ms(t0)}
 
 
