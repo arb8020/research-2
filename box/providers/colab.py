@@ -421,27 +421,18 @@ class ColabMachine:
         rc: list[int] = []
 
         def read(emit: Emit) -> None:
-            frames = Frames(cmd)
             discard = False  # the caller closed the stream: drain the interrupted cell, hand on nothing
             try:
-                for out in runtime.run(kernel, cell, timeout_s + 2 * KERNEL_SLACK_S, stop):
-                    if out["output_type"] == "error":
-                        if stop.is_set():
-                            continue  # our own interrupt: KeyboardInterrupt
-                        raise RuntimeError(f"colab: stream cell failed under `{cmd[:80]}`: {out.get('ename')}: {out.get('evalue')}")
-                    if out.get("name") != "stdout":
-                        continue  # the cell's own stderr (a warning), not the command's
-                    for kind, payload in frames.feed(out["text"]):
-                        if kind in STREAM_NAMES and not discard:
-                            try:
-                                emit(STREAM_NAMES[kind], base64.b64decode(payload))
-                            except Closed:
-                                discard = True  # close() calls kill next, which interrupts the cell
-                        elif kind == "r":
-                            rc.append(int(payload))
-                        elif kind == "t":
-                            raise TimeoutError(f"colab: {self.id}: stream of `{cmd[:80]}` ran past its cell's own bound; killed")
-                frames.end()
+                for kind, payload in stream_frames(runtime.run(kernel, cell, timeout_s + 2 * KERNEL_SLACK_S, stop), stop, cmd):
+                    if kind in STREAM_NAMES and not discard:
+                        try:
+                            emit(STREAM_NAMES[kind], base64.b64decode(payload))
+                        except Closed:
+                            discard = True  # close() calls kill next, which interrupts the cell
+                    elif kind == "r":
+                        rc.append(int(payload))
+                    elif kind == "t":
+                        raise TimeoutError(f"colab: {self.id}: stream of `{cmd[:80]}` ran past its cell's own bound; killed")
             except (Unreachable, KernelGone) as e:
                 raise self._gone_or(e) from e
             finally:
@@ -599,6 +590,21 @@ class Frames:
     def end(self) -> None:
         if self._partial:
             raise RuntimeError(f"colab: stream cell ended mid-frame under `{self.cmd[:80]}`: {self._partial[:200]!r}")
+
+
+def stream_frames(outputs: Iterator[dict[str, Any]], stop: threading.Event, cmd: str) -> Iterator[tuple[str, str]]:
+    """A stream cell's frames, from its outputs as they arrive. A Python error in the cell is the
+    wrapper failing, raised; unless stop is set, when it is our own interrupt (KeyboardInterrupt)."""
+    frames = Frames(cmd)
+    for out in outputs:
+        if out["output_type"] == "error":
+            if stop.is_set():
+                continue
+            raise RuntimeError(f"colab: stream cell failed under `{cmd[:80]}`: {out.get('ename')}: {out.get('evalue')}")
+        if out.get("name") == "stdout":  # not the cell's own stderr (a warning): the command's is inside frames
+            yield from frames.feed(out["text"])
+    if not stop.is_set():  # an interrupted cell may stop mid-line
+        frames.end()
 
 
 def colab_accelerator(gpu: str | None) -> str:

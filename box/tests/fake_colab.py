@@ -23,9 +23,9 @@ import os
 import secrets
 import select
 import signal
-import threading
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable, Generator, Iterator
 from pathlib import Path
