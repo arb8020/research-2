@@ -260,6 +260,7 @@ def main() -> None:
     ap.add_argument("--gateway", help="a running gateway's URL (default: start connect_dev.py)")
     ap.add_argument("--gateway-port", type=int, default=8791)
     ap.add_argument("--page-port", type=int, default=8012)
+    ap.add_argument("--slow-mo", type=int, default=0, help="ms between browser actions (a watchable video: 250)")
     args = ap.parse_args()
 
     shutil.rmtree(OUT, ignore_errors=True)
@@ -272,7 +273,7 @@ def main() -> None:
     url = f"http://localhost:{args.page_port}/neural-nets/?gateway={gateway}"
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(executable_path=CHROME)
+            browser = p.chromium.launch(executable_path=CHROME, slow_mo=args.slow_mo)
             if fake is not None:
                 bad_token(browser, url)
             context = browser.new_context(viewport={"width": 1280, "height": 800}, record_video_dir=OUT / "video",
