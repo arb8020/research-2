@@ -64,9 +64,9 @@ def main() -> None:  # MUST KILL: main() dispatches the `lease` mode while __mai
     root = Path(a.root)
     for kind in KINDS:
         (root / kind).mkdir(parents=True, exist_ok=True)
-    write_json(root / "session.json", {"started_at": time.time(), "created_at": a.created_at, "ceiling": a.ceiling})
-    write_json(root / "lease.json", {"until": a.lease_until, "ceiling": a.ceiling, "released": False})
-    write_json(root / "lease-audit.json", [audit_entry("create", a.lease_until, a.created_at, a.host, a.pid)])
+    put(root / "session.json", json.dumps({"started_at": time.time(), "created_at": a.created_at, "ceiling": a.ceiling}).encode())
+    put(root / "lease.json", json.dumps({"until": a.lease_until, "ceiling": a.ceiling, "released": False}).encode())
+    put(root / "lease-audit.json", json.dumps([audit_entry("create", a.lease_until, a.created_at, a.host, a.pid)]).encode())
     recorder = Recorder(root, root / a.record, sync=a.record_sync) if a.record else None
     try:
         if recorder:
@@ -80,7 +80,7 @@ def main() -> None:  # MUST KILL: main() dispatches the `lease` mode while __mai
     finally:
         if recorder:
             recorder.close()
-    write_json(root / "ended.json", ended)
+    put(root / "ended.json", json.dumps(ended).encode())
     linger(root)
     if a.on_shutdown:
         subprocess.run(["bash", "-c", a.on_shutdown], check=False)
@@ -104,9 +104,9 @@ def change_lease(root: Path, op: str, until: float, host: str, pid: int) -> dict
         now = time.time()
         changed = next_lease(lease, op, until, now)
         if changed != lease:
-            write_json(root / "lease.json", changed)
+            put(root / "lease.json", json.dumps(changed).encode())
             audit = json.loads((root / "lease-audit.json").read_text())
-            write_json(root / "lease-audit.json", next_audit(audit, audit_entry(op, changed["until"], now, host, pid)))
+            put(root / "lease-audit.json", json.dumps(next_audit(audit, audit_entry(op, changed["until"], now, host, pid))).encode())
     return changed
 
 
@@ -182,12 +182,12 @@ def tend_services(root: Path, services: dict[Path, subprocess.Popen]) -> None:
         if job_dir in services or (job_dir / "status.json").exists() or not (job_dir / "spec.json").exists():
             continue
         if len(services) >= MAX_SERVICES:
-            write_json(job_dir / "status.json", {"state": "done", "reason": "refused", "exit_code": None, "ended": time.time()})
+            put(job_dir / "status.json", json.dumps({"state": "done", "reason": "refused", "exit_code": None, "ended": time.time()}).encode())
             continue
         spec = json.loads((job_dir / "spec.json").read_text())
         env = {**spec.get("env", {}), "BOX_JOB_ID": job_dir.name, "BOX_JOB_DIR": str(job_dir)}
         services[job_dir] = child = spawn(spec["cmd"], env, job_dir, stdout=job_dir / "stdout", stderr=job_dir / "stderr")
-        write_json(job_dir / "status.json", {"state": "running", "started": time.time(), "pgid": child.pid})
+        put(job_dir / "status.json", json.dumps({"state": "running", "started": time.time(), "pgid": child.pid}).encode())
     for job_dir, child in services.items():
         if child.poll() is None and (job_dir / "kill").exists():
             kill_group(child)
@@ -207,7 +207,7 @@ def stop_services(services: dict[Path, subprocess.Popen], reason: str) -> None:
 
 def end_service(job_dir: Path, reason: str, code: int | None) -> None:
     status = json.loads((job_dir / "status.json").read_text())
-    write_json(job_dir / "status.json", {**status, "state": "done", "reason": reason, "exit_code": code, "ended": time.time()})
+    put(job_dir / "status.json", json.dumps({**status, "state": "done", "reason": reason, "exit_code": code, "ended": time.time()}).encode())
 
 
 def service_state(job_dir: Path) -> str:
@@ -267,7 +267,7 @@ def run_job(root: Path, job_dir: Path, tick: Callable[[], None]) -> None:
     child = spawn(spec["cmd"], spec["env"], job_dir, stdout=job_dir / "stdout", stderr=job_dir / "stderr")
     killed_at = time.monotonic() + max_duration_s
     status = {"state": "running", "started": time.time(), "pgid": child.pid}
-    write_json(job_dir / "status.json", status)
+    put(job_dir / "status.json", json.dumps(status).encode())
 
     reason = None
     while (code := child.poll()) is None:
@@ -280,13 +280,13 @@ def run_job(root: Path, job_dir: Path, tick: Callable[[], None]) -> None:
     reason = reason or "exited"
 
     status.update(state="hook" if spec.get("on_exit") else "done", reason=reason, exit_code=code, ended=time.time())
-    write_json(job_dir / "status.json", status)
+    put(job_dir / "status.json", json.dumps(status).encode())
     if spec.get("on_exit"):
         env = {**spec["env"], "BOX_EXIT_CODE": str(code), "BOX_REASON": reason}
         timeout = max(0.0, min(budget, read_lease(root)["ceiling"] - time.time()))
         status["hook_exit_code"] = run_hook(spec["on_exit"], env, job_dir, timeout)
         status["state"] = "done"
-        write_json(job_dir / "status.json", status)
+        put(job_dir / "status.json", json.dumps(status).encode())
 
 
 def spawn(cmd: str, env: dict[str, str], job_dir: Path, *, stdout: Path, stderr: Path) -> subprocess.Popen:
@@ -444,12 +444,6 @@ def put(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_bytes(data)
-    tmp.replace(path)
-
-
-def write_json(path: Path, data: dict | list) -> None:  # MUST KILL: duplicates put() (same tmp + rename, different tmp name); merge them
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data))
     tmp.replace(path)
 
 
