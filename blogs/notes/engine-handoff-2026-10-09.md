@@ -48,8 +48,15 @@ Spike branch `spike/workspace-cells` (worktree `.claude/worktrees/agent-ab43b364
 ## next
 
 1. land + merge `engine/ch01-forward` and `engine/ch01-harness`; set tolerance floors from the planted-bug table; plug the real forward into the `gpt2.forward` spec
-2. chapter 1 page: cells over the workspace (decided design), checks via `run_checks ch1`
-3. kernel image toolchain line + the smallest workspace-cell slice end to end (a toy 2-file C++ chapter), then chapter 5's engine
+2. land `blogs/workspace-cells` (toy `ch00` slice + `verify_workspace.py`) and `blogs/verify-skill` (`verify-blogs`); then a maintain pass adds workspace cells to the feature map
+3. **compression pass on the blogs machinery** (`review-compressed` target), right after the merges, before chapter 1:
+   - one check runner: merge `check.py`'s runner into the harness's `run_checks` (used by flappy, engine chapters, the workspace path and harbor alike; runnable standalone with no server)
+   - fold `ws` / `ref` / `manifest` into one workspace module; regions stay deferred
+   - migrate flappy onto workspace cells (its C env is already a whole-file cell); retire `session.py`, the `/run` endpoint and `.session/` state; `page.ts` `BACKENDS` becomes one
+   - all proof hangs off the `verify-blogs` skill (fold `verify_*.py` / `demo_tour.py` in)
+4. **compression pass on `box` code** (after the box team's merges of `box dev` + the Colab provider land): the box team already found `box dev` partially duplicating code paths; dedupe it
+5. chapter 1 page: cells over the workspace, checks via `run_checks ch1`
+6. kernel image toolchain line (patch from the workspace-cells branch; box gateway `kernel.Dockerfile`), then chapter 5's engine
 
 ## open
 
