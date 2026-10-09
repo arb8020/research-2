@@ -3,6 +3,7 @@ would see, and none names a provider: `pytest --provider modal` runs the same ca
 
 from __future__ import annotations
 
+import json
 import shlex
 import socket
 import ssl
@@ -20,6 +21,7 @@ import pytest
 
 from box import sdk
 from box.sdk import Ended, Ending, Provider, Running
+from box.supervisor import MAX_SERVICES
 from box.tests import providers
 
 
@@ -324,3 +326,18 @@ def test_a_caller_can_name_the_session_before_launch_returns(launch: Callable, p
         assert sdk.attach(provider, session_id).machine.id == s.machine.id
     with pytest.raises(ValueError, match="new_session_id"):
         launch(deadline_s=600, session_id="mine")
+
+
+def test_services_past_the_limit_are_refused_and_the_session_goes_on(launch: Callable, scale: float) -> None:
+    with launch(deadline_s=600) as s:
+        for _ in range(MAX_SERVICES):
+            s.run("sleep 999", service=True)
+        with pytest.raises(ValueError, match="services"):
+            s.run("sleep 999", service=True)
+        # a second client racing the first gets past that check: the supervisor refuses the spec, and lives
+        extra = sdk.Job(s, "9999999999-extra")
+        s.machine.write(f"{s.machine.root}/jobs/{extra.id}.spec.tmp", json.dumps({"cmd": "sleep 999", "service": True}).encode())
+        s.machine.exec(f"mkdir -p {extra.dir} && mv {s.machine.root}/jobs/{extra.id}.spec.tmp {extra.dir}/spec.json")
+        assert extra.wait() == Ending("refused", None)
+        assert isinstance(s.status(), Running)
+        assert s.run("echo after").wait() == Ending("exited", 0)
