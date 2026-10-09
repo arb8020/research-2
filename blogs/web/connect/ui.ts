@@ -9,6 +9,7 @@
 import { must } from "../dom";
 import { connect, currentPhase, disconnect, logLines, onLog, onPhase, resume, savedToken, signOut } from "./session";
 import type { LogLine, Phase } from "./session";
+import { LEASE_DEFAULT_S } from "./gateway";
 
 // [value sent as gpu, label]. Modal's ids; $/h from box/gpus.json (2026-10). CPU-only is the cheap way to try it.
 const GPUS: readonly (readonly [gpu: string | null, label: string])[] = [
@@ -126,7 +127,7 @@ class ConnectPill extends HTMLElement {
       const choice = must(form, "select[name=gpu]", HTMLSelectElement).value;
       this.open(false);
       this.pill.focus();
-      void connect(token, choice === "" ? null : choice);
+      void connect(token, choice === "" ? null : choice, LEASE_DEFAULT_S);
     };
     must(this, ".connect-forget", HTMLButtonElement).onclick = () => {
       void signOut().then(() => { this.render(currentPhase()); must(form, "input[name=token-id]", HTMLInputElement).focus(); });
@@ -205,7 +206,7 @@ class ConnectPill extends HTMLElement {
     this.pill.title = p.kind === "connected" ? `Connected: ${gpuName(p.gpu)} on Modal, up ${uptime(p.startedAt)}` : p.kind === "connecting" ? `Connecting: ${p.step}` : p.failure ?? "Connect a GPU to run remote cells";
     this.renderPanel(p);
     must(this.drawer, ".drawer-status", HTMLParagraphElement).textContent = p.kind === "connected"
-      ? `${p.id} · ${gpuName(p.gpu)} on Modal · running, up ${uptime(p.startedAt)} · ends by ${clock(p.deadline)}`
+      ? `${p.id} · ${gpuName(p.gpu)} on Modal · running, up ${uptime(p.startedAt)} · ends ${clock(p.leaseUntil)} (extendable to ${clock(p.ceiling)})`
       : p.kind === "connecting" ? `connecting: ${p.step}` : `disconnected${p.failure ? `: ${p.failure}` : ""}`;
   }
 
