@@ -1,0 +1,26 @@
+[project]
+name = "engine-ch01-harness"
+version = "0.1.0"
+description = "Chapter 1 correctness machinery: op registry, case generator, isolated check harness"
+requires-python = ">=3.12"
+dependencies = [
+    "coverage>=7.16.2",
+    "jaxtyping>=0.3.11",
+    "torch>=2.5,<3",
+    "transformers>=5.18.0",
+]
+
+[project.scripts]
+run_checks = "harness.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["harness", "specs", "candidates"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
