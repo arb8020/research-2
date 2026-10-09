@@ -2,8 +2,9 @@
 
     uv run session.py rl/01-flappy.md --timeout 20      # in one tmux pane
     python3 -m http.server 8010 -d dist                # in another
-    uv run --with playwright verify_page.py
+    uv run --with playwright verify_page.py [url]      # default http://localhost:8010/01-flappy/
 
+The session URL is the one the page was built with (its session-url meta tag).
 Pastes the hidden C solution into the editor programmatically (testing only).
 """
 
@@ -12,16 +13,18 @@ from __future__ import annotations
 import glob
 import os
 import re
+import sys
 import time
 from pathlib import Path
 from urllib.request import urlopen
 
+from playwright.sync_api import Locator, sync_playwright
+
 from check import parse
-from playwright.sync_api import sync_playwright
 
 HERE = Path(__file__).parent
 SHOTS = HERE / "screenshots" / "page-builder"
-PAGE = "http://localhost:8010/01-flappy/"
+PAGE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8010/01-flappy/"
 CHROME = sorted(glob.glob(os.path.expanduser(
     "~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")))[-1]  # fmt: skip
 BLOCKS = parse((HERE / "rl" / "01-flappy.md").read_text())
@@ -42,6 +45,7 @@ def policy_probs(params: dict[str, torch.Tensor], obs: torch.Tensor) -> torch.Te
 
 html = urlopen(PAGE).read().decode()
 assert "solution=" not in html and "flappy->tick += 1" not in html and "check=" not in html, "solution or check leaked"
+SESSION = re.search(r'<meta name="session-url" content="([^"]+)">', html)[1]
 assert not (HERE / ".session" / "01-flappy" / "state.json").exists(), "rm -rf .session first: verify expects a fresh reader"
 SHOTS.mkdir(parents=True, exist_ok=True)
 
@@ -59,14 +63,14 @@ with sync_playwright() as p:
     time.sleep(2)
     page.locator("env-play").screenshot(path=SHOTS / "0-play-reference.png")
 
-    def cell(name):
+    def cell(name: str) -> Locator:
         return page.locator(f'code-cell[name="{name}"]')
 
-    def paste(name, src):
+    def paste(name: str, src: str) -> None:
         page.evaluate("([n, s]) => { const v = document.querySelector(`code-cell[name=\"${n}\"]`).view;"
                       " v.dispatch({changes: {from: 0, to: v.state.doc.length, insert: s}}); }", [name, src])  # fmt: skip
 
-    def run(name):
+    def run(name: str) -> list[str]:
         start = time.perf_counter()
         cell(name).locator(".run").click()
         page.wait_for_selector(f'code-cell[name="{name}"] .cell-out:is(.pass, .fail)', timeout=60_000)
@@ -95,7 +99,7 @@ with sync_playwright() as p:
     cell("policy").screenshot(path=SHOTS / "3-policy-passes.png")
     print("  sample unlocked:", not cell("sample").locator(".run").is_disabled())
 
-    page.wait_for_function("document.querySelector('env-play iframe').src.includes('8787')")
+    page.wait_for_function("s => document.querySelector('env-play iframe').src.includes(encodeURIComponent(s))", arg=SESSION)
     play = page.locator("env-play")
     play.scroll_into_view_if_needed()
     print("  play widget:", page.locator(".play-caption").inner_text())

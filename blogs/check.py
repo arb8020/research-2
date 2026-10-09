@@ -188,12 +188,13 @@ def echo(text: str) -> None:
 
 
 def run_cell(
-    blocks: list[Block], order: list[str], out: Path, target: str, stub: bool,
+    blocks: list[Block], order: list[str], target: str, stub: bool,
     emit: Callable[[str], None] = echo, timeout: float | None = None, build: str = "check",
 ) -> bool:  # fmt: skip
     """Check cell X: compile the C, then run check=X and budget=X, each in a fresh subprocess.
 
     build="prod" gives check=X the prod build too (no asserts, no sanitizers): for seeing what they catch.
+    Build products and job files live in a temporary directory that is gone when this returns.
     """
     steps = [b for b in blocks if b.role == "given"]
     steps += [find(blocks, "solution", name) for name in order[: order.index(target)]]
@@ -201,26 +202,28 @@ def run_cell(
     budgets = [b for b in blocks if b.role == "budget" and b.name == target]
     assert len(budgets) <= 1, f"more than one budget={target}"
 
-    prod: dict[str, str] = {}
-    check_so = ""
-    for b in steps:
-        if b.lang != "c":
-            continue
-        if b is steps[-1] and build == "check":
-            check_so, errors = compile_c(b, out, "check")
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        prod: dict[str, str] = {}
+        check_so = ""
+        for b in steps:
+            if b.lang != "c":
+                continue
+            if b is steps[-1] and build == "check":
+                check_so, errors = compile_c(b, out, "check")
+                if errors:
+                    emit(f"{target:<12} FAIL: {b.role}={b.name} does not compile (warnings count as errors):\n{errors}")
+                    return False
+            prod[b.name], errors = compile_c(b, out, "prod")
             if errors:
-                emit(f"{target:<12} FAIL: {b.role}={b.name} does not compile (warnings count as errors):\n{errors}")
+                emit(f"{target:<12} FAIL: {b.role}={b.name} does not compile (prod build):\n{errors}")
                 return False
-        prod[b.name], errors = compile_c(b, out, "prod")
-        if errors:
-            emit(f"{target:<12} FAIL: {b.role}={b.name} does not compile (prod build):\n{errors}")
-            return False
 
-    python = [b for b in steps if b.lang != "c"]
-    check = python + [find(blocks, "check", target)]
-    phases = [(target, check, {**prod, target: check_so}, sanitizer_env()) if check_so else (target, check, prod, {})]
-    phases += [(f"{target} budget", python + budgets, prod, {}) for _ in budgets]
-    return all(run_phase(label, ps, env_so, env, out, emit, timeout) for label, ps, env_so, env in phases)
+        python = [b for b in steps if b.lang != "c"]
+        check = python + [find(blocks, "check", target)]
+        phases = [(target, check, {**prod, target: check_so}, sanitizer_env()) if check_so else (target, check, prod, {})]
+        phases += [(f"{target} budget", python + budgets, prod, {}) for _ in budgets]
+        return all(run_phase(label, ps, env_so, env, out, emit, timeout) for label, ps, env_so, env in phases)
 
 
 def run_phase(
@@ -289,8 +292,7 @@ def main() -> None:
     for t in targets:
         assert t in order, f"no cell={t}; cells are {order}"
 
-    with tempfile.TemporaryDirectory() as tmp:
-        results = [run_cell(blocks, order, Path(tmp), t, args.stub, build=args.build) for t in targets]
+    results = [run_cell(blocks, order, t, args.stub, build=args.build) for t in targets]
     sys.exit(0 if all(results) else 1)
 
 

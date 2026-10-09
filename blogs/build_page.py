@@ -17,11 +17,15 @@ import html
 import re
 import shutil
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
+
+from markdown_it import MarkdownIt
+from markdown_it.token import Token
+from markdown_it.utils import EnvType, OptionsDict
 
 import build_web
 from check import HIDDEN, ROLES, cell_order, parse
-from markdown_it import MarkdownIt
 
 HERE = Path(__file__).parent
 
@@ -41,7 +45,7 @@ def main() -> None:
     rules = md.renderer.rules
     plain_fence = rules["fence"]
 
-    def fence(tokens, idx, opts, env):
+    def fence(tokens: Sequence[Token], idx: int, opts: OptionsDict, env: EnvType) -> str:
         lang, *info = tokens[idx].info.split()
         role, name = next(((k, v) for k, _, v in (i.partition("=") for i in info) if k in ROLES), ("", ""))
         src = html.escape(tokens[idx].content)
@@ -54,7 +58,7 @@ def main() -> None:
             return ""
         return plain_fence(tokens, idx, opts, env)
 
-    def html_block(tokens, idx, opts, env):
+    def html_block(tokens: Sequence[Token], idx: int, opts: OptionsDict, env: EnvType) -> str:
         content = tokens[idx].content
         if note := re.fullmatch(r"\s*<!--\s*(.*?)\s*-->\s*", content, re.DOTALL):
             return f'<div class="todo" role="note" data-not-typeset>{html.escape(note[1])}</div>\n'
