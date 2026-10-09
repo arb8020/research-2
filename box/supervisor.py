@@ -3,6 +3,7 @@ box and run it as the entrypoint. It holds the session, runs jobs one at a time,
 
 Everything goes through files under ROOT (no sockets), so a client only needs the provider's exec:
 
+    ROOT/session.json           supervisor writes it first: {started_at, deadline_at} (unix times, this clock)
     ROOT/lease                  client touches it to hold the session (mtime = last heartbeat)
     ROOT/released               client wrote it: stop checking the lease; end when no job is left
     ROOT/stop                   client wrote it: kill any job, run its hook, end
@@ -53,7 +54,9 @@ def main() -> None:
     a = p.parse_args()
     root = Path(a.root)
     (root / "jobs").mkdir(parents=True, exist_ok=True)
-    (root / "lease").touch()
+    started_at = time.time()
+    write_json(root / "session.json", {"started_at": started_at, "deadline_at": started_at + a.deadline_s})
+    (root / "lease").touch()  # last: a client takes the lease as "the supervisor is up"
     reason = supervise(root, time.monotonic() + a.deadline_s, a.lease_ttl_s, a.idle_timeout_s)
     write_json(root / "ended.json", {"reason": reason, "at": time.time()})
     linger(root, reason, a.lease_ttl_s)
