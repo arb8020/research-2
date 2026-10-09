@@ -396,7 +396,7 @@ def _create(  # noqa: PLR0913 (create's knobs, plus how its root starts)
     assert lease.ceiling <= created_at + MAX_CEILING_S
     args = [
         "--created-at", repr(created_at), "--lease-until", repr(lease.until), "--ceiling", repr(lease.ceiling),
-        "--host", socket.gethostname(), "--pid", str(os.getpid()),
+        "--host", socket.gethostname(), "--pid", str(os.getpid()), "--session-id", session_id,
         "--idle-timeout-s", str(idle_timeout_s), "--ports", ",".join(map(str, ports)),
         *(["--record", RECORD_PATH, *(["--record-sync"] if record.sync_writes else [])] if record else []),
     ]  # fmt: skip
@@ -444,7 +444,11 @@ def _create_set_up(provider: Provider, spec: SetupSpec, *, image: str | None, en
     cached = None
     if snaps and not spec.rebuild:
         cached = sc.lookup(record, key, now=time.time(), max_age_s=spec.max_age_s)  # type: ignore[arg-type] (checked above)
-    session = None
+    session, began, timings = None, time.monotonic(), {}
+
+    def lap(phase: str) -> None:  # seconds per phase since the last, into setup.json: where a boot's time went
+        timings[phase] = round(time.monotonic() - began - sum(timings.values()), 3)
+
     if cached is not None:
         try:
             session = _create(provider, image=cached.image, env=env, fresh_root=True, **kw)
@@ -455,20 +459,25 @@ def _create_set_up(provider: Provider, spec: SetupSpec, *, image: str | None, en
         session = _create(provider, image=image, env=env, **kw)
     try:
         session.wait_up(SETUP_BOOT_TIMEOUT_S)
+        lap("boot")
         synced = session.sync(spec.repo, paths=spec.paths)
+        lap("sync")
         setup_job, made, built_at = None, cached.image if cached else None, cached.built_at if cached else None
         if cached is None:
             setup_job = session._run_to_end(sc.script_cmd(synced.path, spec.script, unset=list(env)), spec.max_duration_s, "setup")
+            lap("setup")
             if snaps:
                 made = provider.snapshot(session.machine, ttl_s=int(spec.max_age_s + sc.SNAPSHOT_TTL_MARGIN_S))  # type: ignore[attr-defined]
                 built_at = time.time()
                 sc.remember(record, sc.Cached(key, made, built_at, session.id, synced.commit))  # type: ignore[arg-type]
+                lap("snapshot")
         resume_job = None
         if spec.resume is not None:  # every boot, with the session's env: fresh credentials, services
             resume_job = session._run_to_end(sc.script_cmd(synced.path, spec.resume, unset=[]), spec.max_duration_s, "resume")
+            lap("resume")
         if record is not None:
             prepared = SetupRecord(key=key, hit=cached is not None, image=made, base=image or "", built_at=built_at,
-                                   setup_job=setup_job, resume_job=resume_job)  # fmt: skip
+                                   setup_job=setup_job, resume_job=resume_job, timings=timings)  # fmt: skip
             record.put(f"{record_prefix(session.id)}/setup.json", sc.setup_record_json(prepared))
     except BaseException:
         try:  # a session nobody gets back must not idle to its ceiling
@@ -575,12 +584,20 @@ class Session:
         self.close()
 
     def wait_up(self, timeout_s: float) -> None:
-        """Until the supervisor is up (its last act at start: ROOT/up). TimeoutError past timeout_s."""
+        """Until this session's supervisor is up (its last act at start: ROOT/up, holding the session
+        id). Not any up: a machine booted from a snapshot has the snapshotted session's until its
+        boot clears it (seen live: a wait_up that returned on it, then a Booting session). An empty
+        up is a supervisor from before it held the id. TimeoutError past timeout_s."""
         give_up = time.monotonic() + timeout_s
-        while not self._exists("up"):
+        while not self._up():
             if time.monotonic() > give_up:
                 raise TimeoutError(f"{self.machine.id}: supervisor not up after {timeout_s:.0f} s")
             time.sleep(POLL_S)
+
+    def _up(self) -> bool:
+        """One exec: ROOT/up exists and is this session's (or a pre-id supervisor's: empty)."""
+        rc, out, _ = self.machine.exec(f"cat {self._path('up')}")
+        return rc == 0 and out.strip() in ("", self.id)
 
     def extend(self, until: float) -> Lease:
         """Move the lease's end to until (unix time), clamped to the ceiling. Never shorter: an
