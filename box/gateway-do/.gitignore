@@ -6,3 +6,7 @@ results/*.log
 .jupyter-tunnel
 .tunnel-url
 .deploy-machine-key
+.push-secret
+.relay-*.log
+.tunnel-*
+.run/
