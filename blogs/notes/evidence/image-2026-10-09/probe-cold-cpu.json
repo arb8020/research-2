@@ -1,0 +1,87 @@
+{
+  "started": 1791586896.303348,
+  "cpu": {
+    "session_id": "s-009442b610c9",
+    "gpu": null,
+    "connect_s": 178.7,
+    "steps": [
+      [
+        0.0,
+        "booting"
+      ],
+      [
+        0.0,
+        "checking your Modal token"
+      ],
+      [
+        0.2,
+        "creating sandbox: gpu none (a workspace's first connect builds the image: minutes)"
+      ],
+      [
+        174.2,
+        "sandbox sb-adVnDk7wZbD73dFydKPsbb created in 174.0 s; waiting for it to start"
+      ],
+      [
+        176.7,
+        "supervisor up (176.7 s since connect)"
+      ],
+      [
+        177.0,
+        "starting Jupyter Server"
+      ],
+      [
+        177.0,
+        "tunnel open: https://ta-01m4hejc34axhk6xq8bgrfzvts-8888-gzi53dxhbmefzc2kvcihwxd6q.w.modal.host"
+      ],
+      [
+        178.7,
+        "Jupyter Server ready (178.7 s since connect)"
+      ],
+      [
+        178.7,
+        "running"
+      ]
+    ],
+    "image": {
+      "cell_s": 0.79,
+      "status": "ok",
+      "error": "",
+      "probes": [
+        {
+          "probe": "image",
+          "du_mb": "7416",
+          "site_packages_mb": "6683",
+          "nvidia_wheels_mb": "3649",
+          "torch_mb": "1692",
+          "ws_stat_L": "root:root 755\nroot:root 755\nroot:root 755",
+          "ws_tree": "2026-10-09T22:59 19 .\n2026-10-09T22:59 6 ./hf\n2026-10-09T23:00 53 ./hf/hub\n2026-10-09T22:59 30 ./hf/hub/.locks\n2026-10-09T22:59 339 ./hf/hub/.locks/models--openai-community--gpt2\n2026-10-09T22:59 191 ./hf/hub/CACHEDIR.TAG\n2026-10-09T23:00 27 ./hf/hub/blobs\n2026-10-09T23:00 2 ./hf/hub/blobs/.huggingface-shared-blobs\n2026-10-09T23:00 202 ./hf/hub/blobs/63\n2026-10-09T23:00 32 ./hf/hub/models--openai-community--gpt2\n2026-10-09T23:00 40 ./hf/hub/models--openai-community--gpt2/.no_exist\n2026-10-09T23:00 304 ./hf/hub/models--openai-community--gpt2/blobs\n2026-10-09T22:59 4 ./hf/hub/models--openai-community--gpt2/refs\n2026-10-09T22:59 40 ./hf/hub/models--openai-community--gpt2/snapshots\n2026-10-09T22:59 45 ./hf/hub/models--openai-community--gpt2/trees\n2026-10-09T22:59 37 ./hf/xet\n2026-10-09T22:59 7 ./hf/xet/https___cas_serv-tGqkUaZf_CBPHQ6h\n2026-10-09T22:59 0 ./hf/xet/https___cas_serv-tGqkUaZf_CBPHQ6h/staging\n2026-10-09T22:59 34 ./hf/xet/logs\n2026-10-09T23:00 46323 ./hf/xet/logs/xet_20261009T225957732+0000_45.log\n2026-10-09T23:00 32 ./workspace-persist\n2026-10-09T23:00 18 ./workspace-persist/marker_nosync.txt\n2026-10-09T23:00 18 ./workspace-persist/marker_sync.txt"
+        }
+      ]
+    },
+    "volume_read": {
+      "cell_s": 10.38,
+      "status": "ok",
+      "error": "",
+      "probes": [
+        {
+          "probe": "volume_read",
+          "import_torch_s": 4.76,
+          "import_transformers_s": 3.36,
+          "read_safetensors_s": 1.12,
+          "safetensors_mb": 522.71,
+          "from_pretrained_1_s": 0.83,
+          "from_pretrained_2_s": 0.28
+        }
+      ]
+    },
+    "end": {
+      "state": "ended",
+      "gpu": null,
+      "started_at": 1791586896.0,
+      "deadline": 1791587496.0,
+      "lease_until": 1791587496.0,
+      "ceiling": 1791630096.0,
+      "reason": "stopped"
+    }
+  }
+}
