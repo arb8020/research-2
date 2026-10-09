@@ -37,10 +37,17 @@ MAX_LEASE_AUDIT = 1024
 PR_SET_PDEATHSIG = 1
 
 
-def main() -> None:  # MUST KILL: main() dispatches the `lease` mode while __main__ dispatches `tail`; route every mode in one place
-    if sys.argv[1:2] == ["lease"]:
-        lease_main(sys.argv[2:])
-        return
+def main(argv: list[str]) -> None:
+    match argv[:1]:
+        case ["lease"]:
+            lease_main(argv[1:])
+        case ["tail"]:
+            tail_main(argv[1:])
+        case _:
+            supervise_main(argv)
+
+
+def supervise_main(argv: list[str]) -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--root", required=True)
     p.add_argument("--created-at", type=float, required=True, help="unix time the client created the session")
@@ -57,7 +64,7 @@ def main() -> None:  # MUST KILL: main() dispatches the `lease` mode while __mai
         "--on-shutdown", default=os.environ.get("BOX_ON_SHUTDOWN", ""),
         help="bash run last, to end the machine itself (a provider sets BOX_ON_SHUTDOWN, e.g. its API's delete)",
     )  # fmt: skip
-    a = p.parse_args()
+    a = p.parse_args(argv)
     assert a.created_at < a.lease_until, (a.created_at, a.lease_until)
     assert a.lease_until <= a.ceiling, (a.lease_until, a.ceiling)
     assert a.ceiling <= a.created_at + MAX_CEILING_S, (a.created_at, a.ceiling)
@@ -497,7 +504,4 @@ def tail_main(argv: list[str]) -> None:
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["tail"]:
-        tail_main(sys.argv[2:])
-    else:
-        main()
+    main(sys.argv[1:])
