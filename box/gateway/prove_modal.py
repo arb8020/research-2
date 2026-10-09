@@ -1,14 +1,3 @@
-"""The relay on a real Modal GPU, as the page uses it, from Python: connect (timed, step by step), nvidia-smi
-through the Jupyter kernel, then nn-fit's remote_train.py on cuda (steps/s), then end. A running relay first:
-
-    cd box && uv run python -m box.gateway.relay --port 8790 &
-    uv run --extra dev python -m box.gateway.prove_modal --gateway http://localhost:8790 \\
-        --nn-fit ../../blogs-connect/blogs/web/embeds/nn-fit/remote_train.py [--attach s-...] [--keep]
-
-The token is the [arb8020] profile of ~/.modal.toml (read here, never printed). --attach reuses a running
-session (iterating without a new sandbox); --keep leaves it running. Writes a JSON summary to --out.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -24,8 +13,8 @@ from pathlib import Path
 from box.gateway import kernel_client
 from box.providers.modal import ModalToken
 
-PROFILE = "arb8020"  # never herdora
-NN_FIT_SECONDS = 10.0  # each nn-fit benchmark run
+PROFILE = "arb8020"
+NN_FIT_SECONDS = 10.0
 CONNECT_S = 15 * 60
 
 
@@ -42,7 +31,6 @@ def call(url: str, auth: str, method: str = "GET", body: dict | None = None) -> 
 
 
 def follow(gw: str, sid: str, auth: str, t0: float) -> list[dict]:
-    """Print the SSE stream until running (or ended); returns the events with their elapsed time."""
     got = []
     with urllib.request.urlopen(f"{gw}/sessions/{sid}/events?token={auth}", timeout=CONNECT_S) as r:
         for raw in r:
@@ -60,7 +48,6 @@ def follow(gw: str, sid: str, auth: str, t0: float) -> list[dict]:
 
 
 def nn_fit_config(max_seconds: float) -> dict:
-    """The widget's default: a 1-12-12-1 tanh net fitting a wave, float32, Adam lr 0.03 (sampled here)."""
     rng = random.Random(0)
     sizes = [1, 12, 12, 1]
     xs = [rng.uniform(-1, 1) for _ in range(200)]
@@ -94,7 +81,7 @@ def json_lines(text: str) -> list[dict]:
 
 def nn_fit_remote(kernel: dict, program: Path) -> dict:
     config = nn_fit_config(NN_FIT_SECONDS)
-    code = "\n".join([  # what the page sends (web/embeds/nn-fit/remote.ts: remoteCode)
+    code = "\n".join([
         '_nn_fit = {"__name__": "nn_fit_remote"}',
         f"exec(compile({json.dumps(program.read_text())}, 'remote_train.py', 'exec'), _nn_fit)",
         "try:", f"    _nn_fit['run']({json.dumps(json.dumps(config))})", "finally:", "    del _nn_fit",
@@ -111,8 +98,6 @@ def nn_fit_local(program: Path) -> dict:
 
 
 def hold(kernel: dict, sid: str, tok: ModalToken, hold_s: float) -> dict:
-    """An open (quiet) kernel websocket keeps the session past its idle timeout; once closed, the session
-    ends idle. Asks the machine through the SDK (exec), never through the tunnel, which would count as use."""
     from box import sdk
     from box.providers.modal import Modal
 
@@ -128,7 +113,7 @@ def hold(kernel: dict, sid: str, tok: ModalToken, hold_s: float) -> dict:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(description="Prove the relay on a real Modal GPU: connect, nvidia-smi through the kernel, nn-fit, end.", formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--gateway", default="http://localhost:8790")
     ap.add_argument("--gpu", default="T4", type=lambda g: None if g == "none" else g, help="T4, or none (CPU)")
     ap.add_argument("--attach", help="a running session id: skip connect")
@@ -160,7 +145,7 @@ def main() -> None:
             smi = [kernel_client.run(kernel, "!nvidia-smi") for _ in range(3)]
             print(smi[0].stdout, flush=True)
             assert smi[0].status == "ok" and a.gpu in smi[0].stdout, smi[0]
-            summary["nvidia_smi_cell_s"] = [round(o.seconds, 2) for o in smi]  # the first includes starting the kernel
+            summary["nvidia_smi_cell_s"] = [round(o.seconds, 2) for o in smi]
         echo = [kernel_client.run(kernel, "print(1)") for _ in range(3)]
         summary["trivial_cell_s"] = [round(o.seconds, 3) for o in echo]
         if a.hold_s:
@@ -172,7 +157,7 @@ def main() -> None:
             summary["nn_fit_local"] = nn_fit_local(a.nn_fit)
             print(f"nn-fit local:  {summary['nn_fit_local']}", flush=True)
     finally:
-        if not (a.keep or a.hold_s):  # a hold ends by itself (idle)
+        if not (a.keep or a.hold_s):
             summary["end"] = call(f"{a.gateway}/sessions/{sid}/end", auth, "POST")["status"]
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(summary, indent=2))

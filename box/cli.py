@@ -1,31 +1,3 @@
-"""`box`: the SDK (box/sdk.py) from a shell. Every command is a few SDK calls; nothing here knows
-a project. Projects with their own setup (robots/box_run.py, kelpie's remote runner) call the SDK
-themselves.
-
-    box run [--gpu L4] [--image REF] [--put LOCAL:REMOTE]... [--get REMOTE:LOCAL]... [--on-exit CMD]
-            [--lease 90m] [--ceiling 8h] [--max-duration 2h] [--region us] [--detach] -- <cmd>
-            [--setup .box/setup [--lock uv.lock]... [--resume .box/resume] [--rebuild]]
-                             this worktree, synced; its setup run once and snapshotted (box/setup_cache.py);
-                             cmd runs in the synced worktree
-    box attach <session>     its status (lease, ceiling, jobs) and how to follow it
-    box logs <session> [-f]  the session's latest job's output; exits with its exit code once it ends
-    box extend <session> <duration>   its lease to now + duration (never past its ceiling, never shorter)
-    box release <session>    end its lease now: its job is killed, its hook runs
-    box who                  running sessions box launched: session id, machine id, user, lease and ceiling left
-    box kill <session>       end a session: kill its job, let its hook run, terminate the machine;
-                             prints its receipt once the provider says the machine is gone
-    box gc [--yes]           sessions past their ceiling (their supervisor should have ended them)
-    box gpus [--sync]        GPU names (--gpu takes these), provider ids, $/hr
-
-Durations: 90, 90s, 30m, 8h, 2d (seconds by default). A session ends when its lease does (--lease,
-default: the ceiling), never past its ceiling (--ceiling, default 1h, at most 48h); a --detach run
-also ends once it has been idle (its job done) for DETACH_IDLE_S. Nothing ends it because this
-command exits: the lease is the guarantee.
-
-Every command takes --provider (modal by default; runpod; local for a machine on this computer;
-colab for a runtime on your own Colab account: box/providers/colab.py says what it refuses).
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -41,15 +13,14 @@ from pathlib import Path
 from box import gpus, sdk
 from box.setup_cache import SetupSpec
 
-GC_MARGIN_S = 1800  # past box.ceiling by this much (the provider backstop is 600 s), a machine has outlived both
-RECORD_VOLUME = "box-sessions"  # --setup on Modal: where sessions record and setups are remembered
-DETACH_IDLE_S = 120  # a detached run's machine ends this long after its job (no ROOT/released "end when done" any more)
+GC_MARGIN_S = 1800
+RECORD_VOLUME = "box-sessions"
+DETACH_IDLE_S = 120
 DURATION = re.compile(r"(\d+(?:\.\d+)?)([smhd]?)")
 UNIT_S = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
 
 
 def duration(raw: str) -> float:
-    """'90', '90s', '30m', '8h', '2d' -> seconds."""
     m = DURATION.fullmatch(raw.strip())
     if m is None:
         raise argparse.ArgumentTypeError(f"not a duration: {raw!r} (e.g. 90s, 30m, 8h)")
@@ -61,9 +32,6 @@ def until(t: float) -> str:
 
 
 def make_provider(name: str, region: str | None = None) -> sdk.Provider:
-    """The one place a provider is named, and where its credentials are read (the providers take
-    them as arguments). Imported on use: each pulls its own SDK. region: Modal only; None = anywhere.
-    The caller closes it (every command: `with contextlib.closing(make_provider(...))`)."""
     if name == "modal":
         from box.providers.modal import Modal, ModalToken
 
@@ -84,7 +52,6 @@ def make_provider(name: str, region: str | None = None) -> sdk.Provider:
 
 
 def user() -> str:
-    """user@host: the box.user label `box who` shows for a session launched from this computer."""
     return f"{getpass.getuser()}@{socket.gethostname()}"
 
 
@@ -101,14 +68,11 @@ def cmd_run(a: argparse.Namespace) -> int:
         return run(a, cmd, provider)
 
 
-def make_store(name: str, provider: sdk.Provider) -> sdk.Store | None:
-    """Where a --setup session records itself, and remembers its setup's snapshots: the provider's
-    durable store (Modal: the box-sessions Volume; local: a directory). None where there is none
-    (then nothing is snapshotted: the setup runs every boot)."""
+def make_store(name: str, provider: sdk.Provider) -> sdk.Store | None:  # MUST KILL: takes the provider's name and the Provider apart, then hands an sdk.Provider to ModalVolumeStore, which wants a Modal (was type: ignore[arg-type]); let each provider make its own record store
     if name == "modal":
         from box.providers.modal import ModalVolumeStore
 
-        return ModalVolumeStore(RECORD_VOLUME, provider=provider)  # type: ignore[arg-type]
+        return ModalVolumeStore(RECORD_VOLUME, provider=provider)
     if name == "local":
         from box.providers.local import BASE
         from box.store import DirStore
@@ -118,7 +82,7 @@ def make_store(name: str, provider: sdk.Provider) -> sdk.Store | None:
 
 
 def run(a: argparse.Namespace, cmd: str, provider: sdk.Provider) -> int:
-    max_duration_s = a.max_duration or a.ceiling  # by default the job may use the whole session
+    max_duration_s = a.max_duration or a.ceiling
     kw = {"gpu": a.gpu, "image": a.image, "lease_s": a.lease, "ceiling_s": a.ceiling, "labels": {"box.cmd": cmd[:200], "box.user": user()}}
     if a.setup:
         return run_set_up(a, cmd, provider, max_duration_s, kw)
@@ -138,13 +102,12 @@ def run(a: argparse.Namespace, cmd: str, provider: sdk.Provider) -> int:
 
 
 def run_set_up(a: argparse.Namespace, cmd: str, provider: sdk.Provider, max_duration_s: float, kw: dict) -> int:
-    """run with --setup: this worktree's setup (snapshotted where the provider can), then cmd in it."""
     spec = SetupSpec(repo=Path.cwd(), script=a.setup, lockfiles=tuple(a.lock), resume=a.resume, rebuild=a.rebuild)
     s = sdk.launch(provider, record=make_store(a.provider, provider), setup=spec, idle_timeout_s=DETACH_IDLE_S if a.detach else 0.0, **kw)
     prepared = sdk.read_record(s.record, s.id).setup if s.record else None
     print(f"box: {s.id}: {'booted from ' + str(prepared.image) if prepared and prepared.hit else 'set up'}", file=sys.stderr)
     try:
-        path = s.sync(Path.cwd()).path  # nothing to send (create synced it): where it is
+        path = s.sync(Path.cwd()).path  # MUST KILL: calls sync only to learn the synced path (create(setup=) already synced); expose that path on the Session or its SetupRecord
         for local, remote in pairs(a.put, "put"):
             s.put(local, remote)
         job = s.run(f"cd {shlex.quote(path)} && {cmd}", max_duration_s=max_duration_s, on_exit=a.on_exit)
@@ -189,7 +152,7 @@ def logs(a: argparse.Namespace, s: sdk.Session) -> int:
         print(f"box: {a.id} still running; -f to follow", file=sys.stderr)
         return 0
     print(f"box: {status.ending.reason}, exit {status.ending.exit_code}", file=sys.stderr)
-    return status.ending.exit_code if status.ending.exit_code is not None else 1  # so `box logs -f` can gate a script
+    return status.ending.exit_code if status.ending.exit_code is not None else 1
 
 
 def cmd_who(a: argparse.Namespace) -> int:
@@ -198,7 +161,7 @@ def cmd_who(a: argparse.Namespace) -> int:
         print(f"{len(machines)} running")
         for m in machines:
             ceiling = float(m.labels.get(sdk.LABEL_CEILING, 0))
-            status = sdk.Session(m).status()  # one exec each
+            status = sdk.Session(m).status()
             lease = f"lease {(status.lease.until - time.time()) / 60:.0f} min" if isinstance(status, sdk.Running) else type(status).__name__.lower()
             print(f"{m.labels[sdk.LABEL_SESSION]}  {m.id}  {m.labels.get('box.user', '?')}  {lease}, ceiling {(ceiling - time.time()) / 60:.0f} min\n    {m.labels.get('box.cmd', '')}")
     return 0
@@ -264,7 +227,7 @@ def cmd_gpus(a: argparse.Namespace) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="box", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(prog="box", description="Rent a machine, run jobs on it, bring results back; a session ends when its lease does.", formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--provider", default="modal", help="modal (default), runpod, local, or colab")
     sub = p.add_subparsers(dest="subcmd", required=True)
     s = sub.add_parser("run", help="run a command on a fresh machine")
@@ -315,7 +278,7 @@ def main() -> None:
     a = parser().parse_args()
     try:
         code = a.fn(a)
-    except ValueError as e:  # the SDK refused what was asked (a ceiling past 48 h, a hook that cannot fit): say so, no traceback
+    except ValueError as e:  # MUST KILL: reads every ValueError (a bug's too) as 'the SDK refused'; give refusals their own exception type
         print(f"box: {e}", file=sys.stderr)
         code = 2
     sys.exit(code)

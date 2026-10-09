@@ -1,20 +1,3 @@
-"""http://127.0.0.1:<port> -> a port on the machine (sdk.Endpoint), adding the endpoint's headers, for a
-client that cannot send them (a browser, a tool with no header option). Session.proxy makes one.
-
-    with session.proxy(8000) as p:          # Proxy(endpoint, port=0, on_use=session.touch, every_s=...)
-        urllib.request.urlopen(p.url + "/v1/models")
-
-Each request is forwarded with the endpoint's headers (Modal: the connect token as a bearer) and the
-response is copied back as it arrives, chunk by chunk, so server-sent events (an OpenAI-style
-`stream: true`) reach the client live. HTTP/1.0 to the client: the body ends when the connection
-closes, so no length is needed up front. Plain HTTP only: no websockets (an Upgrade is refused).
-Listens on 127.0.0.1 only: anyone who can reach the listener rides on the token.
-
-Every thread is owned and joined (never a daemon): the serving thread, one thread per request (at most
-MAX_INFLIGHT; their sockets, both sides, are shut at close so none outlives it), and the keepalive,
-which calls on_use (the session's touch of ROOT/activity) while the proxy is in use.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -30,24 +13,19 @@ from urllib.parse import urlsplit
 from box.sdk import Endpoint
 
 CHUNK = 65536
-UPSTREAM_TIMEOUT_S = 3600.0  # one read from the machine: a quiet stream (a long generation between events) is still alive
-MAX_BODY_BYTES = 64 << 20  # a request body read before forwarding
-MAX_INFLIGHT = 64  # requests at once; more get 503 (each is a thread)
-JOIN_S = 10.0  # close(): how long the threads get once their sockets are shut
+UPSTREAM_TIMEOUT_S = 3600.0
+MAX_BODY_BYTES = 64 << 20
+MAX_INFLIGHT = 64
+JOIN_S = 10.0
 HOP_BY_HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "proxy-authorization", "proxy-connection", "host"}
 
 
 class _Server(ThreadingHTTPServer):
-    daemon_threads = False  # http.server's default is True: here every request thread is joined (server_close)
+    daemon_threads = False  # ThreadingHTTPServer's default is True
     block_on_close = True
 
 
 class Proxy:
-    """Serving from construction until close() (or leaving `with`). url: where to send requests.
-    on_use runs when a request starts and the last call was over every_s ago, and every every_s
-    while one is in flight, so a long request keeps the session from going idle; its failure
-    (the session ended) is reported, never raised into a request."""
-
     def __init__(self, endpoint: Endpoint, *, port: int = 0, on_use: Callable[[], None] | None = None, every_s: float = 60.0) -> None:
         upstream = urlsplit(endpoint.url)
         if upstream.scheme not in ("http", "https"):
@@ -55,10 +33,10 @@ class Proxy:
         assert every_s > 0, every_s
         self.endpoint = endpoint
         self._on_use, self._every_s = on_use, every_s
-        self._lock = threading.Lock()  # the fields below
+        self._lock = threading.Lock()
         self._inflight = 0
-        self._used_at = float("-inf")  # monotonic: on_use's last call
-        self._sockets: set[socket.socket] = set()  # open client and upstream sockets: shut at close
+        self._used_at = float("-inf")
+        self._sockets: set[socket.socket] = set()
         self._stop = threading.Event()
         self._server = _Server(("127.0.0.1", port), _handler(self, upstream))
         self.url = f"http://127.0.0.1:{self._server.server_address[1]}"
@@ -76,17 +54,16 @@ class Proxy:
         self.close()
 
     def close(self) -> None:
-        """Stop serving, end every request (its sockets shut), join every thread. Idempotent."""
         if self._stop.is_set():
             return
         self._stop.set()
-        self._server.shutdown()  # serve_forever returns within its poll interval
+        self._server.shutdown()
         with self._lock:
             open_sockets = list(self._sockets)
         for sock in open_sockets:
             with contextlib.suppress(OSError):
-                sock.shutdown(socket.SHUT_RDWR)  # a request thread blocked on either side wakes and ends
-        self._server.server_close()  # joins the request threads (block_on_close)
+                sock.shutdown(socket.SHUT_RDWR)
+        self._server.server_close()
         give_up = time.monotonic() + JOIN_S
         for t in self._threads:
             t.join(max(0.0, give_up - time.monotonic()))
@@ -94,8 +71,6 @@ class Proxy:
             print(f"box proxy: threads {stuck} still running {JOIN_S:.0f} s after close", file=sys.stderr)
 
     def _begin(self) -> bool:
-        """A request starts: False if MAX_INFLIGHT are already in flight. Calls on_use first if it
-        is due, so a request after a quiet spell marks the session used before the machine sees it."""
         with self._lock:
             if self._inflight >= MAX_INFLIGHT:
                 return False
@@ -125,12 +100,10 @@ class Proxy:
         assert self._on_use is not None
         try:
             self._on_use()
-        except Exception as e:  # noqa: BLE001 (the session may have ended; the request still gets its answer or error)
+        except Exception as e:  # MUST KILL: swallows every Exception from on_use (was noqa BLE001); catch only the session-ended errors
             print(f"box proxy: marking the session used failed: {e!r}", file=sys.stderr)
 
     def _track(self, sock: socket.socket | None, *, add: bool) -> None:
-        """Note an open socket for close() to shut. Adding after close() began raises: close sets
-        _stop before it takes the sockets (under this lock), so no socket is ever missed."""
         if sock is None:
             return
         with self._lock:
@@ -139,8 +112,8 @@ class Proxy:
             (self._sockets.add if add else self._sockets.discard)(sock)
 
 
-def _handler(proxy: Proxy, upstream: object) -> type[BaseHTTPRequestHandler]:
-    connection = http.client.HTTPSConnection if upstream.scheme == "https" else http.client.HTTPConnection  # type: ignore[attr-defined]
+def _handler(proxy: Proxy, upstream: object) -> type[BaseHTTPRequestHandler]:  # MUST KILL: upstream typed `object`, so three uses needed type: ignore[attr-defined]; type it urllib.parse.SplitResult
+    connection = http.client.HTTPSConnection if upstream.scheme == "https" else http.client.HTTPConnection
 
     class Forward(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.0"
@@ -156,17 +129,16 @@ def _handler(proxy: Proxy, upstream: object) -> type[BaseHTTPRequestHandler]:
             if not proxy._begin():
                 self.send_error(503, f"box proxy: {MAX_INFLIGHT} requests already in flight")
                 return
-            conn = connection(upstream.hostname, upstream.port, timeout=UPSTREAM_TIMEOUT_S)  # type: ignore[attr-defined]
+            conn = connection(upstream.hostname, upstream.port, timeout=UPSTREAM_TIMEOUT_S)
             answered = False
             try:
                 proxy._track(self.connection, add=True)
                 body = self.rfile.read(length)
-                # Connection: close, so nothing upstream pools a connection to the machine's port after
-                # this request (seen live: Modal's connect-token edge holds a keep-alive one 5+ min).
+                # Connection: close: Modal's connect-token edge holds a kept-alive upstream connection open 5+ min
                 headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP_BY_HOP} | proxy.endpoint.headers | {"Connection": "close"}
                 conn.connect()
                 proxy._track(conn.sock, add=True)
-                conn.request(self.command, upstream.path.rstrip("/") + self.path, body=body or None, headers=headers)  # type: ignore[attr-defined]
+                conn.request(self.command, upstream.path.rstrip("/") + self.path, body=body or None, headers=headers)
                 resp = conn.getresponse()
                 answered = True
                 self.send_response(resp.status, resp.reason)
@@ -177,7 +149,7 @@ def _handler(proxy: Proxy, upstream: object) -> type[BaseHTTPRequestHandler]:
                 while chunk := resp.read1(CHUNK):
                     self.wfile.write(chunk)
                     self.wfile.flush()
-            except (OSError, http.client.HTTPException) as e:  # the upstream, the client hanging up, or close()
+            except (OSError, http.client.HTTPException) as e:
                 print(f"box proxy: {self.command} {self.path}: {e!r}", file=sys.stderr)
                 if not answered:
                     with contextlib.suppress(OSError):
