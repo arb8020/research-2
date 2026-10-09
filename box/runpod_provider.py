@@ -27,7 +27,7 @@ from pathlib import Path
 import requests
 
 from box import gpus
-from box.sdk import LABEL_BY, Gone
+from box.sdk import LABEL_BY, LABEL_SESSION, Gone
 
 # TODO(handoff): seen live: a pod whose client died before attaching deleted itself at its boot
 # timeout (UP_TIMEOUT_S). Not yet seen live on the current sdk: the normal path, where the
@@ -134,7 +134,7 @@ class RunPod:
     ) -> RunPodMachine:  # fmt: skip
         """Returns once ssh answers (the supervisor may still be starting)."""
         body: dict = {
-            "name": f"box-{labels.get('box.user', '')}"[:60], "image": image or IMAGE, "cloud": self.cloud,
+            "name": f"box-{labels[LABEL_SESSION]}", "image": image or IMAGE, "cloud": self.cloud,
             "disk": DISK_GB, "ports": ["22/tcp"], "entrypoint": ["bash", "-c", BOOT, "boot", *entrypoint],
             "env": {
                 **env, "BOX_ROOT": ROOT, "BOX_ON_SHUTDOWN": SHUTDOWN, "BOX_TIMEOUT_S": str(timeout_s),

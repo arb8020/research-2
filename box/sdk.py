@@ -16,12 +16,10 @@ runs as its entrypoint and which talks to this file only through files under mac
 from __future__ import annotations
 
 import base64
-import getpass
 import io
 import json
 import secrets
 import shlex
-import socket
 import sys
 import tarfile
 import threading
@@ -35,6 +33,8 @@ from typing import Protocol
 SUPERVISOR = Path(__file__).with_name("supervisor.py")
 LABEL_BY = "box.by"
 LABEL_SESSION = "box.session"  # the session's own id: a session is not its machine, even while 1:1
+LABEL_DEADLINE = "box.deadline"  # unix time the session ends by
+RESERVED = (LABEL_BY, LABEL_SESSION, LABEL_DEADLINE)  # launch stamps these; a caller's labels are the rest
 POLL_S = 0.5
 
 
@@ -85,7 +85,10 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     Returns once the supervisor is up; a machine that is not up in boot_timeout_s (image pull,
     a stuck host) is terminated here, since no supervisor exists yet to end it. The returned
     Session holds the lease (heartbeats) until release() or close(). Its id is new (LABEL_SESSION),
-    not the machine's: attach() finds a session by it."""
+    not the machine's: attach() finds a session by it. labels are the caller's (who launched it,
+    for what, e.g. box.user, box.cmd); box stamps only RESERVED."""
+    if clash := sorted(set(labels or {}) & set(RESERVED)):
+        raise ValueError(f"labels {clash} are box's own (launch stamps them)")
     args = ["--deadline-s", str(deadline_s), "--lease-ttl-s", str(lease_ttl_s), "--idle-timeout-s", str(idle_timeout_s)]
     boot = "import base64,os; exec(base64.b64decode(os.environ['BOX_SUPERVISOR']))"
     entrypoint = ["bash", "-c", f'exec python3 -c {shlex.quote(boot)} --root "$BOX_ROOT" {shlex.join(args)}']
@@ -95,8 +98,8 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     machine = provider.launch(
         gpu=gpu, image=image, entrypoint=entrypoint,
         env={**(env or {}), "BOX_SUPERVISOR": base64.b64encode(SUPERVISOR.read_bytes()).decode()},
-        labels={**(labels or {}), LABEL_BY: "box", LABEL_SESSION: f"s-{secrets.token_hex(6)}", "box.user": f"{getpass.getuser()}@{socket.gethostname()}",
-                "box.deadline": str(int(time.time() + deadline_s))},
+        labels={**(labels or {}), LABEL_BY: "box", LABEL_SESSION: f"s-{secrets.token_hex(6)}",
+                LABEL_DEADLINE: str(int(time.time() + deadline_s))},
         timeout_s=deadline_s + 600,  # the provider's own backstop, past the supervisor's deadline
     )  # fmt: skip
     session = Session(machine)
@@ -172,7 +175,7 @@ class Session:
         """Queue cmd (bash). Jobs run one at a time, in order. on_exit (bash) runs after it ends
         however it ended, with BOX_EXIT_CODE, BOX_REASON, BOX_JOB_DIR set, within hook_budget_s;
         the job is killed hook_budget_s before the session's deadline to leave the hook that time."""
-        left = int(self.machine.labels["box.deadline"]) - time.time()
+        left = int(self.machine.labels[LABEL_DEADLINE]) - time.time()
         if on_exit and hook_budget_s >= left:
             raise ValueError(f"hook_budget_s={hook_budget_s} does not fit in the session's {left:.0f} s left")
         job = Job(self, f"{int(time.time())}-{secrets.token_hex(3)}")
