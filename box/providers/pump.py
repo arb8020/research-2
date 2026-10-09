@@ -1,14 +1,3 @@
-"""Machine.stream underneath, for every provider: a running command's output, pumped by reader threads
-this object owns into a bounded queue and read by the caller as it arrives (a box.sdk.Stream).
-
-    Pumped([pipe_reader("stdout", p.stdout), pipe_reader("stderr", p.stderr)], kill=..., wait=p.wait, ...)
-
-A provider says how to read its command (readers), how to kill it, and how to get its exit code
-(wait, which raises Gone if the machine went with it), and for a pty how to write to its terminal
-(send); Pumped does the rest: the bounds (timeout_s on the whole stream, quiet_s between chunks),
-cancelling (close(), from any thread), and joining.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -23,36 +12,31 @@ import time
 from collections.abc import Callable, Iterator
 from typing import IO
 
-QUEUE_CHUNKS = 64  # chunks held between the readers and the caller; when full, the readers wait (backpressure, never dropped)
-PUT_TICK_S = 0.1  # a waiting reader looks this often whether the stream was closed under it
-CHECK_S = 1.0  # a stream asks `check` this often whether the machine is still there
-JOIN_S = 10.0  # close(): how long a reader gets to end once its command is killed
-READ_BYTES = 64 * 1024  # one read from a pipe at most
-MAX_SEND_BYTES = 64 * 1024  # one send() at most (box.sdk.MAX_SEND_BYTES: keystrokes and pastes)
-SEND_TIMEOUT_S = 10.0  # a send whose terminal takes no input this long (the command reads none) fails
+QUEUE_CHUNKS = 64
+PUT_TICK_S = 0.1
+CHECK_S = 1.0
+JOIN_S = 10.0
+READ_BYTES = 64 * 1024
+MAX_SEND_BYTES = 64 * 1024
+SEND_TIMEOUT_S = 10.0
 
-Emit = Callable[[str, bytes], None]  # (stream name, bytes): a reader hands each chunk to it; raises Closed once closed
-Reader = Callable[[Emit], None]  # pumps one source into emit until its end; each runs on its own thread
+Emit = Callable[[str, bytes], None]
+Reader = Callable[[Emit], None]
 
 
-_WAKE = ("", b"")  # put by close(): wakes an iteration blocked on the queue
+_WAKE = ("", b"")
 
 
 class Closed(Exception):
-    """The stream was closed: a reader still pumping stops."""
+    pass
 
 
 class _Eof:
-    """A reader reached the end of its source."""
+    pass
 
 
 class Pumped:
-    """Iterate for (stream name, bytes) as they arrive; then rc is the command's exit code. Leaving
-    `with` (or close(), safe from any thread, idempotent) kills the command and joins the readers.
-    Raises (and kills the command): TimeoutError past timeout_s, or with no chunk for quiet_s; Gone
-    (from wait or check) once the machine is gone; whatever a reader raised."""
-
-    def __init__(  # noqa: PLR0913 (keyword-only: each is one part of the contract)
+    def __init__(  # noqa: PLR0913
         self, readers: list[Reader], *, kill: Callable[[], None], wait: Callable[[], int | None],
         timeout_s: float, quiet_s: float | None, check: Callable[[], None] = lambda: None, label: str,
         send: Callable[[bytes], None] | None = None,
@@ -66,8 +50,7 @@ class Pumped:
         self._queue: queue.Queue[tuple[str, bytes] | _Eof | BaseException] = queue.Queue(QUEUE_CHUNKS)
         self._closed = threading.Event()
         self._close_lock = threading.Lock()
-        self._finished = False  # the command exited and was waited for: nothing to kill
-        # Not daemons (said, not inherited from a daemon creator): each ends when its source does, which close() forces by killing the command.
+        self._finished = False
         self._threads = [threading.Thread(target=self._pump, args=(r,), name=f"box-stream-{label}-{i}", daemon=False) for i, r in enumerate(readers)]
         for t in self._threads:
             t.start()
@@ -82,9 +65,9 @@ class Pumped:
         open_readers = len(self._threads)
         last = checked = time.monotonic()
         try:
-            while open_readers and not self._closed.is_set():  # closed from another thread: iteration just ends
+            while open_readers and not self._closed.is_set():
                 now = time.monotonic()
-                if now - checked >= CHECK_S:  # by the clock, not only when quiet: output can outlive its machine (local)
+                if now - checked >= CHECK_S:
                     self._check()
                     checked = now
                 quiet_left = float("inf") if self._quiet_s is None else last + self._quiet_s - now
@@ -104,14 +87,13 @@ class Pumped:
                 self.rc = self._wait()
                 self._finished = True
         except GeneratorExit:
-            raise  # a caller that stopped iterating, e.g. next(iter(stream)): the command goes on until close()
-        except BaseException:
-            self.close()  # an error ends it: the command is killed, the readers joined
             raise
-        self.close()  # it ended: the readers are joined
+        except BaseException:
+            self.close()
+            raise
+        self.close()
 
     def _on_quiet(self, last: float) -> None:
-        """No chunk for a while: past a bound, end it (TimeoutError)."""
         now = time.monotonic()
         if now >= self._give_up:
             raise TimeoutError(f"{self.label}: stream ran past {self._timeout_s:.0f} s; killed")
@@ -119,7 +101,6 @@ class Pumped:
             raise TimeoutError(f"{self.label}: no output for {self._quiet_s:.0f} s; killed")
 
     def send(self, data: bytes) -> None:
-        """To the command's terminal (a pty stream only; b"\x03" is Ctrl-C). Safe from any thread."""
         if self._send is None:
             raise ValueError(f"{self.label}: not a pty stream: its stdin is closed (stream(pty=True) to type into it)")
         if len(data) > MAX_SEND_BYTES:
@@ -134,18 +115,17 @@ class Pumped:
                 return
             self._closed.set()
         with contextlib.suppress(queue.Full):
-            self._queue.put_nowait(_WAKE)  # an iteration waiting on another thread sees the close now
+            self._queue.put_nowait(_WAKE)
         if not self._finished:
             try:
                 self._kill()
-            except Exception as e:  # noqa: BLE001 (closing goes on: the readers are still joined)
+            except Exception as e:  # MUST KILL: swallows any kill failure (was noqa BLE001); catch the providers' kill errors only
                 print(f"box: {self.label}: killing a stream's command failed: {e!r}", file=sys.stderr)
         give_up = time.monotonic() + JOIN_S
         for t in self._threads:
             if t is not threading.current_thread():
                 t.join(max(0.0, give_up - time.monotonic()))
         if stuck := [t.name for t in self._threads if t.is_alive()]:
-            # A reader blocked in a call that ignores both the kill and cancellation; it ends when that call returns.
             print(f"box: {self.label}: stream readers {stuck} still running {JOIN_S:.0f} s after close", file=sys.stderr)
 
     def _pump(self, reader: Reader) -> None:
@@ -155,7 +135,7 @@ class Pumped:
             item = _Eof()
         except Closed:
             return
-        except BaseException as e:  # noqa: BLE001 (handed to the caller, raised from its iteration)
+        except BaseException as e:
             item = e
         with contextlib.suppress(Closed):
             self._put(item)
@@ -174,28 +154,20 @@ class Pumped:
                 continue
 
 
-def pipe_reader(name: str, pipe: IO[bytes]) -> Reader:
-    """A local pipe (a subprocess's stdout/stderr): each read returns what is there, up to READ_BYTES."""
-
+def pipe_reader(name: str, pipe: IO[bytes]) -> Reader:  # MUST KILL: pipe typed IO[bytes] though read1 needs a buffered reader (was type: ignore[attr-defined]); type it io.BufferedReader
     def read(emit: Emit) -> None:
         with pipe:
-            while data := pipe.read1(READ_BYTES):  # type: ignore[attr-defined]
+            while data := pipe.read1(READ_BYTES):
                 emit(name, data)
 
     return read
 
 
 class Pty:
-    """A local pseudo-terminal's master side, for a command on this computer (or ssh -tt's client):
-    read by one reader thread (reader()), written by send() from any thread. The reader owns the fd:
-    it closes it when it ends, and a send after that fails rather than write to a reused fd number.
-    Reads wait in select, a PUT_TICK_S at a time, so stop (set by the stream's kill) ends the reader
-    even while something the command started still holds the terminal open."""
-
     def __init__(self, master: int) -> None:
         self.master = master
         self.stop = threading.Event()
-        self._lock = threading.Lock()  # the fd: open or closed, never closed under a write
+        self._lock = threading.Lock()
         self._open = True
         os.set_blocking(master, False)
 
@@ -210,10 +182,10 @@ class Pty:
                     except BlockingIOError:
                         continue
                     except OSError as e:
-                        if e.errno == errno.EIO:  # Linux: every slave fd closed (the command and its children exited)
+                        if e.errno == errno.EIO:  # Linux: EIO once every slave fd is closed
                             return
                         raise
-                    if not data:  # macOS's end of a pty
+                    if not data:  # macOS: b"" at the end of a pty
                         return
                     emit(name, data)
             finally:
@@ -235,13 +207,10 @@ class Pty:
 
 
 def with_pid_file(cmd: str, pid_file: str) -> str:
-    """cmd (bash) that first notes its pid in pid_file, so a stream whose provider cannot kill the
-    command (Modal's exec has no kill; ssh's channel close reaches it only on its next write) kills it
-    with kill_pid_file() in another call."""
+    # Modal's exec has no kill, and ssh's channel close reaches the command only at its next write
     return f"echo $$ > {shlex.quote(pid_file)}; exec bash -c {shlex.quote(cmd)}"
 
 
 def kill_pid_file(pid_file: str) -> str:
-    """bash: SIGTERM the command noted in pid_file and its children, then forget it."""
     p = shlex.quote(pid_file)
     return f"if [ -e {p} ]; then pid=$(cat {p}); pkill -TERM -P \"$pid\"; kill -TERM \"$pid\"; rm -f {p}; fi 2>/dev/null; true"
