@@ -611,3 +611,21 @@ def test_a_follower_reconnects_after_a_dropped_stream_and_stops_at_any_other_err
         with pytest.raises(RuntimeError, match="a bug, not a drop"):
             list(job.logs(follow=True))
         assert failures == []
+
+
+def test_closing_a_stream_reports_a_failed_kill_and_raises_a_kill_bug_after_joining_its_readers(capsys: pytest.CaptureFixture) -> None:
+    from box.providers.pump import Pumped
+
+    def waits_for_close(emit: Callable[[str, bytes], None]) -> None:
+        time.sleep(0.2)
+
+    for kill_raises, raised in ((ConnectionResetError("the channel went away"), None), (KeyError("a bug"), KeyError)):
+
+        def kill(e: BaseException = kill_raises) -> None:
+            raise e
+
+        stream = Pumped([waits_for_close], kill=kill, wait=lambda: 0, timeout_s=10, quiet_s=None, label="test")
+        with pytest.raises(raised) if raised else contextlib.nullcontext():
+            stream.close()
+        assert not [t for t in threading.enumerate() if t.name.startswith("box-stream-test")]  # joined either way
+    assert "killing a stream's command failed: ConnectionResetError" in capsys.readouterr().err
