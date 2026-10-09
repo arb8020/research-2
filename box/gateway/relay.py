@@ -69,7 +69,7 @@ LABEL_GPU = "relay.gpu"  # what the session was launched with, so a stateless GE
 LABEL_PORT = "relay.port"
 DEADLINE_S = 20 * 60  # the session's lifetime; box adds a 10 min provider backstop (30 min hard stop)
 IDLE_TIMEOUT_S = 5 * 60  # no connection to Jupyter (the page keeps a websocket open) for this long ends it
-BOOT_TIMEOUT_S = 10 * 60  # sandbox scheduled + supervisor up (a cold image build happens before, in create)
+BOOT_TIMEOUT_S = 10 * 60  # sandbox scheduled + supervisor up (a cold image build happens before, in sdk.create)
 JUPYTER_READY_S = 3 * 60  # Jupyter answering, after the supervisor is up
 BOOT_RECORD_S = 10 * 60  # how long a finished boot's steps stay replayable from memory
 MAX_BOOTS = 16  # boot records held at once (booting + recently finished); more is 429
@@ -286,23 +286,6 @@ def kernel_service(s: sdk.Session) -> sdk.Job | None:
 # ---- boot (a thread per POST /sessions) ----
 
 
-class Stepping:
-    """A provider that says when its machine exists: create returns after the image is built (a
-    cold build is minutes), the supervisor comes up later (Modal schedules the sandbox)."""
-
-    def __init__(self, inner: sdk.Provider, boot: Boot) -> None:
-        self.inner, self.boot, self.name = inner, boot, inner.name
-
-    def launch(self, **kw: Any) -> sdk.Machine:
-        t0 = time.monotonic()
-        machine = self.inner.launch(**kw)
-        self.boot.step("gateway", f"sandbox {machine.id} created in {time.monotonic() - t0:.1f} s; waiting for it to start")
-        return machine
-
-    def __getattr__(self, attr: str) -> Any:
-        return getattr(self.inner, attr)
-
-
 def jupyter_cmd(cfg: Config, port: int, origin: str) -> str:
     """Jupyter Server as the session's service. allow_origin: the page that connected (its fetches
     and websocket are cross-origin); the token guards every request; xsrf is off because the page
@@ -324,11 +307,20 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
         access.provider.list({sdk.LABEL_SESSION: rec.session_id})  # the first authenticated call: a bad token fails here
         port = cfg.port()
         rec.step("gateway", f"creating sandbox: gpu {rec.gpu or 'none'} (a workspace's first connect builds the image: minutes)")
-        session = sdk.launch(
-            Stepping(access.provider, rec), session_id=rec.session_id, record=access.record, deadline_s=cfg.deadline_s, gpu=rec.gpu, image=cfg.image,
+        created_at = time.monotonic()
+        made = sdk.create(
+            access.provider, session_id=rec.session_id, record=access.record, deadline_s=cfg.deadline_s, gpu=rec.gpu, image=cfg.image,
             labels={**cfg.labels, **req.labels, LABEL_GPU: rec.gpu or "", LABEL_PORT: str(port)},
-            idle_timeout_s=cfg.idle_timeout_s, boot_timeout_s=BOOT_TIMEOUT_S, ports=(port,),
+            idle_timeout_s=cfg.idle_timeout_s, ports=(port,),
         )  # fmt: skip
+        rec.step("gateway", f"sandbox {made.machine.id} created in {time.monotonic() - created_at:.1f} s; waiting for it to start")
+        try:
+            made.wait_up(BOOT_TIMEOUT_S)  # POST /end can't interrupt this: the boot ends at the next check
+        except BaseException:
+            made.machine.terminate()  # no supervisor up to end it (as launch does)
+            raise
+        made.hold()
+        session = made
         rec.step("machine", f"supervisor up ({time.monotonic() - t0:.1f} s since connect)")
         if rec.cancelled:
             raise Cancelled

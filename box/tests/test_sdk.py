@@ -353,3 +353,14 @@ def test_a_session_lists_its_jobs_and_its_services_apart(launch: Callable) -> No
         job = s.run("echo queued")
         job.wait()
         assert ([j.id for j in s.jobs()], [j.id for j in s.services()]) == ([job.id], [server.id])
+
+
+def test_create_returns_before_the_supervisor_is_up_and_launch_is_create_wait_up_hold(name: str, provider: Provider) -> None:
+    s = sdk.create(provider, deadline_s=600, lease_ttl_s=60, **providers.launch_kw(name))
+    assert sdk.attach(provider, s.id).machine.id == s.machine.id  # it exists, booting or not
+    s.wait_up(timeout_s=120)
+    s.hold()
+    assert isinstance(s.status(), Running)
+    assert s.run("echo up").wait() == Ending("exited", 0)
+    s.close()
+    assert s.status() == Ended("stopped")

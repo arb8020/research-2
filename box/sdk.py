@@ -44,7 +44,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Literal, Protocol, TypeVar, get_args
+from typing import Any, Literal, Protocol, TypeVar, get_args
 
 from box.store import Mount, Store
 from box.supervisor import HEARTBEAT_TTL_S, KINDS, MAX_SERVICES, utf8_cut
@@ -172,17 +172,32 @@ class Done:
 JobStatus = Queued | JobRunning | Hooking | Done
 
 
-def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
+def launch(provider: Provider, *, boot_timeout_s: float = 900.0, **create_kw: Any) -> Session:
+    """create(provider, **create_kw), wait until its supervisor is up, hold its lease: a Session
+    ready for jobs, holding the lease (heartbeats) until release() or close(). A machine whose
+    supervisor is not up in boot_timeout_s (image pull, a stuck host) is terminated here, since no
+    supervisor exists yet to end it."""
+    session = create(provider, **create_kw)
+    try:
+        session.wait_up(boot_timeout_s)
+    except BaseException:
+        session.machine.terminate()
+        raise
+    session.hold()
+    return session
+
+
+def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
     provider: Provider, *, deadline_s: int, gpu: str | None = None, image: str | None = None,
     env: dict[str, str] | None = None, labels: dict[str, str] | None = None,
-    lease_ttl_s: float = 60.0, idle_timeout_s: float = 0.0, boot_timeout_s: float = 900.0,
+    lease_ttl_s: float = 60.0, idle_timeout_s: float = 0.0,
     ports: tuple[int, ...] = (), record: Store | None = None, session_id: str | None = None,
 ) -> Session:  # fmt: skip
     """Rent a machine whose supervisor ends it by deadline_s (or sooner: lease lost, idle, stop).
-    Returns once the supervisor is up; a machine that is not up in boot_timeout_s (image pull,
-    a stuck host) is terminated here, since no supervisor exists yet to end it. The returned
-    Session holds the lease (heartbeats) until release() or close(). Its id is new (LABEL_SESSION),
-    not the machine's: attach() finds a session by it. labels are the caller's (who launched it,
+    Returns once the provider has made it, before its supervisor is up (Session.wait_up), so a
+    caller can say so while it boots; launch() is create + wait_up + hold. Until the supervisor is
+    up nothing on the machine can end it: a caller that gives up terminates it (machine.terminate).
+    Its id is new (LABEL_SESSION), not the machine's: attach() finds a session by it. labels are the caller's (who launched it,
     for what, e.g. box.user, box.cmd); box stamps only RESERVED. ports: what Session.expose may
     open later (Modal and RunPod route a port only if the machine was created with it). Idle: no
     job running and no connection to any of ports, for idle_timeout_s (0: never idle).
@@ -217,21 +232,14 @@ def launch(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
         timeout_s=deadline_s + 600,  # the provider's own backstop, past the supervisor's deadline
         ports=list(ports), mounts=[Mount(record, record_prefix(session_id), RECORD_PATH)] if record else [],
     )  # fmt: skip
-    session = Session(machine, record=record)
-    try:  # nothing else ends a machine whose supervisor is not up: every failure here terminates it
-        if record:
+    if record:
+        try:  # nothing else ends a machine whose supervisor is not up
             launched = {"machine_id": machine.id, "provider": provider.name, "labels": machine.labels, "at": time.time()}
             record.put(f"{record_prefix(session_id)}/launch.json", json.dumps(launched).encode())
-        give_up = time.monotonic() + boot_timeout_s
-        while not session._exists("lease"):  # the supervisor's first act
-            if time.monotonic() > give_up:
-                raise TimeoutError(f"{machine.id}: supervisor not up after {boot_timeout_s:.0f} s; terminated")
-            time.sleep(POLL_S)
-    except BaseException:
-        machine.terminate()
-        raise
-    session.hold(lease_ttl_s / 4)
-    return session
+        except BaseException:
+            machine.terminate()
+            raise
+    return Session(machine, record=record, lease_ttl_s=lease_ttl_s)
 
 
 def new_session_id() -> str:
@@ -265,6 +273,7 @@ def record_prefix(session_id: str) -> str:
 class Session:
     machine: Machine
     record: Store | None = None  # where its supervisor records it (launch's record), if anywhere
+    lease_ttl_s: float | None = None  # the lease's TTL, known to the process that created it (hold() needs it)
     _holding: threading.Event | None = field(default=None, repr=False)
     _running: Running | None = field(default=None, repr=False)  # session.json: fixed once written
     _ended: Ended | None = field(default=None, repr=False)  # terminal: once known, it stays
@@ -280,9 +289,19 @@ class Session:
     def __exit__(self, *exc: object) -> None:
         self.close()
 
-    def hold(self, every_s: float) -> None:
-        """Heartbeat the lease every every_s until release()/close(); the supervisor ends the
+    def wait_up(self, timeout_s: float) -> None:
+        """Until the supervisor is up (its first act: ROOT/lease). TimeoutError past timeout_s."""
+        give_up = time.monotonic() + timeout_s
+        while not self._exists("lease"):
+            if time.monotonic() > give_up:
+                raise TimeoutError(f"{self.machine.id}: supervisor not up after {timeout_s:.0f} s")
+            time.sleep(POLL_S)
+
+    def hold(self) -> None:
+        """Heartbeat the lease (4 beats a TTL) until release()/close(); the supervisor ends the
         session if heartbeats stop for its lease TTL (this process died, or lost the network)."""
+        assert self.lease_ttl_s is not None, "hold(): a session from create() (attach does not know the lease TTL)"
+        every_s = self.lease_ttl_s / 4
         stop = self._holding = threading.Event()
 
         def beat() -> None:
