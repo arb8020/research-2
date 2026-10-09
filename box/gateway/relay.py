@@ -6,7 +6,9 @@ A browser cannot call Modal (gRPC, no CORS), so this does it for the reader, wit
 per request. What it keeps:
 - nothing about a running session: GET /sessions/{id} and the event stream ask the machine (box.attach
   by session id, Session.status(), the Jupyter service's logs) every time. Restart the relay, or run
-  two: a session still answers.
+  two: a session still answers. Once the machine is gone they answer from the session's record (box
+  launch(record=): status and logs in a store in the reader's workspace, a Modal Volume): why it
+  ended, and its log, after the fact.
 - while a session boots (POST /sessions returns 202 at once; the boot runs on a thread): its progress
   ("step" events), in memory, and dropped BOOT_RECORD_S after the boot ends. Rebuildable: after it is
   dropped, the machine answers instead.
@@ -48,6 +50,7 @@ from urllib.parse import parse_qs, quote, urlsplit
 from box import sdk
 from box.modal_provider import ModalToken
 from box.sdk import Booting, Ended, Running
+from box.store import Store
 
 HERE = Path(__file__).parent
 KERNEL_IMAGE = str(HERE / "kernel.Dockerfile")
@@ -68,19 +71,29 @@ STREAM_POLL_S = 2.0  # how often an event stream asks the machine (each ask: ~4 
 SSE_PING_S = 15.0
 PROBE_TIMEOUT_S = 5.0
 CLOSE_TIMEOUT_S = 60.0
+RECORD_LANDING_S = 30.0  # a gone machine's record may say Running for its heartbeat TTL (~10 s)
 # The supervisor's end reasons, in the contract's words. released: nobody holds the lease and the
 # Jupyter service exited, so the kernel the page used is gone ("the machine went away").
 REASONS = {"stopped": "stopped", "deadline": "deadline", "idle": "idle", "lease_lost": "lease_lost",
            "released": "machine_lost", "machine_lost": "machine_lost"}  # fmt: skip
+RECORD_VOLUME = "box-sessions"  # a Modal Volume in the reader's workspace: every session's record
 LOCAL_ORIGIN = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 
 
 @dataclass(frozen=True)
-class Config:
-    """How sessions are made. provider(token) is the one place a provider is built (Modal in
-    production, Local in tests); python/ip/port() say how Jupyter runs on that kind of machine."""
+class Access:
+    """What a reader's token reaches: machines, and the store their sessions are recorded in."""
 
-    provider: Callable[[ModalToken], sdk.Provider]
+    provider: sdk.Provider
+    record: Store
+
+
+@dataclass(frozen=True)
+class Config:
+    """How sessions are made. access(token) is the one place a provider and store are built (Modal
+    in production, Local + a directory in tests); python/ip/port() say how Jupyter runs there."""
+
+    access: Callable[[ModalToken], Access]
     image: str | None
     gpus: tuple[str | None, ...]  # what POST /sessions may ask for (spend control)
     labels: dict[str, str]  # stamped on every session (e.g. box.purpose, for sweeps)
@@ -209,6 +222,8 @@ def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: boo
     match s.status():
         case Booting():
             return wire("booting", gpu, time.time(), deadline)
+        case Running() if isinstance(s.machine, sdk.Lost):  # gone; its record's end is still landing
+            return machine_status(cfg, s, token, ready=ready) if wait_out(s) else wire("ended", gpu, deadline - cfg.deadline_s, deadline, reason="machine_lost")
         case Running(started_at=started_at, deadline_at=deadline_at):
             kernel = {"url": s.expose(int(labels[LABEL_PORT])).url, "token": kernel_token(token, s.id)}
             up = ready or jupyter_ready(kernel)
@@ -216,6 +231,14 @@ def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: boo
         case Ended(reason=reason):
             # times only matter while it runs (the pill's uptime); the label's deadline stands in for both
             return wire("ended", gpu, deadline - cfg.deadline_s, deadline, reason=REASONS[reason])
+
+
+def wait_out(s: sdk.Session) -> bool:
+    """A gone machine whose record still says Running: wait() waits out the record's heartbeat TTL
+    (seconds) for the recorded end. True once status() says Ended."""
+    with contextlib.suppress(TimeoutError):
+        s.wait(timeout_s=RECORD_LANDING_S)
+    return isinstance(s.status(), Ended)
 
 
 def jupyter_ready(kernel: dict[str, str]) -> bool:
@@ -230,6 +253,12 @@ def jupyter_ready(kernel: dict[str, str]) -> bool:
         return False
     except (urllib.error.URLError, ConnectionError, TimeoutError):
         return False
+
+
+def attach(cfg: Config, token: ModalToken, sid: str) -> sdk.Session:
+    """The session, live or (machine gone) from its record. LookupError (404) if neither knows it."""
+    access = cfg.access(token)
+    return sdk.attach(access.provider, sid, record=access.record)
 
 
 def the_kernel_job(s: sdk.Session) -> sdk.Job:
@@ -278,12 +307,12 @@ def boot(cfg: Config, rec: Boot, req: CreateRequest, origin: str) -> None:
     session: sdk.Session | None = None
     try:
         rec.step("gateway", "checking your Modal token")
-        provider = cfg.provider(req.token)
-        provider.list({sdk.LABEL_SESSION: rec.session_id})  # the first authenticated call: a bad token fails here
+        access = cfg.access(req.token)
+        access.provider.list({sdk.LABEL_SESSION: rec.session_id})  # the first authenticated call: a bad token fails here
         port = cfg.port()
         rec.step("gateway", f"creating sandbox: gpu {rec.gpu or 'none'} (a workspace's first connect builds the image: minutes)")
         session = sdk.launch(
-            Stepping(provider, rec), session_id=rec.session_id, deadline_s=cfg.deadline_s, gpu=rec.gpu, image=cfg.image,
+            Stepping(access.provider, rec), session_id=rec.session_id, record=access.record, deadline_s=cfg.deadline_s, gpu=rec.gpu, image=cfg.image,
             labels={**cfg.labels, **req.labels, LABEL_GPU: rec.gpu or "", LABEL_PORT: str(port)},
             idle_timeout_s=cfg.idle_timeout_s, boot_timeout_s=BOOT_TIMEOUT_S, ports=(port,),
         )  # fmt: skip
@@ -463,7 +492,7 @@ class Handler(BaseHTTPRequestHandler):
             return 200, {"session_id": sid, "status": rec.status}
         if rec is not None and rec.status is not None and rec.status["state"] == "ended":
             return 200, {"session_id": sid, "status": rec.status}  # a failed boot: no machine to ask
-        s = sdk.attach(self.cfg.provider(token), sid)
+        s = attach(self.cfg, token, sid)
         return 200, {"session_id": sid, "status": machine_status(self.cfg, s, token, ready=False)}
 
     def end(self, sid: str, token: ModalToken) -> tuple[int, dict[str, Any]]:
@@ -471,7 +500,7 @@ class Handler(BaseHTTPRequestHandler):
         if rec is not None and rec.ended_at is None:
             rec.cancelled = True  # the boot thread ends it at its next step (launch itself can't be interrupted)
         try:
-            s = sdk.attach(self.cfg.provider(token), sid)
+            s = attach(self.cfg, token, sid)
         except LookupError:
             if rec is None:
                 raise
@@ -491,7 +520,7 @@ class Handler(BaseHTTPRequestHandler):
         ended status. Last-Event-ID resumes either part. Returns how many events it sent."""
         rec = booting(sid, token)
         if rec is None:
-            sdk.attach(self.cfg.provider(token), sid)  # 404 before the stream starts, as GET /sessions/{id}
+            attach(self.cfg, token, sid)  # 404 before the stream starts, as GET /sessions/{id}
         if not STREAMS.acquire(blocking=False):
             self.reply(429, {"error": f"{MAX_STREAMS} event streams open on this relay"})
             return 0
@@ -512,7 +541,7 @@ class Handler(BaseHTTPRequestHandler):
                 offsets = rec.log_offsets
             else:
                 last_status = None
-            stream.follow_machine(self.cfg, sdk.attach(self.cfg.provider(token), sid), token, offsets or (0, 0), last_status)
+            stream.follow_machine(self.cfg, attach(self.cfg, token, sid), token, offsets or (0, 0), last_status)
         except (BrokenPipeError, ConnectionResetError):
             pass  # the tab went away
         except Exception as e:  # noqa: BLE001 (headers are sent: all that is left is to say so and close)
@@ -555,9 +584,22 @@ class Stream:
                 return rec.status
             self.ping()
 
+    def replay_record(self, cfg: Config, s: sdk.Session, token: ModalToken) -> None:
+        """A session whose machine is gone: its recorded Jupyter log, then its (ended) status."""
+        assert s.record is not None, "relay sessions are always recorded"
+        record = sdk.read_record(s.record, s.id)
+        for job_id in record.jobs():
+            for n, stream, chunk in record.logs(job_id):
+                for line in chunk.splitlines():
+                    self.send(f"r{n}", {"t": time.time(), "kind": "log", "source": "machine", "stream": stream, "text": line})
+        self.send("r-end", {"t": time.time(), "kind": "status", "status": machine_status(cfg, s, token, ready=False)})
+
     def follow_machine(self, cfg: Config, s: sdk.Session, token: ModalToken, offsets: tuple[int, int], last: dict[str, Any] | None) -> None:
         """The machine's word until it ends: Jupyter's log, and its status when it changes. Bounded
         by the session's deadline (plus the provider's backstop), like Session.wait()."""
+        if isinstance(s.machine, sdk.Lost):
+            self.replay_record(cfg, s, token)
+            return
         job = the_kernel_job(s)
         ready = last is not None and last["state"] == "running"
         while True:
@@ -598,11 +640,16 @@ def forget_old_boots() -> None:
 # ---- main ----
 
 
-def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...]) -> Config:
-    from box.modal_provider import Modal
+def modal_access(token: ModalToken, region: str) -> Access:
+    from box.modal_provider import Modal, ModalVolumeStore
 
+    provider = Modal(token=token, region=region)
+    return Access(provider, ModalVolumeStore(RECORD_VOLUME, client=provider.client))
+
+
+def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...]) -> Config:
     return Config(
-        provider=lambda token: Modal(token=token, region=a.region), image=KERNEL_IMAGE, gpus=gpus, labels=dict(a.label),
+        access=lambda token: modal_access(token, a.region), image=KERNEL_IMAGE, gpus=gpus, labels=dict(a.label),
         origins=re.compile(LOCAL_ORIGIN), deadline_s=a.deadline_s, idle_timeout_s=a.idle_timeout_s,
     )  # fmt: skip
 
