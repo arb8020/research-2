@@ -1,23 +1,28 @@
 """box: rent a machine, run jobs on it, bring results back, and never leave it billing.
 
-    with box.launch(provider, gpu="L4", image=IMAGE, deadline_s=3600) as s:   # a Session
+    with box.launch(provider, gpu="L4", image=IMAGE, lease_s=5400, ceiling_s=8 * 3600) as s:   # a Session
         s.put("robots", "/work/robots")
-        job = s.run("cd /work && python robots/train.py", on_exit="upload.sh")
+        job = s.run("cd /work && python robots/train.py", max_duration_s=3600, on_exit="upload.sh")
         for chunk in job.logs(follow=True): ...   # LogChunk(stream, text, end)
         ending = job.wait()                  # Ending(reason="exited", exit_code=0, ...)
         s.get("/work/runs", "runs")
     # leaving the block ends the session: a running job is killed and its hook still runs
     s.status()                               # Ended(reason="stopped")
 
+    s = box.launch(provider, lease_s=600, ceiling_s=8 * 3600)   # detached: nothing ends it but its lease
+    s.extend(time.time() + 3600)             # -> Lease(until, ceiling): clamped to the ceiling, never shorter
+    with s.keep(every_s=60): ...             # interactive: renews to now + 120 s each minute, releases on exit
+    s.release()                              # until = now: ends it (reason "released"), hooks still run
+
     s = box.attach(provider, session_id)     # from anywhere, by the session's own id
-    match s.status():                        # Booting() | Running(started_at, deadline_at) | Ended(reason)
+    match s.status():                        # Booting() | Running(started_at, lease) | Ended(reason)
         case Running(): s.wait()             # -> Ended: the awaitable terminal state
 
-    with box.launch(provider, deadline_s=3600, ports=[8888]) as s:   # ports: declared at launch
+    with box.launch(provider, ceiling_s=3600, ports=[8888]) as s:   # ports: declared at launch
         s.serve("jupyter server --port 8888 ...")   # a service: beside the job queue, until the session ends
         s.expose(8888)                       # Endpoint(url="https://...", headers={})
 
-    s = box.launch(provider, deadline_s=3600, record=store)   # the supervisor records into store (box/store.py)
+    s = box.launch(provider, ceiling_s=3600, record=store)   # the supervisor records into store (box/store.py)
     box.attach(provider, s.id, record=store).wait()           # works after the machine is gone too
     job.logs(after=chunk.end)                # resumes where a reader left off, live or from the record
     r = box.read_record(store, s.id)         # Record: no machine, no provider needed
@@ -25,6 +30,12 @@
 A provider only rents raw machines (Machine: exec, write, read, terminate). Everything else is
 here, built from those four calls and the supervisor (box/supervisor.py), which every machine
 runs as its entrypoint and which talks to this file only through files under machine.root.
+
+One lease ends a session: at min(lease.until, ceiling), both absolute unix times. Callers pass
+durations to create() only; it parses them into those times once, and nothing after handles a
+duration. The provider credential is the authority over a session (one person per credential):
+anyone holding it can extend, release, or close; each lease change is audited (who, when) in
+ROOT/lease-audit.json and the record, for debugging, enforcing nothing.
 """
 
 from __future__ import annotations
@@ -33,9 +44,11 @@ import base64
 import contextlib
 import io
 import json
+import os
 import re
 import secrets
 import shlex
+import socket
 import sys
 import tarfile
 import threading
@@ -47,13 +60,16 @@ from pathlib import Path
 from typing import Any, Literal, Protocol, TypeVar, get_args
 
 from box.store import Mount, Store
-from box.supervisor import HEARTBEAT_TTL_S, KINDS, MAX_SERVICES, utf8_cut
+from box.supervisor import HEARTBEAT_TTL_S, KINDS, MAX_CEILING_S, MAX_SERVICES, utf8_cut
 
 SUPERVISOR = Path(__file__).with_name("supervisor.py")
 LABEL_BY = "box.by"
 LABEL_SESSION = "box.session"  # the session's own id: a session is not its machine, even while 1:1
-LABEL_DEADLINE = "box.deadline"  # unix time the session ends by
-RESERVED = (LABEL_BY, LABEL_SESSION, LABEL_DEADLINE)  # launch stamps these; a caller's labels are the rest
+LABEL_CEILING = "box.ceiling"  # unix time no lease of the session can pass (`box who`, `box gc`)
+RESERVED = (LABEL_BY, LABEL_SESSION, LABEL_CEILING)  # launch stamps these; a caller's labels are the rest
+CEILING_S = 3600  # create()'s default ceiling, from creation
+BACKSTOP_MARGIN_S = 600  # the provider's own hard stop comes this long after the ceiling
+MAX_KEEP_EVERY_S = 3600  # keep(): renewing less often than hourly is a lease, not keep-alive
 POLL_S = 0.5
 RECORD_PATH = "record"  # where a session's record is mounted on its machine, under the supervisor's root
 SESSION_ID = re.compile(r"s-[0-9a-f]{12}")  # new_session_id()'s shape
@@ -110,14 +126,22 @@ class Booting:
 
 
 @dataclass(frozen=True)
+class Lease:
+    """When the session ends: until (unix time), which no extend can move past ceiling."""
+
+    until: float
+    ceiling: float
+
+
+@dataclass(frozen=True)
 class Running:
     """The supervisor is up and the session has not ended. Unix times, by the machine's clock."""
 
     started_at: float
-    deadline_at: float
+    lease: Lease  # as of this status: an extend or a release changes it
 
 
-EndReason = Literal["stopped", "deadline", "idle", "lease_lost", "released", "machine_lost"]
+EndReason = Literal["lease", "released", "stopped", "idle", "machine_lost"]
 
 
 @dataclass(frozen=True)
@@ -135,8 +159,10 @@ Status = Booting | Running | Ended
 
 @dataclass(frozen=True)
 class Ending:
-    """How a job ended. reason: exited | killed | deadline | lease_lost | stopped; a service also
-    idle | released (the session's end), or refused (past MAX_SERVICES, never started)."""
+    """How a job ended. reason: exited | killed | timeout (its max_duration_s) | lease | released |
+    stopped (the session's end, or for lease, about to: killed hook_budget_s early, to leave its
+    hook that time); a service also idle (the session's end), or refused (past MAX_SERVICES, never
+    started)."""
 
     reason: str
     exit_code: int | None
@@ -173,64 +199,72 @@ JobStatus = Queued | JobRunning | Hooking | Done
 
 
 def launch(provider: Provider, *, boot_timeout_s: float = 900.0, **create_kw: Any) -> Session:
-    """create(provider, **create_kw), wait until its supervisor is up, hold its lease: a Session
-    ready for jobs, holding the lease (heartbeats) until release() or close(). A machine whose
-    supervisor is not up in boot_timeout_s (image pull, a stuck host) is terminated here, since no
-    supervisor exists yet to end it."""
+    """create(provider, **create_kw), then wait until its supervisor is up: a Session ready for
+    jobs, which lives until its lease ends (or close, release, idle). A machine whose supervisor is
+    not up in boot_timeout_s (image pull, a stuck host) is terminated here, since no supervisor
+    exists yet to end it."""
     session = create(provider, **create_kw)
     try:
         session.wait_up(boot_timeout_s)
     except BaseException:
         session.machine.terminate()
         raise
-    session.hold()
     return session
 
 
 def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
-    provider: Provider, *, deadline_s: int, gpu: str | None = None, image: str | None = None,
-    env: dict[str, str] | None = None, labels: dict[str, str] | None = None,
-    lease_ttl_s: float = 60.0, idle_timeout_s: float = 0.0,
-    ports: tuple[int, ...] = (), record: Store | None = None, session_id: str | None = None,
+    provider: Provider, *, lease_s: float | None = None, ceiling_s: float = CEILING_S, gpu: str | None = None,
+    image: str | None = None, env: dict[str, str] | None = None, labels: dict[str, str] | None = None,
+    idle_timeout_s: float = 0.0, ports: tuple[int, ...] = (), record: Store | None = None, session_id: str | None = None,
 ) -> Session:  # fmt: skip
-    """Rent a machine whose supervisor ends it by deadline_s (or sooner: lease lost, idle, stop).
-    Returns once the provider has made it, before its supervisor is up (Session.wait_up), so a
-    caller can say so while it boots; launch() is create + wait_up + hold. Until the supervisor is
-    up nothing on the machine can end it: a caller that gives up terminates it (machine.terminate).
+    """Rent a machine whose supervisor ends the session at min(lease, ceiling) (or sooner: idle,
+    stop, release). lease_s (default: ceiling_s) and ceiling_s count from now, and are parsed here,
+    once, into absolute times: the lease is the guarantee, so a session is detached from the start
+    (nothing ends it because this process goes away). extend() moves the lease up to the ceiling;
+    nothing moves the ceiling (at most MAX_CEILING_S). Returns once the provider has made the
+    machine, before its supervisor is up (Session.wait_up), so a caller can say so while it boots;
+    launch() is create + wait_up. Until the supervisor is up nothing on the machine can end it: a
+    caller that gives up terminates it (machine.terminate). The provider's own backstop is the
+    ceiling plus BACKSTOP_MARGIN_S, from the same clock reading, so a slow boot never cuts it short.
     Its id is new (LABEL_SESSION), not the machine's: attach() finds a session by it. labels are the caller's (who launched it,
     for what, e.g. box.user, box.cmd); box stamps only RESERVED. ports: what Session.expose may
     open later (Modal and RunPod route a port only if the machine was created with it). Idle: no
     job running and no connection to any of ports, for idle_timeout_s (0: never idle).
-    record: the supervisor records status, jobs, and output into it, under record_prefix(id), so
-    status() and wait() still answer after the machine is gone, and read_record() reads it.
-    session_id: one from new_session_id(), for a caller that must name the session before launch
-    returns (a relay answers the browser at once, while the machine boots); fresh by default."""
+    record: the supervisor records status, jobs, the lease, and output into it, under
+    record_prefix(id), so status() and wait() still answer after the machine is gone, and
+    read_record() reads it. session_id: one from new_session_id(), for a caller that must name the
+    session before launch returns (a relay answers the browser at once, while the machine boots)."""
     session_id = new_session_id() if session_id is None else session_id
     if not SESSION_ID.fullmatch(session_id):
         raise ValueError(f"session_id {session_id!r} is not one new_session_id() makes")
     if clash := sorted(set(labels or {}) & set(RESERVED)):
         raise ValueError(f"labels {clash} are box's own (launch stamps them)")
+    lease_s = ceiling_s if lease_s is None else lease_s
+    if not 0 < ceiling_s <= MAX_CEILING_S:
+        raise ValueError(f"ceiling_s={ceiling_s}: a ceiling is more than 0 and at most {MAX_CEILING_S} s (48 h)")
+    if not 0 < lease_s <= ceiling_s:
+        raise ValueError(f"lease_s={lease_s}: a lease is more than 0 and at most the ceiling ({ceiling_s} s)")
+    created_at = time.time()
+    lease = Lease(until=created_at + lease_s, ceiling=created_at + ceiling_s)
+    assert created_at < lease.until  # pair: the supervisor asserts these again at its start
+    assert lease.until <= lease.ceiling
+    assert lease.ceiling <= created_at + MAX_CEILING_S
     args = [
-        "--deadline-s", str(deadline_s), "--lease-ttl-s", str(lease_ttl_s), "--idle-timeout-s", str(idle_timeout_s),
-        "--ports", ",".join(map(str, ports)),
+        "--created-at", repr(created_at), "--lease-until", repr(lease.until), "--ceiling", repr(lease.ceiling),
+        "--host", socket.gethostname(), "--pid", str(os.getpid()),
+        "--idle-timeout-s", str(idle_timeout_s), "--ports", ",".join(map(str, ports)),
         *(["--record", RECORD_PATH, *(["--record-sync"] if record.sync_writes else [])] if record else []),
     ]  # fmt: skip
-    boot = "import base64,os; exec(base64.b64decode(os.environ['BOX_SUPERVISOR']))"
-    entrypoint = ["bash", "-c", f'exec python3 -c {shlex.quote(boot)} --root "$BOX_ROOT" {shlex.join(args)}']
-    # TODO(handoff): LABEL_DEADLINE is stamped before the machine boots, but the supervisor's clock
-    # starts at boot, so a slow boot (an unpinned Modal L4 took ~6 min) makes the label early by the
-    # boot time. Only `box who`/`box gc` still read it (gc's 30 min margin covers the default 15 min
-    # boot_timeout_s); the SDK reads the supervisor's own deadline (session.json). Same skew: the
-    # provider backstop (timeout_s) also starts at create, so a boot over 600 s leaves it before
-    # the supervisor's deadline. Fixing both means deadline_s counts from launch (pass the
-    # supervisor an absolute deadline), which changes what deadline_s means: the author's call.
+    # the supervisor is installed as a file (ROOT/supervisor.py), so a later exec can run its `lease` command
+    install = "import base64,os; open(os.environ['BOX_ROOT'] + '/supervisor.py', 'wb').write(base64.b64decode(os.environ['BOX_SUPERVISOR']))"
+    boot = f'mkdir -p "$BOX_ROOT" && python3 -c {shlex.quote(install)} && exec python3 "$BOX_ROOT/supervisor.py" --root "$BOX_ROOT" {shlex.join(args)}'
+    backstop_s = int(lease.ceiling - time.time()) + BACKSTOP_MARGIN_S  # from the ceiling, not from boot
+    assert backstop_s > BACKSTOP_MARGIN_S, backstop_s
     machine = provider.launch(
-        gpu=gpu, image=image, entrypoint=entrypoint,
+        gpu=gpu, image=image, entrypoint=["bash", "-c", boot],
         env={**(env or {}), "BOX_SUPERVISOR": base64.b64encode(SUPERVISOR.read_bytes()).decode()},
-        labels={**(labels or {}), LABEL_BY: "box", LABEL_SESSION: session_id,
-                LABEL_DEADLINE: str(int(time.time() + deadline_s))},
-        timeout_s=deadline_s + 600,  # the provider's own backstop, past the supervisor's deadline
-        ports=list(ports), mounts=[Mount(record, record_prefix(session_id), RECORD_PATH)] if record else [],
+        labels={**(labels or {}), LABEL_BY: "box", LABEL_SESSION: session_id, LABEL_CEILING: str(int(lease.ceiling))},
+        timeout_s=backstop_s, ports=list(ports), mounts=[Mount(record, record_prefix(session_id), RECORD_PATH)] if record else [],
     )  # fmt: skip
     if record:
         try:  # nothing else ends a machine whose supervisor is not up
@@ -239,7 +273,7 @@ def create(  # noqa: PLR0913 (all keyword-only; each is one knob of the session)
         except BaseException:
             machine.terminate()
             raise
-    return Session(machine, record=record, lease_ttl_s=lease_ttl_s)
+    return Session(machine, record=record)
 
 
 def new_session_id() -> str:
@@ -247,7 +281,8 @@ def new_session_id() -> str:
 
 
 def attach(provider: Provider, session_id: str, record: Store | None = None) -> Session:
-    """A session launched elsewhere (another process, a detached run). Does not hold its lease.
+    """A session launched elsewhere (another process, a detached run). It can extend, release, and
+    close it as its creator can: the provider credential is the authority.
     Without record: while its machine lives; LookupError if no live machine carries that id. With
     the store it was launched with: also after its machine is gone (status() and wait() answer from
     the record, every machine call raises Gone; read the output with read_record)."""
@@ -273,9 +308,6 @@ def record_prefix(session_id: str) -> str:
 class Session:
     machine: Machine
     record: Store | None = None  # where its supervisor records it (launch's record), if anywhere
-    lease_ttl_s: float | None = None  # the lease's TTL, known to the process that created it (hold() needs it)
-    _holding: threading.Event | None = field(default=None, repr=False)
-    _running: Running | None = field(default=None, repr=False)  # session.json: fixed once written
     _ended: Ended | None = field(default=None, repr=False)  # terminal: once known, it stays
     _endpoints: dict[int, Endpoint] = field(default_factory=dict, repr=False)  # fixed for the machine's life
 
@@ -290,40 +322,77 @@ class Session:
         self.close()
 
     def wait_up(self, timeout_s: float) -> None:
-        """Until the supervisor is up (its first act: ROOT/lease). TimeoutError past timeout_s."""
+        """Until the supervisor is up (its last act at start: ROOT/up). TimeoutError past timeout_s."""
         give_up = time.monotonic() + timeout_s
-        while not self._exists("lease"):
+        while not self._exists("up"):
             if time.monotonic() > give_up:
                 raise TimeoutError(f"{self.machine.id}: supervisor not up after {timeout_s:.0f} s")
             time.sleep(POLL_S)
 
-    def hold(self) -> None:
-        """Heartbeat the lease (4 beats a TTL) until release()/close(); the supervisor ends the
-        session if heartbeats stop for its lease TTL (this process died, or lost the network)."""
-        assert self.lease_ttl_s is not None, "hold(): a session from create() (attach does not know the lease TTL)"
-        every_s = self.lease_ttl_s / 4
-        stop = self._holding = threading.Event()
+    def extend(self, until: float) -> Lease:
+        """Move the lease's end to until (unix time), clamped to the ceiling. Never shorter: an
+        earlier until is a no-op that returns the lease as it is (as SF Compute's "a shorter
+        re-ask never cuts a hold"). A lease that ran out, or was released, stays over."""
+        return self._change_lease("extend", until)
 
-        def beat() -> None:
-            while not stop.wait(every_s):
-                try:
-                    self.machine.exec(f"touch {self._path('lease')}")
-                except Gone:
-                    return  # nothing left to hold
-                except Exception as exc:  # noqa: BLE001 (a missed beat is retried; the TTL allows several)
-                    print(f"box: {self.id}: heartbeat failed, retrying: {exc!r}", file=sys.stderr)
+    def release(self) -> Lease:
+        """End the lease now (until = now, by the machine's clock): the session ends with reason
+        "released"; a running job is killed and its hook still runs."""
+        return self._change_lease("release", 0.0)
 
-        threading.Thread(target=beat, daemon=True, name=f"box-lease-{self.id}").start()
+    @contextlib.contextmanager
+    def keep(self, every_s: float) -> Iterator[Lease]:
+        """Keep the session alive while the block runs (interactive use): extend to now + 2 *
+        every_s at once and every every_s, then release on the way out, an exception or Ctrl-C
+        included. If this process dies, the session ends at most 2 * every_s later (its lease).
+        A renewer thread does the extending; this block owns it and joins it before leaving."""
+        if not 0 < every_s <= MAX_KEEP_EVERY_S:
+            raise ValueError(f"every_s={every_s}: keep() renews more than 0 and at most every {MAX_KEEP_EVERY_S} s")
+        lease = self.extend(time.time() + 2 * every_s)
+        stop = threading.Event()
+        # NOTE: stdlib threads, structured by hand (owned, joined, never a daemon). If box grows an
+        # async version or mode, use anyio in trio style (nurseries and cancel scopes, no bare tasks)
+        # on the asyncio backend, so Modal's .aio API works.
+        renewer = threading.Thread(target=self._renew, args=(every_s, stop), daemon=False, name=f"box-keep-{self.id}")
+        renewer.start()
+        try:
+            yield lease
+        finally:
+            stop.set()
+            try:
+                with contextlib.suppress(Gone):  # it already ended (its ceiling) and went
+                    self.release()  # before the join: a Ctrl-C during a slow renew still ends the lease
+            finally:
+                renewer.join()  # bounded: one in-flight extend (an exec), then it sees stop
+                assert not renewer.is_alive()
 
-    def release(self) -> None:
-        """Stop holding: the session now ends by itself once no job is left (or at its deadline)."""
-        self._stop_holding()
-        self._touch("released")
+    def _renew(self, every_s: float, stop: threading.Event) -> None:
+        """keep()'s renewer: extend every every_s until stopped, or the session is over."""
+        while not stop.wait(every_s):
+            try:
+                lease = self.extend(time.time() + 2 * every_s)
+            except Gone:
+                return  # nothing left to keep
+            except Exception as exc:  # noqa: BLE001 (a missed renewal is retried; the lease is 2 renewals long)
+                print(f"box: {self.id}: renewing the lease failed, retrying: {exc!r}", file=sys.stderr)
+                continue
+            if lease.until <= time.time():
+                return  # over (released, or past its ceiling): extending can't revive it
+
+    def _change_lease(self, op: Literal["extend", "release"], until: float) -> Lease:
+        """One exec: the supervisor's own `lease` command changes ROOT/lease.json under a lock,
+        audits it as this host and process, and prints the lease after it."""
+        root = self.machine.root
+        argv = ["python3", f"{root}/supervisor.py", "lease", "--root", root, "--op", op, "--until", repr(until),
+                "--host", socket.gethostname(), "--pid", str(os.getpid())]  # fmt: skip
+        lease = parse_lease(self._check(shlex.join(argv)).encode())
+        if op == "release":
+            assert lease.until <= time.time() + 1, lease  # ended now (or before), give or take the clocks' skew
+        return lease
 
     def close(self, timeout_s: float = 900.0) -> None:
         """End the session: kill any running job, let its hook run, then terminate the machine.
         Waits up to timeout_s for the supervisor to say it ended (status() then has why)."""
-        self._stop_holding()
         if not isinstance(self.status(), Ended):  # mkdir: a booting supervisor ends at once on stop
             with contextlib.suppress(Gone):  # it may end as soon as the supervisor exits
                 self.machine.exec(f"mkdir -p {self.machine.root} && touch {self._path('watch')} {self._path('stop')}")
@@ -340,26 +409,25 @@ class Session:
         return self._endpoints[port]
 
     def status(self) -> Status:
-        """Booting, Running, or Ended (and why), from the supervisor's files. Once the machine is
-        gone, always Ended: machine_lost, or with a record, the record's word (Record.end), which
-        may take up to HEARTBEAT_TTL_S to land. Ended is final: once this Session has seen it, it
-        answers without asking the machine."""
+        """Booting, Running (with the lease as it is now), or Ended (and why), from the
+        supervisor's files, in one exec. Once the machine is gone, always Ended: machine_lost, or
+        with a record, the record's word (Record.end), which may take up to HEARTBEAT_TTL_S to
+        land. Ended is final: once this Session has seen it, it answers without asking the machine."""
         if self._ended is not None:
             return self._ended
         try:
-            self._ended = self._read_ended()
-            if self._ended is None and self._running is None:
-                self._running = parse_running(self.machine.read(self._path("session.json")))
-        except FileNotFoundError:
-            return Booting()
+            out = self._check(STATUS_SH.format(root=shlex.quote(self.machine.root)))
         except Gone:
             return self._status_when_gone()
-        return self._ended or self._running
+        status = parse_status(out.encode())
+        if isinstance(status, Ended):
+            self._ended = status
+        return status
 
     def wait(self, timeout_s: float | None = None) -> Ended:
         """Block until the session ends; returns why. While waiting it keeps the machine lingering
         (ROOT/watch), so the supervisor's reason is read before the machine goes. Bounded without
-        timeout_s too: by the session's deadline (or its machine's loss). TimeoutError past timeout_s
+        timeout_s too: by the session's ceiling (or its machine's loss). TimeoutError past timeout_s
         (checked between polls: a gone machine's status() can take up to HEARTBEAT_TTL_S)."""
         give_up = None if timeout_s is None else time.monotonic() + timeout_s
         while not (self._watch() or isinstance(status := self.status(), Ended)):  # watch first: no gap to end in
@@ -368,15 +436,23 @@ class Session:
             time.sleep(POLL_S)
         return status
 
-    def run(self, cmd: str, *, on_exit: str | None = None, hook_budget_s: float = 300.0, env: dict[str, str] | None = None) -> Job:
-        """Queue cmd (bash). Jobs run one at a time, in order. on_exit (bash) runs after it ends
-        however it ended, with BOX_EXIT_CODE, BOX_REASON, BOX_JOB_DIR set, within hook_budget_s;
-        the job is killed hook_budget_s before the session's deadline to leave the hook that time."""
+    def run(  # noqa: PLR0913 (keyword-only: each is one knob of the job)
+        self, cmd: str, *, max_duration_s: float = 1800.0, on_exit: str | None = None, hook_budget_s: float = 300.0,
+        env: dict[str, str] | None = None,
+    ) -> Job:  # fmt: skip
+        """Queue cmd (bash). Jobs run one at a time, in order. The job is killed (reason "timeout")
+        max_duration_s after it starts; pass it explicitly: the default is a seatbelt, not a
+        choice. on_exit (bash) runs after it ends however it ended, with BOX_EXIT_CODE, BOX_REASON,
+        BOX_JOB_DIR set, within hook_budget_s; the job is killed hook_budget_s before the lease
+        ends to leave the hook that time (so a hook needs a lease longer than its budget)."""
+        if not 0 < max_duration_s <= MAX_CEILING_S:
+            raise ValueError(f"max_duration_s={max_duration_s}: more than 0 and at most {MAX_CEILING_S} s")
         running = self._running_now()
-        left = running.deadline_at - time.time()
+        left = min(running.lease.until, running.lease.ceiling) - time.time()
         if on_exit and hook_budget_s >= left:
-            raise ValueError(f"hook_budget_s={hook_budget_s} does not fit in the session's {left:.0f} s left")
-        return self._start(Job(self, new_job_id(), "jobs"), {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "env": env or {}})
+            raise ValueError(f"hook_budget_s={hook_budget_s} does not fit in the lease's {left:.0f} s left")
+        spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "max_duration_s": max_duration_s, "env": env or {}}
+        return self._start(Job(self, new_job_id(), "jobs"), spec)
 
     def serve(self, cmd: str, *, env: dict[str, str] | None = None) -> Job:
         """Start cmd (bash) as a service: a long-lived server (e.g. behind an exposed port) that
@@ -439,13 +515,6 @@ class Session:
             return [Job(self, job_id, kind) for job_id in read_record(self.record, self.id).jobs(kind)]
         return [Job(self, name, kind) for name in sorted(out.split()) if not name.endswith(".tmp")]
 
-    def _read_ended(self) -> Ended | None:
-        """ended.json's reason; None while the session lasts. Gone once the machine is."""
-        try:
-            return parse_ended(self.machine.read(self._path("ended.json")))
-        except FileNotFoundError:
-            return None
-
     def _status_when_gone(self) -> Ended:
         """No record: machine_lost. Else the record's end, waiting out (at most HEARTBEAT_TTL_S) a
         heartbeat still fresh, while the record of the end may still be landing."""
@@ -462,10 +531,6 @@ class Session:
         """Tell the supervisor someone is reading, so the machine lingers for us after it ends."""
         with contextlib.suppress(Gone):  # then the next status() says Ended
             self.machine.exec(f"touch {self._path('watch')}")
-
-    def _stop_holding(self) -> None:
-        if self._holding is not None:
-            self._holding.set()
 
     def _path(self, rel: str) -> str:
         return f"{self.machine.root}/{rel}"
@@ -605,15 +670,16 @@ class LogChunk:
 
 
 def run_job(
-    provider: Provider, cmd: str, *, deadline_s: int, put: list[tuple[str, str]] = (),
+    provider: Provider, cmd: str, *, max_duration_s: float, put: list[tuple[str, str]] = (),
     get: list[tuple[str, str]] = (), on_exit: str | None = None, **launch_kw: object,
 ) -> Ending:  # fmt: skip
-    """launch, put each (local, remote), run cmd with its output on this terminal, get each
-    (remote, local), close. Exactly the Session calls; use them directly for anything else."""
-    with launch(provider, deadline_s=deadline_s, **launch_kw) as s:
+    """launch (launch_kw: lease_s, ceiling_s, gpu, ...), put each (local, remote), run cmd with its
+    output on this terminal, get each (remote, local), close. Exactly the Session calls; use them
+    directly for anything else."""
+    with launch(provider, **launch_kw) as s:
         for local, remote in put:
             s.put(local, remote)
-        job = s.run(cmd, on_exit=on_exit)
+        job = s.run(cmd, max_duration_s=max_duration_s, on_exit=on_exit)
         sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
         for chunk in job.logs(follow=True):
             sinks[chunk.stream].write(chunk.text)
@@ -646,6 +712,19 @@ class Lost:
 
     def terminate(self) -> None:
         """Already gone: nothing to do."""
+
+
+@dataclass(frozen=True)
+class LeaseChange:
+    """One entry of a session's lease audit: op (create | extend | release) made the lease end at
+    until, at (unix time) from pid on host; n such in a row (keep()'s renewals) are one entry."""
+
+    op: str
+    until: float
+    at: float
+    host: str
+    pid: int
+    n: int
 
 
 @dataclass(frozen=True)
@@ -683,6 +762,12 @@ class Record:
         if self.heartbeat is not None and now - self.heartbeat.at < self.heartbeat.ttl_s:
             return None
         return Ended("machine_lost")
+
+    def lease_audit(self) -> list[LeaseChange]:
+        """Every change of the session's lease, as last recorded (debugging: who extended or
+        released it, from where, when). Empty if none was recorded."""
+        raw = _parse_if_present(self.store, f"{record_prefix(self.session_id)}/lease-audit.json", json.loads)
+        return [LeaseChange(e["op"], float(e["until"]), float(e["at"]), str(e["host"]), int(e["pid"]), int(e["n"])) for e in raw or []]
 
     def jobs(self, kind: str = "jobs") -> list[str]:
         """Every job id recorded (kind="services": every service's), oldest first."""
@@ -740,7 +825,7 @@ def read_record(store: Store, session_id: str) -> Record:
         raise ValueError(f"{store.uri}: {prefix}/launch.json is for session {launched['labels'].get(LABEL_SESSION)!r}")
     return Record(
         store=store, machine_id=str(launched["machine_id"]), labels=dict(launched["labels"]),
-        running=_parse_if_present(store, f"{prefix}/session.json", parse_running),
+        running=_recorded_running(store, prefix),
         ended=_parse_if_present(store, f"{prefix}/ended.json", parse_ended),
         heartbeat=_parse_if_present(store, f"{prefix}/heartbeat.json", parse_heartbeat),
     )  # fmt: skip
@@ -759,10 +844,43 @@ def parse_heartbeat(raw: bytes) -> Heartbeat:
     return Heartbeat(at=float(d["at"]), ttl_s=float(d["ttl_s"]))
 
 
-def parse_running(raw: bytes) -> Running:
-    """session.json, as the supervisor wrote it."""
+def _recorded_running(store: Store, prefix: str) -> Running | None:
+    """session.json and lease.json as last recorded; None until both have landed."""
+    session = _parse_if_present(store, f"{prefix}/session.json", json.loads)
+    lease = _parse_if_present(store, f"{prefix}/lease.json", parse_lease)
+    if session is None or lease is None:
+        return None
+    return Running(started_at=float(session["started_at"]), lease=lease)
+
+
+def parse_lease(raw: bytes) -> Lease:
+    """lease.json (or the supervisor's `lease` command's output): {until, ceiling, released}."""
     d = json.loads(raw)
-    return Running(started_at=float(d["started_at"]), deadline_at=float(d["deadline_at"]))
+    lease = Lease(until=float(d["until"]), ceiling=float(d["ceiling"]))
+    if lease.until > lease.ceiling:
+        raise ValueError(f"lease until {lease.until} is past its ceiling {lease.ceiling}")
+    return lease
+
+
+# One exec: ended.json if the session ended; else, once up, session.json and lease.json; else nothing (booting).
+STATUS_SH = (
+    "cd {root} 2>/dev/null || exit 0; "
+    "if [ -e ended.json ]; then echo ended; cat ended.json; "
+    "elif [ -e up ]; then echo running; cat session.json; echo; cat lease.json; fi"
+)
+
+
+def parse_status(raw: bytes) -> Status:
+    """STATUS_SH's output."""
+    kind, *docs = raw.decode().splitlines() or ["booting"]
+    match kind, len(docs):
+        case "booting", 0:
+            return Booting()
+        case "ended", 1:
+            return parse_ended(docs[0].encode())
+        case "running", 2:
+            return Running(started_at=float(json.loads(docs[0])["started_at"]), lease=parse_lease(docs[1].encode()))
+    raise ValueError(f"session status: unexpected {raw[:200]!r}")
 
 
 def parse_job_status(raw: bytes) -> JobStatus:

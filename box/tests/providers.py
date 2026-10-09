@@ -13,7 +13,7 @@ from box.sdk import Gone, Machine, Provider
 from box.store import DirStore, Store
 
 IMAGE = "python:3.13-slim"  # any image with bash + python3 is a box image
-SCALE = {"local": 1.0, "modal": 10.0, "runpod": 30.0}  # runpod: ~30 s boot comes out of box.deadline
+SCALE = {"local": 1.0, "modal": 10.0, "runpod": 30.0}  # runpod: ~30 s boot comes out of the lease (it counts from create)
 PURPOSE = {"box.purpose": "reader-path-dev"}  # every test machine carries it, so a sweep finds strays
 MAX_BACKSTOP_S = 900  # a test machine whose supervisor fails is still gone (and unbilled) after 15 min
 
