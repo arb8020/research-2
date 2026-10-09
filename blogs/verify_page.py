@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 from urllib.request import urlopen
 
-from playwright.sync_api import Locator, sync_playwright
+from playwright.sync_api import Browser, Locator, sync_playwright
 
 from check import parse
 
@@ -49,6 +49,34 @@ SESSION = re.search(r'<meta name="session-url" content="([^"]+)">', html)[1]
 assert not (HERE / ".session" / "01-flappy" / "state.json").exists(), "rm -rf .session first: verify expects a fresh reader"
 SHOTS.mkdir(parents=True, exist_ok=True)
 
+
+def nn_fit_and_wip(browser: Browser, scheme: str) -> None:
+    """The wip banner shows its text; <nn-fit> renders from its .nnfit file and its loss falls after Train."""
+    page = browser.new_page(viewport={"width": 900, "height": 1000}, device_scale_factor=2, color_scheme=scheme)
+    page.on("pageerror", lambda e: print("  pageerror:", e))
+    page.goto(PAGE)
+    wip = page.locator(".wip")
+    assert wip.count() == 1 and wip.is_visible(), "the wip banner is missing"
+    assert "still working on" in wip.inner_text(), wip.inner_text()
+    nn = page.locator("nn-fit")
+    nn.scroll_into_view_if_needed()
+    before = page.evaluate("document.querySelector('nn-fit').stats")
+    assert before["dataset"] == "wave" and before["sizes"] == [1, 12, 12, 1], before  # 01-flappy-nnfit.nnfit
+    assert before["steps"] == 0 and before["loss"] is not None, before
+    nn.locator("button.train").click()
+    page.wait_for_function("document.querySelector('nn-fit').stats.steps >= 200", timeout=20_000)
+    nn.locator("button.train").click()
+    after = page.evaluate("document.querySelector('nn-fit').stats")
+    assert after["loss"] < before["loss"] / 10, f"loss {before['loss']} -> {after['loss']} after {after['steps']} steps"
+    print(f"  nn-fit ({scheme}): {before['sizes']} loss {before['loss']:.3g} -> {after['loss']:.3g} after {after['steps']} steps")
+    page.locator(".wip").scroll_into_view_if_needed()
+    wip.screenshot(path=SHOTS / f"nn-fit-wip-banner-{scheme}.png")
+    nn.screenshot(path=SHOTS / f"nn-fit-widget-{scheme}.png")
+    page.evaluate("document.querySelector('.wip').scrollIntoView({block: 'start'})")
+    page.screenshot(path=SHOTS / f"nn-fit-section-{scheme}.png")
+    page.close()
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch(executable_path=CHROME)
     page = browser.new_page(viewport={"width": 900, "height": 1000}, device_scale_factor=2)
@@ -58,6 +86,9 @@ with sync_playwright() as p:
     page.wait_for_selector('code-cell[name="policy"].locked')
     page.screenshot(path=SHOTS / "0-page.png", full_page=True)
     print("page: policy locked =", page.locator('code-cell[name="policy"] .run').is_disabled())
+
+    for scheme in ("light", "dark"):
+        nn_fit_and_wip(browser, scheme)
 
     page.locator("env-play").scroll_into_view_if_needed()
     time.sleep(2)
