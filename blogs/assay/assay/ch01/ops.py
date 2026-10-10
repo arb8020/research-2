@@ -2,7 +2,7 @@
 cache key, so editing this file recomputes expected answers; graders live in suite.py so editing them does not).
 
 Sections: op registry (`@op`), op specs (the references: linear, gelu, layer_norm, attention), case generator,
-numerics (budget pieces + reductions, no thresholds), prompts, the model-level ops (gpt2 block, forward and generate vs
+numerics (error frontier + reductions, no thresholds), prompts, the model-level ops (gpt2 block, forward and generate vs
 HuggingFace).
 
 Dims are the series' letters (blogs/notes/ch01-design-2026-10-09.md, "notation"): T query len, S kv len, D d_model,
@@ -28,6 +28,8 @@ from torch import Tensor
 
 NAMES = {"fp64": torch.float64, "fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}
 SHORT = {v: k for k, v in NAMES.items()}
+# An op case's input distribution (an axis of every op's sweep; "case generator" below says why):
+INPUTS = {"centered": (0.0, 1.0), "offset": (3.0, 0.5)}  # name -> (mean, std) of every float input tensor
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -74,6 +76,7 @@ class Sweep:
     scalars: dict[str, tuple[float, ...]]
     dtypes: tuple[torch.dtype, ...]
     tied: dict[str, str] = field(default_factory=dict)
+    inputs: tuple[str, ...] = ()  # input distributions (INPUTS), crossed like a dim; model ops: none
 
 
 @dataclass(eq=False)  # identity hash: ops key bind()'s kernels= dict
@@ -143,7 +146,9 @@ def op(*, dims: dict[str, tuple[int, ...]], dtypes: tuple[torch.dtype, ...],
     def declare(fn: Callable[..., Any]) -> Op:
         declared_name = name if name is not None else fn.__name__
         assert declared_name not in REGISTRY, f"op {declared_name!r} declared twice"
-        declared = Op(declared_name, fn, Sweep(dims, scalars or {}, dtypes, tied or {}), kind=kind, blocking=blocking)
+        inputs = tuple(INPUTS) if kind == "op" else ()
+        declared = Op(declared_name, fn, Sweep(dims, scalars or {}, dtypes, tied or {}, inputs), kind=kind,
+                      blocking=blocking)
         REGISTRY[declared_name] = declared
         return declared
 
@@ -188,16 +193,16 @@ def bind(kernels: dict[Op, str] | None = None, *, torch_ops: bool = False) -> Bi
 # by name). Linear weights are [in, out] (GPT-2's checkpoint layout), applied as x @ w.
 # --------------------------------------------------------------------------------------------------------------------
 
-BOTH = (torch.float32, torch.bfloat16)
+ALL = (torch.float32, torch.float16, torch.bfloat16)
 
 
 # 768 -> 2304 is gpt2's qkv projection; 1 and 7 are the odd edges.
-@op(dims={"T": (1, 3, 17, 64), "D": (1, 7, 768), "F": (1, 5, 2304)}, dtypes=BOTH)
+@op(dims={"T": (1, 3, 17, 64), "D": (1, 7, 768), "F": (1, 5, 2304)}, dtypes=ALL)
 def linear(x_TD: Float[Tensor, "T D"], w_DF: Float[Tensor, "D F"], b_F: Float[Tensor, "F"]) -> Float[Tensor, "T F"]:
     return x_TD @ w_DF + b_F
 
 
-@op(dims={"T": (1, 3, 64), "F": (1, 7, 768, 3072)}, dtypes=BOTH)
+@op(dims={"T": (1, 3, 64), "F": (1, 7, 768, 3072)}, dtypes=ALL)
 def gelu(x_TF: Float[Tensor, "T F"]) -> Float[Tensor, "T F"]:
     """GPT-2's GELU, the tanh approximation: 0.5 x (1 + tanh(sqrt(2/pi) (x + 0.044715 x^3)))."""
     return 0.5 * x_TF * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (x_TF + 0.044715 * x_TF ** 3)))
@@ -205,7 +210,7 @@ def gelu(x_TF: Float[Tensor, "T F"]) -> Float[Tensor, "T F"]:
 
 # T/D = 1 are the degenerate rows (variance exactly 0: only eps keeps it finite); 17 / 769 are tile+1 sizes;
 # eps=0.1 makes a missing eps visible.
-@op(dims={"T": (1, 2, 3, 17, 64), "D": (1, 3, 7, 64, 769)}, dtypes=BOTH, scalars={"eps": (1e-5, 1e-1)})
+@op(dims={"T": (1, 2, 3, 17, 64), "D": (1, 3, 7, 64, 769)}, dtypes=ALL, scalars={"eps": (1e-5, 1e-1)})
 def layer_norm(x_TD: Float[Tensor, "T D"], w_D: Float[Tensor, "D"], b_D: Float[Tensor, "D"],
                eps: float) -> Float[Tensor, "T D"]:
     """(x - mean) / sqrt(var + eps) * w + b over D; biased variance."""
@@ -216,7 +221,7 @@ def layer_norm(x_TD: Float[Tensor, "T D"], w_D: Float[Tensor, "D"], b_D: Float[T
 
 # One sequence, all heads: q [T, N, H], k/v [S, N, H], S = T (no KV cache yet). T=1 is a lone query; 16/17 straddle a
 # tile; H=1 makes the scale a no-op, so the sweep must also cross H 8/64 with T > 1 (pairwise does).
-@op(dims={"T": (1, 2, 7, 16, 17, 64), "N": (1, 2, 12), "H": (1, 8, 64)}, tied={"S": "T"}, dtypes=BOTH)
+@op(dims={"T": (1, 2, 7, 16, 17, 64), "N": (1, 2, 12), "H": (1, 8, 64)}, tied={"S": "T"}, dtypes=ALL)
 def attention(q_TNH: Float[Tensor, "T N H"], k_SNH: Float[Tensor, "S N H"],
               v_SNH: Float[Tensor, "S N H"]) -> Float[Tensor, "T N H"]:
     """softmax(q k^T / sqrt(H)) v per head, query t seeing keys s <= t."""
@@ -241,6 +246,12 @@ def attention(q_TNH: Float[Tensor, "T N H"], k_SNH: Float[Tensor, "S N H"],
 #
 # Every case owns its seed (crc32 of op name + case label), so a case is reproducible on its own:
 # `run_checks ch01 --op layer_norm` and a failing case re-run give the same tensors.
+#
+# Inputs come from one of INPUTS, an axis of the sweep like a dim: `centered` (randn) and `offset` (mean 3, spread
+# 0.5). Offset inputs keep "return zeros", a forgotten mean or a forgotten bias from passing by accident, and they are
+# ill-conditioned enough (mean / spread = 6) to show a low-precision mean or variance, without making correct fp32
+# code fail. The spread was picked against the tolerances (suite.py, TOL): at spread 1.0 naive bf16 attention got
+# worse, not better.
 # --------------------------------------------------------------------------------------------------------------------
 
 FULL_PRODUCT_LIMIT = 64  # past this many cases, cover pairs instead of the full product
@@ -255,11 +266,13 @@ class Case:
     dtype: torch.dtype
     seed: int
     prompt: str = ""  # model cases: which prompt
+    inputs: str = ""  # op cases: which input distribution (INPUTS)
 
     def label(self) -> str:
-        """`T=3 D=7 eps=1e-05` -- the shape part of a verdict's case (the dtype is its own field)."""
+        """`T=3 D=7 eps=1e-05 x=offset` -- the shape part of a verdict's case (the dtype is its own field)."""
         parts = [f"prompt={self.prompt}"] if self.prompt else []
         parts += [f"{n}={v}" for n, v in self.sizes] + [f"{n}={v:g}" for n, v in self.scalars]
+        parts += [f"x={self.inputs}"] if self.inputs else []
         return " ".join(parts)
 
     @property
@@ -268,7 +281,7 @@ class Case:
 
     def to_json(self) -> dict:
         return {"sizes": dict(self.sizes), "scalars": dict(self.scalars), "dtype": self.dtype_name,
-                "seed": self.seed, "prompt": self.prompt}
+                "seed": self.seed, "prompt": self.prompt, "inputs": self.inputs}
 
 
 def sweep(declared: Op) -> list[Case]:
@@ -277,7 +290,8 @@ def sweep(declared: Op) -> list[Case]:
         return declared.cases_fn()
     _assert_dims_match(declared)
     plan = declared.sweep
-    axes: list[tuple[Any, ...]] = [*plan.dims.values(), *plan.scalars.values(), plan.dtypes]
+    axes: list[tuple[Any, ...]] = [*plan.dims.values(), *plan.scalars.values(), *([plan.inputs] if plan.inputs else []),
+                                   plan.dtypes]
     full_size = math.prod(len(values) for values in axes)
     rows = (list(itertools.product(*[range(len(values)) for values in axes]))
             if full_size <= FULL_PRODUCT_LIMIT else _pairwise_with_corners(axes))
@@ -287,10 +301,11 @@ def sweep(declared: Op) -> list[Case]:
     for row in rows:
         picked = [values[index] for values, index in zip(axes, row, strict=True)]
         sizes = tuple(zip(dim_names, picked[:len(dim_names)], strict=True))
-        scalars = tuple(zip(scalar_names, picked[len(dim_names):-1], strict=True))
-        unseeded = Case(sizes, scalars, picked[-1], 0)
+        scalars = tuple(zip(scalar_names, picked[len(dim_names):len(dim_names) + len(scalar_names)], strict=True))
+        inputs = picked[-2] if plan.inputs else ""
+        unseeded = Case(sizes, scalars, picked[-1], 0, inputs=inputs)
         seed = zlib.crc32(f"{declared.name}|{unseeded.label()} {unseeded.dtype_name}".encode())
-        cases.append(Case(sizes, scalars, picked[-1], seed))
+        cases.append(Case(sizes, scalars, picked[-1], seed, inputs=inputs))
     assert len({(c.label(), c.dtype) for c in cases}) == len(cases), "sweep produced duplicate cases"
     return cases
 
@@ -303,6 +318,7 @@ def make_inputs(declared: Op, case: Case) -> tuple:
     sizes = dict(case.sizes)
     sizes.update({dim: sizes[to] for dim, to in declared.sweep.tied.items()})
     scalars = dict(case.scalars)
+    mean, std = INPUTS[case.inputs or "centered"]
     args = []
     for param, annotation in _params(declared):
         if param in scalars:
@@ -313,7 +329,7 @@ def make_inputs(declared: Op, case: Case) -> tuple:
         assert "float32" in annotation.dtypes, (
             f"{declared.name}: {param!r} is not a float tensor; give the op an @inputs maker")
         shape = [sizes[dim] for dim in annotation.dim_str.split()]
-        args.append(torch.randn(shape, generator=generator).to(case.dtype))
+        args.append((mean + std * torch.randn(shape, generator=generator)).to(case.dtype))
     return tuple(args)
 
 
@@ -373,15 +389,17 @@ def _gain(uncovered: set, row: dict[int, int], axis: int, value: int) -> int:
 # --------------------------------------------------------------------------------------------------------------------
 # numerics
 #
-# Numbers, no thresholds: the reference's own error vs fp64 truth (what the budget is made of) and the reductions of a
-# candidate's output vs truth that a Run stores (all a grader needs, so grades never need the full output again).
+# Numbers, no thresholds: the reductions of an output vs fp64 truth that a Run stores (all a grader needs, so grades
+# never need the full output again), and the same for the reference at the case's dtype (context only).
 #
-# Budget (crucible / popcorn / FlashAttention): a correct implementation may land as far from fp64 truth as the
-# reference itself does in this precision, with a factor for slack and a floor for when the reference is exact:
+# Chapter 1's op gate is allclose against the fp64 truth T (suite.py has the (atol, rtol) per dtype):
 #
-#     err(candidate) <= max(mult * err(reference), floor[dtype] * max|truth|)
+#     pass  iff  |C - T| <= atol + rtol |T|  for every element      shown as  max |C - T| / (atol + rtol |T|)
 #
-# `mult` and the floors are grader config (grade.py), so changing them regrades stored runs without re-running.
+# A Run keeps the error frontier: the (|T|, |C - T|) pairs no other element beats on both (smaller |T|, bigger error).
+# The ratio above is largest on one of them for ANY (atol, rtol), so changing the tolerances regrades stored runs
+# exactly, without re-running. Later chapters replace this with the principled per-op tolerances
+# (blogs/engine/correctness.md).
 # --------------------------------------------------------------------------------------------------------------------
 
 TOPK = 5
@@ -394,20 +412,52 @@ def max_abs(a: torch.Tensor, b: torch.Tensor) -> float:
         0.0 if diff.numel() == 0 else math.inf)
 
 
-def reference_stats(truth: torch.Tensor, reference: torch.Tensor) -> dict[str, float]:
-    """The reference's own error at its dtype, and the truth's scale. Truth must be finite or the case is broken."""
+def is_logits(truth: torch.Tensor) -> bool:
+    """[T, V] over GPT-2's vocabulary (forward's output). Not "last dim > 1000": linear's [T, 2304] is not logits."""
+    return truth.dim() == 2 and truth.shape[-1] == VOCAB
+
+
+def reference_stats(truth: torch.Tensor, reference: torch.Tensor) -> dict[str, Any]:
+    """The reference's own error at its dtype (its frontier: context for a verdict), and the truth's scale. Truth must
+    be finite or the case is broken."""
     assert truth.dtype == torch.float64, f"truth must be fp64, got {truth.dtype}"
     assert reference.shape == truth.shape, f"reference {tuple(reference.shape)} vs truth {tuple(truth.shape)}"
     assert bool(torch.isfinite(truth).all()), "truth has non-finite values: a broken case"
     assert bool(torch.isfinite(reference).all()), "the reference has non-finite values at its dtype"
-    stats = {"ref_err": max_abs(reference, truth), "scale": float(truth.abs().max()) if truth.numel() else 0.0}
-    if truth.dim() == 2 and truth.shape[-1] > 1000:  # logits: also the reference's own KL, for context
+    stats: dict[str, Any] = {"ref_err": max_abs(reference, truth),
+                             "scale": float(truth.abs().max()) if truth.numel() else 0.0}
+    if is_logits(truth):  # logits: the reference's own KL, for context
         stats["ref_kl_max"] = float(kl_per_position(truth, reference).max())
+    elif reference.is_floating_point():
+        stats["ref_frontier"] = frontier(reference, truth)
     return stats
 
 
-def band(ref_err: float, scale: float, dtype: str, mult: float, floors: dict[str, float]) -> float:
-    return max(mult * ref_err, floors[dtype] * scale)
+def frontier(out: torch.Tensor, truth: torch.Tensor) -> list[list[float]]:
+    """[[|T|, |C - T|], ...]: the elements no other element dominates (one with |T| <= and error >=). For every
+    atol, rtol >= 0, max_i |C-T|_i / (atol + rtol |T|_i) is attained on this list (the ratio grows with the error and
+    shrinks with |T|), so a grader can apply any tolerance to it. A non-finite output -> [[0, inf]]."""
+    err = (out.double() - truth).abs().reshape(-1)
+    size = truth.abs().reshape(-1)
+    if err.numel() == 0:
+        return []
+    if not bool(torch.isfinite(err).all()):
+        return [[0.0, math.inf]]
+    order = torch.argsort(size, stable=True)
+    size, err = size[order], err[order]
+    # walking up |T|, keep each element whose error beats every error at a smaller-or-equal |T|; among equal |T|
+    # only the largest error matters, which this keeps too (a later equal-|T| element with more error is also kept)
+    best = torch.cummax(err, dim=0).values
+    keep = torch.ones_like(err, dtype=torch.bool)
+    keep[1:] = best[1:] > best[:-1]
+    return [[float(t), float(e)] for t, e in zip(size[keep].tolist(), err[keep].tolist(), strict=True)]
+
+
+def tolerance_ratio(points: list[list[float]], atol: float, rtol: float) -> tuple[float, float, float]:
+    """(max |C - T| / (atol + rtol |T|), and that element's |T| and error) over a frontier: ratio <= 1 iff
+    allclose(C, T, atol, rtol) elementwise. Stored infinities come back as "inf" strings: float() takes both."""
+    rows = [(float(e) / (atol + rtol * float(t)), float(t), float(e)) for t, e in points]
+    return max(rows, default=(0.0, 0.0, 0.0))
 
 
 def kl_per_position(truth: torch.Tensor, ours: torch.Tensor) -> torch.Tensor:
@@ -426,7 +476,8 @@ def reduce_output(out: torch.Tensor, truth: torch.Tensor) -> dict[str, Any]:
         first = int(bad[0, 0]) if len(bad) else None
         facts["first_diff"] = None if first is None else {"at": first, "got": int(out[first]), "want": int(truth[first])}
         return facts
-    if truth.dim() != 2 or truth.shape[-1] <= 1000:
+    if not is_logits(truth):
+        facts["frontier"] = frontier(out, truth)
         return facts
     kl = kl_per_position(truth, out)
     per_pos_err = (out.double() - truth).abs().amax(dim=-1)
@@ -551,7 +602,11 @@ VOCAB = 50257
 # name -> (text, token count). ~384 and ~192 tokens: long enough that every planted bug shows (KL >= 2e-5 on the
 # subtlest, exact GELU, at 69-111 tokens), short enough that the fp64 truth (T x 50257 x 8 bytes) stays ~230 MB.
 PROMPTS = {"prose": (LONG, 384), "code": (CODE + "\n" + UNICODE + "\n" + MOBY_DICK, 192)}
-BLOCK_LAYERS = (0, 5, 11)  # first, middle, last: the residual stream grows ~100x between them
+# first, middle, and the last that fits fp32's one allclose tolerance (the stream's largest entries grow from ~90 into
+# block 0 to ~3000 by block 5). Block 11
+# is left to forward's KL gate: HF's own fp32 block 11 lands 4e-4 from fp64 on small entries (its MLP sums huge
+# terms), 1.5x fp32's atol (suite.py, TOL), while every other block stays under 0.25x.
+BLOCK_LAYERS = (0, 5, 10)
 BLOCK_TOKENS = 128
 GENERATE = {"moby": (MOBY_DICK, 64, 24)}  # name -> (text, prompt tokens, new tokens); margin 0.078 (vs fp32 err ~7e-3)
 GENERATE_MIN_MARGIN = 0.05  # every fp64 greedy step's top-1 beats its top-2 by this many logits (not a near tie)
