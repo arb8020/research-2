@@ -14,7 +14,7 @@ connect_dev logs; locally also the Jupyter roots and the persist dir (root1/, ro
 Phases (the shape a verify-blogs skill can call one by one):
   launch   build the page; serve dist/; start sandbox 1 (local root1, or a Modal sandbox with Jupyter on the relay's
            flags and the persist dir on a Volume) and connect_dev.py in front of it
-  doctor   g++ / make / git in the sandbox; the page ships _blogs/ (workspace.py, checks/, MANIFEST.sha256) +
+  doctor   g++ / make / git in the sandbox; the page ships _blogs/ (workspace.py, assay/, MANIFEST.sha256) +
            ref.bundle; after Connect the workspace is seeded (tag ref/<chapter>/start) and every cell can run
   drive    the ch00 story (C++ + Python, whole-file cells, the legacy plain-text check output):
              1  ring.cpp with a missing ';' -> Run -> the compiler error streams in; its ring.cpp:L:C link moves the
@@ -29,26 +29,34 @@ Phases (the shape a verify-blogs skill can call one by one):
                 workspace is restored from the bundle (refs identical to sandbox 1's); ring/loop show their passing
                 versions; the budget draft comes back from the browser's copy and is written to the new workspace
              7  budget passes in the restored workspace
-           the ch01 story (one gpt2.py, seven region cells over one shared doc, contract JSON lines from the fake):
+           the ch01 story (one gpt2.py, seven region cells over one shared doc, the real check core on real GPT-2):
+             0  stop any running assay warm process, so the first check pays its start (the "cold" timing)
              1  before Connect: edit the linear region in its cell; the gelu cell's view of gpt2.py shows the same
                 edit at once; Run linear while disconnected -> "waiting for sandbox"; Connect (slow boot) -> the
                 queued run starts once the workspace is up and passes on the edit made before Connect: tag
                 pass/ch01/linear on exactly that text, the bundle saved
              2  edit gelu in the gelu cell; undo (Mod-z) from the attention cell undoes it everywhere (one history
-                per file), redo restores it; Run gelu -> PASS row (float32) + a visibly distinct SKIP row (bfloat16)
+                per file), redo restores it; exact erf GELU typed in -> Run gelu -> FAIL rows reading
+                "budget: err X > budget Y" (err/budget > 1), nothing committed; tanh restored -> PASS, every row
+                err/budget < 1 (fp32 + bf16 cases + coverage)
              3  a syntax error planted in the forward region; Run layer_norm -> BLOCKED with gpt2.py:L (forward); the
                 link puts the cursor on line L in the forward cell (the one whose region holds it); nothing committed
-             4  syntax fixed; Run forward with attention still a stub -> FAIL whose link names attention's stub line
+             4  syntax fixed; Run forward with attention still a stub -> FAIL "NotImplementedError: self_attention:
+                ..." whose link names the stub's raise line (attention region)
              5  the block region's start marker deleted: the block cell says so (nothing to highlight); Run block still
                 checks (a verdict, no crash); marker restored
-             6  `# fake: infra` -> Run -> "not run (infrastructure)", HEAD unchanged
-             7  a trusted file in _blogs/ tampered -> Run refused (HEAD unchanged); MANIFEST.sha256 itself rewritten
+             6  attention without its / sqrt(H) -> FAIL with numbers; fixed -> PASS; Run block and forward -> PASS
+                on real GPT-2 (forward: per-position KL max < 1e-7) + bf16 a visible SKIP (no bf16 model checks on
+                CPU, the capability table)
+             7  the check store made unreadable -> Run -> "not run (infrastructure)", HEAD unchanged
+             8  a trusted file in _blogs/ tampered -> Run refused (HEAD unchanged); MANIFEST.sha256 itself rewritten
                 to match -> refused (the page's sha256 differs); reload re-uploads _blogs/ -> Run passes again
-             8  reload: the shared doc comes back from the workspace with every edit; linear / gelu show passed
-             9  sandbox 1 stops; this browser's draft is replaced by one built on a commit the restored sandbox never
+             9  reload: the shared doc comes back from the workspace with every edit; passed cells say so
+            10  timings: layer_norm and forward with the warm process stopped (cold) then running (warm), store warm
+            11  sandbox 1 stops; this browser's draft is replaced by one built on a commit the restored sandbox never
                 had (another device's); sandbox 2 restores from the bundle -> every gpt2.py cell shows the conflict
                 banner and the sandbox's text; "Use this browser's draft" puts it in (saved to the workspace); Run
-                generate passes
+                generate passes (24 greedy tokens = HF's)
   evidence screenshots, story.log, timings.json, git-log.txt
   cleanup  stop only what this script started: connect_dev (every process it spawned must be gone, or the run fails),
            the static server, and on Modal both sandboxes (none of this app's sandboxes may be left; the Volume is
@@ -94,7 +102,7 @@ SOLUTION = {path: f.data.decode() for path, f in ref.materialize(CH, "solution")
 BROKEN_STATEMENT = "    r->tail += 1;\n"  # in ring_push; the broken ring.cpp drops its ';'
 HANG = "void sched_step(const Request* reqs, Ring* waiting, u32 budget, Batch* out) {\n"
 SCRATCH = "print('scratch ran while the check was running:', 6 * 7)"
-CHECK_TIMEOUT_MS = 90_000
+CHECK_TIMEOUT_MS = 180_000  # a cold ch01 model check computes HF's fp64 truth first
 SAVE_WAIT_S = 15
 CELLS = 3
 
@@ -146,8 +154,12 @@ class Run:
         print(f"  {text}", flush=True)
         self.log.append(text)
 
-    def shot(self, name: str) -> None:
-        self.page.screenshot(path=self.out / f"{name}.png")
+    def shot(self, name: str, cell: str | None = None) -> None:
+        """The viewport, or (cell=) that ws-cell whole: its editor, verdict table and log."""
+        if cell is None:
+            self.page.screenshot(path=self.out / f"{name}.png")
+        else:
+            self.page.locator(f"ws-cell[name={cell}]").screenshot(path=self.out / f"{name}.png")
 
 
 # ---- small helpers ----
@@ -402,7 +414,7 @@ def step_scratch_and_stop(run: Run, box: Box) -> None:
     scratch_s = time.perf_counter() - t0
     assert "scratch ran while the check was running: 42" in page.locator("scratch-cell .cell-out").inner_text()
     assert page.get_attribute("ws-cell[name=loop]", "data-job") is not None, "the check ended before the scratch cell ran"
-    spinning = box.sh("pgrep -f 'build/debug/check_trac[e] ' || true").split()
+    spinning = box.sh("pgrep -f 'assay-ch00-build-[0-9a-f]*/check_trac[e] ' || true").split()
     assert spinning, "the hanging check_trace isn't running"
     run.shot("4-scratch-during-check")
     cell.scroll_into_view_if_needed()
@@ -414,7 +426,7 @@ def step_scratch_and_stop(run: Run, box: Box) -> None:
     status = cell.locator(".cell-status").inner_text()
     assert status.startswith("stopped"), status
     time.sleep(0.3)
-    left = box.sh("pgrep -f 'build/debug/check_trac[e] ' || true").split()
+    left = box.sh("pgrep -f 'assay-ch00-build-[0-9a-f]*/check_trac[e] ' || true").split()
     assert not left, f"check_trace survived Stop: {left}"
     assert "pass/ch00/loop" not in refs(box)
     run.timings["scratch_during_check_s"] = round(scratch_s, 3)
@@ -533,6 +545,39 @@ def head(box: Box) -> str:
     return git(box, "rev-parse", "HEAD").strip()
 
 
+def check_log(page: Page, cell: str) -> str:
+    return page.locator(f"ws-cell[name={cell}] .check-log").inner_text()
+
+
+def record(run: Run, label: str, cell: str, took: float | None) -> None:
+    """One check's timings: click -> verdict (None: queued before Connect), the check worker's own time, and whether
+    it had to start the warm process (imports torch + transformers) or forked from a running one."""
+    log = check_log(run.page, cell)
+    done = re.findall(r"done in ([\d.]+)s", log)
+    run.timings.setdefault("checks", []).append({
+        "check": label, "click_to_verdict_s": None if took is None else round(took, 2),
+        "worker_s": float(done[-1]) if done else None,
+        "warm_process": "cold (started it)" if "starting the warm check process" in log else "warm (forked)"})
+
+
+def rows(page: Page, cell: str) -> list[dict[str, str]]:
+    """The verdict table under a cell: outcome, op · case, dtype, the key metric, notes (incl. the where link)."""
+    return page.evaluate("""(n) => [...document.querySelectorAll(`ws-cell[name=${n}] tr.verdict`)].map((tr) => {
+        const td = tr.querySelectorAll('td'); return {outcome: tr.dataset.outcome, case: td[0].textContent,
+        dtype: td[1].textContent, metric: td[4].textContent, notes: td[5].textContent}; })""", cell)  # fmt: skip
+
+
+def metric_value(row: dict[str, str], label: str) -> float:
+    assert row["metric"].startswith(label + " "), row
+    return float(row["metric"].removeprefix(label + " "))
+
+
+def stop_warm(box: Box) -> str:
+    """Stop the assay warm process (a fork server the first check starts; idle ones exit after 30 min). -B: no
+    __pycache__ in _blogs/assay (workspace.py would refuse every check: files the manifest doesn't list)."""
+    return box.sh(f"PYTHONPATH=_blogs {shlex.quote(ref.assay_python())} -B -c 'from assay.core import stop_warm; print(stop_warm())'").strip()
+
+
 def ch01_before_connect(run: Run, gateway: Gateway) -> None:
     page, box = run.page, gateway.box
     expect(page.locator("ws-cell[name=linear] .cell-status")).to_have_text("not connected: edits are kept in this browser")
@@ -562,16 +607,22 @@ def ch01_before_connect(run: Run, gateway: Gateway) -> None:
     assert region_text(git(box, "show", "pass/ch01/linear:gpt2.py"), "linear") == want, "the tagged commit lacks the pre-Connect edit"
     box.sh(f"test -s {box.persist}/workspace.bundle")
     run.timings["connect_click_to_queued_pass_s"] = round(took, 3)
+    record(run, "linear (queued at Connect; cold process, cold store)", "linear", None)
     scrolled_to_region(page, "generate")
     run.shot("1-queued-run-passed")
     assert region_text(box.sh("cat workspace/gpt2.py"), "layer_norm") == region_text(SOL1, "layer_norm"), "the edit made while connecting was lost"
     run.say(f"1 linear edited before Connect (mirrored into the gelu cell, kept in localStorage); Run queued while disconnected; "
             f"while connecting the cell said '{waiting}' and layer_norm was edited; "
             f"Connect -> workspace {page.evaluate('document.documentElement.dataset.workspaceBoot')} -> the queued run passed "
-            f"{took:.2f}s after clicking Connect; tag pass/ch01/linear holds the pre-Connect edit; bundle saved")  # fmt: skip
+            f"{took:.2f}s after clicking Connect (worker {run.timings['checks'][-1]['worker_s']}s, "
+            f"{run.timings['checks'][-1]['warm_process']}); tag pass/ch01/linear holds the pre-Connect edit; bundle saved")  # fmt: skip
 
 
-def ch01_mirror_undo_skip(run: Run, box: Box) -> None:
+GELU_TANH = "(1 + torch.tanh(inner_TF))"
+GELU_ERF = "(1 + torch.erf(x_TF / math.sqrt(2)))"  # the planted bug: exact GELU, not GPT-2's tanh approximation
+
+
+def ch01_gelu(run: Run, box: Box) -> None:
     page = run.page
     stub = region_text(doc(page, "gelu"), "gelu")
     put_region(page, "gelu", "gelu", SOL1)
@@ -583,18 +634,34 @@ def ch01_mirror_undo_skip(run: Run, box: Box) -> None:
     page.keyboard.press("ControlOrMeta+Shift+z")
     for cell in ("gelu", "attention"):
         assert region_text(doc(page, cell), "gelu") == region_text(SOL1, "gelu"), f"redo didn't restore the gelu edit in {cell}"
+    # a planted bug, typed into the cell: exact (erf) GELU
+    replace_in_view(page, "gelu", GELU_TANH, GELU_ERF)
+    before = head(box)
     status, _, took = run_cell(page, "gelu")
+    record(run, "gelu, exact-GELU bug (warm process, cold store)", "gelu", took)
+    assert status.startswith("failed"), status
+    bad = [r for r in rows(page, "gelu") if r["outcome"] == "fail"]
+    assert bad and bad[0]["notes"].startswith("budget: err "), bad[:1]
+    worst = max(metric_value(r, "err/budget") for r in bad)
+    assert worst > 1 and "(gelu)" in bad[0]["notes"], bad[0]
+    assert head(box) == before and "pass/ch01/gelu" not in refs(box), "a failing check committed"
+    run.shot("2-gelu-planted-bug", "gelu")
+    run.say(f"2 gelu edited in its cell, mirrored into attention's view; Mod-z in the attention cell undid it everywhere, Mod-Shift-z "
+            f"redid it; then exact erf GELU typed in -> Run -> '{status}' in {took:.2f}s: {len(bad)} failing rows, e.g. "
+            f"'{bad[0]['case']} {bad[0]['dtype']}: {bad[0]['notes']}' ({bad[0]['metric']}; worst {worst:.3g}x its budget); nothing committed")  # fmt: skip
+    replace_in_view(page, "gelu", GELU_ERF, GELU_TANH)
+    status, _, took = run_cell(page, "gelu")
+    record(run, "gelu, fixed (warm process, cold store)", "gelu", took)
     assert status.startswith("passed"), status
-    rows = page.locator("ws-cell[name=gelu] tr.verdict")
-    outcomes = [rows.nth(i).get_attribute("data-outcome") for i in range(rows.count())]
-    assert outcomes == ["pass", "skip"], outcomes
-    skip = page.locator("ws-cell[name=gelu] tr.verdict.skip")
-    assert skip.evaluate("(r) => getComputedStyle(r).fontStyle") == "italic", "SKIP isn't styled apart"
+    got = rows(page, "gelu")
+    assert got and all(r["outcome"] == "pass" for r in got), got
+    ratios = [metric_value(r, "err/budget") for r in got if r["metric"].startswith("err/budget")]
+    assert ratios and max(ratios) < 1, ratios
+    assert any(r["case"].endswith("coverage") for r in got), "no coverage row"
     assert page.locator("ws-cell[name=gelu] .check-summary").inner_text().startswith("PASS")
-    run.timings["check_pass_s"] = round(took, 3)
-    run.shot("2-gelu-pass-skip")
-    run.say(f"2 gelu edited in its cell, mirrored into attention's view; Mod-z in the attention cell undid it in every view, "
-            f"Mod-Shift-z redid it; Run gelu -> PASS (float32) + SKIP (bfloat16, italic, muted) in {took:.2f}s")  # fmt: skip
+    run.shot("2-gelu-pass", "gelu")
+    run.say(f"2 tanh GELU restored -> Run -> '{status}' in {took:.2f}s: {len(got)} rows PASS ({len(ratios)} cases, fp32 + bf16, "
+            f"err at most {max(ratios):.3g}x its budget; + coverage)")  # fmt: skip
 
 
 def ch01_blocked(run: Run, box: Box) -> None:
@@ -604,20 +671,22 @@ def ch01_blocked(run: Run, box: Box) -> None:
     replace_in_view(page, "forward", stub_line, "oops = (  # a syntax error, planted\n    " + stub_line)
     bad = line_of(doc(page, "forward"), "oops = (")
     before = head(box)
-    status, out, _ = run_cell(page, "layer_norm")
+    status, out, took = run_cell(page, "layer_norm")
+    record(run, "layer_norm, syntax error elsewhere (blocked)", "layer_norm", took)
     assert status.startswith("blocked"), f"{status}\n{out}"
     row = page.locator("ws-cell[name=layer_norm] tr.verdict.blocked")
     expect(row).to_have_count(1)
     link = row.locator("a.where")
     assert link.get_attribute("data-loc") == f"gpt2.py:{bad}:1", link.get_attribute("data-loc")
     assert "(forward)" in link.inner_text(), link.inner_text()
+    notes = rows(page, "layer_norm")[0]["notes"]
     link.click()
     cursor = page.evaluate("() => { const v = document.querySelector('ws-cell[name=forward]').view; return {line: v.state.doc.lineAt(v.state.selection.main.head).number, focused: v.hasFocus}; }")
     assert cursor == {"line": bad, "focused": True}, cursor
     assert head(box) == before and "pass/ch01/layer_norm" not in refs(box), "a blocked check committed"
     run.shot("3-blocked-jump")
-    run.say(f"3 syntax error planted in forward (line {bad}); Run layer_norm -> '{status}'; the BLOCKED row's link {link.inner_text()} "
-            f"put the forward cell's cursor on line {bad} (focused); nothing committed")  # fmt: skip
+    run.say(f"3 syntax error planted in forward (line {bad}); Run layer_norm -> '{status}': '{notes}'; the link put the forward cell's "
+            f"cursor on line {bad} (focused); nothing committed")  # fmt: skip
     replace_in_view(page, "forward", "oops = (  # a syntax error, planted\n    ", "")
 
 
@@ -625,12 +694,21 @@ def ch01_fail_at_stub(run: Run, box: Box) -> None:
     page = run.page
     put_region(page, "forward", "forward", SOL1)
     put_region(page, "block", "block", SOL1)
-    status, out, _ = run_cell(page, "forward")
+    status, out, took = run_cell(page, "forward")
+    record(run, "forward, attention still a stub (raises; first forward: computes HF's fp64 truth)", "forward", took)
     assert status.startswith("failed"), f"{status}\n{out}"
-    stub = line_of(doc(page, "attention"), 'raise NotImplementedError("attention:')
-    loc = page.locator("ws-cell[name=forward] tr.verdict.fail a.where").get_attribute("data-loc")
+    text = doc(page, "attention")
+    stub = line_of(text, '"self_attention: write this in the attention cell"') - 1  # the raise's first line
+    assert text.split("\n")[stub - 1].strip() == "raise NotImplementedError(", text.split("\n")[stub - 1]
+    fail = page.locator("ws-cell[name=forward] tr.verdict.fail").first
+    loc = fail.locator("a.where").get_attribute("data-loc")
     assert loc == f"gpt2.py:{stub}:1", (loc, stub)
-    run.say(f"4 Run forward with attention still a stub -> '{status}' (any order: the stub raises; the link names its line {stub})")
+    assert "(attention)" in fail.locator("a.where").inner_text()
+    notes = rows(page, "forward")
+    first = next(r for r in notes if r["outcome"] == "fail")["notes"]
+    assert "NotImplementedError: self_attention: write this in the attention cell" in first, first
+    run.say(f"4 Run forward with attention still a stub -> '{status}': '{first}' (any order: forward runs block runs the "
+            f"stub; the link names the raise, line {stub}, in the attention region)")  # fmt: skip
 
 
 def ch01_missing_marker(run: Run, box: Box) -> None:
@@ -639,8 +717,9 @@ def ch01_missing_marker(run: Run, box: Box) -> None:
     note = page.locator("ws-cell[name=block] .cell-note")
     expect(note).to_be_visible()
     expect(note).to_contain_text('no "# region: block"')
-    status, out, _ = run_cell(page, "block")
-    assert status.startswith("failed") and page.locator("ws-cell[name=block] tr.verdict").count() == 1, f"{status}\n{out}"
+    status, out, took = run_cell(page, "block")
+    record(run, "block, attention still a stub (raises; first block: computes HF's fp64 truth)", "block", took)
+    assert status.startswith("failed") and page.locator("ws-cell[name=block] tr.verdict.fail").count() >= 1, f"{status}\n{out}"
     run.shot("5-missing-marker")
     replace_in_view(page, "block", "def mlp(", "# region: block\ndef mlp(")
     expect(note).to_be_hidden()
@@ -648,24 +727,70 @@ def ch01_missing_marker(run: Run, box: Box) -> None:
             f"still checked ('{status}'); marker restored, note gone")  # fmt: skip
 
 
-def ch01_infra(run: Run, box: Box) -> None:
+NO_SCALE = "    scores_NTS = scores_NTS / math.sqrt(H)\n"  # the planted bug: attention without its 1/sqrt(H)
+
+
+def ch01_attention_and_model(run: Run, box: Box) -> None:
+    """A planted attention bug fails with numbers; fixed it passes; then the model-level cells pass on real GPT-2 and
+    show bf16 as a visible SKIP (the capability table: no bf16 model checks on CPU)."""
     page = run.page
-    replace_in_view(page, "generate", "# endregion\n", "# endregion\n# fake: infra\n")
+    put_region(page, "attention", "attention", SOL1.replace(NO_SCALE, ""))
+    status, _, took = run_cell(page, "attention")
+    record(run, "attention, scale missing (warm process, cold store)", "attention", took)
+    assert status.startswith("failed"), status
+    bad = [r for r in rows(page, "attention") if r["outcome"] == "fail"]
+    assert bad and bad[0]["notes"].startswith("budget: err "), bad[:1]
+    assert "pass/ch01/attention" not in refs(box)
+    run.shot("6-attention-no-scale", "attention")
+    run.say(f"6 attention without / sqrt(H) -> '{status}' in {took:.2f}s: {len(bad)} failing rows, e.g. "
+            f"'{bad[0]['case']} {bad[0]['dtype']}: {bad[0]['notes']}' ({bad[0]['metric']})")  # fmt: skip
+    put_region(page, "attention", "attention", SOL1)
+    status, _, took = run_cell(page, "attention")
+    record(run, "attention, fixed (warm process, cold store)", "attention", took)
+    assert status.startswith("passed"), status
+    run.say(f"6 attention fixed -> '{status}' in {took:.2f}s ({len(rows(page, 'attention'))} rows)")
+    for cell, label in (("block", "err/budget"), ("forward", "KL max")):
+        status, _, took = run_cell(page, cell)
+        record(run, f"{cell}, correct (warm process; HF's truth cached by the stub run above)", cell, took)
+        assert status.startswith("passed"), f"{status}\n{page.locator(f'ws-cell[name={cell}] .cell-out').inner_text()[-2000:]}"
+        got = rows(page, cell)
+        passing = [r for r in got if r["outcome"] == "pass"]
+        skip = [r for r in got if r["outcome"] == "skip"]
+        assert passing and len(skip) == 1 and skip[0]["dtype"] == "bf16", got
+        assert "checked on a bf16 GPU" in skip[0]["notes"], skip[0]
+        values = [metric_value(r, label) for r in passing]
+        if cell == "forward":
+            assert max(values) < 1e-7, values  # the fp32 model gate
+        skip_row = page.locator(f"ws-cell[name={cell}] tr.verdict.skip")
+        assert skip_row.evaluate("(r) => getComputedStyle(r).fontStyle") == "italic", "SKIP isn't styled apart"
+        run.shot(f"6-{cell}-pass-skip", cell)
+        run.say(f"6 Run {cell} -> '{status}' in {took:.2f}s: {len(passing)} fp32 rows PASS ({label} at most {max(values):.3g}); "
+                f"bf16 a visible SKIP (italic): '{skip[0]['notes']}'")  # fmt: skip
+
+
+def ch01_infra(run: Run, box: Box) -> None:
+    """A real infrastructure failure: the check store (in the persist dir) unreadable. Not the reader's code: exit 2."""
+    page = run.page
+    store = f"{box.persist}/cache/assay"
+    mode = box.sh(f"stat -f %Lp {shlex.quote(store)} 2>/dev/null || stat -c %a {shlex.quote(store)}").strip()
+    box.sh(f"chmod 000 {shlex.quote(store)}")
     before = head(box)
-    status, out, _ = run_cell(page, "linear")
+    try:
+        status, out, _ = run_cell(page, "linear")
+    finally:
+        box.sh(f"chmod {mode} {shlex.quote(store)}")
     assert status.startswith("not run (infrastructure)"), f"{status}\n{out}"
     assert head(box) == before
-    replace_in_view(page, "generate", "# fake: infra\n", "")
-    run.say(f"6 '# fake: infra' -> Run linear -> '{status}'; HEAD unchanged")
+    run.say(f"7 check store unreadable (chmod 000 {store}) -> Run linear -> '{status[:120]}'; HEAD unchanged; store restored")
 
 
 def ch01_tamper(run: Run, box: Box) -> None:
     page = run.page
     before = head(box)
-    box.sh("echo '# tampered' >> _blogs/checks/run_checks.py")
+    box.sh("echo '# tampered' >> _blogs/assay/cli.py")
     status, _, _ = run_cell(page, "linear")
-    assert status.startswith("not run (infrastructure): the trusted code in _blogs/ differs from MANIFEST.sha256: checks/run_checks.py changed"), status
-    run.shot("7-tampered")
+    assert status.startswith("not run (infrastructure): the trusted code in _blogs/ differs from MANIFEST.sha256: assay/cli.py changed"), status
+    run.shot("8-tampered")
     box.sh("python3 - <<'PY'\nimport hashlib, pathlib\nm = pathlib.Path('_blogs/MANIFEST.sha256')\n"
            "lines = [l.split('  ') for l in m.read_text().splitlines()]\n"
            "m.write_text(''.join(f\"{hashlib.sha256(pathlib.Path('_blogs', p).read_bytes()).hexdigest()}  {p}\\n\" for _, p in lines))\nPY")  # fmt: skip
@@ -676,7 +801,7 @@ def ch01_tamper(run: Run, box: Box) -> None:
     page.wait_for_function(f"document.querySelectorAll('ws-cell[data-loaded]').length === {CELLS1}", timeout=120_000)
     status3, _, _ = run_cell(page, "linear")
     assert status3.startswith("passed"), status3
-    run.say(f"7 tampered checks/run_checks.py -> '{status[:90]}…'; manifest rewritten to match -> '{status2[:80]}…'; "
+    run.say(f"8 tampered assay/cli.py -> '{status[:90]}…'; manifest rewritten to match -> '{status2[:80]}…'; "
             f"HEAD unchanged; reload re-uploaded _blogs/ -> Run linear '{status3}'")  # fmt: skip
 
 
@@ -688,11 +813,24 @@ def ch01_reload(run: Run, box: Box) -> None:
     page.wait_for_function(f"document.querySelectorAll('ws-cell[data-loaded]').length === {CELLS1}", timeout=120_000)
     for cell in ("linear", "generate"):
         assert doc(page, cell) == text, f"{cell} after reload differs from the workspace's draft"
-    for cell in ("linear", "gelu"):
+    for cell in ("linear", "gelu", "attention", "block", "forward"):
         expect(page.locator(f"ws-cell[name={cell}] .cell-status")).to_contain_text("passed")
-    run.shot("8-reloaded")
-    statuses = {c: page.locator(f"ws-cell[name={c}] .cell-status").inner_text() for c in ("linear", "gelu", "layer_norm")}
-    run.say(f"8 reload: every view shows the workspace's gpt2.py with all edits; {statuses}")
+    run.shot("9-reloaded")
+    statuses = {c: page.locator(f"ws-cell[name={c}] .cell-status").inner_text() for c in ("linear", "gelu", "layer_norm", "forward")}
+    run.say(f"9 reload: every view shows the workspace's gpt2.py with all edits; {statuses}")
+
+
+def ch01_timings(run: Run, box: Box) -> None:
+    """The same checks against a cold and a warm warm-process, the store already holding every expected answer."""
+    page = run.page
+    for cell in ("layer_norm", "forward"):
+        run.say(f"10 stop the warm process: {stop_warm(box)}")
+        for label in ("cold process, warm store", "warm process, warm store"):
+            status, _, took = run_cell(page, cell)
+            assert status.startswith("passed"), status
+            record(run, f"{cell} ({label})", cell, took)
+            last = run.timings["checks"][-1]
+            run.say(f"10 {cell} ({label}): {took:.2f}s click -> verdict, worker {last['worker_s']}s, {last['warm_process']}")
 
 
 def ch01_conflict(run: Run, old: Gateway) -> Gateway:
@@ -713,33 +851,41 @@ def ch01_conflict(run: Run, old: Gateway) -> Gateway:
         expect(page.locator(f"ws-cell[name={cell}] .cell-conflict")).to_be_visible()
     assert doc(page, "linear") == in_workspace, "with a conflict the editor should show the sandbox's passing code"
     scrolled_to_region(page, "gelu")
-    run.shot("9-conflict")
+    run.shot("11-conflict")
     page.locator("ws-cell[name=generate] .use-browser").click()
     assert doc(page, "linear") == SOL1
     wait_saved(box, "gpt2.py", SOL1)
     expect(page.locator("ws-cell[name=linear] .cell-conflict")).to_be_hidden()
-    status, _, _ = run_cell(page, "generate")
+    status, _, took = run_cell(page, "generate")
+    record(run, "generate, correct (new sandbox; cold store for generate)", "generate", took)
     assert status.startswith("passed"), status
-    run.shot("9-resolved-generate-passed")
-    run.say(f"9 new sandbox ({boot}); a draft built on another commit -> conflict banner on every gpt2.py cell, editor shows "
-            f"the sandbox's passing code; 'Use this browser's draft' -> saved to the workspace; Run generate '{status}'")  # fmt: skip
+    got = rows(page, "generate")
+    assert [r["outcome"] for r in got] == ["pass"] and got[0]["metric"] == "tokens 24", got
+    run.shot("11-resolved-generate-passed")
+    run.say(f"11 new sandbox ({boot}); a draft built on another commit -> conflict banner on every gpt2.py cell, editor shows "
+            f"the sandbox's passing code; 'Use this browser's draft' -> saved to the workspace; Run generate '{status}' in "
+            f"{took:.2f}s ({got[0]['case']}: {got[0]['metric']}, HF's greedy tokens exactly)")  # fmt: skip
     return gateway
 
 
 def drive_ch01(run: Run, gateway: Gateway) -> Gateway:
+    run.say(f"0 before the story, stop any running warm process: {stop_warm(gateway.box)}")
     ch01_before_connect(run, gateway)
     assert "refs/tags/ref/ch01/start" in refs(gateway.box)
     assert "ring.cpp" not in gateway.box.sh("ls workspace"), "ch00's toy files leaked into ch01's tree"
-    ch01_mirror_undo_skip(run, gateway.box)
+    ch01_gelu(run, gateway.box)
     ch01_blocked(run, gateway.box)
     ch01_fail_at_stub(run, gateway.box)
     ch01_missing_marker(run, gateway.box)
+    ch01_attention_and_model(run, gateway.box)
     ch01_infra(run, gateway.box)
     ch01_tamper(run, gateway.box)
     ch01_reload(run, gateway.box)
+    ch01_timings(run, gateway.box)
     gateway.remember()
     gateway = ch01_conflict(run, gateway)
     (run.out / "git-log.txt").write_text(git(gateway.box, "log", "--oneline", "--decorate", "--all"))
+    run.say(f"cleanup: stop the warm process the checks started: {stop_warm(gateway.box)}")
     return gateway
 
 
@@ -817,7 +963,7 @@ def main() -> None:
     assert not (args.modal and "ch01" in names), "--modal drives ch00 only (pass --page ch00)"
     args.gateway_port = args.gateway_port or free_port()
     args.page_port = args.page_port or free_port()
-    assert {args.gateway_port, args.page_port}.isdisjoint({8790, 8012, 8010, 8787, 8060}), "those ports are the author's"
+    assert {args.gateway_port, args.page_port}.isdisjoint({8790, 8795, 8012, 8015, 8010, 8787, 8060}), "those ports are the author's"
 
     root = HERE / ".evidence" / ("verify_workspace-modal" if args.modal else "verify_workspace")
     shutil.rmtree(root, ignore_errors=True)
