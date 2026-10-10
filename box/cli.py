@@ -104,7 +104,7 @@ def run(a: argparse.Namespace, cmd: str, provider: sdk.Provider) -> int:
 def run_set_up(a: argparse.Namespace, cmd: str, provider: sdk.Provider, max_duration_s: float, kw: dict) -> int:
     spec = SetupSpec(repo=Path.cwd(), script=a.setup, lockfiles=tuple(a.lock), resume=a.resume, rebuild=a.rebuild)
     s = sdk.launch(provider, record=make_store(a.provider, provider), setup=spec, idle_timeout_s=DETACH_IDLE_S if a.detach else 0.0, **kw)
-    prepared = sdk.read_record(s.record, s.id).setup if s.record else None
+    prepared = sdk.read_record(s.record, s.id).setup() if s.record else None
     print(f"box: {s.id}: {'booted from ' + str(prepared.image) if prepared and prepared.hit else 'set up'}", file=sys.stderr)
     try:
         path = gitsync.tree_path(s.machine.work, gitsync.toplevel(Path.cwd()))

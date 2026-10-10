@@ -72,7 +72,7 @@ def test_a_miss_runs_the_setup_snapshots_it_and_remembers_the_key(create: Callab
     assert isinstance(provider, Snapshotter)
     s = create(record=store, setup=spec)
     assert setup_runs(s) == 1
-    prepared = sdk.read_record(store, s.id).setup
+    prepared = sdk.read_record(store, s.id).setup()
     assert prepared is not None
     assert (prepared.hit, prepared.setup_job is not None, prepared.resume_job is not None) == (False, True, True)
     cached = lookup(store, prepared.key, now=time.time(), max_age_s=spec.max_age_s)
@@ -84,9 +84,9 @@ def test_a_miss_runs_the_setup_snapshots_it_and_remembers_the_key(create: Callab
 
 def test_a_hit_boots_from_the_snapshot_and_runs_no_setup(create: Callable, spec: SetupSpec, store: Store) -> None:
     first = create(record=store, setup=spec)
-    built = sdk.read_record(store, first.id).setup
+    built = sdk.read_record(store, first.id).setup()
     s = create(record=store, setup=spec)
-    prepared = sdk.read_record(store, s.id).setup
+    prepared = sdk.read_record(store, s.id).setup()
     assert prepared is not None and built is not None
     assert (prepared.hit, prepared.key, prepared.image, prepared.setup_job) == (True, built.key, built.image, None)
     assert setup_runs(s) == 1  # the one line is the snapshot's, from first's setup
@@ -101,10 +101,10 @@ def test_changing_a_lockfile_or_the_setup_is_a_miss(create: Callable, spec: Setu
     with (spec.repo / edit).open("a") as f:
         f.write("\n# changed\n")  # on disk, not committed: the key is what a sync would send
     s = create(record=store, setup=spec)
-    prepared = sdk.read_record(store, s.id).setup
+    prepared = sdk.read_record(store, s.id).setup()
     assert prepared is not None
     assert prepared.hit is False
-    assert prepared.key != sdk.read_record(store, first.id).setup.key  # type: ignore[union-attr]
+    assert prepared.key != sdk.read_record(store, first.id).setup().key  # type: ignore[union-attr]
     assert setup_runs(s) == 1  # booted from the base: a fresh machine, set up once
 
 
@@ -113,13 +113,13 @@ def test_an_expired_snapshot_is_a_miss(create: Callable, spec: SetupSpec, store:
     create(record=store, setup=short)
     time.sleep(1.0)
     s = create(record=store, setup=short)
-    assert sdk.read_record(store, s.id).setup.hit is False  # type: ignore[union-attr]
+    assert sdk.read_record(store, s.id).setup().hit is False  # type: ignore[union-attr]
 
 
 def test_rebuild_is_a_miss_and_replaces_the_snapshot(create: Callable, spec: SetupSpec, store: Store) -> None:
     first = create(record=store, setup=spec)
     s = create(record=store, setup=dataclasses.replace(spec, rebuild=True))
-    prepared, built = sdk.read_record(store, s.id).setup, sdk.read_record(store, first.id).setup
+    prepared, built = sdk.read_record(store, s.id).setup(), sdk.read_record(store, first.id).setup()
     assert prepared is not None and built is not None
     assert (prepared.hit, prepared.key) == (False, built.key)
     assert prepared.image != built.image
@@ -142,7 +142,7 @@ def test_a_sync_after_a_hit_sends_only_the_diff(create: Callable, spec: SetupSpe
     (spec.repo / "pkg" / "a.txt").write_text("edited after the setup\n")
     s = create(record=store, setup=spec)
     (synced,) = sdk.read_record(store, s.id).syncs()
-    assert sdk.read_record(store, s.id).setup.hit is True  # type: ignore[union-attr]
+    assert sdk.read_record(store, s.id).setup().hit is True  # type: ignore[union-attr]
     assert 0 < synced["pack_bytes"] < full / 20, (synced["pack_bytes"], full)  # the 200 kB blob came with the snapshot
     assert remote(s, f"cat {s.machine.work}/repo/pkg/a.txt") == "edited after the setup"
     again = s.sync(spec.repo)
@@ -160,7 +160,7 @@ def test_syncs_and_jobs_record_their_commits(create: Callable, spec: SetupSpec, 
     syncs = record.syncs()
     assert [x["commit"] for x in syncs][-1] == v2.commit
     assert len(syncs) == 2 and syncs[0]["commit"] != v2.commit
-    assert record.job_code(record.setup.setup_job) == {"repo": syncs[0]["commit"]}  # type: ignore[union-attr, arg-type]
+    assert record.job_code(record.setup().setup_job) == {"repo": syncs[0]["commit"]}  # type: ignore[union-attr, arg-type]
     assert record.job_code(job.id) == {"repo": v2.commit}
     assert git(spec.repo, "show", f"{v2.commit}:pkg/a.txt") == "v2"  # the commit answers what code ran, here
 
@@ -173,7 +173,7 @@ def test_a_failed_setup_closes_the_session_and_caches_nothing(create: Callable, 
     key = setup_key(spec, provider=provider.name, image=None if name == "local" else providers.DEV_IMAGE)
     assert store.list(f"{CACHE_PREFIX}/{key}") == []
     session_id = str(raised.value).split(":", 1)[0]
-    assert sdk.read_record(store, session_id).receipt is not None  # closed: ended, and the provider said it is gone
+    assert sdk.read_record(store, session_id).receipt() is not None  # closed: ended, and the provider said it is gone
 
 
 class NoSnapshots:
@@ -224,7 +224,7 @@ def test_without_snapshots_every_boot_runs_the_setup(provider: Provider, name: s
     for _ in range(2):
         with sdk.create(plain, ceiling_s=600, record=store, setup=spec, **kw) as s:
             assert setup_runs(s) == 1
-            prepared = sdk.read_record(store, s.id).setup
+            prepared = sdk.read_record(store, s.id).setup()
             assert prepared is not None
             assert (prepared.hit, prepared.image) == (False, None)
     assert store.list(f"{CACHE_PREFIX}/") == []  # nothing to remember

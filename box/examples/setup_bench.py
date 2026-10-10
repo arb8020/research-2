@@ -61,7 +61,7 @@ def one(provider: Modal, store: ModalVolumeStore, spec: SetupSpec, *, image: str
     finally:
         receipt = s.close()
     record = sdk.read_record(store, s.id)
-    prepared = record.setup
+    prepared = record.setup()
     assert prepared is not None and prepared.hit == (not cold), prepared
     (synced,) = record.syncs()
     return {

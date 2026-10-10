@@ -202,7 +202,7 @@ def wire(state: str, gpu: str | None, started_at: float | None, lease: sdk.Lease
 
 
 def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: bool) -> dict[str, Any]:
-    labels = s.machine.labels
+    labels = s.labels
     gpu = labels.get(LABEL_GPU) or None
     match s.status():
         case Booting():
@@ -224,13 +224,11 @@ def first_lease(labels: dict[str, str]) -> sdk.Lease:
 
 
 def ended_status(s: sdk.Session, reason: str) -> dict[str, Any]:
-    labels = s.machine.labels
-    started_at = None if s.record is None else sdk.recorded_started_at(s.record, s.id)
-    return wire("ended", labels.get(LABEL_GPU) or None, started_at, first_lease(labels), reason=reason)
+    return wire("ended", s.labels.get(LABEL_GPU) or None, s.started_at(), first_lease(s.labels), reason=reason)
 
 
 def running_status(s: sdk.Session, token: ModalToken, running: Running, *, ready: bool, gpu: str | None) -> dict[str, Any]:
-    kernel = {"url": s.expose(int(s.machine.labels[LABEL_PORT])).url, "token": kernel_token(token, s.id)}
+    kernel = {"url": s.expose(int(s.labels[LABEL_PORT])).url, "token": kernel_token(token, s.id)}
     if ready or jupyter_ready(kernel):
         return wire("running", gpu, running.started_at, running.lease, kernel=kernel)
     jupyter = kernel_service(s)
@@ -254,7 +252,7 @@ def jupyter_ready(kernel: dict[str, str]) -> bool:
 
 
 def kernel_service(s: sdk.Session) -> sdk.Job | None:
-    return next((job for job in s.services() if job.id == JUPYTER_SERVICE), None)
+    return next((job for job in s.jobs("services") if job.id == JUPYTER_SERVICE), None)
 
 
 def jupyter_cmd(cfg: Config, port: int, origin: str) -> str:

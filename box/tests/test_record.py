@@ -14,9 +14,9 @@ from pathlib import Path
 import pytest
 
 from box import sdk
-from box.sdk import Ended, Ending, Provider, Running
+from box.sdk import Ended, Ending, Provider
 from box.store import Store
-from box.supervisor import CHUNK_BYTES, FLUSH_S, HEARTBEAT_TTL_S
+from box.supervisor import CHUNK_BYTES, ENDED, FLUSH_S, HEARTBEAT_TTL_S, LEASE, Lease, load
 from box.tests import providers
 from box.tests.test_sdk import JOB_S, eventually, gone
 
@@ -28,8 +28,12 @@ def store(name: str, provider: Provider, tmp_path: Path) -> Store:
     return providers.make_store(name, tmp_path / "store", provider)
 
 
-def recorded_output(record: sdk.Record, job_id: str, stream: str = "stdout") -> str:
-    return "".join(c.text for c in record.logs(job_id) if c.stream == stream)
+def recorded(store: Store, session_id: str) -> sdk.Session:
+    return sdk.Session(None, store, sdk.read_record(store, session_id))
+
+
+def recorded_output(store: Store, session_id: str, job_id: str, stream: str = "stdout") -> str:
+    return "".join(c.text for c in sdk.Job(recorded(store, session_id), job_id).logs() if c.stream == stream)
 
 
 def test_a_recorded_session_says_why_it_ended_after_its_machine_is_gone(launch: Callable, provider: Provider, store: Store) -> None:
@@ -41,11 +45,11 @@ def test_a_recorded_session_says_why_it_ended_after_its_machine_is_gone(launch: 
     assert again.status() == Ended("stopped")
     assert again.wait() == Ended("stopped")
     record = sdk.read_record(store, s.id)
-    assert (record.ended, record.machine_id, record.labels["box.user"]) == (Ended("stopped"), s.machine.id, "reader-7@relay")
-    assert record.jobs() == [job.id]
-    assert record.job_status(job.id).ending == Ending("exited", 3)
-    assert recorded_output(record, job.id) == "hello\n"
-    assert recorded_output(record, job.id, "stderr") == "oops\n"
+    assert (record.machine_id, record.labels["box.user"]) == (s.machine.id, "reader-7@relay")
+    assert [j.id for j in again.jobs()] == [job.id]
+    assert again.jobs()[0].status().ending == Ending("exited", 3)
+    assert recorded_output(store, s.id, job.id) == "hello\n"
+    assert recorded_output(store, s.id, job.id, "stderr") == "oops\n"
 
 
 def test_job_logs_read_on_from_the_record_with_the_same_cursor_once_the_machine_is_gone(launch: Callable, provider: Provider, store: Store) -> None:
@@ -76,7 +80,7 @@ def test_a_session_ended_by_its_lease_records_its_end_and_all_its_output(launch:
     job = s.run(f"for i in 1 2 3; do echo line $i; sleep {0.5 * scale}; done", max_duration_s=JOB_S)
     eventually(lambda: gone(provider, s), timeout_s=60 * scale)  # nobody here reads its ended.json before it goes
     assert sdk.attach(provider, session_id=s.id, record=store).wait(timeout_s=30 * scale) == Ended("lease")
-    assert recorded_output(sdk.read_record(store, s.id), job.id) == "line 1\nline 2\nline 3\n"
+    assert recorded_output(store, s.id, job.id) == "line 1\nline 2\nline 3\n"
 
 
 def test_every_change_of_the_lease_is_audited_in_the_record(launch: Callable, provider: Provider, store: Store, scale: float) -> None:
@@ -92,7 +96,7 @@ def test_every_change_of_the_lease_is_audited_in_the_record(launch: Callable, pr
     assert [(c.op, c.n) for c in audit] == [("create", 1), ("extend", 2), ("release", 1)]
     assert {(c.host, c.pid) for c in audit} == {(socket.gethostname(), os.getpid())}
     assert audit[-1].until == released.until
-    assert record.running.lease == released  # the last lease recorded
+    assert load(Lease, record.read({LEASE: 0})[LEASE]) == released  # the last lease recorded
 
 
 def test_a_supervisor_killed_without_a_word_is_machine_lost_with_logs_up_to_the_last_flush(
@@ -100,7 +104,7 @@ def test_a_supervisor_killed_without_a_word_is_machine_lost_with_logs_up_to_the_
 ) -> None:  # fmt: skip
     s = launch(ceiling_s=600, record=store)
     job = s.run("echo before; sleep 999", max_duration_s=JOB_S)
-    eventually(lambda: recorded_output(sdk.read_record(store, s.id), job.id) == "before\n", timeout_s=30 * scale)
+    eventually(lambda: recorded_output(store, s.id, job.id) == "before\n", timeout_s=30 * scale)
     providers.kill_supervisor(s.machine)
     killed_at = time.monotonic()
     # its heartbeat is still fresh: status() waits that out (the end may still be landing), never says Running
@@ -109,12 +113,10 @@ def test_a_supervisor_killed_without_a_word_is_machine_lost_with_logs_up_to_the_
     assert s.wait(timeout_s=HEARTBEAT_TTL_S + 30 * scale) == Ended("machine_lost")
     assert time.monotonic() - killed_at < HEARTBEAT_TTL_S + 30 * scale
     s.machine.terminate()  # macOS: the job outlives its supervisor (no PDEATHSIG)
-    record = sdk.read_record(store, s.id)
-    assert record.ended is None
-    assert isinstance(record.running, Running)
-    assert record.end(now=time.time()) == Ended("machine_lost")
+    assert sdk.read_record(store, s.id).read({ENDED: 0}) == {ENDED: None}
+    assert recorded(store, s.id).status() == Ended("machine_lost")
     assert sdk.attach(provider, session_id=s.id, record=store).status() == Ended("machine_lost")
-    assert recorded_output(record, job.id) == "before\n"
+    assert recorded_output(store, s.id, job.id) == "before\n"
     s.close()
 
 
@@ -123,10 +125,9 @@ def test_the_receipt_is_in_the_record_and_readable_after_the_machine_is_gone(lau
     s.run("sleep 999", max_duration_s=JOB_S)
     receipt = s.close()
     assert gone(provider, s)
-    record = sdk.read_record(store, s.id)
-    assert record.receipt == receipt
-    assert record.receipt.supervisor_confirmed
-    assert record.ended == receipt.ended == Ended("stopped")
+    assert sdk.read_record(store, s.id).receipt() == receipt
+    assert receipt.supervisor_confirmed
+    assert recorded(store, s.id).status() == receipt.ended == Ended("stopped")
     assert sdk.attach(provider, session_id=s.id, record=store).status() == Ended("stopped")  # a fresh process, after the fact
 
 
@@ -135,7 +136,7 @@ def test_a_session_nobody_closed_has_no_receipt(launch: Callable, provider: Prov
     s.release()
     assert s.wait() == Ended("released")
     eventually(lambda: gone(provider, s), timeout_s=60 * scale)
-    assert sdk.read_record(store, s.id).receipt is None  # it ended on its own: no closer, no receipt
+    assert sdk.read_record(store, s.id).receipt() is None  # it ended on its own: no closer, no receipt
 
 
 def test_a_receipt_that_contradicts_itself_is_refused() -> None:
@@ -151,9 +152,8 @@ def test_a_character_split_across_flushes_is_recorded_whole(launch: Callable, st
     with launch(ceiling_s=600, record=store) as s:
         job = s.run(rf"printf 'caf\xc3'; sleep {3 * scale}; printf '\xa9\n'", max_duration_s=JOB_S)  # é = c3 a9, a flush in between
         job.wait()
-    record = sdk.read_record(store, s.id)
-    assert recorded_output(record, job.id) == "café\n"
-    assert all("\N{REPLACEMENT CHARACTER}" not in c.text for c in record.logs(job.id))
+    assert recorded_output(store, s.id, job.id) == "café\n"
+    assert all("\N{REPLACEMENT CHARACTER}" not in c.text for c in sdk.Job(recorded(store, s.id), job.id).logs())
 
 
 def test_output_past_a_chunk_is_recorded_in_order_and_never_dropped(launch: Callable, store: Store) -> None:
@@ -161,14 +161,14 @@ def test_output_past_a_chunk_is_recorded_in_order_and_never_dropped(launch: Call
     with launch(ceiling_s=600, record=store) as s:
         job = s.run(f"awk 'BEGIN {{ for (i = 1; i <= {lines}; i++) printf \"%07d\\n\", i }}'", max_duration_s=JOB_S)
         job.wait()
-    record = sdk.read_record(store, s.id)
-    chunks = list(record.logs(job.id))
+    job = sdk.Job(recorded(store, s.id), job.id)
+    chunks = list(job.logs())
     assert len(chunks) >= 3
-    recorded = "".join(c.text for c in chunks)
+    text = "".join(c.text for c in chunks)
     expected = "".join(f"{i:07d}\n" for i in range(1, lines + 1))
-    assert len(recorded) == len(expected)  # a short, readable failure first: no 12 MB diff
-    assert recorded == expected
-    assert list(record.logs(job.id, after=chunks[0].end)) == chunks[1:]
+    assert len(text) == len(expected)  # a short, readable failure first: no 12 MB diff
+    assert text == expected
+    assert list(job.logs(after=chunks[0].end)) == chunks[1:]
 
 
 def test_a_session_never_recorded_is_not_found(provider: Provider, store: Store) -> None:

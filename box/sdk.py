@@ -24,17 +24,22 @@ from box.gitsync import Synced
 from box.setup_cache import SetupRecord, SetupSpec, parse_setup_record
 from box.store import Mount, Store
 from box.supervisor import (
+    ACTIVITY,
     AUDIT,
     ENDED,
     HEARTBEAT,
     HEARTBEAT_TTL_S,
-    KINDS,
+    KILL,
     LEASE,
     MAX_CEILING_S,
     MAX_SERVICES,
     SESSION,
+    STATUS,
+    STOP,
     TAIL_FRAME_BYTES,
     TAIL_MAX_S,
+    UP,
+    WATCH,
     Done,
     Ended,
     Ending,
@@ -84,6 +89,7 @@ SERVICE_NAME = re.compile(r"[a-z][a-z0-9-]{0,31}")
 T = TypeVar("T")
 STREAMS = ("stdout", "stderr")
 LogCursor = tuple[int, int]
+Kind = Literal["jobs", "services"]
 MAX_LOG_READ = 4 * 1024 * 1024
 FOLLOW_QUIET_S = 10.0
 FOLLOW_TRIES = 5
@@ -388,8 +394,7 @@ def attach(provider: Provider, *, session_id: str | None = None, name: str | Non
         return found
     if record is None or session_id is None:
         raise LookupError(f"{provider.name} provider: no live machine for session {session_id or repr(name)}")
-    recorded = read_record(record, session_id)
-    return Session(Lost(recorded.machine_id, recorded.labels), record=record)
+    return Session(None, record, read_record(record, session_id))
 
 
 def _find(provider: Provider, labels: dict[str, str], record: Store | None = None) -> Session | None:
@@ -423,20 +428,31 @@ def record_prefix(session_id: str) -> str:
     return f"sessions/{session_id}"
 
 
-@dataclass
 class Session:
-    machine: Machine
-    record: Store | None = None
-    _ended: Ended | None = field(default=None, repr=False)
-    _endpoints: dict[int, Endpoint] = field(default_factory=dict, repr=False)
+    def __init__(self, machine: Machine | None, record: Store | None = None, place: Place | None = None) -> None:
+        assert machine is not None or place is not None, "a Session needs a machine or its record"
+        self.machine = machine
+        self.record = record
+        self.place: Place = place or Live(machine)
+        self._ended: Ended | None = None
+        self._endpoints: dict[int, Endpoint] = {}
+
+    @property
+    def labels(self) -> dict[str, str]:
+        return self.place.labels
 
     @property
     def id(self) -> str:
-        return self.machine.labels[LABEL_SESSION]
+        return self.labels[LABEL_SESSION]
 
     @property
     def name(self) -> str | None:
-        return self.machine.labels.get(LABEL_NAME)
+        return self.labels.get(LABEL_NAME)
+
+    def _live(self) -> Machine:
+        if self.machine is None:
+            raise Gone(f"{self.id}: gone (known from its record)")
+        return self.machine
 
     def __enter__(self) -> Session:
         return self
@@ -448,11 +464,11 @@ class Session:
         give_up = time.monotonic() + timeout_s
         while not self._up():
             if time.monotonic() > give_up:
-                raise TimeoutError(f"{self.machine.id}: supervisor not up after {timeout_s:.0f} s")
+                raise TimeoutError(f"{self._live().id}: supervisor not up after {timeout_s:.0f} s")
             time.sleep(POLL_S)
 
     def _up(self) -> bool:
-        rc, out, _ = self.machine.exec(f"cat {self._path('up')}")
+        rc, out, _ = self._live().exec(f"cat {self._path(UP)}")
         return rc == 0 and out.strip() == self.id
 
     def extend(self, until: float) -> Lease:
@@ -499,7 +515,7 @@ class Session:
                 return
 
     def _change_lease(self, op: Literal["extend", "release"], until: float) -> Lease:
-        root = self.machine.root
+        root = self._live().root
         argv = ["python3", f"{root}/supervisor.py", "lease", "--root", root, "--op", op, "--until", repr(until),
                 "--host", socket.gethostname(), "--pid", str(os.getpid())]  # fmt: skip
         return load(Lease, self._check(shlex.join(argv)).encode())
@@ -508,12 +524,11 @@ class Session:
         assert timeout_s > 0, timeout_s
         assert gone_timeout_s > 0, gone_timeout_s
         ended = self._stop_and_wait(timeout_s)
-        self.machine.terminate()
-        gone_at = self._confirm_gone(gone_timeout_s)
+        gone_at = self._terminate(gone_timeout_s)
         if ended is None:
             ended = self.status()
             assert isinstance(ended, Ended), ended
-        receipt = Receipt(session_id=self.id, machine_id=self.machine.id, ended=ended, machine_gone_at=gone_at)
+        receipt = Receipt(session_id=self.id, machine_id=self.place.machine_id, ended=ended, machine_gone_at=gone_at)
         if self.record is not None:
             self.record.put(f"{record_prefix(self.id)}/receipt.json", receipt_json(receipt))
         return receipt
@@ -521,13 +536,16 @@ class Session:
     def _stop_and_wait(self, timeout_s: float) -> Ended | None:
         if not isinstance(self.status(), Ended):
             with contextlib.suppress(Gone):
-                self.machine.exec(f"mkdir -p {self.machine.root} && touch {self._path('watch')} {self._path('stop')}")
+                self._live().exec(f"mkdir -p {self._live().root} && touch {self._path(WATCH)} {self._path(STOP)}")
         try:
             return self.wait(timeout_s)
         except TimeoutError:
             return None
 
-    def _confirm_gone(self, timeout_s: float) -> float:
+    def _terminate(self, timeout_s: float) -> float:
+        if self.machine is None:
+            return time.time()
+        self.machine.terminate()
         give_up = time.monotonic() + timeout_s
         while not self.machine.gone():
             if time.monotonic() > give_up:
@@ -540,7 +558,7 @@ class Session:
             raise Refused(f"port {port}: not a TCP port")
         if port in self._endpoints:
             return self._endpoints[port]
-        endpoint = self.machine.expose(port)
+        endpoint = self._live().expose(port)
         if not endpoint.headers:
             self._endpoints[port] = endpoint
         return endpoint
@@ -560,59 +578,81 @@ class Session:
             raise Refused(f"timeout_s={timeout_s}: more than 0 and at most the {left:.0f} s to the session's ceiling")
         inner = f"cd {shlex.quote(cwd)} && {cmd}" if cwd else cmd
         then = f"exec bash -c {shlex.quote(inner)}"
-        return self.machine.stream(self._keepalive(then, until=time.time() + timeout_s), timeout_s=timeout_s, quiet_s=quiet_s, pty=pty)
+        return self._live().stream(self._keepalive(then, until=time.time() + timeout_s), timeout_s=timeout_s, quiet_s=quiet_s, pty=pty)
 
     def shell(self, cwd: str | None = None) -> Shell:
         running = self._running_now()
         start = f"cd {shlex.quote(cwd)} && " if cwd else ""
-        return self.machine.shell(self._keepalive(f"{start}exec bash -l", until=running.lease.ceiling))
+        return self._live().shell(self._keepalive(f"{start}exec bash -l", until=running.lease.ceiling))
 
     def sync(self, repo: str | Path, *, paths: tuple[str, ...] = (), force: bool = False) -> Synced:
         from box import gitsync
 
         keep = f"refs/box/{self.name or self.id}"
-        synced = gitsync.sync(self.machine, Path(repo), paths=paths, force=force, keep=keep, touch=self._path("activity"))
+        synced = gitsync.sync(self._live(), Path(repo), paths=paths, force=force, keep=keep, touch=self._path(ACTIVITY))
         if self.record is not None:
             entry = {"commit": synced.commit, "path": synced.path, "pack_bytes": synced.pack_bytes, "local": str(Path(repo).resolve()), "at": time.time()}
             self.record.put(f"{record_prefix(self.id)}/syncs/{time.time_ns()}.json", json.dumps(entry).encode())
         return synced
 
     def touch(self) -> None:
-        self._touch("activity")
+        self._touch(ACTIVITY)
 
     def _keepalive_every_s(self) -> float:
-        idle_s = float(self.machine.labels.get(LABEL_IDLE) or 0)
+        idle_s = float(self.labels.get(LABEL_IDLE) or 0)
         return max(MIN_KEEPALIVE_S, min(KEEPALIVE_S, idle_s / 4)) if idle_s else KEEPALIVE_S
 
     def _keepalive(self, then: str, *, until: float) -> str:
-        activity = shlex.quote(self._path("activity"))
+        activity = shlex.quote(self._path(ACTIVITY))
         loop = (f"while kill -0 $$ 2>/dev/null; do touch {activity}; "
                 f"if [ $(date +%s) -ge {int(until)} ]; then kill -HUP $$; exit; fi; sleep {self._keepalive_every_s():g}; done")  # fmt: skip
         # braced: `x && ( loop ) &` would background x too, in a shell that holds the caller's stdout open
         return f"{{ ( {loop} ) </dev/null >/dev/null 2>&1 & }} && {then}"
 
     def status(self) -> Status:
-        if self._ended is not None:
-            return self._ended
-        try:
-            out = self._check(STATUS_SH.format(root=shlex.quote(self.machine.root)))
-        except Gone:
-            return self._status_when_gone()
-        status = parse_status(out.encode())
+        return self._status(watch=False)
+
+    def wait(self, timeout_s: float | None = None) -> Ended:
+        give_up = None if timeout_s is None else time.monotonic() + timeout_s
+        while not isinstance(status := self._status(watch=True), Ended):
+            if give_up is not None and time.monotonic() > give_up:
+                raise TimeoutError(f"{self.id}: still {status} after {timeout_s:.0f} s")
+            time.sleep(POLL_S)
+        return status
+
+    def _status(self, *, watch: bool) -> Status:
+        give_up = time.monotonic() + HEARTBEAT_TTL_S
+        while (status := self._ended or self._status_now(watch=watch)) is None:
+            if time.monotonic() > give_up:
+                status = Ended("machine_lost")
+                break
+            time.sleep(POLL_S)
         if isinstance(status, Ended):
             self._ended = status
         return status
 
-    def wait(self, timeout_s: float | None = None) -> Ended:
-        give_up = None if timeout_s is None else time.monotonic() + timeout_s
-        while True:
-            self._watch()
-            status = self.status()
-            if isinstance(status, Ended):
-                return status
-            if give_up is not None and time.monotonic() > give_up:
-                raise TimeoutError(f"{self.id}: still {status} after {timeout_s:.0f} s")
-            time.sleep(POLL_S)
+    def _status_now(self, *, watch: bool) -> Status | None:
+        try:
+            files = self._read(dict.fromkeys(STATUS_FILES, 0), watch=watch)
+        except Gone:
+            return Ended("machine_lost")
+        return parse_status(files, gone=self.place.gone, now=time.time())
+
+    def started_at(self) -> float | None:
+        raw = self._read({SESSION: 0})[SESSION]
+        return None if raw is None else load(Started, raw).started_at
+
+    def _read(self, rels: dict[str, int], *, watch: bool = False) -> dict[str, bytes | None]:
+        return self._ask(lambda place: place.read(rels, watch=watch))
+
+    def _ask(self, ask: Callable[[Place], T]) -> T:
+        try:
+            return ask(self.place)
+        except Gone:
+            if self.record is None:
+                raise
+            self.place = Record(self.record, self.place.machine_id, self.place.labels)
+            return ask(self.place)
 
     def run(  # noqa: PLR0913
         self, cmd: str, *, max_duration_s: float = 1800.0, on_exit: str | None = None, hook_budget_s: float = 300.0,
@@ -639,7 +679,7 @@ class Session:
         self._running_now()
         if name is not None and not SERVICE_NAME.fullmatch(name):
             raise Refused(f"service name {name!r}: a lowercase letter, then lowercase letters, digits or '-', at most 32")
-        started = [job_id for job_id in self._check(f"ls {self._path('services')}").split() if not job_id.endswith(".tmp")]
+        started = [job.id for job in self.jobs("services")]
         if len(started) >= MAX_SERVICES:
             raise Refused(f"{self.id}: a session runs at most {MAX_SERVICES} services")
         if name in started:
@@ -654,8 +694,8 @@ class Session:
 
     def _start(self, job: Job, spec: dict) -> Job:
         tmp = self._path(f"{job.kind}/{job.id}.spec.tmp")
-        self.machine.write(tmp, json.dumps(spec).encode())
-        work, code = shlex.quote(self.machine.work), shlex.quote(f"{job.dir}/code")
+        self._live().write(tmp, json.dumps(spec).encode())
+        work, code = shlex.quote(self._live().work), shlex.quote(f"{job.dir}/code")
         heads = (f'for t in {work}/*/; do if [ -e "$t.git" ] && h=$(git -C "$t" rev-parse HEAD 2>/dev/null); '
                  f'then mkdir -p {code} && echo "$h" > {code}/"$(basename "$t")"; fi; done; ')  # fmt: skip
         self._check(f"{heads}mkdir -p {job.dir} && mv {tmp} {job.dir}/spec.json")
@@ -668,57 +708,28 @@ class Session:
             for child in sorted(root.iterdir()):
                 tar.add(child, arcname=child.name, filter=lambda i: None if ignored(i.name, ignore) else i)
         tmp = self._path(f"put-{secrets.token_hex(3)}.tgz")
-        self.machine.write(tmp, buf.getvalue())
+        self._live().write(tmp, buf.getvalue())
         self._check(f"mkdir -p {shlex.quote(remote)} && tar xzf {tmp} --no-same-owner -C {shlex.quote(remote)} && rm {tmp}")
 
     def get(self, remote: str, local: str | Path) -> None:
         tmp = self._path(f"get-{secrets.token_hex(3)}.tgz")
         self._check(f"tar czf {tmp} -C {shlex.quote(remote)} .")
-        data = self.machine.read(tmp)
-        self.machine.exec(f"rm -f {tmp}")
+        data = self._live().read(tmp)
+        self._live().exec(f"rm -f {tmp}")
         with tarfile.open(fileobj=io.BytesIO(data)) as tar:
             tar.extractall(local, filter="data")
 
-    def jobs(self) -> list[Job]:
-        return self._listed("jobs")
-
-    def services(self) -> list[Job]:
-        return self._listed("services")
-
-    def _listed(self, kind: str) -> list[Job]:
-        try:
-            out = self._check(f"ls {self._path(kind)}")
-        except Gone:
-            if self.record is None:
-                raise
-            return [Job(self, job_id, kind) for job_id in read_record(self.record, self.id).jobs(kind)]
-        return [Job(self, name, kind) for name in sorted(out.split()) if not name.endswith(".tmp")]
-
-    def _status_when_gone(self) -> Ended:
-        give_up = time.monotonic() + HEARTBEAT_TTL_S
-        ended = Ended("machine_lost") if self.record is None else None
-        while ended is None and time.monotonic() < give_up:
-            ended = read_record(self.record, self.id).end(now=time.time())
-            if ended is None:
-                time.sleep(POLL_S)
-        self._ended = ended or Ended("machine_lost")
-        return self._ended
-
-    def _watch(self) -> None:
-        with contextlib.suppress(Gone):
-            self.machine.exec(f"touch {self._path('watch')}")
+    def jobs(self, kind: Kind = "jobs") -> list[Job]:
+        return [Job(self, job_id, kind) for job_id in self._ask(lambda place: place.jobs(kind))]
 
     def _path(self, rel: str) -> str:
-        return f"{self.machine.root}/{rel}"
+        return f"{self._live().root}/{rel}"
 
     def _touch(self, rel: str) -> None:
         self._check(f"touch {self._path(rel)}")
 
-    def _exists(self, rel: str) -> bool:
-        return self.machine.exec(f"test -e {self._path(rel)}")[0] == 0
-
     def _check(self, cmd: str) -> str:
-        rc, out, err = self.machine.exec(cmd)
+        rc, out, err = self._live().exec(cmd)
         if rc != 0:
             raise RuntimeError(f"{self.id}: `{cmd}` exited {rc}: {err.strip()}")
         return out
@@ -732,47 +743,40 @@ def new_job_id() -> str:
 class Job:
     session: Session
     id: str
-    kind: Literal["jobs", "services"] = "jobs"
+    kind: Kind = "jobs"
 
     @property
     def dir(self) -> str:
-        return self.session._path(f"{self.kind}/{self.id}")
+        return self.session._path(self.rel)
+
+    @property
+    def rel(self) -> str:
+        return f"{self.kind}/{self.id}"
 
     def status(self) -> JobStatus:
-        try:
-            return load_job(self.session.machine.read(f"{self.dir}/status.json"))
-        except FileNotFoundError:
-            return Queued()
-
-    def done(self) -> bool:
-        return isinstance(self.status(), Done)
+        return self.read(None).status
 
     def wait(self) -> Ending:
-        while not isinstance(status := self._read_live(None, watch=True).status, Done):
+        while True:
+            final = self.session.place.gone and isinstance(self.session.status(), Ended)
+            status = self.read(None, watch=True).status
+            if isinstance(status, Done):
+                return status.ending
+            if final:
+                raise Gone(f"{self.session.id}: its machine went before {self.id} ended ({status})")
             time.sleep(POLL_S)
-        return status.ending
 
     def kill(self) -> None:
-        self.session._touch(f"{self.kind}/{self.id}/kill")
+        self.session._touch(f"{self.rel}/{KILL}")
 
     def logs(self, *, after: LogCursor = (0, 0), follow: bool = False, stop: threading.Event | None = None) -> Iterator[LogChunk]:
         if follow:
             yield from self._follow(after, stop)
             return
-        cursor = after
-        while True:
-            try:
-                read = self._read_live(cursor, watch=False)
-            except Gone:
-                if self.session.record is None:
-                    raise
-                yield from read_record(self.session.record, self.session.id).logs(self.id, after=cursor, kind=self.kind)
-                return
-            for chunk in read.chunks:
-                cursor = chunk.end
-                yield chunk
-            if not read.more:
-                return
+        read = JobRead(Queued(), [], more=True)
+        while read.more:
+            read = self.read(read.chunks[-1].end if read.chunks else after)
+            yield from read.chunks
 
     def _follow(self, cursor: LogCursor, stop: threading.Event | None) -> Iterator[LogChunk]:
         tries = 0
@@ -783,10 +787,8 @@ class Job:
                     cursor = chunk.end
                     yield chunk
             except Gone:
-                if self.session.record is None:
-                    raise
                 self.session.wait()
-                yield from read_record(self.session.record, self.session.id).logs(self.id, after=cursor, kind=self.kind)
+                yield from self.logs(after=cursor)
                 return
             except Dropped as e:
                 tries = 1 if tail.frames else tries + 1
@@ -802,7 +804,7 @@ class Job:
 
     def _tail(self, tail: TailReader, stop: threading.Event | None) -> Iterator[LogChunk]:
         cmd = f"exec python3 {shlex.quote(self.session._path('supervisor.py'))} tail {shlex.quote(self.dir)} {tail.cursor[0]} {tail.cursor[1]}"
-        with self.session.machine.stream(cmd, timeout_s=TAIL_MAX_S + 60, quiet_s=FOLLOW_QUIET_S) as stream:
+        with self.session._live().stream(cmd, timeout_s=TAIL_MAX_S + 60, quiet_s=FOLLOW_QUIET_S) as stream:
             for name, data in stream:
                 if name == "stderr":
                     tail.errors = (tail.errors + data)[-TAIL_ERR_BYTES:]
@@ -812,34 +814,26 @@ class Job:
                     return
         tail.rc = stream.rc
 
-    def read(self, after: LogCursor, *, watch: bool = False) -> JobRead:
-        try:
-            return self._read_live(after, watch=watch)
-        except Gone:
-            if self.session.record is None:
-                raise
-            record = read_record(self.session.record, self.session.id)
-            return JobRead(record.job_status(self.id, kind=self.kind), list(record.logs(self.id, after=after, kind=self.kind)))
-
-    def _read_live(self, after: LogCursor | None, *, watch: bool) -> JobRead:
-        files = [("status.json", 0), *([] if after is None else zip(STREAMS, after, strict=True))]
-        reads = [f"{{ tail -c +{offset + 1} {name} 2>/dev/null | head -c {MAX_LOG_READ} | base64; }} | tr -d '\\n'; echo" for name, offset in files]
-        out = self.session._check("; ".join([*([f"touch {self.session._path('watch')}"] if watch else []), f"cd {self.dir} || exit 1", *reads]))
-        lines = out.split("\n")
-        if len(lines) != len(files) + 1 or lines[-1]:
-            raise RuntimeError(f"{self.id}: reading the job gave {len(lines) - 1} lines for {len(files)} files")
-        raw = [base64.b64decode(line) for line in lines[:-1]]
-        status = load_job(raw[0]) if raw[0] else Queued()
-        done = isinstance(status, Done)
+    def read(self, after: LogCursor | None, *, watch: bool = False) -> JobRead:
+        streams = {} if after is None else {f"{self.rel}/{name}": offset for name, offset in zip(STREAMS, after, strict=True)}
+        files = self.session._read({f"{self.rel}/{STATUS}": 0, **streams}, watch=watch)
+        raw = files[f"{self.rel}/{STATUS}"]
+        status = Queued() if raw is None else load_job(raw)
         chunks, cursor, more = [], after, False
-        for i, data in enumerate(raw[1:]):
+        for name, rel in zip(STREAMS, streams, strict=False):
+            data = files[rel] or b""
             full = len(data) == MAX_LOG_READ
             more = more or full
-            cut = len(data) if done and not full else utf8_cut(data)
+            cut = len(data) if isinstance(status, Done) and not full else utf8_cut(data)
             if cut:
-                cursor = (cursor[0] + cut, cursor[1]) if i == 0 else (cursor[0], cursor[1] + cut)
-                chunks.append(LogChunk(STREAMS[i], data[:cut].decode(errors="replace"), cursor))
+                cursor = advance(cursor, name, cut)
+                chunks.append(LogChunk(name, data[:cut].decode(errors="replace"), cursor))
         return JobRead(status, chunks, more)
+
+
+def advance(cursor: LogCursor, stream: str, n: int) -> LogCursor:
+    assert stream in STREAMS, stream
+    return (cursor[0] + n, cursor[1]) if stream == "stdout" else (cursor[0], cursor[1] + n)
 
 
 @dataclass(frozen=True)
@@ -866,7 +860,7 @@ class TailError(RuntimeError):
 
 class TailReader:
     def __init__(self, after: LogCursor) -> None:
-        self.cursor = list(after)
+        self.cursor = after
         self.end: str | None = None
         self.frames = 0
         self.rc: int | None = None
@@ -909,8 +903,8 @@ class TailReader:
         self._held[stream] = raw[cut:]
         if not cut:
             return []
-        self.cursor[STREAMS.index(stream)] += cut
-        return [LogChunk(stream, raw[:cut].decode(errors="replace"), (self.cursor[0], self.cursor[1]))]
+        self.cursor = advance(self.cursor, stream, cut)
+        return [LogChunk(stream, raw[:cut].decode(errors="replace"), self.cursor)]
 
 
 def run_job(
@@ -931,36 +925,61 @@ def run_job(
     return ending
 
 
-@dataclass(frozen=True)
-class Lost:
-    id: str
+STATUS_FILES = (ENDED, UP, SESSION, LEASE, HEARTBEAT)
+
+
+def parse_status(files: dict[str, bytes | None], *, gone: bool, now: float) -> Status | None:
+    if (ended := files[ENDED]) is not None:
+        return load_ended(ended)
+    if files[UP] is not None:
+        return Running(started_at=load(Started, files[SESSION]).started_at, lease=load(Lease, files[LEASE]))
+    if not gone:
+        return Booting()
+    beat = files[HEARTBEAT]
+    return None if beat is not None and load(Heartbeat, beat).fresh(now) else Ended("machine_lost")
+
+
+class Place(Protocol):
+    gone: bool
+    machine_id: str
     labels: dict[str, str]
-    root: str = ""
-    work: str = ""
 
-    def exec(self, cmd: str) -> tuple[int, str, str]:
-        raise Gone(f"{self.id}: gone (known from its record)")
+    def read(self, rels: dict[str, int], *, watch: bool = False) -> dict[str, bytes | None]: ...
+    def jobs(self, kind: Kind) -> list[str]: ...
 
-    def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Stream:
-        raise Gone(f"{self.id}: gone (known from its record)")
 
-    def shell(self, cmd: str) -> Shell:
-        raise Gone(f"{self.id}: gone (known from its record)")
+@dataclass(frozen=True)
+class Live:
+    machine: Machine
+    gone = False
 
-    def write(self, path: str, data: bytes) -> None:
-        raise Gone(f"{self.id}: gone (known from its record)")
+    @property
+    def machine_id(self) -> str:
+        return self.machine.id
 
-    def read(self, path: str) -> bytes:
-        raise Gone(f"{self.id}: gone (known from its record)")
+    @property
+    def labels(self) -> dict[str, str]:
+        return self.machine.labels
 
-    def expose(self, port: int) -> Endpoint:
-        raise Gone(f"{self.id}: gone (known from its record)")
+    def read(self, rels: dict[str, int], *, watch: bool = False) -> dict[str, bytes | None]:
+        each = [f"if [ -e {shlex.quote(rel)} ]; then tail -c +{offset + 1} {shlex.quote(rel)} | head -c {MAX_LOG_READ} | base64 | tr -d '\\n'; else printf -; fi; echo"
+                for rel, offset in rels.items()]  # fmt: skip
+        out = self._check("; ".join([f"cd {shlex.quote(self.machine.root)} 2>/dev/null || exit 0", *([f"touch {WATCH}"] if watch else []), *each]))
+        if not out:
+            return dict.fromkeys(rels)
+        lines = out.split("\n")
+        if len(lines) != len(rels) + 1 or lines[-1]:
+            raise RuntimeError(f"{self.machine.id}: reading {len(rels)} files gave {len(lines) - 1} lines")
+        return {rel: None if line == "-" else base64.b64decode(line) for rel, line in zip(rels, lines, strict=False)}
 
-    def terminate(self) -> None:
-        pass
+    def jobs(self, kind: Kind) -> list[str]:
+        return sorted(name for name in self._check(f"ls {shlex.quote(f'{self.machine.root}/{kind}')}").split() if not name.endswith(".tmp"))
 
-    def gone(self) -> bool:
-        return True
+    def _check(self, cmd: str) -> str:
+        rc, out, err = self.machine.exec(cmd)
+        if rc != 0:
+            raise RuntimeError(f"{self.machine.id}: `{cmd[:200]}` exited {rc}: {err.strip()}")
+        return out
 
 
 @dataclass(frozen=True)
@@ -968,62 +987,61 @@ class Record:
     store: Store
     machine_id: str
     labels: dict[str, str]
-    running: Running | None
-    ended: Ended | None
-    heartbeat: Heartbeat | None
-    receipt: Receipt | None
-    setup: SetupRecord | None = None
+    gone = True
 
     @property
-    def session_id(self) -> str:
-        return self.labels[LABEL_SESSION]
+    def prefix(self) -> str:
+        return record_prefix(self.labels[LABEL_SESSION])
 
-    def end(self, now: float) -> Ended | None:
-        if self.ended is not None:
-            return self.ended
-        if self.heartbeat is not None and self.heartbeat.fresh(now):
-            return None
-        return Ended("machine_lost")
+    def read(self, rels: dict[str, int], *, watch: bool = False) -> dict[str, bytes | None]:
+        return {rel: self._output(rel, offset) if rel.rsplit("/", 1)[-1] in STREAMS else self._file(rel) for rel, offset in rels.items()}
 
-    def lease_audit(self) -> list[LeaseChange]:
-        return _parse_if_present(self.store, f"{record_prefix(self.session_id)}/{AUDIT}", load_audit) or []
-
-    def syncs(self) -> list[dict]:
-        prefix = f"{record_prefix(self.session_id)}/syncs/"
-        return [json.loads(self.store.get(key)) for key in sorted(self.store.list(prefix), key=lambda k: int(k[len(prefix) :].split(".")[0]))]
-
-    def job_code(self, job_id: str, kind: str = "jobs") -> dict[str, str]:
-        prefix = f"{record_prefix(self.session_id)}/{kind}/{job_id}/code/"
-        return {key[len(prefix) :]: self.store.get(key).decode().strip() for key in self.store.list(prefix)}
-
-    def jobs(self, kind: str = "jobs") -> list[str]:
-        assert kind in KINDS, kind
-        prefix = f"{record_prefix(self.session_id)}/{kind}/"
+    def jobs(self, kind: Kind) -> list[str]:
+        prefix = f"{self.prefix}/{kind}/"
         return sorted({key[len(prefix) :].split("/", 1)[0] for key in self.store.list(prefix)})
 
-    def job_status(self, job_id: str, kind: str = "jobs") -> JobStatus:
-        try:
-            return load_job(self.store.get(f"{record_prefix(self.session_id)}/{kind}/{job_id}/status.json"))
-        except FileNotFoundError:
-            return Queued()
+    def receipt(self) -> Receipt | None:
+        return self._load("receipt.json", parse_receipt)
 
-    def logs(self, job_id: str, after: LogCursor = (0, 0), kind: str = "jobs") -> Iterator[LogChunk]:
-        prefix = f"{record_prefix(self.session_id)}/{kind}/{job_id}/"
-        names = [key[len(prefix) :] for key in self.store.list(prefix)]
-        chunks = sorted((*parsed, name) for name in names if (parsed := parse_chunk(name)) is not None)
-        cursor = dict(zip(STREAMS, after, strict=True))
-        begins = dict.fromkeys(STREAMS, 0)
-        for _n, stream, end, name in chunks:
-            begin, begins[stream] = begins[stream], end
-            if end <= cursor[stream]:
+    def setup(self) -> SetupRecord | None:
+        return self._load("setup.json", parse_setup_record)
+
+    def lease_audit(self) -> list[LeaseChange]:
+        return self._load(AUDIT, load_audit) or []
+
+    def syncs(self) -> list[dict]:
+        prefix = f"{self.prefix}/syncs/"
+        return [json.loads(self.store.get(key)) for key in sorted(self.store.list(prefix), key=lambda k: int(k[len(prefix) :].split(".")[0]))]
+
+    def job_code(self, job_id: str, kind: Kind = "jobs") -> dict[str, str]:
+        prefix = f"{self.prefix}/{kind}/{job_id}/code/"
+        return {key[len(prefix) :]: self.store.get(key).decode().strip() for key in self.store.list(prefix)}
+
+    def _load(self, rel: str, parse: Callable[[bytes], T]) -> T | None:  # noqa: UP047
+        raw = self._file(rel)
+        return None if raw is None else parse(raw)
+
+    def _file(self, rel: str) -> bytes | None:
+        try:
+            return self.store.get(f"{self.prefix}/{rel}")
+        except FileNotFoundError:
+            return None
+
+    def _output(self, rel: str, offset: int) -> bytes:
+        job, stream = rel.rsplit("/", 1)
+        prefix = f"{self.prefix}/{job}/"
+        chunks = sorted((*parsed, key) for key in self.store.list(prefix) if (parsed := parse_chunk(key[len(prefix) :])) is not None)
+        data, begin = b"", 0
+        for _n, name, end, key in chunks:
+            if name != stream:
                 continue
-            key = prefix + name
-            data = self.store.get(key)
-            if len(data) != end - begin:
-                raise ValueError(f"{self.store.uri}: {key} holds {len(data)} bytes; its name says {end - begin}")
-            text = data[max(0, cursor[stream] - begin) :].decode(errors="replace")
-            cursor[stream] = end
-            yield LogChunk(stream, text, (cursor["stdout"], cursor["stderr"]))
+            if end > offset and len(data) < MAX_LOG_READ:
+                got = self.store.get(key)
+                if len(got) != end - begin:
+                    raise ValueError(f"{self.store.uri}: {key} holds {len(got)} bytes; its name says {end - begin}")
+                data += got[max(0, offset - begin) :]
+            begin = end
+        return data[:MAX_LOG_READ]
 
 
 def read_record(store: Store, session_id: str) -> Record:
@@ -1034,54 +1052,7 @@ def read_record(store: Store, session_id: str) -> Record:
         raise LookupError(f"{store.uri}: no record of session {session_id}") from e
     if launched["labels"].get(LABEL_SESSION) != session_id:
         raise ValueError(f"{store.uri}: {prefix}/launch.json is for session {launched['labels'].get(LABEL_SESSION)!r}")
-    return Record(
-        store=store, machine_id=str(launched["machine_id"]), labels=dict(launched["labels"]),
-        running=_recorded_running(store, prefix),
-        ended=_parse_if_present(store, f"{prefix}/{ENDED}", load_ended),
-        heartbeat=_parse_if_present(store, f"{prefix}/{HEARTBEAT}", lambda raw: load(Heartbeat, raw)),
-        receipt=_parse_if_present(store, f"{prefix}/receipt.json", parse_receipt),
-        setup=_parse_if_present(store, f"{prefix}/setup.json", parse_setup_record),
-    )  # fmt: skip
-
-
-def _parse_if_present(store: Store, key: str, parse: Callable[[bytes], T]) -> T | None:  # noqa: UP047
-    try:
-        raw = store.get(key)
-    except FileNotFoundError:
-        return None
-    return parse(raw)
-
-
-def recorded_started_at(store: Store, session_id: str) -> float | None:
-    started = _parse_if_present(store, f"{record_prefix(session_id)}/{SESSION}", lambda raw: load(Started, raw))
-    return None if started is None else started.started_at
-
-
-def _recorded_running(store: Store, prefix: str) -> Running | None:
-    started = _parse_if_present(store, f"{prefix}/{SESSION}", lambda raw: load(Started, raw))
-    lease = _parse_if_present(store, f"{prefix}/{LEASE}", lambda raw: load(Lease, raw))
-    if started is None or lease is None:
-        return None
-    return Running(started_at=started.started_at, lease=lease)
-
-
-STATUS_SH = (
-    "cd {root} 2>/dev/null || exit 0; "
-    "if [ -e ended.json ]; then echo ended; cat ended.json; "
-    "elif [ -e up ]; then echo running; cat session.json; echo; cat lease.json; fi"
-)
-
-
-def parse_status(raw: bytes) -> Status:
-    kind, *docs = raw.decode().splitlines() or ["booting"]
-    match kind, len(docs):
-        case "booting", 0:
-            return Booting()
-        case "ended", 1:
-            return load_ended(docs[0].encode())
-        case "running", 2:
-            return Running(started_at=load(Started, docs[0].encode()).started_at, lease=load(Lease, docs[1].encode()))
-    raise ValueError(f"session status: unexpected {raw[:200]!r}")
+    return Record(store, str(launched["machine_id"]), dict(launched["labels"]))
 
 
 def receipt_json(receipt: Receipt) -> bytes:
