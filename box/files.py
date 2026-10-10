@@ -38,5 +38,5 @@ def ignored(rel: str, ignore: tuple[str, ...]) -> bool:
 def check(machine: Machine, cmd: str) -> str:
     rc, out, err = machine.exec(cmd)
     if rc != 0:
-        raise RuntimeError(f"{machine.id}: `{cmd}` exited {rc}: {err.strip()}")
+        raise RuntimeError(f"{machine.id}: `{cmd[:200]}` exited {rc}: {err.strip()}")
     return out

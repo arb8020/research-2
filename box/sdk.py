@@ -35,6 +35,7 @@ from box.supervisor import (
     SESSION,
     STATUS,
     STOP,
+    STREAMS,
     TAIL_FRAME_BYTES,
     TAIL_MAX_S,
     UP,
@@ -86,7 +87,6 @@ RECORD_PATH = "record"
 SESSION_ID = re.compile(r"s-[0-9a-f]{12}")
 SERVICE_NAME = re.compile(r"[a-z][a-z0-9-]{0,31}")
 T = TypeVar("T")
-STREAMS = ("stdout", "stderr")
 LogCursor = tuple[int, int]
 Kind = Literal["jobs", "services"]
 MAX_LOG_READ = 4 * 1024 * 1024
@@ -297,7 +297,6 @@ def create(  # noqa: PLR0913
     created_at = time.time()
     lease = Lease(until=created_at + lease_s, ceiling=created_at + ceiling_s)
     assert created_at < lease.until
-    assert lease.until <= lease.ceiling
     assert lease.ceiling <= created_at + MAX_CEILING_S
     args = [
         "--created-at", repr(created_at), "--lease-until", repr(lease.until), "--ceiling", repr(lease.ceiling),
@@ -611,7 +610,7 @@ class Session:
         if not 0 < max_duration_s <= MAX_CEILING_S:
             raise Refused(f"max_duration_s={max_duration_s}: more than 0 and at most {MAX_CEILING_S} s")
         running = self._running_now()
-        left = min(running.lease.until, running.lease.ceiling) - time.time()
+        left = running.lease.until - time.time()
         if on_exit and hook_budget_s >= left:
             raise Refused(f"hook_budget_s={hook_budget_s} does not fit in the lease's {left:.0f} s left")
         spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "max_duration_s": max_duration_s, "env": env or {}}
@@ -661,10 +660,7 @@ class Session:
         self._check(f"touch {self._path(rel)}")
 
     def _check(self, cmd: str) -> str:
-        rc, out, err = self._live().exec(cmd)
-        if rc != 0:
-            raise RuntimeError(f"{self.id}: `{cmd}` exited {rc}: {err.strip()}")
-        return out
+        return files.check(self._live(), cmd)
 
 
 def new_job_id() -> str:
@@ -898,7 +894,7 @@ class Live:
     def read(self, rels: dict[str, int], *, watch: bool = False) -> dict[str, bytes | None]:
         each = [f"if [ -e {shlex.quote(rel)} ]; then tail -c +{offset + 1} {shlex.quote(rel)} | head -c {MAX_LOG_READ} | base64 | tr -d '\\n'; else printf -; fi; echo"
                 for rel, offset in rels.items()]  # fmt: skip
-        out = self._check("; ".join([f"cd {shlex.quote(self.machine.root)} 2>/dev/null || exit 0", *([f"touch {WATCH}"] if watch else []), *each]))
+        out = files.check(self.machine, "; ".join([f"cd {shlex.quote(self.machine.root)} 2>/dev/null || exit 0", *([f"touch {WATCH}"] if watch else []), *each]))
         if not out:
             return dict.fromkeys(rels)
         lines = out.split("\n")
@@ -907,13 +903,7 @@ class Live:
         return {rel: None if line == "-" else base64.b64decode(line) for rel, line in zip(rels, lines, strict=False)}
 
     def jobs(self, kind: Kind) -> list[str]:
-        return sorted(name for name in self._check(f"ls {shlex.quote(f'{self.machine.root}/{kind}')}").split() if not name.endswith(".tmp"))
-
-    def _check(self, cmd: str) -> str:
-        rc, out, err = self.machine.exec(cmd)
-        if rc != 0:
-            raise RuntimeError(f"{self.machine.id}: `{cmd[:200]}` exited {rc}: {err.strip()}")
-        return out
+        return sorted(name for name in files.check(self.machine, f"ls {shlex.quote(f'{self.machine.root}/{kind}')}").split() if not name.endswith(".tmp"))
 
 
 @dataclass(frozen=True)
