@@ -23,7 +23,38 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar, get_args
 from box.gitsync import Synced
 from box.setup_cache import SetupRecord, SetupSpec, parse_setup_record
 from box.store import Mount, Store
-from box.supervisor import HEARTBEAT_TTL_S, KINDS, MAX_CEILING_S, MAX_SERVICES, TAIL_FRAME_BYTES, TAIL_MAX_S, utf8_cut
+from box.supervisor import (
+    AUDIT,
+    ENDED,
+    HEARTBEAT,
+    HEARTBEAT_TTL_S,
+    KINDS,
+    LEASE,
+    MAX_CEILING_S,
+    MAX_SERVICES,
+    SESSION,
+    TAIL_FRAME_BYTES,
+    TAIL_MAX_S,
+    Done,
+    Ended,
+    Ending,
+    EndReason,
+    Heartbeat,
+    JobStatus,
+    Lease,
+    LeaseChange,
+    Queued,
+    Started,
+    load,
+    load_audit,
+    load_ended,
+    load_job,
+    parse_chunk,
+    utf8_cut,
+)
+from box.supervisor import Hooking as Hooking
+from box.supervisor import JobEndReason as JobEndReason
+from box.supervisor import JobRunning as JobRunning
 
 if TYPE_CHECKING:
     from box.proxy import Proxy
@@ -164,23 +195,9 @@ class Booting:
 
 
 @dataclass(frozen=True)
-class Lease:
-    until: float
-    ceiling: float
-
-
-@dataclass(frozen=True)
 class Running:
     started_at: float
     lease: Lease
-
-
-EndReason = Literal["lease", "released", "stopped", "idle", "machine_lost"]
-
-
-@dataclass(frozen=True)
-class Ended:
-    reason: EndReason
 
 
 Status = Booting | Running | Ended
@@ -210,41 +227,6 @@ class Receipt:
     @property
     def supervisor_confirmed(self) -> bool:
         return self.ended.reason != "machine_lost"
-
-
-JobEndReason = Literal["exited", "killed", "timeout", "lease", "released", "stopped", "idle", "refused"]
-
-
-@dataclass(frozen=True)
-class Ending:
-    reason: JobEndReason
-    exit_code: int | None
-    hook_exit_code: int | None = None
-
-
-@dataclass(frozen=True)
-class Queued:
-    pass
-
-
-@dataclass(frozen=True)
-class JobRunning:
-    started_at: float
-
-
-@dataclass(frozen=True)
-class Hooking:
-    ending: Ending
-
-
-@dataclass(frozen=True)
-class Done:
-    ending: Ending
-    started_at: float | None
-    ended_at: float
-
-
-JobStatus = Queued | JobRunning | Hooking | Done
 
 
 def launch(provider: Provider, *, boot_timeout_s: float = 900.0, **create_kw: Any) -> Session:
@@ -520,7 +502,7 @@ class Session:
         root = self.machine.root
         argv = ["python3", f"{root}/supervisor.py", "lease", "--root", root, "--op", op, "--until", repr(until),
                 "--host", socket.gethostname(), "--pid", str(os.getpid())]  # fmt: skip
-        return parse_lease(self._check(shlex.join(argv)).encode())
+        return load(Lease, self._check(shlex.join(argv)).encode())
 
     def close(self, timeout_s: float = 900.0, gone_timeout_s: float = GONE_TIMEOUT_S) -> Receipt:
         assert timeout_s > 0, timeout_s
@@ -758,7 +740,7 @@ class Job:
 
     def status(self) -> JobStatus:
         try:
-            return parse_job_status(self.session.machine.read(f"{self.dir}/status.json"))
+            return load_job(self.session.machine.read(f"{self.dir}/status.json"))
         except FileNotFoundError:
             return Queued()
 
@@ -847,7 +829,7 @@ class Job:
         if len(lines) != len(files) + 1 or lines[-1]:
             raise RuntimeError(f"{self.id}: reading the job gave {len(lines) - 1} lines for {len(files)} files")
         raw = [base64.b64decode(line) for line in lines[:-1]]
-        status = parse_job_status(raw[0]) if raw[0] else Queued()
+        status = load_job(raw[0]) if raw[0] else Queued()
         done = isinstance(status, Done)
         chunks, cursor, more = [], after, False
         for i, data in enumerate(raw[1:]):
@@ -982,22 +964,6 @@ class Lost:
 
 
 @dataclass(frozen=True)
-class LeaseChange:
-    op: str
-    until: float
-    at: float
-    host: str
-    pid: int
-    n: int
-
-
-@dataclass(frozen=True)
-class Heartbeat:
-    at: float
-    ttl_s: float
-
-
-@dataclass(frozen=True)
 class Record:
     store: Store
     machine_id: str
@@ -1015,13 +981,12 @@ class Record:
     def end(self, now: float) -> Ended | None:
         if self.ended is not None:
             return self.ended
-        if self.heartbeat is not None and now - self.heartbeat.at < self.heartbeat.ttl_s:
+        if self.heartbeat is not None and self.heartbeat.fresh(now):
             return None
         return Ended("machine_lost")
 
     def lease_audit(self) -> list[LeaseChange]:
-        raw = _parse_if_present(self.store, f"{record_prefix(self.session_id)}/lease-audit.json", json.loads)
-        return [LeaseChange(e["op"], float(e["until"]), float(e["at"]), str(e["host"]), int(e["pid"]), int(e["n"])) for e in raw or []]
+        return _parse_if_present(self.store, f"{record_prefix(self.session_id)}/{AUDIT}", load_audit) or []
 
     def syncs(self) -> list[dict]:
         prefix = f"{record_prefix(self.session_id)}/syncs/"
@@ -1038,14 +1003,14 @@ class Record:
 
     def job_status(self, job_id: str, kind: str = "jobs") -> JobStatus:
         try:
-            return parse_job_status(self.store.get(f"{record_prefix(self.session_id)}/{kind}/{job_id}/status.json"))
+            return load_job(self.store.get(f"{record_prefix(self.session_id)}/{kind}/{job_id}/status.json"))
         except FileNotFoundError:
             return Queued()
 
     def logs(self, job_id: str, after: LogCursor = (0, 0), kind: str = "jobs") -> Iterator[LogChunk]:
         prefix = f"{record_prefix(self.session_id)}/{kind}/{job_id}/"
         names = [key[len(prefix) :] for key in self.store.list(prefix)]
-        chunks = sorted((*parse_chunk(name), name) for name in names if CHUNK.fullmatch(name))
+        chunks = sorted((*parsed, name) for name in names if (parsed := parse_chunk(name)) is not None)
         cursor = dict(zip(STREAMS, after, strict=True))
         begins = dict.fromkeys(STREAMS, 0)
         for _n, stream, end, name in chunks:
@@ -1061,14 +1026,6 @@ class Record:
             yield LogChunk(stream, text, (cursor["stdout"], cursor["stderr"]))
 
 
-CHUNK = re.compile(r"(stdout|stderr)\.(\d+)\.(\d+)")
-
-
-def parse_chunk(name: str) -> tuple[int, str, int]:
-    stream, n, end = CHUNK.fullmatch(name).groups()
-    return int(n), stream, int(end)
-
-
 def read_record(store: Store, session_id: str) -> Record:
     prefix = record_prefix(session_id)
     try:
@@ -1080,8 +1037,8 @@ def read_record(store: Store, session_id: str) -> Record:
     return Record(
         store=store, machine_id=str(launched["machine_id"]), labels=dict(launched["labels"]),
         running=_recorded_running(store, prefix),
-        ended=_parse_if_present(store, f"{prefix}/ended.json", parse_ended),
-        heartbeat=_parse_if_present(store, f"{prefix}/heartbeat.json", parse_heartbeat),
+        ended=_parse_if_present(store, f"{prefix}/{ENDED}", load_ended),
+        heartbeat=_parse_if_present(store, f"{prefix}/{HEARTBEAT}", lambda raw: load(Heartbeat, raw)),
         receipt=_parse_if_present(store, f"{prefix}/receipt.json", parse_receipt),
         setup=_parse_if_present(store, f"{prefix}/setup.json", parse_setup_record),
     )  # fmt: skip
@@ -1095,30 +1052,17 @@ def _parse_if_present(store: Store, key: str, parse: Callable[[bytes], T]) -> T 
     return parse(raw)
 
 
-def parse_heartbeat(raw: bytes) -> Heartbeat:
-    d = json.loads(raw)
-    return Heartbeat(at=float(d["at"]), ttl_s=float(d["ttl_s"]))
-
-
 def recorded_started_at(store: Store, session_id: str) -> float | None:
-    session = _parse_if_present(store, f"{record_prefix(session_id)}/session.json", json.loads)
-    return None if session is None else float(session["started_at"])
+    started = _parse_if_present(store, f"{record_prefix(session_id)}/{SESSION}", lambda raw: load(Started, raw))
+    return None if started is None else started.started_at
 
 
 def _recorded_running(store: Store, prefix: str) -> Running | None:
-    session = _parse_if_present(store, f"{prefix}/session.json", json.loads)
-    lease = _parse_if_present(store, f"{prefix}/lease.json", parse_lease)
-    if session is None or lease is None:
+    started = _parse_if_present(store, f"{prefix}/{SESSION}", lambda raw: load(Started, raw))
+    lease = _parse_if_present(store, f"{prefix}/{LEASE}", lambda raw: load(Lease, raw))
+    if started is None or lease is None:
         return None
-    return Running(started_at=float(session["started_at"]), lease=lease)
-
-
-def parse_lease(raw: bytes) -> Lease:
-    d = json.loads(raw)
-    lease = Lease(until=float(d["until"]), ceiling=float(d["ceiling"]))
-    if lease.until > lease.ceiling:
-        raise ValueError(f"lease until {lease.until} is past its ceiling {lease.ceiling}")
-    return lease
+    return Running(started_at=started.started_at, lease=lease)
 
 
 STATUS_SH = (
@@ -1134,31 +1078,10 @@ def parse_status(raw: bytes) -> Status:
         case "booting", 0:
             return Booting()
         case "ended", 1:
-            return parse_ended(docs[0].encode())
+            return load_ended(docs[0].encode())
         case "running", 2:
-            return Running(started_at=float(json.loads(docs[0])["started_at"]), lease=parse_lease(docs[1].encode()))
+            return Running(started_at=load(Started, docs[0].encode()).started_at, lease=load(Lease, docs[1].encode()))
     raise ValueError(f"session status: unexpected {raw[:200]!r}")
-
-
-def parse_job_status(raw: bytes) -> JobStatus:
-    d = json.loads(raw)
-    match d["state"]:
-        case "running":
-            return JobRunning(float(d["started"]))
-        case "hook":
-            return Hooking(Ending(parse_job_end_reason(d["reason"]), d["exit_code"]))
-        case "done":
-            ending = Ending(parse_job_end_reason(d["reason"]), d["exit_code"], d.get("hook_exit_code"))
-            return Done(ending, float(d["started"]) if "started" in d else None, float(d["ended"]))
-        case state:
-            raise ValueError(f"status.json: unknown job state {state!r}")
-
-
-def parse_job_end_reason(reason: object) -> JobEndReason:
-    for known in get_args(JobEndReason):
-        if reason == known:
-            return known
-    raise ValueError(f"status.json: unknown job end reason {reason!r}")
 
 
 def receipt_json(receipt: Receipt) -> bytes:
@@ -1172,22 +1095,12 @@ def receipt_json(receipt: Receipt) -> bytes:
 
 def parse_receipt(raw: bytes) -> Receipt:
     d = json.loads(raw)
-    reason = d["reason"]
-    if reason not in get_args(EndReason):
-        raise ValueError(f"receipt.json: unknown end reason {reason!r}")
-    receipt = Receipt(str(d["session_id"]), str(d["machine_id"]), Ended(reason), float(d["machine_gone_at"]))
+    receipt = Receipt(str(d["session_id"]), str(d["machine_id"]), Ended(d["reason"]), float(d["machine_gone_at"]))
     if not SESSION_ID.fullmatch(receipt.session_id):
         raise ValueError(f"receipt.json: not a session id: {receipt.session_id!r}")
     if d["supervisor_confirmed"] is not receipt.supervisor_confirmed:
-        raise ValueError(f"receipt.json: supervisor_confirmed {d['supervisor_confirmed']!r} contradicts reason {reason!r}")
+        raise ValueError(f"receipt.json: supervisor_confirmed {d['supervisor_confirmed']!r} contradicts reason {receipt.ended.reason!r}")
     return receipt
-
-
-def parse_ended(raw: bytes) -> Ended:
-    reason = json.loads(raw)["reason"]
-    if reason not in get_args(EndReason) or reason == "machine_lost":
-        raise ValueError(f"ended.json: unknown end reason {reason!r}")
-    return Ended(reason)
 
 
 def ignored(rel: str, ignore: tuple[str, ...]) -> bool:
