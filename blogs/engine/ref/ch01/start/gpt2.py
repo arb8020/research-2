@@ -1,135 +1,186 @@
-"""Chapter 1: the GPT-2 forward pass, torch functional.
+"""Chapter 1: the GPT-2 forward pass, in functional torch.
 
-Weights are a flat dict keyed by the checkpoint's own names (`h.3.attn.c_attn.weight`). One sequence, no batch, no
-KV cache: `generate` recomputes the whole prefix every step.
+One sequence, no batch, no KV cache: `generate` recomputes the whole prefix
+every step. Every tensor name ends in its shape, in these letters:
 
-The code between `# region: <name>` and `# endregion` is yours to write; everything else is given. The ops the checks
-grade (linear, gelu_tanh, layer_norm, causal_attention) take plain tensors, so they can be tested alone.
+    T  query length      S  key/value length     D  d_model (768)
+    N  heads (12)        H  head dim (64)        F  mlp hidden (3072)
+    V  vocab (50257)     L  layers (12)
+
+so `x_TD` is [T, D] and `w_qkv_D3NH` is [D, 3, N, H]. Contractions are
+`einsum`s spelled in those letters ("T D, D F -> T F").
+
+The code between `# region: <name>` and `# endregion` is yours to write;
+everything else is given.
 """
 
 import json
-import math  # noqa: F401 (your gelu and attention use it)
+import math  # noqa: F401 (for your gelu and attention)
+import sys
 from dataclasses import dataclass
 
 import torch
+from einops import einsum, rearrange, reduce  # noqa: F401
 from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file
+from tokenizers import Tokenizer
 
 CHECKPOINT = "openai-community/gpt2"
-
-Weights = dict[str, torch.Tensor]
 
 
 @dataclass(frozen=True)
 class Config:
-    n_layer: int
-    n_head: int
-    n_embd: int
-    vocab_size: int
-    n_ctx: int  # HF n_positions: rows in wpe, so the longest sequence the model can see
+    L: int  # layers
+    N: int  # heads
+    D: int  # d_model
+    H: int  # head dim: D / N
+    F: int  # mlp hidden: 4 D
+    V: int  # vocab
+    T_max: int  # context: rows in the position table
     eps: float  # layer norm epsilon
 
 
-# HF's GPT-2 stores its linears as Conv1D, [in, out]; load() transposes them to [out, in], the usual layout.
-CONV1D = ("attn.c_attn.weight", "attn.c_proj.weight", "mlp.c_fc.weight", "mlp.c_proj.weight")
+@dataclass(frozen=True)
+class Layer:
+    """One block's weights, in the layouts the einsums below want."""
+
+    ln1_w_D: torch.Tensor
+    ln1_b_D: torch.Tensor
+    w_qkv_D3NH: torch.Tensor  # q, k, v projections, all heads
+    b_qkv_3NH: torch.Tensor
+    w_o_NHD: torch.Tensor  # heads back to d_model
+    b_o_D: torch.Tensor
+    ln2_w_D: torch.Tensor
+    ln2_b_D: torch.Tensor
+    w_up_DF: torch.Tensor
+    b_up_F: torch.Tensor
+    w_down_FD: torch.Tensor
+    b_down_D: torch.Tensor
 
 
-def load(dtype: torch.dtype, checkpoint: str = CHECKPOINT) -> tuple[Weights, Config]:
-    """Download (once, to the HF cache) and parse config.json + model.safetensors."""
-    with open(hf_hub_download(checkpoint, "config.json")) as f:
-        raw = json.load(f)
-    if raw["activation_function"] != "gelu_new":
-        raise ValueError(f"expected gelu_new (tanh GELU), got {raw['activation_function']!r}")
-    if raw.get("scale_attn_by_inverse_layer_idx", False) or raw.get("reorder_and_upcast_attn", False):
-        raise ValueError("this forward implements plain 1/sqrt(head_dim) attention only")
-    cfg = Config(
-        n_layer=raw["n_layer"],
-        n_head=raw["n_head"],
-        n_embd=raw["n_embd"],
-        vocab_size=raw["vocab_size"],
-        n_ctx=raw["n_positions"],
-        eps=raw["layer_norm_epsilon"],
-    )
-    state = load_file(hf_hub_download(checkpoint, "model.safetensors"))
-    # `h.N.attn.bias` is a stored causal-mask buffer, not a parameter; we build the mask ourselves.
-    weights = {k: v.to(dtype) for k, v in state.items() if not k.endswith((".attn.bias", ".attn.masked_bias"))}
-    expected = {"wte.weight", "wpe.weight", "ln_f.weight", "ln_f.bias"} | {
-        f"h.{i}.{name}"
-        for i in range(cfg.n_layer)
-        for name in (
-            "ln_1.weight", "ln_1.bias", "attn.c_attn.weight", "attn.c_attn.bias",
-            "attn.c_proj.weight", "attn.c_proj.bias", "ln_2.weight", "ln_2.bias",
-            "mlp.c_fc.weight", "mlp.c_fc.bias", "mlp.c_proj.weight", "mlp.c_proj.bias",
+@dataclass(frozen=True)
+class Weights:
+    wte_VD: torch.Tensor  # token embeddings, also the lm head (tied)
+    wpe_TD: torch.Tensor  # position embeddings: T_max rows
+    layers: list[Layer]
+    lnf_w_D: torch.Tensor
+    lnf_b_D: torch.Tensor
+
+
+def load(
+    dtype: torch.dtype = torch.float32, device: str = "cpu"
+) -> tuple[Weights, Config]:
+    """GPT-2 small from the HF hub (downloaded once to its cache).
+
+    The checkpoint stores each linear as a Conv1D, [in, out], with q, k, v
+    fused into one: c_attn is [D, 3 * N * H]. Here they get named axes."""
+    with open(hf_hub_download(CHECKPOINT, "config.json")) as f:
+        hf = json.load(f)
+    assert hf["activation_function"] == "gelu_new"  # the tanh GELU
+    D, N = hf["n_embd"], hf["n_head"]
+    cfg = Config(L=hf["n_layer"], N=N, D=D, H=D // N, F=4 * D,
+                 V=hf["vocab_size"], T_max=hf["n_positions"],
+                 eps=hf["layer_norm_epsilon"])
+    sd = load_file(hf_hub_download(CHECKPOINT, "model.safetensors"))
+
+    def get(name: str, pattern: str = "", **sizes: int) -> torch.Tensor:
+        t = sd[name].to(device=device, dtype=dtype)
+        return rearrange(t, pattern, **sizes).contiguous() if pattern else t
+
+    def layer(i: int) -> Layer:
+        p = f"h.{i}."
+        return Layer(
+            ln1_w_D=get(p + "ln_1.weight"),
+            ln1_b_D=get(p + "ln_1.bias"),
+            w_qkv_D3NH=get(p + "attn.c_attn.weight",
+                           "D (k N H) -> D k N H", k=3, N=N),
+            b_qkv_3NH=get(p + "attn.c_attn.bias", "(k N H) -> k N H", k=3, N=N),
+            w_o_NHD=get(p + "attn.c_proj.weight", "(N H) D -> N H D", N=N),
+            b_o_D=get(p + "attn.c_proj.bias"),
+            ln2_w_D=get(p + "ln_2.weight"),
+            ln2_b_D=get(p + "ln_2.bias"),
+            w_up_DF=get(p + "mlp.c_fc.weight"),
+            b_up_F=get(p + "mlp.c_fc.bias"),
+            w_down_FD=get(p + "mlp.c_proj.weight"),
+            b_down_D=get(p + "mlp.c_proj.bias"),
         )
-    }
-    if set(weights) != expected:
-        raise ValueError(f"checkpoint keys differ: missing {expected - set(weights)}, extra {set(weights) - expected}")
-    for k in weights:
-        if k.endswith(CONV1D):
-            weights[k] = weights[k].T.contiguous()
-    D = cfg.n_embd
-    assert cfg.n_embd % cfg.n_head == 0
-    assert weights["wte.weight"].shape == (cfg.vocab_size, D)
-    assert weights["wpe.weight"].shape == (cfg.n_ctx, D)
-    assert weights["h.0.attn.c_attn.weight"].shape == (3 * D, D)
-    assert weights["h.0.mlp.c_fc.weight"].shape == (4 * D, D)
-    return weights, cfg
+
+    w = Weights(wte_VD=get("wte.weight"), wpe_TD=get("wpe.weight"),
+                layers=[layer(i) for i in range(cfg.L)],
+                lnf_w_D=get("ln_f.weight"), lnf_b_D=get("ln_f.bias"))
+    return w, cfg
+
+
+def tokenizer() -> Tokenizer:
+    """GPT-2's byte-level BPE: .encode(text).ids, .decode(ids)."""
+    return Tokenizer.from_file(hf_hub_download(CHECKPOINT, "tokenizer.json"))
 
 
 # region: linear
-def linear(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor) -> torch.Tensor:
-    """x [rows, in] -> [rows, out]; weight is [out, in]."""
+def linear(x_TD, w_DF, b_F):
+    """Each row of x times w, plus b: [T, D] -> [T, F]."""
     raise NotImplementedError("linear: write this in the linear cell")
 # endregion
 
 
 # region: gelu
-def gelu_tanh(x: torch.Tensor) -> torch.Tensor:
-    """GPT-2's GELU, the tanh approximation: 0.5 x (1 + tanh(sqrt(2/pi) (x + 0.044715 x^3)))."""
-    raise NotImplementedError("gelu_tanh: write this in the gelu cell")
+def gelu(x_TF):
+    """GPT-2's GELU, the tanh approximation, elementwise."""
+    raise NotImplementedError("gelu: write this in the gelu cell")
 # endregion
 
 
 # region: layer_norm
-def layer_norm(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float) -> torch.Tensor:
-    """(x - mean) / sqrt(var + eps) * weight + bias over the last dim; biased variance."""
+def layer_norm(x_TD, w_D, b_D, eps):
+    """Normalize each row over D (biased variance), then scale and shift."""
     raise NotImplementedError("layer_norm: write this in the layer_norm cell")
 # endregion
 
 
 # region: attention
-def causal_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
-    """softmax(q k^T / sqrt(head_dim)) v, each position seeing itself and the past. [..., seq, head_dim]."""
-    raise NotImplementedError("causal_attention: write this in the attention cell")
-
-
-def attention(x: torch.Tensor, w: Weights, i: int, cfg: Config) -> torch.Tensor:
-    """Causal multi-head self-attention of block i. x: [T, D] -> [T, D]."""
+def attention(q_TNH, k_SNH, v_SNH):
+    """Causal attention, all heads at once: query t sees keys s <= t."""
     raise NotImplementedError("attention: write this in the attention cell")
+
+
+def self_attention(x_TD, layer):
+    """One block's attention: x -> q, k, v -> attend -> back to D.
+    Keys and values come from the same tokens as the queries: S = T."""
+    raise NotImplementedError(
+        "self_attention: write this in the attention cell")
 # endregion
 
 
 # region: block
-def mlp(x: torch.Tensor, w: Weights, i: int) -> torch.Tensor:
+def mlp(x_TD, layer):
+    """Up to F, GELU, back down to D."""
     raise NotImplementedError("mlp: write this in the block cell")
 
 
-def block(x: torch.Tensor, w: Weights, i: int, cfg: Config) -> torch.Tensor:
-    """Transformer block i (pre-norm): x + attention(ln_1(x)), then + mlp(ln_2(.)). [T, D] -> [T, D]."""
+def block(x_TD, layer, cfg):
+    """A pre-norm residual block: x + attention(ln(x)), then + mlp(ln(.))."""
     raise NotImplementedError("block: write this in the block cell")
 # endregion
 
 
 # region: forward
-def forward(w: Weights, cfg: Config, tokens: torch.Tensor) -> torch.Tensor:
-    """tokens [T] (int64) -> logits [T, vocab]: row t predicts token t + 1."""
+def forward(w, cfg, tokens_T):
+    """Token ids [T] -> logits [T, V]: row t scores the token after t."""
     raise NotImplementedError("forward: write this in the forward cell")
 # endregion
 
 
 # region: generate
 @torch.no_grad()
-def generate(w: Weights, cfg: Config, prompt_ids: list[int], n: int) -> list[int]:
-    """Greedy decode n tokens, recomputing the whole sequence every step."""
+def generate(w, cfg, prompt, n):
+    """Greedy: append the most likely next token, n times. Returns the n
+    new token ids. Each step runs forward on the whole sequence."""
     raise NotImplementedError("generate: write this in the generate cell")
 # endregion
+
+
+if __name__ == "__main__":  # python gpt2.py "Some text to continue"
+    text = sys.argv[1] if len(sys.argv) > 1 else "The meaning of life is"
+    tok = tokenizer()
+    w, cfg = load()
+    print(text + tok.decode(generate(w, cfg, tok.encode(text).ids, 20)))
