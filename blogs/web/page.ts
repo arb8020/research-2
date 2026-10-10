@@ -78,7 +78,7 @@ function sessionUrl(): string {
 const SESSION = sessionUrl();
 let state: SessionState = { passed: {}, wasm: {} };
 
-const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g; // eslint-disable-line no-control-regex
+const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g; // oxlint-disable-line no-control-regex
 
 async function refresh(): Promise<void> {
   state = parseState(await (await fetch(`${SESSION}/state`)).json());
@@ -101,10 +101,10 @@ async function runOnSession(name: string, source: string, onOut: (text: string) 
       else onOut(line.text);
     }
     return result ?? { passed: false, message: "the session stopped before giving a result" };
-  } catch (e) {
+  } catch (cause) {
     // fetch and a dropped stream throw TypeError; a malformed line throws from JSON.parse / parseRunLine.
-    const message = e instanceof TypeError ? "session unreachable" : "the session sent a reply the page can't read";
-    onOut(`\n[${message}: ${String(e)}]\n`);
+    const message = cause instanceof TypeError ? "session unreachable" : "the session sent a reply the page can't read";
+    onOut(`\n[${message}: ${String(cause)}]\n`);
     return { passed: false, message };
   }
 }
@@ -240,7 +240,7 @@ class ScratchCell extends HTMLElement {
     must(this, ".vim-toggle", HTMLButtonElement).onclick = () => { setVim(!vimEnabled()); };
     must(this, ".connect-to-run", HTMLButtonElement).onclick = () => { document.dispatchEvent(new Event("connect:open")); };
     must(this, ".run", HTMLButtonElement).onclick = () => {
-      if (this.running) interrupt().catch((e: unknown) => { this.status(`interrupt failed: ${String(e)}`, "fail"); });
+      if (this.running) interrupt().catch((cause: unknown) => { this.status(`interrupt failed: ${String(cause)}`, "fail"); });
       else void this.run();
     };
     onKernelState(() => { this.gate(); });
@@ -310,5 +310,5 @@ customElements.define("env-play", EnvPlay);
 
 // Only pages with cells or play widgets talk to the session (a prose-only page like neural-nets has nothing to ask).
 if (document.querySelector("code-cell, env-play") !== null) {
-  refresh().catch((e: unknown) => { console.warn("session unreachable", e); });
+  refresh().catch((cause: unknown) => { console.warn("session unreachable", cause); });
 }

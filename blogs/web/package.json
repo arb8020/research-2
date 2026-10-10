@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "esbuild settings.ts --bundle --format=iife --minify --outfile=build/settings.js && esbuild page.ts embeds/*/element.ts --bundle --format=esm --minify --loader:.py=text --outdir=build --outbase=.",
-    "lint": "tsc --noEmit && eslint --max-warnings=0 . && cd .. && uv run ruff check",
+    "lint": "tsc --noEmit && oxlint -f default && cd .. && uv run ruff check",
     "test:nn-fit": "esbuild embeds/nn-fit/mlp.test.ts --bundle --platform=node --format=esm --log-level=warning --outfile=build/nn-fit.test.mjs && node build/nn-fit.test.mjs",
     "test:nn-fit-remote": "esbuild embeds/nn-fit/parity.ts --bundle --platform=node --format=esm --loader:.py=text --log-level=warning --outfile=build/nn-fit-parity.mjs && cd .. && uv run python web/embeds/nn-fit/remote_train_test.py web/build/nn-fit-parity.mjs",
     "test:nn-fit-grok": "cd .. && uv run python web/embeds/nn-fit/grok_train_test.py"
@@ -22,11 +22,10 @@
     "codemirror": "6.0.1"
   },
   "devDependencies": {
-    "@eslint/js": "9.39.5",
+    "@oxlint/plugins": "1.87.0",
     "esbuild": "0.28.2",
-    "eslint": "9.39.5",
-    "eslint-plugin-import": "2.32.0",
-    "typescript": "6.0.3",
-    "typescript-eslint": "8.71.1"
+    "oxlint": "1.87.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "typescript": "6.0.3"
   }
 }

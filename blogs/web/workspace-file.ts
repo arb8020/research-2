@@ -253,7 +253,7 @@ export class WorkspaceFile {
       this.lastSaveMs = performance.now() - t0;
       this.saveError = undefined;
       if (this.text === text) writeDraft(this.draftKey, { text, acked: true, base: this.head });
-    }).catch((e: unknown) => { this.saveError = String(e); this.changed(); });
+    }).catch((cause: unknown) => { this.saveError = String(cause); this.changed(); });
     return this.saving;
   }
 

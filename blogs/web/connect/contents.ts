@@ -13,7 +13,10 @@ function url(path: string, query = ""): string {
   return `${address.url}/api/contents/${encoded}?token=${encodeURIComponent(address.token)}${query}`;
 }
 
-async function put(path: string, body: Record<string, unknown>): Promise<void> {
+// The Contents API models the page PUTs: a file (text or base64) or a directory.
+type Model = { type: "file"; format: "text" | "base64"; content: string } | { type: "directory" };
+
+async function put(path: string, body: Model): Promise<void> {
   const res = await fetch(url(path), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!res.ok) throw new ContentsError(`PUT ${path}: ${String(res.status)} ${await res.text()}`);
 }

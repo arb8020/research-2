@@ -11,6 +11,7 @@
 import { createSession, endSession, extendSession, getSession, subscribe } from "./gateway";
 import type { EndedReason, GatewayEvent, Status, Token } from "./gateway";
 import { attach, detach, onKernelState } from "./kernel";
+import { isJsonObject } from "../json";
 
 export type Phase =
   | { kind: "disconnected"; failure: string | undefined }
@@ -108,11 +109,10 @@ export function savedToken(): Token | undefined {
 
 function storedSession(): Stored | undefined {
   const raw = readJson(SESSION_KEY);
-  if (typeof raw !== "object" || raw === null) return undefined;
-  const r: Partial<Record<string, unknown>> = { ...raw };
-  const gpu = r["gpu"];
-  if (typeof r["gateway"] !== "string" || typeof r["session_id"] !== "string" || r["provider"] !== "modal" || (gpu !== null && typeof gpu !== "string")) return undefined;
-  return { gateway: r["gateway"], session_id: r["session_id"], provider: "modal", gpu };
+  if (!isJsonObject(raw)) return undefined;
+  const gpu = raw["gpu"];
+  if (typeof raw["gateway"] !== "string" || typeof raw["session_id"] !== "string" || raw["provider"] !== "modal" || (gpu !== null && typeof gpu !== "string")) return undefined;
+  return { gateway: raw["gateway"], session_id: raw["session_id"], provider: "modal", gpu };
 }
 
 // ---- transitions ----
@@ -136,9 +136,9 @@ export async function connect(token: Token, gpu: string | null, leaseS: number):
     writeJson(SESSION_KEY, stored);
     note(`session ${id} created`);
     follow(stored, token, status);
-  } catch (e) {
-    note(`connect failed: ${describe(e)}`, "error");
-    setPhase({ kind: "disconnected", failure: describe(e) });
+  } catch (cause) {
+    note(`connect failed: ${describe(cause)}`, "error");
+    setPhase({ kind: "disconnected", failure: describe(cause) });
   }
 }
 
@@ -154,9 +154,9 @@ export async function resume(): Promise<void> {
     const status = await getSession(gateway(), stored.session_id, token);
     if (status === "gone") { end(undefined, "the gateway no longer knows this session"); return; }
     follow(stored, token, status);
-  } catch (e) {
-    note(`reattach failed: ${describe(e)}`, "error");
-    setPhase({ kind: "disconnected", failure: `${describe(e)}; your session may still be running` });
+  } catch (cause) {
+    note(`reattach failed: ${describe(cause)}`, "error");
+    setPhase({ kind: "disconnected", failure: `${describe(cause)}; your session may still be running` });
   }
 }
 
@@ -190,8 +190,8 @@ function apply(status: Status): void {
   attach(kernel).then(() => {
     note(`kernel attached (${kernel.url})`);
     if (live !== undefined) setPhase({ kind: "connected", id: live.stored.session_id, gpu: status.gpu, startedAt: status.startedAt, leaseUntil: status.leaseUntil, ceiling: status.ceiling });
-  }, (e: unknown) => {
-    note(`kernel attach failed: ${describe(e)}`, "error");
+  }, (cause: unknown) => {
+    note(`kernel attach failed: ${describe(cause)}`, "error");
     void recheck();
   }).finally(() => { attaching = false; });
 }
@@ -208,8 +208,8 @@ async function recheck(): Promise<void> {
     note("kernel connection lost; reattaching");
     setPhase({ kind: "connecting", gpu: status.gpu, step: "reattaching to the kernel" });
     apply(status);
-  } catch (e) {
-    end(undefined, `lost the gateway: ${describe(e)}`);
+  } catch (cause) {
+    end(undefined, `lost the gateway: ${describe(cause)}`);
   }
 }
 
@@ -243,9 +243,9 @@ export async function disconnect(): Promise<void> {
   note(`ending session ${current.stored.session_id}`);
   try {
     await endSession(gateway(), current.stored.session_id, current.token);
-  } catch (e) {
+  } catch (cause) {
     // The machine may outlive this (the gateway reaps it when its lease ends); say so rather than pretend.
-    note(`end failed: ${describe(e)}; the session stops when its length runs out`, "error");
+    note(`end failed: ${describe(cause)}; the session stops when its length runs out`, "error");
   }
   end(undefined, undefined);
 }
