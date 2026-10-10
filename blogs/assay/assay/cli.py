@@ -28,6 +28,7 @@ import contextlib
 import importlib
 import json
 import os
+import signal
 import sys
 import threading
 import time
@@ -130,6 +131,8 @@ def worker(argv: list[str], *, out_fd: int, client_pid: int | None) -> int:
     emit = Emitter(out_fd)
     if client_pid is not None:
         threading.Thread(target=_watchdog, args=(client_pid,), daemon=True).start()
+    else:  # in-process: a Stop (SIGTERM to our process group) must also end children that lead their own sessions
+        signal.signal(signal.SIGTERM, lambda signum, frame: _abandon())
     store = core.Store.from_env()
     iso = core.isolation()
     warm = Path(os.environ["ASSAY_WARM"]) if os.environ.get("ASSAY_WARM") and client_pid else None

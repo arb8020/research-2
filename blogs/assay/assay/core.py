@@ -413,6 +413,7 @@ def run_cmd(argv: list[str], *, cwd: Path, iso: Isolation, env: Mapping[str, str
     proc = subprocess.Popen(argv, cwd=cwd, env=dict(env), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, errors="replace", bufsize=1,
                             start_new_session=True, **iso.popen_kwargs())
+    LIVE.add(proc.pid)  # its own session: a Stop that kills our process group must kill it via LIVE (cli._abandon)
     lines: list[str] = []
     truncated = [False]
 
@@ -435,6 +436,7 @@ def run_cmd(argv: list[str], *, cwd: Path, iso: Isolation, env: Mapping[str, str
         proc.wait()
         rc = None
     reader.join(EXIT_GRACE_S)
+    LIVE.discard(proc.pid)
     return CmdResult(argv, rc, "\n".join(lines), time.perf_counter() - started, truncated[0])
 
 
