@@ -180,7 +180,7 @@ def markdown(chapter: Path, kinds: dict[str, embeds.Embed], preview: bool) -> Ma
     `used` (embed kinds rendered). A card differs from a page in three ways: cells render read-only (like
     `given`), headings render as styled paragraphs (no ids, outside the page outline), and [[links]] are plain.
     """
-    md = MarkdownIt("commonmark", {"html": True})
+    md = MarkdownIt("commonmark", {"html": True}).enable("table")  # GFM pipe tables (typeset.css styles them)
     links.use(md)
     rules = md.renderer.rules
     plain_fence = rules["fence"]
