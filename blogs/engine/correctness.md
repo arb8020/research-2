@@ -1,5 +1,7 @@
 # How assay decides an implementation is correct
 
+<!-- wip: Claude-written stub, in progress: the author is rewriting this page. Claims marked in the source with claude comments are unverified, and some numbers are still placeholders. -->
+
 You write `layer_norm` in `gpt2.py`, press Run, and a check answers pass or fail. This page explains why the checks work the way they do. The thresholds live in `checks/chNN.toml` and in the docstrings of the check functions. <!-- claude: checks/chNN.toml is not implemented yet; today the thresholds are constants in assay/ch01/suite.py (FLOORS, KL_MAX) -->
 
 ## Correct cannot mean equal
