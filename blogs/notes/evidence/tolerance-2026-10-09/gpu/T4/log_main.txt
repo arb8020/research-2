@@ -1,0 +1,346 @@
+done linear fp32 (30 cases)
+done linear fp16 (30 cases)
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+done linear bf16 (30 cases)
+W1010 01:11:40.603000 216 site-packages/torch/_inductor/utils.py:1806] [2/0] Not enough SMs to use max_autotune_gemm mode
+done qk fp32 (30 cases)
+done qk fp16 (30 cases)
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+done qk bf16 (30 cases)
+done pv fp32 (30 cases)
+done pv fp16 (30 cases)
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+done pv bf16 (30 cases)
+done gelu fp32 (30 cases)
+done gelu fp16 (30 cases)
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+done gelu bf16 (30 cases)
+done layernorm fp32 (30 cases)
+done layernorm fp16 (30 cases)
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+done layernorm bf16 (30 cases)
+done softmax fp32 (30 cases)
+done softmax fp16 (30 cases)
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+done softmax bf16 (30 cases)
+/root/proto_gpu.py:328: UserWarning: Memory efficient kernel not used because: (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:1240.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Memory Efficient attention has been runtime disabled. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:600.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Flash attention kernel not used because: (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:1242.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Flash attention only supports gpu architectures in the range [sm80, sm121]. Attempting to run on a sm 7.5 gpu. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:457.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: cuDNN attention kernel not used because: (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:1244.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: cuDNN attention has been runtime disabled. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:922.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+/root/proto_gpu.py:328: UserWarning: Flash attention has been runtime disabled. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:588.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Expected query, key and value to all be of dtype: {Half}. Got Query dtype: float, Key dtype: float, and Value dtype: float instead. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:110.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+/root/proto_gpu.py:328: UserWarning: Memory efficient kernel not used because: (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:1240.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Memory Efficient attention has been runtime disabled. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:600.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Flash attention kernel not used because: (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:1242.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Flash attention only supports gpu architectures in the range [sm80, sm121]. Attempting to run on a sm 7.5 gpu. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:457.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: cuDNN attention kernel not used because: (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:1244.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: cuDNN attention has been runtime disabled. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:922.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+/root/proto_gpu.py:328: UserWarning: Flash attention has been runtime disabled. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:588.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Expected query, key and value to all be of dtype: {Half}. Got Query dtype: float, Key dtype: float, and Value dtype: float instead. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:110.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp32 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp32 sdpa_cudnn No available kernel. Aborting execution.
+done attention fp32 (30 cases)
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+/root/proto_gpu.py:328: UserWarning: cuDNN MHA only supports gpu architectures in the range [sm80, sm121]. Attempting to run on a sm 7.5 gpu. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:863.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+/root/proto_gpu.py:328: UserWarning: Memory efficient kernel not used because: (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:1240.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Memory Efficient attention has been runtime disabled. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:600.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Flash attention kernel not used because: (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:1242.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Flash attention only supports gpu architectures in the range [sm80, sm121]. Attempting to run on a sm 7.5 gpu. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:457.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: cuDNN attention kernel not used because: (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:1244.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: cuDNN attention has been runtime disabled. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:922.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+/root/proto_gpu.py:328: UserWarning: Flash attention has been runtime disabled. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:588.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: cuDNN MHA only supports gpu architectures in the range [sm80, sm121]. Attempting to run on a sm 7.5 gpu. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:863.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention fp16 sdpa_flash No available kernel. Aborting execution.
+ERR attention fp16 sdpa_cudnn No available kernel. Aborting execution.
+done attention fp16 (30 cases)
+/root/proto_gpu.py:328: UserWarning: Expected query, key and value to all be of dtype: {Half, Float}. Got Query dtype: c10::BFloat16, Key dtype: c10::BFloat16, and Value dtype: c10::BFloat16 instead. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:110.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+/root/proto_gpu.py:328: UserWarning: Expected query, key and value to all be of dtype: {Half}. Got Query dtype: c10::BFloat16, Key dtype: c10::BFloat16, and Value dtype: c10::BFloat16 instead. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:110.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/usr/local/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:3403: UserWarning: Tesla T4 does not support bfloat16 compilation natively, skipping
+  warnings.warn(
+/root/proto_gpu.py:328: UserWarning: Memory efficient kernel not used because: (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:1240.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Expected query, key and value to all be of dtype: {Half, Float}. Got Query dtype: c10::BFloat16, Key dtype: c10::BFloat16, and Value dtype: c10::BFloat16 instead. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:110.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Flash attention kernel not used because: (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:1242.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Flash attention has been runtime disabled. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:588.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: cuDNN attention kernel not used because: (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:1244.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: cuDNN attention has been runtime disabled. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:922.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+/root/proto_gpu.py:328: UserWarning: Memory Efficient attention has been runtime disabled. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:600.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+/root/proto_gpu.py:328: UserWarning: Flash attention only supports gpu architectures in the range [sm80, sm121]. Attempting to run on a sm 7.5 gpu. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/cuda/sdp_utils.cpp:457.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+/root/proto_gpu.py:328: UserWarning: Expected query, key and value to all be of dtype: {Half}. Got Query dtype: c10::BFloat16, Key dtype: c10::BFloat16, and Value dtype: c10::BFloat16 instead. (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/transformers/sdp_utils_cpp.h:110.)
+  return F.scaled_dot_product_attention(I["q"][None, None], I["k"][None, None], I["v"][None, None], is_causal=True)[0, 0]
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+ERR attention bf16 sdpa_efficient No available kernel. Aborting execution.
+ERR attention bf16 sdpa_flash No available kernel. Aborting execution.
+ERR attention bf16 sdpa_cudnn No available kernel. Aborting execution.
+done attention bf16 (30 cases)

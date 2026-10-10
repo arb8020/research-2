@@ -1,0 +1,37 @@
+# CPU vs GPU, same rule and constants
+
+| rule                                   | dtype   | bug_det:CPU   | bug_det:L4   | bug_det:T4   | correct_ff:CPU   | correct_ff:L4   | correct_ff:T4   | subtle_det:CPU   | subtle_det:L4   | subtle_det:T4   |
+|:---------------------------------------|:--------|:--------------|:-------------|:-------------|:-----------------|:----------------|:----------------|:-----------------|:----------------|:----------------|
+| MCA max seq K32 c=2                    | bf16    | 87%           | 91%          | 91%          | 1%               | 1%              | 1%              | 0%               | 0%              | 0%              |
+| MCA max seq K32 c=2                    | fp16    | 100%          | 99%          | 99%          | 3%               | 3%              | 3%              | 6%               | 4%              | 3%              |
+| MCA max seq K32 c=2                    | fp32    | 100%          | 100%         | 100%         | 1%               | 1%              | 1%              | 70%              | 69%             | 70%             |
+| MCA rms c=1 [gelu]                     | bf16    | 50%           | 50%          | 50%          | 0%               | 0%              | 0%              | 0%               | 0%              | 0%              |
+| MCA rms c=1 [gelu]                     | fp16    | 50%           | 50%          | 50%          | 0%               | 0%              | 0%              | 0%               | 0%              | 0%              |
+| MCA rms c=1 [gelu]                     | fp32    | 100%          | 100%         | 100%         | 0%               | 0%              | 0%              | 100%             | 100%            | 100%            |
+| MCA rms pairwise K64 c=2               | bf16    | 94%           | 93%          | 93%          | 6%               | 6%              | 6%              | 0%               | 0%              | 0%              |
+| MCA rms pairwise K64 c=2               | fp16    | 100%          | 100%         | 100%         | 8%               | 8%              | 8%              | 14%              | 14%             | 13%             |
+| MCA rms pairwise K64 c=2               | fp32    | 100%          | 100%         | 100%         | 7%               | 6%              | 7%              | 73%              | 73%             | 73%             |
+| MCA rms pairwise K64 c=2, --inner fp32 | bf16    | 99%           | 99%          | 99%          | 36%              | 36%             | 36%             | 80%              | 80%             | 80%             |
+| MCA rms pairwise K64 c=2, --inner fp32 | fp16    | 100%          | 100%         | 100%         | 39%              | 39%             | 39%             | 80%              | 80%             | 80%             |
+| MCA rms pairwise K64 c=2, --inner fp32 | fp32    | 100%          | 100%         | 100%         | 7%               | 6%              | 7%              | 73%              | 73%             | 73%             |
+| MCA rms seq K16 c=2 (recommended)      | bf16    | nan           | 83%          | 83%          | nan              | 0%              | 0%              | nan              | 0%              | 0%              |
+| MCA rms seq K16 c=2 (recommended)      | fp16    | nan           | 97%          | 97%          | nan              | 2%              | 2%              | nan              | 3%              | 3%              |
+| MCA rms seq K16 c=2 (recommended)      | fp32    | nan           | 100%         | 100%         | nan              | 0%              | 0%              | nan              | 67%             | 67%             |
+| MCA rms seq K16 c=2, --inner fp32      | bf16    | nan           | 99%          | 99%          | nan              | 36%             | 36%             | nan              | 80%             | 80%             |
+| MCA rms seq K16 c=2, --inner fp32      | fp16    | nan           | 100%         | 100%         | nan              | 39%             | 39%             | nan              | 80%             | 80%             |
+| MCA rms seq K16 c=2, --inner fp32      | fp32    | nan           | 100%         | 100%         | nan              | 0%              | 0%              | nan              | 67%             | 67%             |
+| MCA rms seq K32 c=2                    | bf16    | 83%           | 83%          | 84%          | 0%               | 0%              | 0%              | 0%               | 0%              | 0%              |
+| MCA rms seq K32 c=2                    | fp16    | 97%           | 97%          | 97%          | 2%               | 2%              | 2%              | 3%               | 3%              | 3%              |
+| MCA rms seq K32 c=2                    | fp32    | 100%          | 100%         | 100%         | 0%               | 0%              | 0%              | 67%              | 67%             | 67%             |
+| gelu gauge +u|x| [gelu]                | bf16    | 50%           | 50%          | 50%          | 0%               | 0%              | 0%              | 0%               | 0%              | 0%              |
+| gelu gauge +u|x| [gelu]                | fp16    | 50%           | 50%          | 50%          | 0%               | 0%              | 0%              | 0%               | 0%              | 0%              |
+| gelu gauge +u|x| [gelu]                | fp32    | 100%          | 100%         | 100%         | 0%               | 0%              | 0%              | 75%              | 75%             | 75%             |
+| old 2x [LN,sm,attn]                    | bf16    | 89%           | 89%          | 89%          | 13%              | 12%             | 12%             | 31%              | 31%             | 31%             |
+| old 2x [LN,sm,attn]                    | fp16    | 95%           | 95%          | 95%          | 21%              | 21%             | 21%             | 65%              | 65%             | 65%             |
+| old 2x [LN,sm,attn]                    | fp32    | 100%          | 100%         | 100%         | 1%               | 0%              | 0%              | 60%              | 60%             | 60%             |
+| old 2x [contractions]                  | bf16    | 98%           | 98%          | 98%          | 0%               | 0%              | 0%              | -                | -               | -               |
+| old 2x [contractions]                  | fp16    | 100%          | 100%         | 100%         | 1%               | 1%              | 1%              | 100%             | 100%            | 100%            |
+| old 2x [contractions]                  | fp32    | 100%          | 100%         | 100%         | 0%               | 0%              | 1%              | 100%             | 100%            | 100%            |
+| split gauge [contractions]             | bf16    | 100%          | 100%         | 100%         | 0%               | 0%              | 0%              | -                | -               | -               |
+| split gauge [contractions]             | fp16    | 100%          | 100%         | 100%         | 0%               | 0%              | 0%              | 100%             | 100%            | 100%            |
+| split gauge [contractions]             | fp32    | 100%          | 100%         | 100%         | 0%               | 0%              | 0%              | 100%             | 100%            | 100%            |
