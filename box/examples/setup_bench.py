@@ -53,10 +53,8 @@ def one(provider: Modal, store: ModalVolumeStore, spec: SetupSpec, *, image: str
     s = sdk.launch(provider, image=image, ceiling_s=ceiling_s, record=store, labels=PURPOSE, setup=dataclasses.replace(spec, rebuild=cold))
     ready_s = time.monotonic() - began
     try:
-        job = s.run(check, max_duration_s=300)
-        ending = job.wait()
+        job = s.run_to_end(check, max_duration_s=300, what="check")
         checked = "".join(c.text for c in job.logs()).strip()
-        assert ending == sdk.Ending("exited", 0), (ending, checked)
     finally:
         receipt = s.close()
     record = sdk.read_record(store, s.id)

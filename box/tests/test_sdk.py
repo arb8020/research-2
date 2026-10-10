@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from box import sdk
+from box import files, sdk
 from box.sdk import Ended, Ending, Provider, Running
 from box.supervisor import MAX_CEILING_S, MAX_SERVICES
 from box.tests import providers
@@ -99,10 +99,10 @@ def test_put_then_run_then_get(launch: Callable, tmp_path: Path) -> None:
     (src / "pkg" / "__pycache__" / "x.pyc").write_text("junk")
     with launch(ceiling_s=600) as s:
         work = f"{s.machine.root}/work"
-        s.put(src, work, ignore=("**/__pycache__",))
+        files.put(s.machine, src, work, ignore=("**/__pycache__",))
         job = s.run(f"cd {work} && ls -R . > listing && cp pkg/a.txt out.txt", max_duration_s=JOB_S)
         assert job.wait() == Ending("exited", 0)
-        s.get(work, tmp_path / "back")
+        files.get(s.machine, work, tmp_path / "back")
     assert (tmp_path / "back" / "out.txt").read_text() == "a"
     assert "__pycache__" not in (tmp_path / "back" / "listing").read_text()
 

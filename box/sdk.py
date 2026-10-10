@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import contextlib
 import dataclasses
-import io
 import json
 import os
 import re
@@ -11,16 +10,15 @@ import secrets
 import shlex
 import socket
 import sys
-import tarfile
 import threading
 import time
 import zlib
 from collections.abc import Callable, Generator, Iterator
 from dataclasses import dataclass, field
-from fnmatch import fnmatch
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar, get_args
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TextIO, TypeVar, get_args
 
+from box import files
 from box.gitsync import Synced
 from box.setup_cache import SetupRecord, SetupSpec, parse_setup_record, plan_setup, prepare
 from box.store import Mount, Store
@@ -526,25 +524,20 @@ class Session:
     def stream(  # noqa: PLR0913
         self, cmd: str, *, cwd: str | None = None, pty: bool = False, timeout_s: float | None = None, quiet_s: float | None = None,
     ) -> Stream:  # fmt: skip
-        running = self._running_now()
-        left = running.lease.ceiling - time.time()
-        timeout_s = left if timeout_s is None else timeout_s
-        if not 0 < timeout_s <= left:
-            raise Refused(f"timeout_s={timeout_s}: more than 0 and at most the {left:.0f} s to the session's ceiling")
-        inner = f"cd {shlex.quote(cwd)} && {cmd}" if cwd else cmd
-        then = f"exec bash -c {shlex.quote(inner)}"
-        return self._live().stream(self._keepalive(then, until=time.time() + timeout_s), timeout_s=timeout_s, quiet_s=quiet_s, pty=pty)
+        left = self._running_now().lease.ceiling - time.time()
+        bound = left if timeout_s is None else timeout_s
+        if not 0 < bound <= left:
+            raise Refused(f"timeout_s={bound}: more than 0 and at most the {left:.0f} s to the session's ceiling")
+        return self._live().stream(self.used(cmd, cwd=cwd, until=time.time() + bound), timeout_s=bound, quiet_s=quiet_s, pty=pty)
 
     def shell(self, cwd: str | None = None) -> Shell:
-        running = self._running_now()
-        start = f"cd {shlex.quote(cwd)} && " if cwd else ""
-        return self._live().shell(self._keepalive(f"{start}exec bash -l", until=running.lease.ceiling))
+        return self._live().shell(self.used("exec bash -l", cwd=cwd))
 
     def sync(self, repo: str | Path, *, paths: tuple[str, ...] = (), force: bool = False) -> Synced:
         from box import gitsync
 
-        keep = f"refs/box/{self.name or self.id}"
-        synced = gitsync.sync(self._live(), Path(repo), paths=paths, force=force, keep=keep, touch=self._path(ACTIVITY))
+        self.touch()
+        synced = gitsync.sync(self._live(), Path(repo), paths=paths, force=force, keep=f"refs/box/{self.name or self.id}")
         if self.record is not None:
             entry = {"commit": synced.commit, "path": synced.path, "pack_bytes": synced.pack_bytes, "local": str(Path(repo).resolve()), "at": time.time()}
             self.record.put(f"{record_prefix(self.id)}/syncs/{time.time_ns()}.json", json.dumps(entry).encode())
@@ -557,12 +550,14 @@ class Session:
         idle_s = float(self.labels.get(LABEL_IDLE) or 0)
         return max(MIN_KEEPALIVE_S, min(KEEPALIVE_S, idle_s / 4)) if idle_s else KEEPALIVE_S
 
-    def _keepalive(self, then: str, *, until: float) -> str:
+    def used(self, cmd: str, *, cwd: str | None = None, until: float | None = None) -> str:
+        end = self._running_now().lease.ceiling if until is None else until
         activity = shlex.quote(self._path(ACTIVITY))
         loop = (f"while kill -0 $$ 2>/dev/null; do touch {activity}; "
-                f"if [ $(date +%s) -ge {int(until)} ]; then kill -HUP $$; exit; fi; sleep {self._keepalive_every_s():g}; done")  # fmt: skip
+                f"if [ $(date +%s) -ge {int(end)} ]; then kill -HUP $$; exit; fi; sleep {self._keepalive_every_s():g}; done")  # fmt: skip
+        inner = f"cd {shlex.quote(cwd)} && {cmd}" if cwd else cmd
         # braced: `x && ( loop ) &` would background x too, in a shell that holds the caller's stdout open
-        return f"{{ ( {loop} ) </dev/null >/dev/null 2>&1 & }} && {then}"
+        return f"{{ ( {loop} ) </dev/null >/dev/null 2>&1 & }} && exec bash -c {shlex.quote(inner)}"
 
     def status(self) -> Status:
         return self._status(watch=False)
@@ -656,24 +651,6 @@ class Session:
         self._check(f"{heads}mkdir -p {job.dir} && mv {tmp} {job.dir}/spec.json")
         return job
 
-    def put(self, local: str | Path, remote: str, ignore: tuple[str, ...] = ()) -> None:
-        root = Path(local)
-        buf = io.BytesIO()
-        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-            for child in sorted(root.iterdir()):
-                tar.add(child, arcname=child.name, filter=lambda i: None if ignored(i.name, ignore) else i)
-        tmp = self._path(f"put-{secrets.token_hex(3)}.tgz")
-        self._live().write(tmp, buf.getvalue())
-        self._check(f"mkdir -p {shlex.quote(remote)} && tar xzf {tmp} --no-same-owner -C {shlex.quote(remote)} && rm {tmp}")
-
-    def get(self, remote: str, local: str | Path) -> None:
-        tmp = self._path(f"get-{secrets.token_hex(3)}.tgz")
-        self._check(f"tar czf {tmp} -C {shlex.quote(remote)} .")
-        data = self._live().read(tmp)
-        self._live().exec(f"rm -f {tmp}")
-        with tarfile.open(fileobj=io.BytesIO(data)) as tar:
-            tar.extractall(local, filter="data")
-
     def jobs(self, kind: Kind = "jobs") -> list[Job]:
         return [Job(self, job_id, kind) for job_id in self._ask(lambda place: place.jobs(kind))]
 
@@ -723,6 +700,13 @@ class Job:
 
     def kill(self) -> None:
         self.session._touch(f"{self.rel}/{KILL}")
+
+    def tee(self, out: TextIO | None = None, err: TextIO | None = None) -> Ending:
+        sinks = {"stdout": out or sys.stdout, "stderr": err or sys.stderr}
+        for chunk in self.logs(follow=True):
+            sinks[chunk.stream].write(chunk.text)
+            sinks[chunk.stream].flush()
+        return self.wait()
 
     def logs(self, *, after: LogCursor = (0, 0), follow: bool = False, stop: threading.Event | None = None) -> Iterator[LogChunk]:
         if follow:
@@ -868,15 +852,10 @@ def run_job(  # noqa: PLR0913
 ) -> Ending:  # fmt: skip
     with launch(provider, setup=setup, **launch_kw) as s:
         for local, remote in put:
-            s.put(local, remote)
-        job = s.run(in_tree(s, setup, cmd), max_duration_s=max_duration_s, on_exit=on_exit)
-        sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
-        for chunk in job.logs(follow=True):
-            sinks[chunk.stream].write(chunk.text)
-            sinks[chunk.stream].flush()
-        ending = job.wait()
+            files.put(s._live(), local, remote)
+        ending = s.run(in_tree(s, setup, cmd), max_duration_s=max_duration_s, on_exit=on_exit).tee()
         for remote, local in get:
-            s.get(remote, local)
+            files.get(s._live(), remote, local)
     return ending
 
 
@@ -1037,5 +1016,3 @@ def in_tree(session: Session, setup: SetupSpec | None, cmd: str) -> str:
     return f"cd {shlex.quote(gitsync.tree_path(session._live().work, gitsync.toplevel(setup.repo)))} && {cmd}"
 
 
-def ignored(rel: str, ignore: tuple[str, ...]) -> bool:
-    return any(fnmatch(rel, g) or (g.startswith("**/") and fnmatch(rel.rsplit("/", 1)[-1], g[3:])) for g in ignore)

@@ -27,7 +27,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from box import sdk
+from box import files, sdk
 from box.cli import DETACH_IDLE_S, user
 
 from kelpie_http.dev.local import KELPIE, xgrammar_submodule_sha
@@ -155,30 +155,23 @@ def start(a: argparse.Namespace, cmd: str, provider: sdk.Provider) -> tuple[sdk.
         },
     )
     print(f"kelpie remote: {s.id}", file=sys.stderr, flush=True)
-    try:
+    with sdk.closing_on_error(s):
         where = Where.on(a.provider, s.machine.root)
-        s.put(KELPIE, where.tree, ignore=IGNORE)
-        s.put(RESEARCH_DIR / "observe", f"{where.research}/observe", ignore=OBSERVE_IGNORE)
+        files.put(s.machine, KELPIE, where.tree, ignore=IGNORE)
+        files.put(s.machine, RESEARCH_DIR / "observe", f"{where.research}/observe", ignore=OBSERVE_IGNORE)
         sha = xgrammar_submodule_sha(KELPIE)
         job = s.run(
             job_cmd(where, submodule_sha=sha, models=a.model, timeout=a.timeout, cmd=cmd),
             max_duration_s=a.timeout + GRACE_S,  # setup + cmd (cmd has its own --timeout inside)
             env={"BOX_ID": s.id},
         )
-    except BaseException:
-        s.close()
-        raise
     return s, job
 
 
 def follow(s: sdk.Session, job: sdk.Job) -> int:
     """The job's output on this terminal until it ends; the machine ends however this returns."""
-    sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
     with s:
-        for chunk in job.logs(follow=True):
-            sinks[chunk.stream].write(chunk.text)
-            sinks[chunk.stream].flush()
-        ending = job.wait()
+        ending = job.tee()
     print(f"kelpie remote: {s.id} {ending.reason}, exit {ending.exit_code}", file=sys.stderr)
     return ending.exit_code if ending.reason == "exited" and ending.exit_code is not None else 1
 
