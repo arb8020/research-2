@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "about": "Per-chip capability table for the check core: which dtypes a chip can honestly test. testable=false is a VISIBLE SKIP (blogs/notes/ch01-design-2026-10-09.md, 'matrix'). Measured live; evidence in blogs/notes/evidence/image-2026-10-09/.",
+  "chips": {
+    "T4": {
+      "arch": "sm_75",
+      "device_name": "Tesla T4",
+      "probed": "2026-10-09",
+      "env": {
+        "image": "blogs/engine/kernel.Dockerfile",
+        "python": "3.12.15",
+        "torch": "2.14.1+cu126",
+        "cuda": "12.6",
+        "cudnn": 91002,
+        "driver": "610.57.04",
+        "provider": "modal"
+      },
+      "dtypes": {
+        "fp64": {
+          "testable": true,
+          "native": true,
+          "role": "truth",
+          "notes": "reference only: matmul 43x slower than fp32 here (0.16 vs 6.9 TFLOP/s)"
+        },
+        "fp32": {
+          "testable": true,
+          "native": true,
+          "notes": "TF32 off by default (allow_tf32=False) and sm_75 has no TF32 anyway"
+        },
+        "fp16": {
+          "testable": true,
+          "native": true,
+          "notes": "tensor cores; 39.6 TFLOP/s matmul; layer_norm/gelu/softmax/sdpa(causal) kernels run"
+        },
+        "bf16": {
+          "testable": false,
+          "native": false,
+          "runs": true,
+          "skip_reason": "sm_75 has no bf16 hardware: torch.cuda.is_bf16_supported(including_emulation=False) is False; bf16 runs only emulated (matmul 3.8 TFLOP/s, slower than fp32), so it does not test the bf16 kernels a bf16 chip (sm_80+) would run"
+        }
+      },
+      "measured": {
+        "matmul_shape": [1024, 768, 3072],
+        "matmul": {
+          "fp64": {"ms": 29.9265, "tflops": 0.161, "max_err_over_max_ref": 0.0},
+          "fp32": {"ms": 0.7012, "tflops": 6.891, "max_err_over_max_ref": 6.03e-07, "median_rel_err": 3.13e-07},
+          "fp16": {"ms": 0.1222, "tflops": 39.555, "max_err_over_max_ref": 4.35e-04, "median_rel_err": 3.58e-04},
+          "bf16": {"ms": 1.2671, "tflops": 3.813, "max_err_over_max_ref": 3.11e-03, "median_rel_err": 2.86e-03}
+        }
+      }
+    }
+  }
+}
