@@ -22,9 +22,21 @@ from anyio.from_thread import BlockingPortal, start_blocking_portal
 from box import gpus
 from box.providers.pump import MAX_SEND_BYTES, Closed, Emit, Pumped, kill_pid_file, with_pid_file
 from box.sdk import (
-    LABEL_BY, LABEL_NAME, Dockerfile, Dropped, Endpoint, Gone, NameTaken, Refused, RegistryImage, SnapshotImage,
-    Shell, declared_ports, parse_image, snapshot_ref,
-)  # fmt: skip
+    LABEL_BY,
+    LABEL_NAME,
+    Dockerfile,
+    Dropped,
+    Endpoint,
+    Gone,
+    NameTaken,
+    Refused,
+    RegistryImage,
+    Shell,
+    SnapshotImage,
+    declared_ports,
+    parse_image,
+    snapshot_ref,
+)
 from box.store import Mount
 
 APP = "box"
