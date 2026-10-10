@@ -19,7 +19,7 @@ Lease: POST /sessions takes lease_s (60..43200, default 5400); the session ends 
 lease_until. POST /sessions/{id}/extend {until}, as the real relay (box/gateway/relay.py, Relay.extend):
 409 while booting; running: lease_until = min(until, ceiling) (start + 12 h), never shorter (an until at or
 before lease_until is a no-op, 200 with the status as it is); ended: a no-op, 200 with the ended status.
-status keeps "deadline" (= lease_until; the contract keeps it for older pages). Fake only, not in the contract:
+Fake only, not in the contract:
 POST /dev/sessions/{id}/expire ends the lease now (so a check can see a lease run out without waiting).
 """
 
@@ -91,7 +91,7 @@ class Session:
     def status(self) -> dict[str, Any]:
         s: dict[str, Any] = {
             "state": self.state, "gpu": self.gpu, "started_at": self.started_at,
-            "lease_until": self.lease_until, "ceiling": self.ceiling, "deadline": self.lease_until,
+            "lease_until": self.lease_until, "ceiling": self.ceiling,
         }  # fmt: skip
         if self.reason is not None:
             s["reason"] = self.reason
