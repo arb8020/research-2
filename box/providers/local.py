@@ -13,7 +13,18 @@ import termios
 from pathlib import Path
 
 from box.providers.pump import JOIN_S, Pty, Pumped, pipe_readers
-from box.sdk import LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken, Refused, Shell, SnapshotImage, parse_image, snapshot_ref
+from box.sdk import (
+    LABEL_BY,
+    LABEL_NAME,
+    Endpoint,
+    Gone,
+    NameTaken,
+    Refused,
+    Shell,
+    SnapshotImage,
+    parse_image,
+    snapshot_ref,
+)
 from box.store import DirStore, Mount
 
 BASE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local"

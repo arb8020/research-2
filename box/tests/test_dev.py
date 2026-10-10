@@ -5,7 +5,6 @@ test names a provider: `pytest --provider modal` runs them on Modal CPU boxes.""
 from __future__ import annotations
 
 import concurrent.futures
-import http.client
 import hashlib
 import os
 import shlex
@@ -405,6 +404,14 @@ def test_a_sync_is_use_and_a_run_sees_the_synced_code(dev: Callable, repo: Path,
     assert "".join(c.text for c in job.logs()) == "a\n"
 
 
+def answered_ok(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url + "/", timeout=10) as r:
+            return r.read() == b"ok"
+    except (urllib.error.URLError, ConnectionError):
+        return False
+
+
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_the_proxy_serves_on_after_its_session_is_gone_but_not_after_a_bug_in_marking_it_used(capsys: pytest.CaptureFixture) -> None:
     import http.server
@@ -429,12 +436,7 @@ def test_the_proxy_serves_on_after_its_session_is_gone_but_not_after_a_bug_in_ma
                 raise e
 
             with Proxy(endpoint, on_use=on_use, every_s=3600) as proxy:
-                try:
-                    with urllib.request.urlopen(proxy.url + "/", timeout=10) as r:
-                        got = r.read() == b"ok"
-                except (urllib.error.URLError, ConnectionError, http.client.RemoteDisconnected):
-                    got = False
-                assert got is served, failure
+                assert answered_ok(proxy.url) is served, failure
                 assert proxy._inflight == 0
     finally:
         upstream.shutdown()

@@ -19,7 +19,17 @@ from urllib.parse import quote
 
 from box import gpus
 from box.providers.pump import READ_BYTES, Closed, Emit, Pumped
-from box.sdk import BACKSTOP_MARGIN_S, LABEL_BY, LABEL_NAME, Dropped, Endpoint, Gone, NameTaken, Refused, Shell
+from box.sdk import (
+    BACKSTOP_MARGIN_S,
+    LABEL_BY,
+    LABEL_NAME,
+    Dropped,
+    Endpoint,
+    Gone,
+    NameTaken,
+    Refused,
+    Shell,
+)
 from box.store import Mount
 
 T = TypeVar("T")
