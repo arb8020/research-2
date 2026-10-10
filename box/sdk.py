@@ -1086,6 +1086,11 @@ def parse_heartbeat(raw: bytes) -> Heartbeat:
     return Heartbeat(at=float(d["at"]), ttl_s=float(d["ttl_s"]))
 
 
+def recorded_started_at(store: Store, session_id: str) -> float | None:
+    session = _parse_if_present(store, f"{record_prefix(session_id)}/session.json", json.loads)
+    return None if session is None else float(session["started_at"])
+
+
 def _recorded_running(store: Store, prefix: str) -> Running | None:
     session = _parse_if_present(store, f"{prefix}/session.json", json.loads)
     lease = _parse_if_present(store, f"{prefix}/lease.json", parse_lease)

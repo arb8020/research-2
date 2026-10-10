@@ -30,7 +30,8 @@ GET  /sessions/{id}/events         SSE (text/event-stream). Each event is one JS
                                    (EventSource can't set headers: token goes as ?token= for A/C over localhost dev.)
 ```
 `status` = `{state:"booting"|"running"|"ended", gpu, started_at, lease_until, ceiling, reason?, kernel?:{url, token}}`
-`lease_until`, `ceiling`: unix seconds.
+`lease_until`, `ceiling`: unix seconds. `started_at`: unix seconds the machine's supervisor started (booting: now);
+null on an ended session whose machine never started.
 `reason` (ended) = `"stopped"|"lease"|"idle"|"boot_failed"|"machine_lost"`. Idle (no connection to the kernel
 for the relay's idle timeout) stays on: a closed tab ends the session even with lease left.
 `kernel` appears once running: a Jupyter Server base URL + token reachable from the browser (A: Modal tunnel

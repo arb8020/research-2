@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import functools
 import hashlib
 import hmac
 import json
@@ -197,26 +196,25 @@ def digest(token: ModalToken) -> str:
     return hashlib.sha256(f"{token.id}:{token.secret}".encode()).hexdigest()
 
 
-def wire(state: str, gpu: str | None, started_at: float, lease: sdk.Lease, **extra: Any) -> dict[str, Any]:
+def wire(state: str, gpu: str | None, started_at: float | None, lease: sdk.Lease, **extra: Any) -> dict[str, Any]:
     return {"state": state, "gpu": gpu, "started_at": started_at, "lease_until": lease.until, "ceiling": lease.ceiling, **extra}
 
 
 def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: bool) -> dict[str, Any]:
     labels = s.machine.labels
     gpu = labels.get(LABEL_GPU) or None
-    ended = ended_wire(labels)
     match s.status():
         case Booting():
             return wire("booting", gpu, time.time(), first_lease(labels))
         case Running() as running:
             try:
-                return running_status(s, token, running, ready=ready, gpu=gpu, ended=ended)
+                return running_status(s, token, running, ready=ready, gpu=gpu)
             except sdk.Gone:
                 gone = s.status()
                 assert isinstance(gone, Ended), f"{s.id}: {gone} once its machine is gone"
-                return ended(reason=REASONS[gone.reason])
+                return ended_status(s, REASONS[gone.reason])
         case Ended(reason=reason):
-            return ended(reason=REASONS[reason])
+            return ended_status(s, REASONS[reason])
 
 
 def first_lease(labels: dict[str, str]) -> sdk.Lease:
@@ -224,21 +222,20 @@ def first_lease(labels: dict[str, str]) -> sdk.Lease:
     return sdk.Lease(until=ceiling - READER_CEILING_S + float(labels[LABEL_LEASE]), ceiling=ceiling)
 
 
-def ended_wire(labels: dict[str, str]) -> Callable[..., dict[str, Any]]:  # MUST KILL: fakes started_at as ceiling - READER_CEILING_S from labels; stamp the creation time as a label instead
-    first = first_lease(labels)
-    return functools.partial(wire, "ended", labels.get(LABEL_GPU) or None, first.ceiling - READER_CEILING_S, first)
+def ended_status(s: sdk.Session, reason: str) -> dict[str, Any]:
+    labels = s.machine.labels
+    started_at = None if s.record is None else sdk.recorded_started_at(s.record, s.id)
+    return wire("ended", labels.get(LABEL_GPU) or None, started_at, first_lease(labels), reason=reason)
 
 
-def running_status(  # noqa: PLR0913
-    s: sdk.Session, token: ModalToken, running: Running, *, ready: bool, gpu: str | None, ended: Callable[..., dict[str, Any]],
-) -> dict[str, Any]:  # fmt: skip
+def running_status(s: sdk.Session, token: ModalToken, running: Running, *, ready: bool, gpu: str | None) -> dict[str, Any]:
     kernel = {"url": s.expose(int(s.machine.labels[LABEL_PORT])).url, "token": kernel_token(token, s.id)}
     if ready or jupyter_ready(kernel):
         return wire("running", gpu, running.started_at, running.lease, kernel=kernel)
     jupyter = kernel_service(s)
     match Queued() if jupyter is None else jupyter.status():
         case Done(ending=ending):
-            return ended(reason=REASONS.get(ending.reason, JUPYTER_GONE))
+            return ended_status(s, REASONS.get(ending.reason, JUPYTER_GONE))
     return wire("booting", gpu, running.started_at, running.lease)
 
 
@@ -465,7 +462,7 @@ class Relay:
                     raise
                 return wire("ended", rec.gpu, rec.created_at, rec.lease, reason="stopped")
             receipt = s.close(timeout_s=CLOSE_TIMEOUT_S)
-        return ended_wire(s.machine.labels)(reason=REASONS[receipt.ended.reason])
+        return ended_status(s, REASONS[receipt.ended.reason])
 
     def extend(self, sid: str, token: ModalToken, until: float) -> dict[str, Any]:
         rec = self._boot_of(sid, token)
