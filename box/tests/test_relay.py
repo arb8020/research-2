@@ -129,6 +129,7 @@ def test_connect_run_a_cell_end(make_relay: Callable[..., str]) -> None:
     assert (out.status, out.stdout) == ("ok", "42\n")
     code, body, _ = call(f"{gw}/sessions/{sid}/end", "POST", headers={"X-Box-Token": AUTH})
     assert (code, body["status"]["state"], body["status"]["reason"]) == (200, "ended", "stopped")
+    assert body["status"]["started_at"] == running["started_at"]  # the recorded start, not one made up
     assert status(gw, sid) == (200, body["status"])  # the machine is gone: its record answers
     assert status(gw, "s-000000000000")[0] == 404  # a session nobody recorded is unknown
 
