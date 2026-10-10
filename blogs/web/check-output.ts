@@ -50,8 +50,18 @@ export function parseLine(line: string): Line {
   return { kind: "text", text: line };
 }
 
-// The one number a row shows: the first metric with a value, else the score.
+// The gate metrics a row prefers to show (blogs/assay: err as a fraction of its budget, per-position KL, tokens), in
+// order; a non-finite one arrives as the string "inf" / "nan" (JSON has no infinities).
+const KEY_METRICS: readonly (readonly [string, string])[] = [["ratio", "err/budget"], ["kl_max", "KL max"], ["first_diff", "first bad token"], ["tokens", "tokens"]];
+const shown = (x: unknown): string | undefined =>
+  typeof x === "number" ? String(Number(x.toPrecision(3))) : typeof x === "string" && /^-?(inf|nan)$/.test(x) ? x : undefined;
+
+// The one number a row shows: its gate's metric if it has one, else the first metric with a value, else the score.
 function keyMetric(v: Verdict): string {
+  for (const [k, label] of KEY_METRICS) {
+    const value = shown(v.metrics[k]);
+    if (value !== undefined) return `${label} ${value}`;
+  }
   for (const [k, value] of Object.entries(v.metrics)) {
     if (typeof value === "number") return `${k} ${String(Number(value.toPrecision(3)))}`;
   }
