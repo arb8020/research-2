@@ -2,7 +2,11 @@
 
 <!-- wip: Claude-written stub, in progress: the author is rewriting this page. Claims marked in the source with claude comments are unverified, and some numbers are still placeholders. -->
 
-You write `layer_norm` in `gpt2.py`, press Run, and a check answers pass or fail. This page explains why the checks work the way they do. The thresholds live in `checks/chNN.toml` and in the docstrings of the check functions. <!-- claude: checks/chNN.toml is not implemented yet; today the thresholds are constants in assay/ch01/suite.py (FLOORS, KL_MAX) -->
+You write `layer_norm` in `gpt2.py`, press Run, and a check answers pass or fail. This page explains why the checks work the way they do. The thresholds live in `checks/chNN.toml` and in the docstrings of the check functions. <!-- claude: checks/chNN.toml is not implemented yet; today the thresholds are constants in assay/ch01/suite.py (TOL, KL_MAX) -->
+
+## Chapter 1 uses a simple scheme
+
+Chapter 1 does not use the per-op bounds described below. Every op is checked with allclose against fp64 truth T: each element must satisfy |C − T| ≤ atol + rtol·|T|, with one (atol, rtol) per dtype (`TOL` in `assay/ch01/suite.py`: fp32 1.5e-4 and 1e-5, fp16 2e-2 and 2e-2, bf16 0.15 and 0.15). A row shows the worst |C − T| / (atol + rtol·|T|), which passes at 1 or below. `forward` is checked with per-position KL against fp64 truth (below 1e-7 in fp32) and a top-k smoke check. The fp32 values are tight enough that every planted bug fails, exact-erf GELU included. fp16 and bf16 catch only gross bugs. The kernel chapters bring the principled version described below.
 
 ## Correct cannot mean equal
 
@@ -26,7 +30,7 @@ max|C - T| <= 2 * max|R - T| + floor[dtype]
 
 C is your output, T is fp64 truth, and R is the reference run in your dtype: your error may be twice the reference's. The rule needs no analysis of the op, but it is only as strict as one reference. Worse, it compares two maxima over thousands of elements, each a noisy number, so two correct orders can land on either side of the line.
 
-That noise is what broke it. A correct GPT-2 forward came in at 1.02x the budget on Linux and 0.98x on macOS. <!-- claude: from an agent's session report, not a file in the repo --> Its error against truth was 2.6x HF's own, only because it sums in a different order. <!-- claude: from an agent's session report, not a file in the repo --> Yet its per-position KL against fp64 truth was 5.3e-9: its output distribution matched truth to within rounding. <!-- claude: 5.3e-9 is vs fp64 truth, from an integration run (session report, not a file); RESULTS.md has 5.2e-10 for the correct forward, but that is vs HF fp32, a different baseline --> A gate that flips with the platform on correct code cannot be the gate. assay still records the 2x number for one chapter, and `run_checks ch01 --grade-only` regrades stored runs, so the two rules can be compared on the same runs.
+That noise is what broke it. A correct GPT-2 forward came in at 1.02x the budget on Linux and 0.98x on macOS. <!-- claude: from an agent's session report, not a file in the repo --> Its error against truth was 2.6x HF's own, only because it sums in a different order. <!-- claude: from an agent's session report, not a file in the repo --> Yet its per-position KL against fp64 truth was 5.3e-9: its output distribution matched truth to within rounding. <!-- claude: 5.3e-9 is vs fp64 truth, from an integration run (session report, not a file); RESULTS.md has 5.2e-10 for the correct forward, but that is vs HF fp32, a different baseline --> A gate that flips with the platform on correct code cannot be the gate. assay still records the 2x number for one chapter, and `run_checks ch01 --grade-only` regrades stored runs, so the two rules can be compared on the same runs. <!-- claude: no longer true: chapter 1 dropped the 2x rule for allclose (see the section near the top); runs keep max|C - T| (`err`) and an error frontier that any (atol, rtol) regrades, not the 2x budget -->
 
 ## Most of the field picks tolerances by hand
 
@@ -42,7 +46,7 @@ A partial survey of how kernel test suites decide correctness: <!-- claude: rows
 | BLAS `dblat3` (`DMMCH`) | Per element, \|C − T\| / (ε · Σ\|a\|\|b\|) < 16 |
 | [LAPACK test suite](https://github.com/Reference-LAPACK/lapack) | Normalized residuals < 30 |
 
-Most projects loosen `atol` and `rtol` until known-good code passes, which is how all zeros passes KernelBench. Numerical linear algebra derives the shape of the bound from error analysis and picks only a small constant. assay does the same: the math sets the shape of each bound, and measurement sets the constants.
+Most projects loosen `atol` and `rtol` until known-good code passes, which is how all zeros passes KernelBench. Numerical linear algebra derives the shape of the bound from error analysis and picks only a small constant. assay does the same: the math sets the shape of each bound, and measurement sets the constants. <!-- claude: not yet: chapter 1 picks atol and rtol by hand from measurements, the way this paragraph says most projects do -->
 
 ## Each kind of op gets the bound its math supports
 
@@ -106,7 +110,7 @@ bf16 uses the same statistic with a limit of 0.1, about twice HF's own bf16 KL a
 A tolerance can catch only a bug that the inputs make visible.
 
 - **Offset from zero.** Data centered at zero hides a missing mean subtraction in `layer_norm`.
-- **Several magnitudes.** A missing `eps` shows only when the variance is comparable to `eps`, so layer norm cases include `eps=0.1` and rows of length 1, whose variance is 0. <!-- claude: carried over from the earlier draft; I did not find eps=0.1 in assay/ch01/ops.py -->
+- **Several magnitudes.** A missing `eps` shows only when the variance is comparable to `eps`, so layer norm cases include `eps=0.1` and rows of length 1, whose variance is 0. <!-- claude: eps=0.1 IS in assay/ch01/ops.py (layer_norm's scalars, with 1e-5); the earlier note was wrong. "Several magnitudes" is not: op inputs come in two kinds only, centered (randn) and offset (mean 3, std 0.5) -->
 - **Long, varied prompts.** Attention over one token ignores the attention scale, so a 1-token prompt hides a wrong scale. On a 200-token repetitive prompt, the scale bug kept all 64 greedy tokens (`RESULTS.md`). The model prompts are 384 and 192 tokens of mixed prose, code, and Unicode.
 - **Shapes that reach every code path.** Each op sweeps edge sizes such as 1, small primes, and tile size ± 1, and a `coverage` check fails if a line or branch of your function never ran.
 
