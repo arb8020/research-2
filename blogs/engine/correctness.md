@@ -18,7 +18,7 @@ Truth runs on your device, because a GPU and a CPU can disagree even in fp64. fp
 
 The first checks used the rule from FlashAttention's tests, which popcorn also uses:
 
-```
+```text
 max|C - T| <= 2 * max|R - T| + floor[dtype]
 ```
 
@@ -50,7 +50,7 @@ Every op declares a kind: contraction, elementwise, composite, or model. <!-- cl
 
 For C = A·B with inner dimension k and unit roundoff u, the classic first-order bound is |C − T| ≤ k·u·(|A|·|B|) per element. assay turns it into a ratio:
 
-```
+```text
 r = |C - T| / (u * (|A| @ |B|) + u * |T|)
 ```
 
@@ -62,7 +62,7 @@ Rounding errors usually cancel in part, so Higham and Mary (2019) show growth li
 
 For y = f(x), the input carries a rounding error of about u·|x|. f scales it by f′(x), and rounding the result adds u·|T|:
 
-```
+```text
 |C - T| <= m * (u * |x * f'(x)| + u * |T|) + floor
 ```
 
@@ -74,7 +74,7 @@ A tight bound for a layer norm or an attention is easy to get wrong, so assay me
 
 The decision is a one-sided hypothesis test, as in [TensorRT-LLM's accuracy tests](https://github.com/NVIDIA/TensorRT-LLM/blob/main/tests/integration/defs/accuracy/README.md), defined by three numbers: α, how often a correct implementation may fail; β, how often a bug of size θ may pass; and θ, the smallest bug the test promises to catch. With n samples per side, that README gives the threshold γ and θ:
 
-```
+```text
 γ = x̄ + Φ⁻¹(α) · √(2σ²/n)
 θ = −(Φ⁻¹(α) + Φ⁻¹(β)) · √(2σ²/n)
 ```
@@ -89,7 +89,7 @@ A check fails if any element is out of bounds, so the threshold must bound the m
 
 For `forward`, what matters is the next-token distribution at each position. The fp32 gate is the maximum over positions of KL(truth ‖ candidate), below 1e-7. For a small logit error δ and true distribution p,
 
-```
+```text
 KL(p ‖ softmax(z + δ)) ≈ ½ · Var_p(δ)
 ```
 
