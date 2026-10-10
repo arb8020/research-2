@@ -58,7 +58,6 @@ CLOSE_TIMEOUT_S = 60.0
 REASONS = {"lease": "lease", "released": "stopped", "stopped": "stopped", "idle": "idle", "machine_lost": "machine_lost"}
 JUPYTER_GONE = "machine_lost"
 JUPYTER_SERVICE = "jupyter"
-RECORD_VOLUME = "box-sessions"
 LOCAL_ORIGIN = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 
 
@@ -265,76 +264,56 @@ def jupyter_cmd(cfg: Config, port: int, origin: str) -> str:
 
 
 def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str) -> None:
-    t0 = time.monotonic()
-    session: sdk.Session | None = None
     try:
-        rec.step("gateway", "checking your Modal token")
-        access.provider.list({sdk.LABEL_SESSION: rec.session_id})  # MUST KILL: a provider.list call made only to validate the token; give Access an explicit credential check
-        port = cfg.port()
-        rec.step("gateway", f"creating sandbox: gpu {rec.gpu or 'none'} (a workspace's first connect builds the image: minutes)")
-        created_at = time.monotonic()
-        made = sdk.create(  # MUST KILL: re-implements sdk.launch (create, wait_up, terminate on failure) only to emit a step in between; give launch a hook
-            access.provider, session_id=rec.session_id, record=access.record, lease_s=req.lease_s, ceiling_s=READER_CEILING_S,
-            gpu=rec.gpu, image=cfg.image, labels={**cfg.labels, **req.labels, LABEL_GPU: rec.gpu or "", LABEL_PORT: str(port),
-            LABEL_LEASE: str(req.lease_s)}, idle_timeout_s=cfg.idle_timeout_s, ports=(port,),
-        )  # fmt: skip
-        rec.step("gateway", f"sandbox {made.machine.id} created in {time.monotonic() - created_at:.1f} s; waiting for it to start")
-        try:
-            made.wait_up(BOOT_TIMEOUT_S)
-        except BaseException:
-            made.machine.terminate()
-            raise
-        session = made
+        rec.finish(start_kernel(cfg, access, rec, req, origin))
+    except Exception as e:
+        cause = e.__context__ if isinstance(e, sdk.NotGone) else e
+        if isinstance(cause, Cancelled) or rec.cancelled:
+            rec.step("gateway", "ended while booting")
+        else:
+            print(f"relay: boot {rec.session_id} failed: {cause!r}", file=sys.stderr)
+            rec.step("gateway", f"boot failed: {type(cause).__name__}: {cause}")
+        if isinstance(e, sdk.NotGone):
+            rec.step("gateway", f"the sandbox may still be running (and billing): {e}")
+            sys.stderr.write(json.dumps({"t": round(time.time(), 3), "event": "not_gone", "session": rec.session_id, "error": str(e)}) + "\n")
+        rec.finish(ended(rec, "stopped" if rec.cancelled else "boot_failed"))
+
+
+def start_kernel(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str) -> dict[str, Any]:
+    t0, port = time.monotonic(), cfg.port()
+    rec.step("gateway", f"creating sandbox: gpu {rec.gpu or 'none'} (a workspace's first connect builds the image: minutes)")
+    session = sdk.create(
+        access.provider, session_id=rec.session_id, record=access.record, lease_s=req.lease_s, ceiling_s=READER_CEILING_S,
+        gpu=rec.gpu, image=cfg.image, labels={**cfg.labels, **req.labels, LABEL_GPU: rec.gpu or "", LABEL_PORT: str(port),
+        LABEL_LEASE: str(req.lease_s)}, idle_timeout_s=cfg.idle_timeout_s, ports=(port,),
+    )  # fmt: skip
+    rec.step("gateway", f"sandbox {session.machine.id} created in {time.monotonic() - t0:.1f} s; waiting for it to start")
+    with sdk.closing_on_error(session):
+        session.wait_up(BOOT_TIMEOUT_S)
         rec.step("machine", f"supervisor up ({time.monotonic() - t0:.1f} s since connect)")
         if rec.cancelled:
             raise Cancelled
-        job = session.serve(jupyter_cmd(cfg, port, origin), env={"JUPYTER_TOKEN": kernel_token(req.token, rec.session_id)}, name=JUPYTER_SERVICE)
+        token = kernel_token(req.token, rec.session_id)
+        job = session.serve(jupyter_cmd(cfg, port, origin), env={"JUPYTER_TOKEN": token}, name=JUPYTER_SERVICE)
         rec.step("machine", "starting Jupyter Server")
-        endpoint = session.expose(port)
-        rec.step("gateway", f"tunnel open: {endpoint.url}")
-        kernel = {"url": endpoint.url, "token": kernel_token(req.token, rec.session_id)}
+        kernel = {"url": session.expose(port).url, "token": token}
+        rec.step("gateway", f"tunnel open: {kernel['url']}")
         wait_for_jupyter(rec, job, kernel)
         if rec.cancelled:
             raise Cancelled
         running = session.status()
         if not isinstance(running, Running):
             raise RuntimeError(f"{rec.session_id}: {running} as Jupyter came up")
-        status = wire("running", rec.gpu, running.started_at, running.lease, kernel=kernel)
         rec.step("machine", f"Jupyter Server ready ({time.monotonic() - t0:.1f} s since connect)")
-        rec.finish(status)
-    except Cancelled:
-        rec.step("gateway", "ended while booting")
-        try:
-            end_after_boot(rec, session)
-        finally:
-            rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="stopped"))
-    except Exception as e:
-        if rec.cancelled:
-            rec.step("gateway", "ended while booting")
-            rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="stopped"))
-            return
-        print(f"relay: boot {rec.session_id} failed: {e!r}", file=sys.stderr)
-        rec.step("gateway", f"boot failed: {type(e).__name__}: {e}")
-        try:
-            end_after_boot(rec, session)
-        finally:
-            rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="boot_failed"))
+        return wire("running", rec.gpu, running.started_at, running.lease, kernel=kernel)
 
 
 class Cancelled(Exception):
     pass
 
 
-def end_after_boot(rec: Boot, session: sdk.Session | None) -> None:
-    if session is None:
-        return
-    try:
-        session.close(timeout_s=CLOSE_TIMEOUT_S)
-    except sdk.NotGone as e:
-        rec.step("gateway", f"sandbox {session.machine.id} may still be running (and billing): {e}")
-        sys.stderr.write(json.dumps({"t": round(time.time(), 3), "event": "not_gone", "session": session.id, "machine": session.machine.id, "error": str(e)}) + "\n")
-    except (sdk.Gone, OSError) as e:
-        print(f"relay: closing {session.id} after a failed boot: {e!r}", file=sys.stderr)
+def ended(rec: Boot, reason: str) -> dict[str, Any]:
+    return wire("ended", rec.gpu, rec.created_at, rec.lease, reason=reason)
 
 
 def wait_for_jupyter(rec: Boot, job: sdk.Job, kernel: dict[str, str]) -> None:
@@ -465,7 +444,7 @@ class Relay:
             except LookupError:
                 if rec is None:
                     raise
-                return wire("ended", rec.gpu, rec.created_at, rec.lease, reason="stopped")
+                return ended(rec, "stopped")
             receipt = s.close(timeout_s=CLOSE_TIMEOUT_S)
         return ended_status(s, REASONS[receipt.ended.reason])
 
@@ -520,7 +499,7 @@ class Relay:
                 boot(self.cfg, access, rec, req, origin)
         except Busy as e:
             rec.step("gateway", f"boot failed: {e}")
-            rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="boot_failed"))
+            rec.finish(ended(rec, "boot_failed"))
 
     @contextlib.contextmanager
     def _stream_slot(self) -> Iterator[None]:
@@ -782,10 +761,10 @@ def error_code(e: Exception) -> int:
 
 
 def modal_access(token: ModalToken, region: str, volumes: dict[str, str]) -> Access:
-    from box.providers.modal import Modal, ModalVolumeStore
+    from box.providers.modal import Modal
 
     provider = Modal(token=token, region=region, volumes=volumes)
-    return Access(provider, ModalVolumeStore(RECORD_VOLUME, provider=provider), close=provider.close)
+    return Access(provider, provider.record_store(), close=provider.close)
 
 
 def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...]) -> Config:

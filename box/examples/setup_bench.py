@@ -16,7 +16,6 @@ from box.setup_cache import SetupSpec
 
 PURPOSE = {"box.purpose": "lease-dev-setup"}
 PROFILE = "arb8020"
-STORE = "box-sessions"
 TOP = Path(__file__).resolve().parents[2]
 SYNTHETIC_SETUP = """set -euo pipefail
 python3 -m pip install -q --root-user-action=ignore uv
@@ -51,7 +50,7 @@ def kelpie_spec() -> SetupSpec:
 
 def one(provider: Modal, store: ModalVolumeStore, spec: SetupSpec, *, image: str, ceiling_s: int, cold: bool, check: str) -> dict:
     began = time.monotonic()
-    s = sdk.create(provider, image=image, ceiling_s=ceiling_s, record=store, labels=PURPOSE, setup=dataclasses.replace(spec, rebuild=cold))
+    s = sdk.launch(provider, image=image, ceiling_s=ceiling_s, record=store, labels=PURPOSE, setup=dataclasses.replace(spec, rebuild=cold))
     ready_s = time.monotonic() - began
     try:
         job = s.run(check, max_duration_s=300)
@@ -81,7 +80,7 @@ def main() -> None:
     runs: list[dict] = []
     with contextlib.ExitStack() as stack:
         provider = stack.enter_context(Modal(token=ModalToken.from_profile(PROFILE), region="us"))
-        store = ModalVolumeStore(STORE, provider=provider)
+        store = provider.record_store()
         if a.which == "synthetic":
             tmp = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="box-bench-")))
             spec, image, ceiling_s, edit = synthetic_repo(tmp / "bench"), "python:3.13", 1800, tmp / "bench" / "app.py"

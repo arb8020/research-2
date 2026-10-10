@@ -69,13 +69,8 @@ def make_store(name: str, base: Path, provider: Provider) -> Store:
     if name == "local":
         return DirStore(base)
     if name == "modal":
-        from box.providers.modal import ModalVolumeStore
-
-        return ModalVolumeStore(RECORD_VOLUME, provider=provider)  # type: ignore[arg-type] (a Tested Modal)
+        return provider.record_store()  # a v2 Volume in the tester's own Modal workspace
     raise ValueError(f"no store for provider {name!r}")
-
-
-RECORD_VOLUME = "box-sessions"  # a v2 Volume in the tester's own Modal workspace
 
 
 def kill_supervisor(machine: Machine) -> None:

@@ -97,6 +97,9 @@ class Local:
     def close(self) -> None:
         pass
 
+    def record_store(self) -> DirStore:
+        return DirStore(self.base.parent / "records")
+
     def snapshot(self, machine: LocalMachine, *, ttl_s: int) -> str:
         del ttl_s
         snapshot_id = secrets.token_hex(6)

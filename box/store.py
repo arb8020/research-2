@@ -7,7 +7,6 @@ from typing import Protocol
 
 class Store(Protocol):
     uri: str
-    sync_writes: bool  # MUST KILL: a protocol bool only so the supervisor knows to shell out `sync`; let the store or its Mount own its commit step
 
     def get(self, key: str) -> bytes: ...
     def list(self, prefix: str) -> list[str]: ...
@@ -22,8 +21,6 @@ class Mount:
 
 
 class DirStore:
-    sync_writes = False
-
     def __init__(self, root: Path) -> None:
         assert root.is_absolute(), root
         self.root = root

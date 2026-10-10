@@ -188,6 +188,9 @@ class Colab:
         backend = CliBackend(login(os.environ.get("BOX_COLAB_AUTH", "oauth2")))
         return cls(backend, allow_free=os.environ.get("BOX_COLAB_ALLOW_FREE") == "1", max_runtime_s=int(hours * 3600))
 
+    def record_store(self) -> None:
+        return None
+
     def close(self) -> None:
         self.closed = True
         for machine in list(self._machines.values()):

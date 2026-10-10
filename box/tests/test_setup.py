@@ -49,12 +49,12 @@ def spec(repo: Path) -> SetupSpec:
 
 @pytest.fixture
 def create(provider: Provider, name: str) -> Iterator[Callable[..., sdk.Session]]:
-    """create(setup=...) on an image with git, every session closed after the test."""
+    """launch(setup=...) on an image with git, every session closed after the test."""
     made: list[sdk.Session] = []
 
     def make(**kw: object) -> sdk.Session:
         image = {} if name in ("local", "colab-fake") else {"image": providers.DEV_IMAGE}
-        s = sdk.create(provider, **(providers.launch_kw(name) | image | {"ceiling_s": 600} | kw))
+        s = sdk.launch(provider, **(providers.launch_kw(name) | image | {"ceiling_s": 600} | kw))
         made.append(s)
         return s
 
@@ -213,7 +213,7 @@ def test_a_machine_that_will_not_go_after_a_failed_setup_is_raised_not_swallowed
     (spec.repo / ".box" / "setup").write_text("exit 7\n")
     kw = providers.launch_kw(name) | ({} if name == "local" else {"image": providers.DEV_IMAGE})
     with pytest.raises(sdk.NotGone, match="still has it") as raised:
-        sdk.create(StaysListed(provider), ceiling_s=600, setup=spec, **kw)
+        sdk.launch(StaysListed(provider), ceiling_s=600, setup=spec, **kw)
     assert isinstance(raised.value.__context__, sdk.SetupFailed)  # the setup's own failure rides along
 
 
@@ -222,7 +222,7 @@ def test_without_snapshots_every_boot_runs_the_setup(provider: Provider, name: s
     assert not isinstance(plain, Snapshotter)
     kw = providers.launch_kw(name) | ({} if name == "local" else {"image": providers.DEV_IMAGE})
     for _ in range(2):
-        with sdk.create(plain, ceiling_s=600, record=store, setup=spec, **kw) as s:
+        with sdk.launch(plain, ceiling_s=600, record=store, setup=spec, **kw) as s:
             assert setup_runs(s) == 1
             prepared = sdk.read_record(store, s.id).setup()
             assert prepared is not None

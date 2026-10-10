@@ -16,7 +16,6 @@ from box.providers.modal import Modal, ModalToken, ModalVolumeStore
 PROFILE = "arb8020"
 NAME = "overnight-demo"
 LABELS = {"box.purpose": "lease-e2e"}
-RECORD_VOLUME = "box-sessions"
 LINES, EVERY_S = 80, 3
 JOB = f'for i in $(seq 1 {LINES}); do echo "overnight line $i of {LINES} at $(date +%H:%M:%S)"; sleep {EVERY_S}; done'
 FOLLOW_B_S = 20.0
@@ -41,7 +40,7 @@ def check(ok: bool, what: str) -> None:
 @contextlib.contextmanager
 def modal() -> Generator[tuple[Modal, ModalVolumeStore]]:
     with Modal(token=ModalToken.from_profile(PROFILE), region="us") as provider:
-        yield provider, ModalVolumeStore(RECORD_VOLUME, provider=provider)
+        yield provider, provider.record_store()
 
 
 def left(lease: sdk.Lease) -> str:

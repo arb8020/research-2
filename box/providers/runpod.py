@@ -115,6 +115,9 @@ class RunPod:
     def close(self) -> None:
         self.http.close()
 
+    def record_store(self) -> None:
+        return None
+
     def api(self, method: str, path: str, body: dict | None = None) -> dict | None:
         r = self.http.request(method, API + path, json=body, timeout=60)
         if r.status_code == 404 and method in ("GET", "DELETE"):
