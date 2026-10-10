@@ -126,12 +126,14 @@ def phase_c(state: Path) -> None:  # noqa: PLR0915
         live = provider.list({sdk.LABEL_SESSION: s.id})
         check(not live, f"provider.list for the session: {len(live)} live machines")
 
-        header("C: read_record() after the machine is gone (no machine, just the store)")
+        header("C: attach() and read_record() after the machine is gone (no machine, just the store)")
+        again = sdk.attach(provider, session_id=s.id, record=store)
         r = sdk.read_record(store, s.id)
         say(f"machine {r.machine_id}, labels box.purpose={r.labels.get('box.purpose')} box.name={r.labels.get(sdk.LABEL_NAME)}")
-        check(r.ended == sdk.Ended("stopped"), f"status: {r.ended}")
-        check(r.jobs() == [st["job_id"]] and isinstance(r.job_status(st["job_id"]), sdk.Done), f"job {st['job_id']}: {r.job_status(st['job_id'])}")
-        recorded = "".join(c.text for c in r.logs(st["job_id"]) if c.stream == "stdout")
+        check(again.status() == sdk.Ended("stopped"), f"status: {again.status()} (machine {again.machine})")
+        (recorded_job,) = again.jobs()
+        check(recorded_job.id == st["job_id"] and isinstance(recorded_job.status(), sdk.Done), f"job {st['job_id']}: {recorded_job.status()}")
+        recorded = "".join(c.text for c in recorded_job.logs() if c.stream == "stdout")
         for line in recorded.splitlines()[-3:]:
             say(f"| {line}")
         check(recorded == st["b_text"] + text, f"recorded stdout ({len(recorded)} bytes) == what B and C followed, byte for byte")
@@ -140,9 +142,7 @@ def phase_c(state: Path) -> None:  # noqa: PLR0915
             say(f"lease {e.op:<7} until {time.strftime('%H:%M:%S', time.localtime(e.until))}  at {time.strftime('%H:%M:%S', time.localtime(e.at))}  from {e.host} pid {e.pid} (x{e.n})")
         ops = [e.op for e in audit]
         check(ops[:2] == ["create", "extend"] and len({e.pid for e in audit[:2]}) == 2, f"lease audit: {ops} (create and extend from different processes)")
-        check(r.receipt == receipt, f"record's receipt == close()'s: {r.receipt}")
-        again = sdk.attach(provider, session_id=s.id, record=store)
-        check(again.status() == sdk.Ended("stopped"), f"attach(session_id, record=store) after it is gone: {again.status()} (machine {type(again.machine).__name__})")
+        check(r.receipt() == receipt, f"record's receipt == close()'s: {r.receipt()}")
 
 
 def driver(out: Path, gap_s: float) -> int:

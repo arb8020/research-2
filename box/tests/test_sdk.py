@@ -428,7 +428,7 @@ def test_a_session_lists_its_jobs_and_its_services_apart(launch: Callable) -> No
         server = s.serve("sleep 999")
         job = s.run("echo queued", max_duration_s=JOB_S)
         job.wait()
-        assert ([j.id for j in s.jobs()], [j.id for j in s.services()]) == ([job.id], [server.id])
+        assert ([j.id for j in s.jobs()], [j.id for j in s.jobs("services")]) == ([job.id], [server.id])
 
 
 def test_a_named_service_is_found_by_its_name_and_the_name_is_taken_once(launch: Callable) -> None:
@@ -436,7 +436,7 @@ def test_a_named_service_is_found_by_its_name_and_the_name_is_taken_once(launch:
         first = s.serve("sleep 999")
         named = s.serve("sleep 999", name="web")
         assert named.id == "web"
-        assert sorted(j.id for j in s.services()) == sorted([first.id, "web"])
+        assert sorted(j.id for j in s.jobs("services")) == sorted([first.id, "web"])
         with pytest.raises(sdk.Refused, match="already named 'web'"):
             s.serve("sleep 999", name="web")
         with pytest.raises(sdk.Refused, match="service name"):
