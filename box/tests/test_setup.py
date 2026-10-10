@@ -196,6 +196,27 @@ class NoSnapshots:
         self.inner.close()
 
 
+class StaysListed(NoSnapshots):
+    """A provider whose machines terminate but which says it still has them (one that may bill on)."""
+
+    def launch(self, **kw: object) -> sdk.Machine:
+        machine = self.inner.launch(**kw)
+
+        def gone() -> bool:
+            raise sdk.NotGone(f"{machine.id}: its provider still has it")
+
+        setattr(machine, "gone", gone)  # noqa: B010
+        return machine
+
+
+def test_a_machine_that_will_not_go_after_a_failed_setup_is_raised_not_swallowed(provider: Provider, name: str, spec: SetupSpec) -> None:
+    (spec.repo / ".box" / "setup").write_text("exit 7\n")
+    kw = providers.launch_kw(name) | ({} if name == "local" else {"image": providers.DEV_IMAGE})
+    with pytest.raises(sdk.NotGone, match="still has it") as raised:
+        sdk.create(StaysListed(provider), ceiling_s=600, setup=spec, **kw)
+    assert isinstance(raised.value.__context__, sdk.SetupFailed)  # the setup's own failure rides along
+
+
 def test_without_snapshots_every_boot_runs_the_setup(provider: Provider, name: str, spec: SetupSpec, store: Store) -> None:
     plain = NoSnapshots(provider)
     assert not isinstance(plain, Snapshotter)
