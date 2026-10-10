@@ -4,7 +4,8 @@ Connect path (connect_dev.py). Ports are free ones picked at start (never the au
     uv run --with playwright verify_workspace.py [--page ch00|ch01|all]   # sandbox = a local Jupyter (connect_dev --root)
     uv run --with playwright --with modal verify_workspace.py --modal --page ch00   # ch00 on a Modal CPU sandbox
 
-ch01's checks run the FAKE run_checks (fake_checks/, ref.TRUSTED_SRC) until the real check core lands.
+Checks run the real check core (blogs/assay, shipped as _blogs/assay/). Locally connect_dev.py runs under assay's uv
+env (`uv run --project assay python connect_dev.py`), so the kernel, workspace.py and run_checks have torch etc.
 
 Evidence goes to .evidence/verify_workspace/<page>/ (or verify_workspace-modal/; gitignored, kept until the next run):
 numbered screenshots, story.log (what each step saw), timings.json, git-log.txt (the workspace's history),
@@ -261,7 +262,7 @@ class Gateway:
     def __init__(self, port: int, box: Box, out: Path, boot_delay: float = 0.1) -> None:
         self.box = box
         self.log = (out / f"connect_dev-{box.name}.log").open("wb")
-        self.proc = subprocess.Popen(["uv", "run", "connect_dev.py", "--port", str(port), "--boot-delay", str(boot_delay), *box.gateway_args()],
+        self.proc = subprocess.Popen(["uv", "run", "--project", "assay", "python", "connect_dev.py", "--port", str(port), "--boot-delay", str(boot_delay), *box.gateway_args()],
                                      cwd=HERE, stdout=self.log, stderr=self.log)  # fmt: skip
         self.seen: set[int] = set()
         for _ in range(240):  # the first run installs jupyter_server
@@ -295,10 +296,11 @@ class Gateway:
 
 def doctor_page(name: str) -> str:
     dist = HERE / "dist" / name
-    for f in ("index.html", "page.js", "_blogs/workspace.py", "_blogs/checks/run_checks.py", "_blogs/MANIFEST.sha256", "ref.bundle"):
+    for f in ("index.html", "page.js", "_blogs/workspace.py", "_blogs/assay/cli.py", "_blogs/MANIFEST.sha256", "ref.bundle"):
         assert (dist / f).is_file(), f"the built page lacks {f}"
     listed = sorted(line.split("  ")[1] for line in (dist / "_blogs/MANIFEST.sha256").read_text().splitlines())
-    return f"doctor: {name} ships _blogs/ ({', '.join(listed)} + MANIFEST.sha256) + ref.bundle"
+    assert all(f == "workspace.py" or (f.startswith("assay/") and f.endswith(".py")) for f in listed), listed
+    return f"doctor: {name} ships _blogs/ (workspace.py + {len(listed) - 1} assay/*.py, all in MANIFEST.sha256) + ref.bundle"
 
 
 def doctor_box(box: Box) -> str:

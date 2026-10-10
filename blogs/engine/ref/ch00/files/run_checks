@@ -6,7 +6,9 @@
 
 JSON lines on stdout ({"kind": "log" | "verdict" | "summary"}); exit 0 pass, 1 fail, 2 infrastructure error.
 The core is trusted code that lives outside this tree: $BLOGS_ASSAY names the dir holding the `assay` package, else
-the nearest `_blogs/assay` above this file (the sandbox layout), else the blogs repo's own `assay/` above it.
+the nearest `_blogs/` above this file holding `assay/` (the sandbox layout: the page ships the package there), else the
+blogs repo's own `assay/` project above it. (The page doesn't run this file: workspace.py runs `python -P -m assay.cli`
+directly; this is for running checks by hand.)
 """
 
 import os
@@ -15,10 +17,11 @@ from pathlib import Path
 
 
 def assay_root() -> Path | None:
+    """The dir to put on sys.path: it holds the `assay` package."""
     if os.environ.get("BLOGS_ASSAY"):
         return Path(os.environ["BLOGS_ASSAY"])
     for parent in Path(__file__).resolve().parents:
-        for candidate in (parent / "_blogs" / "assay", parent / "assay"):
+        for candidate in (parent / "_blogs", parent / "assay", parent):
             if (candidate / "assay" / "cli.py").is_file():
                 return candidate
     return None

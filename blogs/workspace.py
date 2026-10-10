@@ -24,13 +24,17 @@ Layout under the root (the cwd: Jupyter's root_dir, where the kernel runs):
                           reader's drafts, written by the page through Jupyter's Contents API. The index always
                           equals HEAD: drafts are never staged, a pass commits exactly the bytes it checked.
     _blogs/workspace.py   this file   } trusted: shipped by the page, listed with their sha256 in
-    _blogs/checks/        check code  } _blogs/MANIFEST.sha256, verified before every check
+    _blogs/assay/         check core  } _blogs/MANIFEST.sha256, verified before every check (the `assay`
+                                        package: blogs/assay/assay, its .py files only)
     _blogs/tree/          where checks run: HEAD's tree with the cell's file replaced by the reader's working copy
                           (the whole file, as in the editor). Kept between checks so make only rebuilds what changed.
     _blogs/check.lock     one check at a time
 
 The manifest checks/<chapter>.json (in the repo, read at HEAD) lists the cells: {name, file, region, ops, cmd}. A
-cell's cmd[0] names a trusted command (COMMANDS); it never runs a program from the reader's tree.
+cell's cmd[0] names a trusted command (COMMANDS); it never runs a program from the reader's tree. It runs with this
+interpreter (the kernel's python: in the sandbox the image's, which has torch etc.; locally the one connect_dev.py
+runs under, see its docstring) as `python -P -m assay.cli`, with only _blogs/ on PYTHONPATH: -P keeps the cwd (the
+reader's tree) off sys.path, so a reader's `torch.py` or `assay.py` can't shadow what the trusted parent imports.
 
 Persistence: $BLOGS_WS_PERSIST names a directory that outlives the sandbox (locally any directory; on Modal a
 Volume mount). Every pass writes workspace.bundle there (temp + rename; the previous one is kept as
@@ -59,10 +63,10 @@ STATE = ROOT / "_blogs"
 CHECK_TREE = STATE / "tree"
 LOCK = STATE / "check.lock"
 TRUST_MANIFEST = "MANIFEST.sha256"  # in STATE: `<sha256>  <path under _blogs/>` per trusted file
-TRUSTED = ("workspace.py", "checks")  # what the manifest must cover exactly: this file + the check code dir
-# A manifest cmd's argv[0] -> its entry script in the trusted check dir (run with this interpreter: files uploaded
-# through the Contents API are not executable). The one place a new trusted command is named.
-COMMANDS = {"run_checks": "checks/run_checks.py"}
+TRUSTED = ("workspace.py", "assay")  # what the manifest must cover exactly: this file + the check core package
+# A manifest cmd's argv[0] -> the trusted module that runs it (`python -P -m <module>`, _blogs/ on PYTHONPATH; files
+# uploaded through the Contents API are not executable). The one place a new trusted command is named.
+COMMANDS = {"run_checks": "assay.cli"}
 BRANCH = "main"
 BUNDLE = "workspace.bundle"
 PREV_BUNDLE = "workspace.prev.bundle"
@@ -354,13 +358,13 @@ def commit_pass(chapter: str, cell: str, path: str, data: bytes, mode: int) -> s
     return commit
 
 
-def command_argv(cmd: list[str], trusted: Path) -> list[str]:
-    """A manifest cmd -> the argv that runs it: cmd[0] must be a trusted command (COMMANDS), run from `trusted`
-    (the dir holding checks/: _blogs/ in the sandbox; ref.py passes the page's copy)."""
-    entry = COMMANDS.get(cmd[0])
-    if entry is None:
+def command(cmd: list[str], trusted: Path, python: str = sys.executable) -> tuple[list[str], dict[str, str]]:
+    """A manifest cmd -> (argv, env additions) that run it: cmd[0] must be a trusted command (COMMANDS), its module
+    imported from `trusted` (the dir holding assay/: _blogs/ in the sandbox; ref.py passes a staged copy)."""
+    module = COMMANDS.get(cmd[0])
+    if module is None:
         raise Refused(f"the manifest's command {cmd[0]!r} is not a trusted command ({sorted(COMMANDS)})")
-    return [sys.executable, str(trusted / entry), *cmd[1:]]
+    return [python, "-P", "-m", module, *cmd[1:]], {"PYTHONPATH": str(trusted.resolve())}
 
 
 def check(chapter: str, cell: str, expected_manifest: str | None) -> int:
@@ -373,7 +377,7 @@ def check(chapter: str, cell: str, expected_manifest: str | None) -> int:
     if cell not in cells:
         raise Refused(f"{chapter} has no cell {cell!r}; its cells are {list(cells)}")
     c = cells[cell]
-    argv = command_argv(c["cmd"], STATE)
+    argv, extra = command(c["cmd"], STATE)
     path = c["file"]
     tree = head_tree()
     draft = (REPO / path).read_bytes()
@@ -383,7 +387,7 @@ def check(chapter: str, cell: str, expected_manifest: str | None) -> int:
     say(f"checking {chapter}/{cell} (ops {', '.join(c['ops']) or '-'}): passing tree {head} + your {path}"
         + (f" ({len(written)} file(s) changed)" if written else "") + f"; trusted code {fingerprint[:12]}")  # fmt: skip
     t_run = time.perf_counter()
-    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1"}
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1", **extra}
     try:
         rc = subprocess.run(argv, cwd=CHECK_TREE, env=env, timeout=CHECK_TIMEOUT_S, check=False).returncode
     except subprocess.TimeoutExpired:

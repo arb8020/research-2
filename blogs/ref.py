@@ -19,7 +19,8 @@ sandbox, the page and the check command read the same list. A cell's region name
 `# endregion` block in its file (display only: the page scrolls to and highlights it); the build checks it exists.
 
 The check command (cmd[0], e.g. run_checks) is trusted code, not part of the tree: TRUSTED_SRC below is the one place
-that says which directory the page ships as _blogs/checks/ and `verify` runs from.
+that says which package the page ships as _blogs/assay/ and `verify` runs from. `verify` runs it with assay's own uv
+env (blogs/assay: torch, transformers, einops, ...), the local stand-in for the sandbox image's python.
 """
 
 from __future__ import annotations
@@ -41,10 +42,11 @@ import workspace
 
 HERE = Path(__file__).resolve().parent
 REF = HERE / "engine" / "ref"
-# The trusted check code: shipped by the page as _blogs/checks/ (build_page.py), run by workspace.py. A FAKE that
-# speaks the run_checks contract until the real check core lands; then point this at it (its entry must be
-# run_checks.py at the top, or change workspace.COMMANDS).
-TRUSTED_SRC = HERE / "fake_checks"
+# The trusted check code: the check core package (blogs/assay/assay), shipped by the page as _blogs/assay/
+# (build_page.py) and run by workspace.py as `python -P -m assay.cli` (workspace.COMMANDS). Only its .py files ship:
+# no tests, venv, caches or notes.
+TRUSTED_SRC = HERE / "assay" / "assay"
+ASSAY_PROJECT = HERE / "assay"
 CHAPTER = re.compile(r"ch\d{2}")
 MAX_TREE_FILES = 2000  # a chapter tree past this is a mistake (build output copied in?)
 # Fixed identity and dates: the same reference always makes the same commits, so bundles are reproducible.
@@ -198,26 +200,55 @@ def reader_bundle(chapter: str, out: Path, root: Path = REF) -> Path:
 
 
 def stage_trusted(out: Path) -> str:
-    """Write the trusted code the page ships into `out` (its _blogs/): workspace.py, TRUSTED_SRC as checks/, and
-    MANIFEST.sha256 over both. Returns the manifest's sha256 (the page passes it to every check)."""
-    assert not (out / "checks").exists(), f"{out}/checks already exists"
+    """Write the trusted code the page ships into `out` (its _blogs/): workspace.py, TRUSTED_SRC's .py files as
+    assay/, and MANIFEST.sha256 over both. Returns the manifest's sha256 (the page passes it to every check)."""
+    assert not (out / "assay").exists(), f"{out}/assay already exists"
     out.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(HERE / "workspace.py", out / "workspace.py")
-    shutil.copytree(TRUSTED_SRC, out / "checks", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    for src in sorted(TRUSTED_SRC.rglob("*.py")):
+        if "__pycache__" in src.parts:
+            continue
+        dest = out / "assay" / src.relative_to(TRUSTED_SRC)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dest)
     text = workspace.manifest_lines(out)
     (out / workspace.TRUST_MANIFEST).write_text(text)
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def run_cell(cell: Cell, tree: Path, trusted: Path) -> int:
-    argv = workspace.command_argv(list(cell.cmd), trusted)
-    return subprocess.run(argv, cwd=tree, capture_output=True, text=True, check=False, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}).returncode
+def assay_python() -> str:
+    """The interpreter of assay's uv env (synced first): what runs checks outside the sandbox."""
+    out = subprocess.run(["uv", "run", "--project", str(ASSAY_PROJECT), "--frozen", "python", "-c", "import sys; print(sys.executable)"],
+                         capture_output=True, text=True, check=True)  # fmt: skip
+    return out.stdout.strip().splitlines()[-1]
+
+
+def run_cell(cell: Cell, tree: Path, trusted: Path, python: str) -> tuple[int, str]:
+    """(exit code, the last verdict-or-summary line that says why) of the cell's cmd on `tree`."""
+    argv, extra = workspace.command(list(cell.cmd), trusted, python)
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", **extra}
+    proc = subprocess.run(argv, cwd=tree, capture_output=True, text=True, check=False, env=env)
+    why = ""
+    for line in proc.stdout.splitlines():
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if rec.get("kind") == "verdict" and rec.get("outcome") in ("fail", "blocked") and not why:
+            why = f"{rec['outcome']}: {rec.get('op')} {rec.get('case')} {rec.get('dtype')}: {rec.get('notes', '')}"[:200]
+        if rec.get("kind") == "summary":
+            why = why or f"summary {rec.get('outcome')} {rec.get('counts')}"
+    if proc.returncode == 2:
+        why = f"infrastructure: {(proc.stdout + proc.stderr)[-1500:]}"
+    return proc.returncode, why
 
 
 def verify(chapter: str, root: Path = REF) -> bool:
     """Every cell's check passes on the reference solution, and fails with that cell's start file swapped in (else the
-    stub gives the reader nothing to do). Runs the trusted check code (TRUSTED_SRC), as the sandbox would."""
+    stub gives the reader nothing to do). Runs the staged trusted code (TRUSTED_SRC) with assay's python, as the
+    sandbox would with its image's."""
     ok = True
+    python = assay_python()
     with tempfile.TemporaryDirectory() as tmp:
         trusted = Path(tmp) / "_blogs"
         stage_trusted(trusted)
@@ -226,13 +257,13 @@ def verify(chapter: str, root: Path = REF) -> bool:
         write_tree(solution_tree, solution)
         start_tree = materialize(chapter, "start", root)
         for cell in cells(start_tree, chapter):
-            rc = run_cell(cell, solution, trusted)
-            print(f"{chapter} solution: {' '.join(cell.cmd)} -> exit {rc} (want 0)")
+            rc, why = run_cell(cell, solution, trusted, python)
+            print(f"{chapter} solution: {' '.join(cell.cmd)} -> exit {rc} (want 0) {why}", flush=True)
             ok &= rc == 0
             one = Path(tmp) / f"start-{cell.name}"
             write_tree({**solution_tree, cell.file: start_tree[cell.file]}, one)
-            rc = run_cell(cell, one, trusted)
-            print(f"{chapter} start {cell.file}: {' '.join(cell.cmd)} -> exit {rc} (want 1)")
+            rc, why = run_cell(cell, one, trusted, python)
+            print(f"{chapter} start {cell.file}: {' '.join(cell.cmd)} -> exit {rc} (want 1) {why}", flush=True)
             ok &= rc == 1
     return ok
 
