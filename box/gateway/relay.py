@@ -197,8 +197,8 @@ def digest(token: ModalToken) -> str:
     return hashlib.sha256(f"{token.id}:{token.secret}".encode()).hexdigest()
 
 
-def wire(state: str, gpu: str | None, started_at: float, lease: sdk.Lease, **extra: Any) -> dict[str, Any]:  # MUST KILL: emits `deadline`, a copy of lease_until kept for pages from before the lease; drop it once pages read lease_until
-    return {"state": state, "gpu": gpu, "started_at": started_at, "deadline": lease.until, "lease_until": lease.until, "ceiling": lease.ceiling, **extra}
+def wire(state: str, gpu: str | None, started_at: float, lease: sdk.Lease, **extra: Any) -> dict[str, Any]:
+    return {"state": state, "gpu": gpu, "started_at": started_at, "lease_until": lease.until, "ceiling": lease.ceiling, **extra}
 
 
 def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: bool) -> dict[str, Any]:

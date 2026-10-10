@@ -392,7 +392,7 @@ def test_lease_s_is_an_integer_minute_to_twelve_hours(make_relay: Callable[..., 
     events(gw, sid, "running")
     running = status(gw, sid)[1]
     assert running["ceiling"] - running["lease_until"] == pytest.approx(relay.READER_CEILING_S - 60, abs=2)
-    assert running["deadline"] == running["lease_until"]  # the old name, for older pages
+    assert "deadline" not in running  # lease_until only: the old copy is gone
     assert running["ceiling"] - running["started_at"] <= relay.READER_CEILING_S  # 12 h from creation, not from boot
 
 
