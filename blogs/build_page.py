@@ -10,16 +10,20 @@ run `npm ci` there once).
 
 cell=X     -> <code-cell> editor prefilled with the stub, Run button, output pane
 given      -> collapsed, read-only code (the reader calls into it, so they can read it)
-```K cell=X file=F, on a <!-- page: workspace=chNN --> page -> <ws-cell>: a whole-file editor over the reader's
-                      workspace file F (ws.py in their sandbox); the fence body is optional and, if there, must equal F at
-                      chNN/start (ref.py). Its check=X fence is one shell command (run_checks chNN X), run by ws.py check
+```K cell=X file=F, on a <!-- page: workspace=chNN --> page -> <ws-cell>: an editor over the reader's workspace
+                      file F (workspace.py in their sandbox), scrolled to the cell's region (checks/chNN.json); cells
+                      over one file share one document. The fence body is optional and, if there, must equal F at
+                      chNN/start (ref.py). Run runs the cell's cmd from checks/chNN.json (no check= fence)
 ```K given file=F (workspace page) -> read-only view of F at chNN/start; output lines naming F link to it
 ```python scratch -> <scratch-cell>: editable, Run executes on the Connect session's kernel; no checks, no gating
 <!-- page: connect --> on its own line -> this page has the header Connect control (gateway: --gateway-url);
                       a page with scratch cells or workspace cells must have it
 <!-- page: workspace=chNN --> -> the page's file= cells are chapter chNN of the reference (engine/ref/chNN); the page
-                      ships ws.py and the chapter's start bundle (ref.bundle) for the sandbox
+                      ships _blogs/ (workspace.py + the trusted check code + MANIFEST.sha256, ref.stage_trusted) and
+                      the chapter's start bundle (ref.bundle) for the sandbox
 solution=X, check=X, budget=X -> not in the page; the session runs them
+workspace solutions (ref/chNN/files) -> only each region cell's own region, in a <template class="reference"> inside
+                      that <ws-cell> (the cell's "reference" toggle shows it read-only); never the whole file
 <!-- ... --> on its own line -> a muted "todo" note
 <!-- wip: ... --> on its own line -> a visible "under construction" banner (🚧 + the text), for readers
 <X-play></X-play>, X a C cell -> <env-play cell=X>, the wasm play widget (reference env until X passes)
@@ -54,17 +58,15 @@ from check import HIDDEN, ROLES, Block, cell_order, parse
 HERE = Path(__file__).parent
 PAGE_FLAG = re.compile(r"^<!--\s*page:\s*(\S+)\s*-->\s*$", re.MULTILINE)
 PAGE_FLAGS = ("connect", "workspace")
-CHECK_COMMAND = re.compile(r"[\w./=-]+(?: [\w./=-]+)*")  # ws.py splits it on spaces: no quoting
 
 
 class Workspace(NamedTuple):
-    """A workspace chapter's reference: its start tree, its cells (checks/chNN.json) and their check commands."""
+    """A workspace chapter's reference: its start and solution trees and its cells (checks/chNN.json)."""
 
     chapter: str
     start: ref.Tree
     solution: ref.Tree
     cells: list[ref.Cell]
-    checks: dict[str, str]  # cell name -> the check fence's command
 
 
 @functools.cache
@@ -77,13 +79,16 @@ def workspace_of(chapter: Path) -> Workspace | None:
     assert len(flags) == 1, f"{chapter}: more than one workspace flag {flags}"
     name = flags[0].removeprefix("workspace=")
     start = ref.materialize(name, "start")
-    checks: dict[str, str] = {}
     for b in parse(text):
-        if b.role == "check":
-            command = b.source.strip()
-            assert CHECK_COMMAND.fullmatch(command), f"line {b.line}: check={b.name} must be one command without quoting, got {b.source!r}"
-            checks[b.name] = command
-    return Workspace(name, start, ref.materialize(name, "solution"), ref.cells(start, name), checks)
+        assert b.role != "check", f"line {b.line}: check={b.name}: a workspace cell's check is its cmd in checks/{name}.json, not a fence"
+    return Workspace(name, start, ref.materialize(name, "solution"), ref.cells(start, name))
+
+
+@functools.cache
+def trusted_sha() -> str:
+    """The sha256 of the MANIFEST.sha256 the page ships (what workspace.py check --trusted compares against)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        return ref.stage_trusted(Path(tmp) / "_blogs")
 
 
 def workspace_file(ws: Workspace | None, b: Block, body: str) -> str:
@@ -96,8 +101,24 @@ def workspace_file(ws: Workspace | None, b: Block, body: str) -> str:
     if b.role == "cell":
         owned = {c.name: c.file for c in ws.cells}
         assert owned.get(b.name) == b.file, f"line {b.line}: cell={b.name} file={b.file}, but checks/{ws.chapter}.json says {owned.get(b.name)}"
-        assert b.name in ws.checks, f"line {b.line}: cell={b.name} has no check={b.name} fence"
     return text
+
+
+def region_text(tree: ref.Tree, file: str, region: str) -> str | None:
+    """The lines strictly between `# region: <region>` and its `# endregion` in file, or None if a marker is missing."""
+    text = tree[file].data.decode()
+    span = ref.region_span(text, region)
+    return None if span is None else "\n".join(text.split("\n")[span[0] : span[1] - 1])
+
+
+def solution_region(ws: Workspace, c: ref.Cell) -> str:
+    """Cell c's region of the solution: what its "reference" toggle shows."""
+    assert c.region is not None, f"cell {c.name} has no region"
+    assert c.file in ws.solution, f"cell {c.name}: {c.file} is not in {ws.chapter}/solution"
+    found = region_text(ws.solution, c.file, c.region)
+    assert found is not None, (f"cell {c.name}: {ws.chapter}/solution's {c.file} has no `# region: {c.region}` ... `# endregion` "
+                               f"(the reference toggle shows that region); add the markers in engine/ref/{ws.chapter}/files/{c.file}")
+    return found
 
 
 def render_workspace_fence(chapter: Path, b: Block, preview: bool) -> str:
@@ -108,8 +129,13 @@ def render_workspace_fence(chapter: Path, b: Block, preview: bool) -> str:
     assert ws is not None  # workspace_file asserted it
     file = html.escape(b.file)
     if b.role == "cell" and not preview:
-        return (f'<ws-cell name="{b.name}" data-file="{file}" data-lang="{b.lang}" data-chapter="{ws.chapter}" '
-                f'data-check="{html.escape(ws.checks[b.name])}" data-not-typeset><pre>{text}</pre></ws-cell>\n')
+        c = next(c for c in ws.cells if c.name == b.name)
+        region = f' data-region="{html.escape(c.region)}"' if c.region else ""
+        # The cell's "reference" toggle: its region of the solution, in a <template> (inert, not shown until asked).
+        reference = f'<template class="reference">{html.escape(solution_region(ws, c))}</template>' if c.region else ""
+        return (f'<ws-cell name="{b.name}" data-file="{file}" data-lang="{b.lang}" data-chapter="{ws.chapter}"{region} '
+                f'data-ops="{html.escape(" ".join(c.ops))}" data-trusted="{trusted_sha()}" data-not-typeset>'
+                f'<pre>{text}</pre>{reference}</ws-cell>\n')
     what = f"{b.name} cell · read-only here" if b.role == "cell" else "given · read-only"
     # A link card (preview) must not claim the file: output links would jump into the card instead of the page.
     claim = "" if preview else f' data-file="{file}"'
@@ -182,8 +208,6 @@ def markdown(chapter: Path, kinds: dict[str, embeds.Embed], preview: bool) -> Ma
         file = next((v for k, _, v in (i.partition("=") for i in info) if k == "file"), "")
         if file:
             return render_workspace_fence(chapter, Block(lang, role, name, tokens[idx].content, line, file), preview)
-        if role == "check" and workspace_of(chapter) is not None:
-            return ""  # a workspace check's command rides on its ws-cell (data-check)
         src = html.escape(tokens[idx].content)
         if "scratch" in info:
             assert not role, f"line {line}: a scratch block can't also be {role}={name}"
@@ -294,10 +318,20 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
     ws_cells = re.findall(r'<ws-cell name="(\w+)"', body)
     if ws is not None:
         assert ws_cells == [c.name for c in ws.cells], f"{chapter}: the page's workspace cells {ws_cells} differ from checks/{ws.chapter}.json {[c.name for c in ws.cells]}"
+        # The solution is never in the page, except each cell's own region of it inside that cell's reference payload.
+        payloads = re.findall(r'<ws-cell name="(\w+)"[^>]*>(?:(?!</ws-cell>).)*?<template class="reference">(.*?)</template>', body, re.DOTALL)
+        outside = re.sub(r'<template class="reference">.*?</template>', "", body, flags=re.DOTALL)
         for c in ws.cells:
             assert html.escape(ws.solution[c.file].data.decode()) not in body, f"the solution of {c.file} leaked into the page"
+            if c.region is None:
+                continue
+            want = html.escape(solution_region(ws, c))
+            assert payloads.count((c.name, want)) == 1, f"cell {c.name}: its reference payload is not its solution region"
+            if want != html.escape(region_text(ws.start, c.file, c.region) or ""):  # a region the reader starts with solved is no secret
+                assert want not in outside, f"cell {c.name}: its solution region leaked into the page outside its reference"
+                assert sum(want in p for _, p in payloads) == 1, f"cell {c.name}: its solution region is in another cell's reference"
     for b in blocks:
-        if b.role in HIDDEN and not (ws is not None and b.role == "check"):
+        if b.role in HIDDEN:
             assert html.escape(b.source) not in body, f"{b.role}={b.name} (line {b.line}) leaked into the page"
 
     flags = PAGE_FLAG.findall(text)
@@ -318,7 +352,9 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
     for f in ("build/page.js", "build/settings.js", "page.css", "typeset.css", "play.html"):
         shutil.copy(HERE / "web" / f, out / Path(f).name)
     if ws is not None:
-        shutil.copy(HERE / "ws.py", out / "ws.py")  # the page uploads both into the sandbox (web/workspace.ts)
+        # The page uploads _blogs/ and ref.bundle into the sandbox (web/workspace.ts); cells carry the manifest's sha256.
+        shutil.rmtree(out / "_blogs", ignore_errors=True)
+        assert ref.stage_trusted(out / "_blogs") == trusted_sha(), "the trusted code changed during the build"
         ref.reader_bundle(ws.chapter, out / "ref.bundle")
 
     if envs:
