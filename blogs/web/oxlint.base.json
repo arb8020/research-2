@@ -7,8 +7,9 @@
 //
 // Provenance: section 2 is a port of the rules ESLint enabled via @eslint/js recommended +
 // typescript-eslint strictTypeChecked + stylisticTypeChecked (eslint 9.39.5, typescript-eslint 8.71.1),
-// with the options  reported. Not portable (no oxlint equivalent):
-//   @typescript-eslint/no-unsafe-enum-assignment, no-octal (tsc already rejects legacy octal in strict/ESM code).
+// with the options `eslint --print-config` reported. Not portable (no oxlint equivalent):
+//   @typescript-eslint/no-unsafe-enum-assignment (no enums in blogs/web today),
+//   no-octal (tsc already rejects legacy octal literals: TS1121).
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["eslint", "typescript", "unicorn"],
