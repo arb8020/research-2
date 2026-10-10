@@ -61,9 +61,9 @@ export function parseLine(line: string): Line {
   return { kind: "text", text: line };
 }
 
-// The gate metrics a row prefers to show (blogs/assay: err as a fraction of its budget, per-position KL, tokens), in
+// The gate metrics a row prefers to show (blogs/assay: the worst error as a fraction of its allclose tolerance, per-position KL, tokens), in
 // order.
-const KEY_METRICS: readonly (readonly [string, string])[] = [["ratio", "err/budget"], ["kl_max", "KL max"], ["first_diff", "first bad token"], ["tokens", "tokens"]];
+const KEY_METRICS: readonly (readonly [string, string])[] = [["ratio", "err/tol"], ["kl_max", "KL max"], ["first_diff", "first bad token"], ["tokens", "tokens"]];
 const shown = (x: number | undefined): string | undefined =>
   x === undefined ? undefined : Number.isFinite(x) ? String(Number(x.toPrecision(3))) : Number.isNaN(x) ? "nan" : x > 0 ? "inf" : "-inf";
 

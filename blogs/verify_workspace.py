@@ -37,8 +37,9 @@ Phases (the shape a verify-blogs skill can call one by one):
                 pass/ch01/linear on exactly that text, the bundle saved
              2  edit gelu in the gelu cell; undo (Mod-z) from the attention cell undoes it everywhere (one history
                 per file), redo restores it; exact erf GELU typed in -> Run gelu -> FAIL rows reading
-                "budget: err X > budget Y" (err/budget > 1), nothing committed; tanh restored -> PASS, every row
-                err/budget < 1 (fp32 + bf16 cases + coverage)
+                "allclose: |out - fp64 truth| up to Xx the tolerance" (err/tol > 1 at fp32; fp16/bf16 miss it by
+                design), nothing committed; tanh restored -> PASS, every row err/tol < 1 (fp32 + bf16 cases +
+                coverage; fp16 a visible SKIP on CPU, rows on a GPU)
              3  a syntax error planted in the forward region; Run layer_norm -> BLOCKED with gpt2.py:L (forward); the
                 link puts the cursor on line L in the forward cell (the one whose region holds it); nothing committed
              4  syntax fixed; Run forward with attention still a stub -> FAIL "NotImplementedError: self_attention:
@@ -100,6 +101,7 @@ CHROME = sorted(glob.glob(os.path.expanduser(
 TOKEN = ("ak-verify-workspace-0001", "as-verify-workspace-secret")
 SOLUTION = {path: f.data.decode() for path, f in ref.materialize(CH, "solution").items()}
 BROKEN_STATEMENT = "    r->tail += 1;\n"  # in ring_push; the broken ring.cpp drops its ';'
+TOL_FAIL = "allclose: |out - fp64 truth| up to "  # an op row failing its tolerance (assay ch01 suite.py)
 HANG = "void sched_step(const Request* reqs, Ring* waiting, u32 budget, Batch* out) {\n"
 SCRATCH = "print('scratch ran while the check was running:', 6 * 7)"
 CHECK_TIMEOUT_MS = 180_000  # a cold ch01 model check computes HF's fp64 truth first
@@ -641,27 +643,28 @@ def ch01_gelu(run: Run, box: Box) -> None:
     record(run, "gelu, exact-GELU bug (warm process, cold store)", "gelu", took)
     assert status.startswith("failed"), status
     bad = [r for r in rows(page, "gelu") if r["outcome"] == "fail"]
-    assert bad and bad[0]["notes"].startswith("budget: err "), bad[:1]
-    worst = max(metric_value(r, "err/budget") for r in bad)
+    assert bad and bad[0]["notes"].startswith(TOL_FAIL), bad[:1]
+    assert {r["dtype"] for r in bad} == {"fp32"}, "exact GELU is under fp16/bf16's tolerance: only fp32 rows catch it"
+    worst = max(metric_value(r, "err/tol") for r in bad)
     assert worst > 1 and "(gelu)" in bad[0]["notes"], bad[0]
     assert head(box) == before and "pass/ch01/gelu" not in refs(box), "a failing check committed"
     run.shot("2-gelu-planted-bug", "gelu")
     run.say(f"2 gelu edited in its cell, mirrored into attention's view; Mod-z in the attention cell undid it everywhere, Mod-Shift-z "
             f"redid it; then exact erf GELU typed in -> Run -> '{status}' in {took:.2f}s: {len(bad)} failing rows, e.g. "
-            f"'{bad[0]['case']} {bad[0]['dtype']}: {bad[0]['notes']}' ({bad[0]['metric']}; worst {worst:.3g}x its budget); nothing committed")  # fmt: skip
+            f"'{bad[0]['case']} {bad[0]['dtype']}: {bad[0]['notes']}' ({bad[0]['metric']}; worst {worst:.3g}x its tolerance); nothing committed")  # fmt: skip
     replace_in_view(page, "gelu", GELU_ERF, GELU_TANH)
     status, _, took = run_cell(page, "gelu")
     record(run, "gelu, fixed (warm process, cold store)", "gelu", took)
     assert status.startswith("passed"), status
-    got = rows(page, "gelu")
+    got = [r for r in rows(page, "gelu") if r["outcome"] != "skip"]  # fp16 on CPU: a visible skip
     assert got and all(r["outcome"] == "pass" for r in got), got
-    ratios = [metric_value(r, "err/budget") for r in got if r["metric"].startswith("err/budget")]
+    ratios = [metric_value(r, "err/tol") for r in got if r["metric"].startswith("err/tol")]
     assert ratios and max(ratios) < 1, ratios
     assert any(r["case"].endswith("coverage") for r in got), "no coverage row"
     assert page.locator("ws-cell[name=gelu] .check-summary").inner_text().startswith("PASS")
     run.shot("2-gelu-pass", "gelu")
-    run.say(f"2 tanh GELU restored -> Run -> '{status}' in {took:.2f}s: {len(got)} rows PASS ({len(ratios)} cases, fp32 + bf16, "
-            f"err at most {max(ratios):.3g}x its budget; + coverage)")  # fmt: skip
+    run.say(f"2 tanh GELU restored -> Run -> '{status}' in {took:.2f}s: {len(got)} rows PASS ({len(ratios)} cases, "
+            f"{'+'.join(sorted({r['dtype'] for r in got} - {'*'}))}, err at most {max(ratios):.3g}x its tolerance; + coverage)")  # fmt: skip
 
 
 def ch01_blocked(run: Run, box: Box) -> None:
@@ -739,7 +742,7 @@ def ch01_attention_and_model(run: Run, box: Box) -> None:
     record(run, "attention, scale missing (warm process, cold store)", "attention", took)
     assert status.startswith("failed"), status
     bad = [r for r in rows(page, "attention") if r["outcome"] == "fail"]
-    assert bad and bad[0]["notes"].startswith("budget: err "), bad[:1]
+    assert bad and bad[0]["notes"].startswith(TOL_FAIL), bad[:1]
     assert "pass/ch01/attention" not in refs(box)
     run.shot("6-attention-no-scale", "attention")
     run.say(f"6 attention without / sqrt(H) -> '{status}' in {took:.2f}s: {len(bad)} failing rows, e.g. "
@@ -749,7 +752,7 @@ def ch01_attention_and_model(run: Run, box: Box) -> None:
     record(run, "attention, fixed (warm process, cold store)", "attention", took)
     assert status.startswith("passed"), status
     run.say(f"6 attention fixed -> '{status}' in {took:.2f}s ({len(rows(page, 'attention'))} rows)")
-    for cell, label in (("block", "err/budget"), ("forward", "KL max")):
+    for cell, label in (("block", "err/tol"), ("forward", "KL max")):
         status, _, took = run_cell(page, cell)
         record(run, f"{cell}, correct (warm process; HF's truth cached by the stub run above)", cell, took)
         assert status.startswith("passed"), f"{status}\n{page.locator(f'ws-cell[name={cell}] .cell-out').inner_text()[-2000:]}"
