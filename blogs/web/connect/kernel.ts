@@ -18,6 +18,8 @@
 // can't set headers on a WebSocket, and query-only auth keeps fetches simple (no CORS preflight).
 
 import JOBS_PY from "./jobs.py";
+import { isJsonObject } from "../json";
+import type { JsonObject } from "../json";
 
 export interface KernelAddress {
   url: string;
@@ -48,23 +50,27 @@ interface Msg {
   type: string;
   parent: string | undefined;
   channel: string;
-  content: Record<string, unknown>;
+  content: JsonObject;
 }
 
-const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
-
 function parseMsg(raw: unknown): Msg {
-  if (!isRecord(raw) || !isRecord(raw["header"]) || typeof raw["header"]["msg_type"] !== "string" || !isRecord(raw["content"])) {
+  if (!isJsonObject(raw) || !isJsonObject(raw["header"]) || typeof raw["header"]["msg_type"] !== "string" || !isJsonObject(raw["content"])) {
     throw new Error(`kernel websocket: expected a Jupyter message, got ${JSON.stringify(raw).slice(0, 200)}`);
   }
-  const parent = isRecord(raw["parent_header"]) && typeof raw["parent_header"]["msg_id"] === "string" ? raw["parent_header"]["msg_id"] : undefined;
+  const parent = isJsonObject(raw["parent_header"]) && typeof raw["parent_header"]["msg_id"] === "string" ? raw["parent_header"]["msg_id"] : undefined;
   return { type: raw["header"]["msg_type"], parent, channel: typeof raw["channel"] === "string" ? raw["channel"] : "", content: raw["content"] };
 }
 
-const text = (content: Record<string, unknown>, key: string): string => {
+const text = (content: JsonObject, key: string): string => {
   const v = content[key];
   return typeof v === "string" ? v : "";
 };
+
+// The content of an execute_request (the only request the page sends with a non-empty content).
+interface ExecuteRequest {
+  code: string; silent: boolean; store_history: boolean; user_expressions: Record<string, never>;
+  allow_stdin: boolean; stop_on_error: boolean;
+}
 
 interface Gone { gone: string } // the socket closed or the kernel died before a reply
 type Handler = (msg: Msg | Gone) => void;
@@ -104,10 +110,10 @@ class Kernel {
     this.set("attaching");
     try {
       const listed: unknown = await (await fetch(this.api("/api/kernels"))).json();
-      const first = Array.isArray(listed) ? listed.find(isRecord) : undefined;
+      const first = Array.isArray(listed) ? listed.find(isJsonObject) : undefined;
       // No Content-Type: a text/plain body keeps this a simple request; Jupyter parses it as JSON anyway.
       const kernel: unknown = first ?? await (await fetch(this.api("/api/kernels"), { method: "POST", body: JSON.stringify({ name: "python3" }) })).json();
-      if (!isRecord(kernel) || typeof kernel["id"] !== "string") throw new Error(`kernel: /api/kernels gave no id: ${JSON.stringify(kernel)}`);
+      if (!isJsonObject(kernel) || typeof kernel["id"] !== "string") throw new Error(`kernel: /api/kernels gave no id: ${JSON.stringify(kernel)}`);
       this.id = kernel["id"];
       await this.open();
       this.set("idle");
@@ -160,7 +166,7 @@ class Kernel {
     this.request("kernel_info_request", "control").catch(() => { this.ws?.close(); });
   }
 
-  private send(type: string, content: Record<string, unknown>, channel = "shell"): string {
+  private send(type: string, content: ExecuteRequest | Record<string, never>, channel = "shell"): string {
     if (this.ws?.readyState !== WebSocket.OPEN) throw new Error("kernel: socket not open");
     const id = crypto.randomUUID();
     this.ws.send(JSON.stringify({
@@ -220,7 +226,7 @@ class Kernel {
         if ("gone" in msg) { finish({ status: "aborted", reason: msg.gone }); return; }
         const c = msg.content;
         if (msg.type === "stream") (text(c, "name") === "stderr" ? onStderr : onStdout)(text(c, "text"));
-        else if ((msg.type === "execute_result" || msg.type === "display_data") && isRecord(c["data"])) {
+        else if ((msg.type === "execute_result" || msg.type === "display_data") && isJsonObject(c["data"])) {
           const plain = c["data"]["text/plain"];
           onStdout(typeof plain === "string" ? `${plain}\n` : `[${Object.keys(c["data"]).join(", ")} output not shown]\n`);
         } else if (msg.type === "execute_reply") reply = parseReply(c);
@@ -266,7 +272,7 @@ class Kernel {
         if ("gone" in msg) { finish({ status: "aborted", reason: msg.gone }); return; }
         const c = msg.content;
         if (msg.type === "stream") onOutput(text(c, "text"));
-        else if (msg.type === "display_data" && isRecord(c["data"]) && isRecord(c["data"][JOB_MIME])) {
+        else if (msg.type === "display_data" && isJsonObject(c["data"]) && isJsonObject(c["data"][JOB_MIME])) {
           const marker = c["data"][JOB_MIME];
           if (typeof marker["exit"] !== "number") throw new Error(`kernel: job marker without an exit code: ${JSON.stringify(marker)}`);
           finish({ status: "exited", exit: marker["exit"] });
@@ -286,7 +292,7 @@ class Kernel {
   }
 }
 
-function parseReply(c: Record<string, unknown>): RunResult {
+function parseReply(c: JsonObject): RunResult {
   const status = text(c, "status");
   if (status === "ok") return { status: "ok" };
   if (status === "aborted") return { status: "aborted", reason: "the kernel skipped it (an earlier cell failed)" };

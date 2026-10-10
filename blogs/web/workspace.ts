@@ -11,6 +11,7 @@
 import { makeDir, readText, writeBytes, writeText } from "./connect/contents";
 import { killJob, onKernelState, runCode, runJob } from "./connect/kernel";
 import type { JobResult } from "./connect/kernel";
+import { isJsonObject } from "./json";
 
 const DIR = "workspace"; // workspace.py's REPO, relative to Jupyter's root (the kernel's cwd)
 // Not a dot-dir: the Contents API refuses hidden paths (ContentsManager.allow_hidden is off), and its error replies
@@ -42,12 +43,11 @@ export interface WorkspaceStatus {
 export type Created = "seeded" | "restored" | "restored-previous" | "existing";
 export interface Boot { created: Created; ms: number; status: WorkspaceStatus }
 
-const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 const fail = (what: string, raw: unknown): never => { throw new Error(`workspace.py: expected ${what}, got ${JSON.stringify(raw).slice(0, 300)}`); };
 const isStrings = (x: unknown): x is string[] => Array.isArray(x) && x.every((s) => typeof s === "string");
 
 function parseCell(raw: unknown): CellStatus {
-  if (!isRecord(raw)) return fail("a cell status", raw);
+  if (!isJsonObject(raw)) return fail("a cell status", raw);
   const { name, file, region, ops, passed, stale, draft } = raw;
   if (typeof name !== "string" || typeof file !== "string" || !(typeof region === "string" || region === null) || !isStrings(ops)
     || typeof passed !== "boolean" || typeof stale !== "boolean" || typeof draft !== "boolean") {
@@ -57,13 +57,13 @@ function parseCell(raw: unknown): CellStatus {
 }
 
 function parseStatus(raw: unknown): WorkspaceStatus {
-  if (!isRecord(raw) || typeof raw["chapter"] !== "string" || typeof raw["head"] !== "string" || !Array.isArray(raw["cells"])) {
+  if (!isJsonObject(raw) || typeof raw["chapter"] !== "string" || typeof raw["head"] !== "string" || !Array.isArray(raw["cells"])) {
     return fail("{chapter, head, cells, persist}", raw);
   }
   const p = raw["persist"];
   let persist: WorkspaceStatus["persist"] = null;
   if (p !== null) {
-    if (!isRecord(p) || typeof p["dir"] !== "string" || typeof p["bundle_bytes"] !== "number") return fail("persist {dir, bundle_bytes} or null", p);
+    if (!isJsonObject(p) || typeof p["dir"] !== "string" || typeof p["bundle_bytes"] !== "number") return fail("persist {dir, bundle_bytes} or null", p);
     persist = { dir: p["dir"], bundleBytes: p["bundle_bytes"] };
   }
   return { chapter: raw["chapter"], head: raw["head"], cells: raw["cells"].map(parseCell), persist };
@@ -71,7 +71,7 @@ function parseStatus(raw: unknown): WorkspaceStatus {
 
 const CREATED: readonly Created[] = ["seeded", "restored", "restored-previous", "existing"];
 function parseBoot(raw: unknown): Boot {
-  if (!isRecord(raw) || typeof raw["ms"] !== "number") return fail("{created, ms, status}", raw);
+  if (!isJsonObject(raw) || typeof raw["ms"] !== "number") return fail("{created, ms, status}", raw);
   const created = CREATED.find((c) => c === raw["created"]);
   if (created === undefined) return fail(`created in ${CREATED.join("|")}`, raw["created"]);
   return { created, ms: raw["ms"], status: parseStatus(raw["status"]) };

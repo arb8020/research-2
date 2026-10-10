@@ -4,6 +4,8 @@
 import source from "./remote_train.py"; // the program's text, bundled at build time (esbuild text loader)
 import type { Activation, Adam, Batch, Grads, Mlp, Task } from "./mlp";
 import { INPUT_SCALE } from "./datasets";
+import { isJsonObject } from "../../json";
+import type { JsonObject } from "../../json";
 
 // Plot grids the remote predicts on. The curve: points evenly across the plot's x (the browser samples every
 // 2 CSS px, ~320 points at full width). The spiral heatmap: a square raster, coarser than the browser's (up to
@@ -190,26 +192,25 @@ export function loadState(net: Mlp, opt: Adam, state: NetState): void {
 }
 
 // Parsing helpers, shared with grok.ts (its lines cross the same network).
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
-export function record(v: unknown, where: string): Record<string, unknown> {
-  if (!isRecord(v)) throw new Error(`${where}: expected an object`);
+export function record(v: unknown, where: string): JsonObject {
+  if (!isJsonObject(v)) throw new Error(`${where}: expected an object`);
   return v;
 }
 
-export function str(obj: Record<string, unknown>, key: string, where: string): string {
+export function str(obj: JsonObject, key: string, where: string): string {
   const v = obj[key];
   if (typeof v !== "string") throw new Error(`${where}: ${key} must be a string`);
   return v;
 }
 
-export function num(obj: Record<string, unknown>, key: string, where: string): number {
+export function num(obj: JsonObject, key: string, where: string): number {
   const v = obj[key];
   if (typeof v !== "number") throw new Error(`${where}: ${key} must be a number`);
   return v;
 }
 
-export function int(obj: Record<string, unknown>, key: string, where: string): number {
+export function int(obj: JsonObject, key: string, where: string): number {
   const v = num(obj, key, where);
   if (!Number.isInteger(v) || v < 0) throw new Error(`${where}: ${key} must be a non-negative integer`);
   return v;
@@ -221,7 +222,7 @@ export function numOrNaN(v: unknown, where: string): number {
   return v;
 }
 
-function optional(obj: Record<string, unknown>, key: string, where: string): number | null {
+function optional(obj: JsonObject, key: string, where: string): number | null {
   return obj[key] === null ? null : num(obj, key, where);
 }
 

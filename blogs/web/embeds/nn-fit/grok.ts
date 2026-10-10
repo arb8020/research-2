@@ -5,6 +5,7 @@
 import source from "./grok_train.py"; // the program's text, bundled at build time (esbuild text loader)
 import type { StopReason } from "./remote";
 import { int, num, numOrNaN, reason, record, str } from "./remote";
+import type { JsonObject } from "../../json";
 
 export const GROK_P = 113; // Nanda et al. 2023's modulus
 export const TRAIN_FRACTIONS: readonly number[] = [0.3, 0.4, 0.5]; // 0.3 is Nanda's; more pairs grok in fewer steps
@@ -72,7 +73,7 @@ export type GrokLine =
   | ({ readonly kind: "tick" } & GrokPoint)
   | { readonly kind: "end"; readonly reason: StopReason; readonly step: number; readonly seconds: number };
 
-function fraction(obj: Record<string, unknown>, key: string, where: string): number {
+function fraction(obj: JsonObject, key: string, where: string): number {
   const v = num(obj, key, where);
   if (v < 0 || v > 1) throw new Error(`${where}: ${key} must be in 0..1`);
   return v;
