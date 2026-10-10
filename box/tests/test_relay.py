@@ -129,6 +129,7 @@ def test_connect_run_a_cell_end(make_relay: Callable[..., str]) -> None:
     assert (out.status, out.stdout) == ("ok", "42\n")
     code, body, _ = call(f"{gw}/sessions/{sid}/end", "POST", headers={"X-Box-Token": AUTH})
     assert (code, body["status"]["state"], body["status"]["reason"]) == (200, "ended", "stopped")
+    assert body["status"]["started_at"] == running["started_at"]  # the recorded start, not one made up
     assert status(gw, sid) == (200, body["status"])  # the machine is gone: its record answers
     assert status(gw, "s-000000000000")[0] == 404  # a session nobody recorded is unknown
 
@@ -322,7 +323,8 @@ def test_a_log_line_reaches_the_event_stream_well_under_a_second_after_it_is_wri
     gw = make_relay()
     sid = create(gw)
     wait_running(gw, sid)
-    jupyter = sdk.attach(Local(tmp_path / "machines"), session_id=sid).services()[0]
+    jupyter = relay.kernel_service(sdk.attach(Local(tmp_path / "machines"), session_id=sid))
+    assert jupyter is not None
     arrived: dict[str, float] = {}  # log line -> when the stream delivered it
     stream = threading.Thread(target=lambda: [arrived.setdefault(e.get("text", ""), time.monotonic()) for _, e in events(gw, sid, "ended", on_event=True)])
     stream.start()
@@ -392,7 +394,7 @@ def test_lease_s_is_an_integer_minute_to_twelve_hours(make_relay: Callable[..., 
     events(gw, sid, "running")
     running = status(gw, sid)[1]
     assert running["ceiling"] - running["lease_until"] == pytest.approx(relay.READER_CEILING_S - 60, abs=2)
-    assert running["deadline"] == running["lease_until"]  # the old name, for older pages
+    assert "deadline" not in running  # lease_until only: the old copy is gone
     assert running["ceiling"] - running["started_at"] <= relay.READER_CEILING_S  # 12 h from creation, not from boot
 
 
@@ -436,3 +438,42 @@ def test_image_and_volume_flags_reach_the_modal_provider() -> None:
         assert access.provider.volumes == {"/ws": "blogs-ws", "/hf": "weights"}
     finally:
         access.close()
+
+
+class NeverGone(Counted):
+    """A provider whose machines terminate but which says it still has them (a sandbox that may bill on)."""
+
+    def launch(self, **kw: object) -> object:
+        return NeverGoneMachine(self.inner.launch(**kw))
+
+
+class NeverGoneMachine:
+    def __init__(self, inner: object) -> None:
+        self.inner = inner
+
+    def gone(self) -> bool:
+        raise sdk.NotGone(f"{self.inner.id}: its provider still has it")
+
+    def __getattr__(self, attr: str) -> object:
+        return getattr(self.inner, attr)
+
+
+def test_a_machine_that_will_not_go_after_a_failed_boot_is_said_not_swallowed(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    provider = NeverGone(Local(tmp_path / "machines"), [])
+    cfg = relay.Config(
+        access=lambda token: relay.Access(provider, DirStore(tmp_path / "records")), image=None, gpus=(None,),
+        labels={"box.purpose": "relay-test"}, origins=re.compile(relay.LOCAL_ORIGIN), python="false", ip="127.0.0.1", port=free_port,
+    )  # fmt: skip
+    server = relay.serve(cfg, free_port())
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    gw = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        got = events(gw, create(gw), "ended")
+    finally:
+        server.shutdown()
+        server.server_close()
+    steps = [e["text"] for _, e in got if e["kind"] == "step"]
+    assert any("may still be running (and billing)" in s for s in steps), steps
+    assert got[-1][1]["status"]["reason"] == "boot_failed"
+    wide = [json.loads(line) for line in capsys.readouterr().err.splitlines() if line.startswith("{")]
+    assert [e["event"] for e in wide if e.get("event")] == ["not_gone"], wide

@@ -19,7 +19,17 @@ from urllib.parse import quote
 
 from box import gpus
 from box.providers.pump import READ_BYTES, Closed, Emit, Pumped
-from box.sdk import BACKSTOP_MARGIN_S, LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken
+from box.sdk import (
+    BACKSTOP_MARGIN_S,
+    LABEL_BY,
+    LABEL_NAME,
+    Dropped,
+    Endpoint,
+    Gone,
+    NameTaken,
+    Refused,
+    Shell,
+)
 from box.store import Mount
 
 T = TypeVar("T")
@@ -153,6 +163,7 @@ class Backend(Protocol):
     def assignments(self) -> list[Assignment]: ...
     def unassign(self, endpoint: str) -> None: ...
     def runtime(self, assignment: Assignment) -> Runtime: ...
+    def root(self, endpoint: str) -> str: ...
     def close(self) -> None: ...
 
 
@@ -160,18 +171,16 @@ class Colab:
     name = "colab"
 
     def __init__(
-        self, backend: Backend, *, allow_free: bool = False, max_runtime_s: int = MAX_RUNTIME_S,
-        root: str = ROOT, log: TextIO = sys.stderr,
+        self, backend: Backend, *, allow_free: bool = False, max_runtime_s: int = MAX_RUNTIME_S, log: TextIO = sys.stderr,
     ) -> None:  # fmt: skip
         assert max_runtime_s > BACKSTOP_MARGIN_S, max_runtime_s
         self.backend = backend
         self.allow_free = allow_free
         self.max_runtime_s = max_runtime_s
-        self.root = root
         self.log = log
         self.closed = False
         # a kernel websocket runs a non-daemon thread (jupyter_kernel_client) that holds the process open at exit
-        self._machines: dict[int, ColabMachine] = {}  # MUST KILL: keyed by id() because ColabMachine.__eq__/__hash__ compare runtime ids; hold machines in a list, or drop the custom equality
+        self._machines: dict[str, ColabMachine] = {}
 
     @classmethod
     def from_env(cls) -> Colab:
@@ -191,16 +200,16 @@ class Colab:
     ) -> ColabMachine:  # fmt: skip
         backstop_at = int(time.time()) + timeout_s
         if image is not None:
-            raise ValueError(f"colab provider: Colab runs its own image; got image={image!r} (install what the job needs in the job)")
+            raise Refused(f"colab provider: Colab runs its own image; got image={image!r} (install what the job needs in the job)")
         if ports:
-            raise ValueError(f"colab provider: no ports (got {ports}): Colab's terms forbid web services and proxies")
+            raise Refused(f"colab provider: no ports (got {ports}): Colab's terms forbid web services and proxies")
         if mounts:
-            raise ValueError(
+            raise Refused(
                 f"colab provider: Colab has no volumes, so nothing can be mounted (got {[m.store.uri for m in mounts]}), "
                 "and a Colab session has no durable record (record=): get results out before it ends"
             )  # fmt: skip
         if timeout_s > self.max_runtime_s:
-            raise ValueError(self._past_max_runtime(timeout_s))
+            raise Refused(self._past_max_runtime(timeout_s))
         accelerator = colab_accelerator(gpu)
         # Colab runtimes have no names: this check races
         if LABEL_NAME in labels and self.list({LABEL_NAME: labels[LABEL_NAME]}):
@@ -223,7 +232,7 @@ class Colab:
             raise LookupError(f"colab provider: no runtime {machine_id} on this account")
         machine = self._ours(found[0])
         if machine is None:
-            raise LookupError(f"colab provider: {machine_id} was not launched by box (no {self.root_of(machine_id)}/{META})")
+            raise LookupError(f"colab provider: {machine_id} was not launched by box (no {self.backend.root(machine_id)}/{META})")
         return machine
 
     def list(self, labels: dict[str, str] | None = None) -> list[ColabMachine]:
@@ -242,7 +251,7 @@ class Colab:
     def _ours(self, a: Assignment) -> ColabMachine | None:
         runtime = self.backend.runtime(a)
         try:
-            meta = parse_meta(runtime.get_file(f"{self.root_of(a.endpoint)}/{META}"))
+            meta = parse_meta(runtime.get_file(f"{self.backend.root(a.endpoint)}/{META}"))
         except FileNotFoundError:
             return None
         finally:
@@ -251,16 +260,13 @@ class Colab:
             return None
         return self._track(ColabMachine(self, a, meta["labels"], exec_kernel=meta["exec_kernel"]))
 
-    def root_of(self, machine_id: str) -> str:  # MUST KILL: root is a template with "{machine}" only so the test fake can host many runtimes on one computer; let the fake give each machine its root
-        return self.root.replace("{machine}", machine_id)
-
     def _track(self, machine: ColabMachine) -> ColabMachine:
         assert not self.closed, "colab provider: closed"
-        self._machines[id(machine)] = machine
-        return machine
+        return self._machines.setdefault(machine.id, machine)
 
     def _untrack(self, machine: ColabMachine) -> None:
-        self._machines.pop(id(machine), None)
+        if self._machines.get(machine.id) is machine:
+            del self._machines[machine.id]
 
     def _past_max_runtime(self, timeout_s: int) -> str:
         ceiling_h = (timeout_s - BACKSTOP_MARGIN_S) / 3600
@@ -291,7 +297,7 @@ class ColabMachine:
         self.colab = colab
         self.id = assignment.endpoint
         self.labels = labels
-        self.root = colab.root_of(self.id)
+        self.root = colab.backend.root(self.id)
         self.work = self.root.rsplit("/", 1)[0] + "/work"
         self._assignment = assignment
         self._exec_kernel = exec_kernel
@@ -327,7 +333,7 @@ class ColabMachine:
 
     def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Pumped:
         if pty:
-            raise ValueError("colab provider: no pty: a kernel cell takes no stdin, so nothing could type into it (Ctrl-C is close())")
+            raise Refused("colab provider: no pty: a kernel cell takes no stdin, so nothing could type into it (Ctrl-C is close())")
         runtime = self._connection()
         try:
             kernel = runtime.start_kernel()
@@ -352,7 +358,10 @@ class ColabMachine:
                     elif kind == "t":
                         raise TimeoutError(f"colab: {self.id}: stream of `{cmd[:80]}` ran past its cell's own bound; killed")
             except (Unreachable, KernelGone) as e:
-                raise self._gone_or(e) from e
+                gone = self._gone_or(e)
+                if isinstance(gone, Gone):
+                    raise gone from e
+                raise Dropped(f"colab: {self.id}: the stream of `{cmd[:80]}` dropped: {e!r}") from e
             finally:
                 with contextlib.suppress(Exception):
                     runtime.shutdown_kernel(kernel)
@@ -386,10 +395,10 @@ class ColabMachine:
         return self._call(lambda rt: rt.get_file(path))
 
     def expose(self, port: int) -> Endpoint:
-        raise ValueError(f"colab provider: cannot expose port {port}: Colab's terms forbid web services and proxies")
+        raise Refused(f"colab provider: cannot expose port {port}: Colab's terms forbid web services and proxies")
 
-    def shell_argv(self, cmd: str) -> list[str]:
-        raise ValueError("colab provider: no shell: Colab's terminal is in its UI only, and a kernel cell is not one (stream runs commands)")
+    def shell(self, cmd: str) -> Shell:
+        raise Refused("colab provider: no shell: Colab's terminal is in its UI only, and a kernel cell is not one (stream runs commands)")
 
     def terminate(self) -> None:
         self._drop_connection()
@@ -518,10 +527,10 @@ def colab_accelerator(gpu: str | None) -> str:
         return CPU
     name, _, count = gpu.partition(":")
     if count not in ("", "1"):
-        raise ValueError(f"colab provider: one accelerator per runtime; got {gpu!r}")
+        raise Refused(f"colab provider: one accelerator per runtime; got {gpu!r}")
     accelerator = gpus.provider_id(gpus.lookup(name), "colab")
     if accelerator is None:
-        raise ValueError(f"colab provider: Colab does not rent {name!r}; it rents {', '.join(g.name for g in gpus.GPUS if g.colab)}")
+        raise Refused(f"colab provider: Colab does not rent {name!r}; it rents {', '.join(g.name for g in gpus.GPUS if g.colab)}")
     assert accelerator in GPU_ACCELERATORS + TPU_ACCELERATORS, accelerator
     return accelerator
 
@@ -633,6 +642,9 @@ class CliBackend:
 
     def runtime(self, assignment: Assignment) -> CliRuntime:
         return CliRuntime(assignment.url, assignment.token)
+
+    def root(self, endpoint: str) -> str:
+        return ROOT
 
     def close(self) -> None:
         self.http.close()

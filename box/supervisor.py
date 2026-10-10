@@ -34,12 +34,20 @@ MAX_SERVICES = 8
 KINDS = ("jobs", "services")
 LEASE_OPS = ("create", "extend", "release")
 MAX_LEASE_AUDIT = 1024
+PR_SET_PDEATHSIG = 1
 
 
-def main() -> None:  # MUST KILL: main() dispatches the `lease` mode while __main__ dispatches `tail`; route every mode in one place
-    if sys.argv[1:2] == ["lease"]:
-        lease_main(sys.argv[2:])
-        return
+def main(argv: list[str]) -> None:
+    match argv[:1]:
+        case ["lease"]:
+            lease_main(argv[1:])
+        case ["tail"]:
+            tail_main(argv[1:])
+        case _:
+            supervise_main(argv)
+
+
+def supervise_main(argv: list[str]) -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--root", required=True)
     p.add_argument("--created-at", type=float, required=True, help="unix time the client created the session")
@@ -47,7 +55,7 @@ def main() -> None:  # MUST KILL: main() dispatches the `lease` mode while __mai
     p.add_argument("--ceiling", type=float, required=True, help="unix time no lease can pass")
     p.add_argument("--host", required=True, help="the creating client's host, for the lease audit")
     p.add_argument("--pid", type=int, required=True, help="the creating client's pid, for the lease audit")
-    p.add_argument("--session-id", default="", help="written into ROOT/up: whose supervisor is up (a snapshot can hold another's)")
+    p.add_argument("--session-id", required=True, help="written into ROOT/up: whose supervisor is up (a snapshot can hold another's)")
     p.add_argument("--idle-timeout-s", type=float, default=0.0, help="end after this long with no job and no connection; 0 = never")
     p.add_argument("--ports", type=lambda s: [int(p) for p in s.split(",") if p], default=[], help="exposed ports, comma-separated")
     p.add_argument("--record", default="", help="record the session into this directory (a mounted store), relative to --root")
@@ -56,16 +64,16 @@ def main() -> None:  # MUST KILL: main() dispatches the `lease` mode while __mai
         "--on-shutdown", default=os.environ.get("BOX_ON_SHUTDOWN", ""),
         help="bash run last, to end the machine itself (a provider sets BOX_ON_SHUTDOWN, e.g. its API's delete)",
     )  # fmt: skip
-    a = p.parse_args()
+    a = p.parse_args(argv)
     assert a.created_at < a.lease_until, (a.created_at, a.lease_until)
     assert a.lease_until <= a.ceiling, (a.lease_until, a.ceiling)
     assert a.ceiling <= a.created_at + MAX_CEILING_S, (a.created_at, a.ceiling)
     root = Path(a.root)
     for kind in KINDS:
         (root / kind).mkdir(parents=True, exist_ok=True)
-    write_json(root / "session.json", {"started_at": time.time(), "created_at": a.created_at, "ceiling": a.ceiling})
-    write_json(root / "lease.json", {"until": a.lease_until, "ceiling": a.ceiling, "released": False})
-    write_json(root / "lease-audit.json", [audit_entry("create", a.lease_until, a.created_at, a.host, a.pid)])
+    put(root / "session.json", json.dumps({"started_at": time.time(), "created_at": a.created_at, "ceiling": a.ceiling}).encode())
+    put(root / "lease.json", json.dumps({"until": a.lease_until, "ceiling": a.ceiling, "released": False}).encode())
+    put(root / "lease-audit.json", json.dumps([audit_entry("create", a.lease_until, a.created_at, a.host, a.pid)]).encode())
     recorder = Recorder(root, root / a.record, sync=a.record_sync) if a.record else None
     try:
         if recorder:
@@ -73,16 +81,18 @@ def main() -> None:  # MUST KILL: main() dispatches the `lease` mode while __mai
         (root / "activity").touch()
         (root / "up").write_text(a.session_id)
         reason = supervise(root, a.idle_timeout_s, a.ports)
-        ended = {"reason": reason, "at": time.time()}
-        if recorder:
-            recorder.finish(ended)
     finally:
         if recorder:
             recorder.close()
-    write_json(root / "ended.json", ended)
-    linger(root)
-    if a.on_shutdown:
-        subprocess.run(["bash", "-c", a.on_shutdown], check=False)
+    ended = {"reason": reason, "at": time.time()}
+    try:
+        if recorder:
+            recorder.finish(ended)
+    finally:
+        put(root / "ended.json", json.dumps(ended).encode())
+        linger(root)
+        if a.on_shutdown:
+            subprocess.run(["bash", "-c", a.on_shutdown], check=False)
 
 
 def lease_main(argv: list[str]) -> None:
@@ -103,9 +113,9 @@ def change_lease(root: Path, op: str, until: float, host: str, pid: int) -> dict
         now = time.time()
         changed = next_lease(lease, op, until, now)
         if changed != lease:
-            write_json(root / "lease.json", changed)
+            put(root / "lease.json", json.dumps(changed).encode())
             audit = json.loads((root / "lease-audit.json").read_text())
-            write_json(root / "lease-audit.json", next_audit(audit, audit_entry(op, changed["until"], now, host, pid)))
+            put(root / "lease-audit.json", json.dumps(next_audit(audit, audit_entry(op, changed["until"], now, host, pid))).encode())
     return changed
 
 
@@ -181,12 +191,12 @@ def tend_services(root: Path, services: dict[Path, subprocess.Popen]) -> None:
         if job_dir in services or (job_dir / "status.json").exists() or not (job_dir / "spec.json").exists():
             continue
         if len(services) >= MAX_SERVICES:
-            write_json(job_dir / "status.json", {"state": "done", "reason": "refused", "exit_code": None, "ended": time.time()})
+            put(job_dir / "status.json", json.dumps({"state": "done", "reason": "refused", "exit_code": None, "ended": time.time()}).encode())
             continue
         spec = json.loads((job_dir / "spec.json").read_text())
         env = {**spec.get("env", {}), "BOX_JOB_ID": job_dir.name, "BOX_JOB_DIR": str(job_dir)}
         services[job_dir] = child = spawn(spec["cmd"], env, job_dir, stdout=job_dir / "stdout", stderr=job_dir / "stderr")
-        write_json(job_dir / "status.json", {"state": "running", "started": time.time(), "pgid": child.pid})
+        put(job_dir / "status.json", json.dumps({"state": "running", "started": time.time(), "pgid": child.pid}).encode())
     for job_dir, child in services.items():
         if child.poll() is None and (job_dir / "kill").exists():
             kill_group(child)
@@ -206,7 +216,7 @@ def stop_services(services: dict[Path, subprocess.Popen], reason: str) -> None:
 
 def end_service(job_dir: Path, reason: str, code: int | None) -> None:
     status = json.loads((job_dir / "status.json").read_text())
-    write_json(job_dir / "status.json", {**status, "state": "done", "reason": reason, "exit_code": code, "ended": time.time()})
+    put(job_dir / "status.json", json.dumps({**status, "state": "done", "reason": reason, "exit_code": code, "ended": time.time()}).encode())
 
 
 def service_state(job_dir: Path) -> str:
@@ -266,7 +276,7 @@ def run_job(root: Path, job_dir: Path, tick: Callable[[], None]) -> None:
     child = spawn(spec["cmd"], spec["env"], job_dir, stdout=job_dir / "stdout", stderr=job_dir / "stderr")
     killed_at = time.monotonic() + max_duration_s
     status = {"state": "running", "started": time.time(), "pgid": child.pid}
-    write_json(job_dir / "status.json", status)
+    put(job_dir / "status.json", json.dumps(status).encode())
 
     reason = None
     while (code := child.poll()) is None:
@@ -279,13 +289,17 @@ def run_job(root: Path, job_dir: Path, tick: Callable[[], None]) -> None:
     reason = reason or "exited"
 
     status.update(state="hook" if spec.get("on_exit") else "done", reason=reason, exit_code=code, ended=time.time())
-    write_json(job_dir / "status.json", status)
-    if spec.get("on_exit"):
-        env = {**spec["env"], "BOX_EXIT_CODE": str(code), "BOX_REASON": reason}
-        timeout = max(0.0, min(budget, read_lease(root)["ceiling"] - time.time()))
-        status["hook_exit_code"] = run_hook(spec["on_exit"], env, job_dir, timeout)
-        status["state"] = "done"
-        write_json(job_dir / "status.json", status)
+    if not spec.get("on_exit"):
+        put(job_dir / "status.json", json.dumps(status).encode())
+        return
+    env = {**spec["env"], "BOX_EXIT_CODE": str(code), "BOX_REASON": reason}
+    timeout = max(0.0, min(budget, read_lease(root)["ceiling"] - time.time()))
+    hook = spawn(spec["on_exit"], env, job_dir, stdout=job_dir / "hook.stdout", stderr=job_dir / "hook.stderr")
+    status["hook_pgid"] = hook.pid
+    put(job_dir / "status.json", json.dumps(status).encode())
+    status["hook_exit_code"] = wait_hook(hook, timeout)
+    status["state"] = "done"
+    put(job_dir / "status.json", json.dumps(status).encode())
 
 
 def spawn(cmd: str, env: dict[str, str], job_dir: Path, *, stdout: Path, stderr: Path) -> subprocess.Popen:
@@ -298,7 +312,7 @@ def spawn(cmd: str, env: dict[str, str], job_dir: Path, *, stdout: Path, stderr:
 
 def die_with_parent() -> None:
     if sys.platform == "linux":
-        ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGKILL)  # MUST KILL: magic prctl option 1; name it PR_SET_PDEATHSIG
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(PR_SET_PDEATHSIG, signal.SIGKILL)
 
 
 def kill_group(child: subprocess.Popen) -> None:
@@ -314,8 +328,7 @@ def kill_group(child: subprocess.Popen) -> None:
             continue
 
 
-def run_hook(cmd: str, env: dict[str, str], job_dir: Path, timeout: float) -> int | None:
-    hook = spawn(cmd, env, job_dir, stdout=job_dir / "hook.stdout", stderr=job_dir / "hook.stderr")
+def wait_hook(hook: subprocess.Popen, timeout: float) -> int | None:
     try:
         return hook.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -329,7 +342,10 @@ def recorded_spec(raw: bytes) -> bytes:
     return json.dumps({**spec, "env": sorted(spec.get("env", {}))}).encode()
 
 
-class Recorder:  # MUST KILL: fail-open rests on two blind `except Exception` in run() and finish() (was noqa BLE001); catch the store's failures (OSError, CalledProcessError) only
+STORE_FAILURES = (OSError, subprocess.CalledProcessError)
+
+
+class Recorder:
     def __init__(self, root: Path, dest: Path, *, sync: bool) -> None:
         self.root = root
         self.dest = dest
@@ -357,7 +373,7 @@ class Recorder:  # MUST KILL: fail-open rests on two blind `except Exception` in
             self.flush(final=True)
             put(self.dest / "ended.json", json.dumps(ended).encode())
             self.commit()
-        except Exception as e:
+        except STORE_FAILURES as e:
             print(f"box supervisor: recording into {self.dest} failed at the end: {e!r}", file=sys.stderr, flush=True)
 
     def run(self) -> None:
@@ -367,7 +383,7 @@ class Recorder:  # MUST KILL: fail-open rests on two blind `except Exception` in
                 continue
             try:
                 self.flush(final=False)
-            except Exception as e:
+            except STORE_FAILURES as e:
                 print(f"box supervisor: recording into {self.dest} stopped: {e!r}", file=sys.stderr, flush=True)
                 return
             last = time.monotonic()
@@ -446,12 +462,6 @@ def put(path: Path, data: bytes) -> None:
     tmp.replace(path)
 
 
-def write_json(path: Path, data: dict | list) -> None:  # MUST KILL: duplicates put() (same tmp + rename, different tmp name); merge them
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data))
-    tmp.replace(path)
-
-
 TAIL_TICK_S = 0.05
 TAIL_BEAT_S = 1.0
 TAIL_FRAME_BYTES = 256 * 1024
@@ -502,7 +512,4 @@ def tail_main(argv: list[str]) -> None:
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["tail"]:
-        tail_main(sys.argv[2:])
-    else:
-        main()
+    main(sys.argv[1:])

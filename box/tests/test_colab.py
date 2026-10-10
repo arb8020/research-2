@@ -31,11 +31,11 @@ def log() -> io.StringIO:
 
 
 @pytest.fixture
-def colab(backend: FakeBackend, tmp_path: Path, log: io.StringIO) -> Iterator[Callable[..., Colab]]:
+def colab(backend: FakeBackend, log: io.StringIO) -> Iterator[Callable[..., Colab]]:
     made: list[Colab] = []
 
     def make(**kw: object) -> Colab:
-        made.append(Colab(backend, root=str(tmp_path / "content" / "{machine}" / "box"), log=log, **kw))
+        made.append(Colab(backend, log=log, **kw))
         return made[-1]
 
     yield make
@@ -106,7 +106,7 @@ def test_a_pty_and_a_shell_are_refused_and_a_plain_stream_still_works(colab: Cal
         with pytest.raises(ValueError, match="no pty: a kernel cell takes no stdin"):
             s.stream("bash", pty=True)
         with pytest.raises(ValueError, match="no shell"):
-            s.shell_argv()
+            s.shell()
         with s.stream("echo plain", timeout_s=60) as stream:
             assert b"".join(data for _, data in stream) == b"plain\n"
 
@@ -215,14 +215,14 @@ def test_gone_after_terminate(colab: Callable) -> None:
     assert machine.gone()
 
 
-def test_a_session_that_ends_by_itself_unassigns_its_runtime_from_inside(colab: Callable, backend: FakeBackend, tmp_path: Path) -> None:
+def test_a_session_that_ends_by_itself_unassigns_its_runtime_from_inside(colab: Callable, backend: FakeBackend) -> None:
     """No client terminates it: the supervisor ends (released) and BOOT calls the runtime's own
     unassign, as google.colab.runtime.unassign() does."""
     s = sdk.launch(colab(), ceiling_s=600)
     s.release()
     eventually(lambda: backend.assignments() == [])
     assert s.machine.gone()
-    assert "supervisor exited 0" in (tmp_path / "content" / s.machine.id / "box" / "shutdown.log").read_text()
+    assert "supervisor exited 0" in (Path(s.machine.root) / "shutdown.log").read_text()
 
 
 def test_the_backstop_unassigns_a_runtime_whose_supervisor_never_ends(colab: Callable, backend: FakeBackend) -> None:

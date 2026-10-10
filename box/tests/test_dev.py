@@ -291,14 +291,15 @@ def test_a_log_follow_does_not_keep_a_session_from_going_idle(dev: Callable, sca
 
 
 @pytest.mark.needs("shell")
-def test_shell_argv_gives_a_shell_in_cwd_that_keeps_the_session_used(dev: Callable, name: str) -> None:
+def test_shell_gives_a_shell_in_cwd_that_keeps_the_session_used(dev: Callable, name: str) -> None:
     if name != "local":
-        pytest.skip("runs the argv with a pipe for its terminal; `modal shell` wants a real one")
+        pytest.skip("runs the shell with a pipe for its terminal; `modal shell` wants a real one")
     s = dev(ceiling_s=600, idle_timeout_s=8)
     remote(s, f"mkdir -p {s.machine.work}/here")
     before = float(remote(s, f"stat -f %m {s.machine.root}/activity || stat -c %Y {s.machine.root}/activity"))
     time.sleep(1.1)
-    done = subprocess.run(s.shell_argv(cwd=f"{s.machine.work}/here"), input="pwd; exit 3\n", capture_output=True, text=True, timeout=60)
+    shell = s.shell(cwd=f"{s.machine.work}/here")
+    done = subprocess.run(shell.argv, env={**os.environ, **shell.env}, input="pwd; exit 3\n", capture_output=True, text=True, timeout=60)
     assert done.returncode == 3, done.stderr
     assert done.stdout.strip().endswith("/work/here")
     after = float(remote(s, f"stat -f %m {s.machine.root}/activity || stat -c %Y {s.machine.root}/activity"))
@@ -401,3 +402,43 @@ def test_a_sync_is_use_and_a_run_sees_the_synced_code(dev: Callable, repo: Path,
     job = s.run(f"cd {shlex.quote(s.machine.work)}/repo && cat pkg/a.txt", max_duration_s=JOB_S)
     assert job.wait() == Ending("exited", 0)
     assert "".join(c.text for c in job.logs()) == "a\n"
+
+
+def answered_ok(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url + "/", timeout=10) as r:
+            return r.read() == b"ok"
+    except (urllib.error.URLError, ConnectionError):
+        return False
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_the_proxy_serves_on_after_its_session_is_gone_but_not_after_a_bug_in_marking_it_used(capsys: pytest.CaptureFixture) -> None:
+    import http.server
+
+    class Ok(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(200)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    upstream = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Ok)
+    threading.Thread(target=upstream.serve_forever, daemon=True).start()
+    endpoint = sdk.Endpoint(f"http://127.0.0.1:{upstream.server_address[1]}")
+    try:
+        for failure, served in ((sdk.Gone("the machine is gone"), True), (KeyError("a bug"), False)):
+
+            def on_use(e: BaseException = failure) -> None:
+                raise e
+
+            with Proxy(endpoint, on_use=on_use, every_s=3600) as proxy:
+                assert answered_ok(proxy.url) is served, failure
+                assert proxy._inflight == 0
+    finally:
+        upstream.shutdown()
+        upstream.server_close()
+    assert "marking the session used failed: Gone" in capsys.readouterr().err

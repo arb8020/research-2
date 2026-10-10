@@ -153,7 +153,8 @@ def driver(out: Path, gap_s: float) -> int:
         for phase, wait_s in (("a", gap_s), ("b", 5.0), ("c", 0.0)):
             t = time.monotonic()
             proc = subprocess.Popen([sys.executable, __file__, phase, "--state", str(state)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            for line in proc.stdout:  # MUST KILL: proc.stdout is Optional (was type: ignore[union-attr]); assert it before iterating
+            assert proc.stdout is not None, "Popen(stdout=PIPE) has a stdout"
+            for line in proc.stdout:
                 sys.stdout.write(line)
                 sys.stdout.flush()
                 f.write(line)

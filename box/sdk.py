@@ -49,6 +49,7 @@ MAX_KEEP_EVERY_S = 3600
 POLL_S = 0.5
 RECORD_PATH = "record"
 SESSION_ID = re.compile(r"s-[0-9a-f]{12}")
+SERVICE_NAME = re.compile(r"[a-z][a-z0-9-]{0,31}")
 T = TypeVar("T")
 STREAMS = ("stdout", "stderr")
 LogCursor = tuple[int, int]
@@ -62,6 +63,14 @@ SETUP_FAIL_TAIL = 4000
 
 
 class Gone(Exception):
+    pass
+
+
+class Refused(ValueError):
+    pass
+
+
+class Dropped(ConnectionError):
     pass
 
 
@@ -87,7 +96,7 @@ class Machine(Protocol):
     def read(self, path: str) -> bytes: ...
     def terminate(self) -> None: ...
     def expose(self, port: int) -> Endpoint: ...
-    def shell_argv(self, cmd: str) -> list[str]: ...
+    def shell(self, cmd: str) -> Shell: ...
     def gone(self) -> bool: ...
 
 
@@ -101,6 +110,46 @@ class Provider(Protocol):
     def get(self, machine_id: str) -> Machine: ...
     def list(self, labels: dict[str, str] | None = None) -> list[Machine]: ...
     def close(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class Dockerfile:
+    path: Path
+
+
+@dataclass(frozen=True)
+class RegistryImage:
+    ref: str
+
+
+@dataclass(frozen=True)
+class SnapshotImage:
+    provider: str
+    id: str
+
+
+Image = Dockerfile | RegistryImage | SnapshotImage
+SNAPSHOT_REF = re.compile(r"(modal|local)-snapshot:(.+)")
+
+
+def parse_image(image: str) -> Image:
+    if snapshot := SNAPSHOT_REF.fullmatch(image):
+        return SnapshotImage(provider=snapshot[1], id=snapshot[2])
+    if image.lower().endswith("dockerfile"):
+        return Dockerfile(Path(image))
+    return RegistryImage(image)
+
+
+def snapshot_ref(provider: str, snapshot_id: str) -> str:
+    ref = f"{provider}-snapshot:{snapshot_id}"
+    assert parse_image(ref) == SnapshotImage(provider, snapshot_id), ref
+    return ref
+
+
+@dataclass(frozen=True)
+class Shell:
+    argv: list[str]
+    env: dict[str, str] = field(default_factory=dict, repr=False)
 
 
 @dataclass(frozen=True)
@@ -163,9 +212,12 @@ class Receipt:
         return self.ended.reason != "machine_lost"
 
 
+JobEndReason = Literal["exited", "killed", "timeout", "lease", "released", "stopped", "idle", "refused"]
+
+
 @dataclass(frozen=True)
 class Ending:
-    reason: str  # MUST KILL: a free str whose values only the deleted docstring listed (exited, killed, timeout, lease, released, stopped, idle, refused); make it a Literal like EndReason
+    reason: JobEndReason
     exit_code: int | None
     hook_exit_code: int | None = None
 
@@ -225,18 +277,18 @@ def _create(  # noqa: PLR0913
 ) -> Session:  # fmt: skip
     session_id = new_session_id() if session_id is None else session_id
     if not SESSION_ID.fullmatch(session_id):
-        raise ValueError(f"session_id {session_id!r} is not one new_session_id() makes")
+        raise Refused(f"session_id {session_id!r} is not one new_session_id() makes")
     if clash := sorted(set(labels or {}) & set(RESERVED)):
-        raise ValueError(f"labels {clash} are box's own (launch stamps them)")
+        raise Refused(f"labels {clash} are box's own (launch stamps them)")
     if name is not None and not NAME.fullmatch(name):
-        raise ValueError(f"name {name!r}: letters, digits, '.', '_', '-', at most 63, starting with a letter or digit")
+        raise Refused(f"name {name!r}: letters, digits, '.', '_', '-', at most 63, starting with a letter or digit")
     if not 0 <= idle_timeout_s <= MAX_CEILING_S:
-        raise ValueError(f"idle_timeout_s={idle_timeout_s}: 0 (never idle) to {MAX_CEILING_S} s")
+        raise Refused(f"idle_timeout_s={idle_timeout_s}: 0 (never idle) to {MAX_CEILING_S} s")
     lease_s = ceiling_s if lease_s is None else lease_s
     if not 0 < ceiling_s <= MAX_CEILING_S:
-        raise ValueError(f"ceiling_s={ceiling_s}: a ceiling is more than 0 and at most {MAX_CEILING_S} s (48 h)")
+        raise Refused(f"ceiling_s={ceiling_s}: a ceiling is more than 0 and at most {MAX_CEILING_S} s (48 h)")
     if not 0 < lease_s <= ceiling_s:
-        raise ValueError(f"lease_s={lease_s}: a lease is more than 0 and at most the ceiling ({ceiling_s} s)")
+        raise Refused(f"lease_s={lease_s}: a lease is more than 0 and at most the ceiling ({ceiling_s} s)")
     created_at = time.time()
     lease = Lease(until=created_at + lease_s, ceiling=created_at + ceiling_s)
     assert created_at < lease.until
@@ -276,13 +328,15 @@ def _create_set_up(provider: Provider, spec: SetupSpec, *, image: str | None, en
     from box import setup_cache as sc
 
     record: Store | None = kw["record"]
-    snaps = isinstance(provider, sc.Snapshotter)
-    if snaps and record is None:
-        raise ValueError(f"{provider.name} provider snapshots its setup: pass record= (the store that remembers which snapshot a key is)")
+    snapping: tuple[sc.Snapshotter, Store] | None = None
+    if isinstance(provider, sc.Snapshotter):
+        if record is None:
+            raise Refused(f"{provider.name} provider snapshots its setup: pass record= (the store that remembers which snapshot a key is)")
+        snapping = (provider, record)
     key = sc.setup_key(spec, provider=provider.name, image=image)
     cached = None
-    if snaps and not spec.rebuild:
-        cached = sc.lookup(record, key, now=time.time(), max_age_s=spec.max_age_s)
+    if snapping is not None and not spec.rebuild:
+        cached = sc.lookup(snapping[1], key, now=time.time(), max_age_s=spec.max_age_s)
     session, began, timings = None, time.monotonic(), {}
 
     def lap(phase: str) -> None:
@@ -305,10 +359,11 @@ def _create_set_up(provider: Provider, spec: SetupSpec, *, image: str | None, en
         if cached is None:
             setup_job = session._run_to_end(sc.script_cmd(synced.path, spec.script, unset=list(env)), spec.max_duration_s, "setup")
             lap("setup")
-            if snaps:
-                made = provider.snapshot(session.machine, ttl_s=int(spec.max_age_s + sc.SNAPSHOT_TTL_MARGIN_S))
+            if snapping is not None:
+                snapshotter, cache = snapping
+                made = snapshotter.snapshot(session.machine, ttl_s=int(spec.max_age_s + sc.SNAPSHOT_TTL_MARGIN_S))
                 built_at = time.time()
-                sc.remember(record, sc.Cached(key, made, built_at, session.id, synced.commit))
+                sc.remember(cache, sc.Cached(key, made, built_at, session.id, synced.commit))
                 lap("snapshot")
         resume_job = None
         if spec.resume is not None:
@@ -321,9 +376,14 @@ def _create_set_up(provider: Provider, spec: SetupSpec, *, image: str | None, en
     except BaseException:
         try:
             session.close()
-        except Exception:  # MUST KILL: swallows any close() failure after a failed setup, NotGone included (was noqa BLE001); catch close's own errors
-            print(f"box: {session.id}: closing after a failed setup failed too; terminating", file=sys.stderr)
+        except NotGone:
+            raise
+        except (Gone, OSError) as e:
+            print(f"box: {session.id}: closing after a failed setup failed too ({e!r}); terminating", file=sys.stderr)
             session.machine.terminate()
+        except BaseException:
+            session.machine.terminate()
+            raise
         raise
     return session
 
@@ -340,7 +400,7 @@ def new_session_id() -> str:
 
 def attach(provider: Provider, *, session_id: str | None = None, name: str | None = None, record: Store | None = None) -> Session:
     if (session_id is None) == (name is None):
-        raise ValueError("attach: pass exactly one of session_id or name")
+        raise Refused("attach: pass exactly one of session_id or name")
     found = _find(provider, {LABEL_SESSION: session_id} if name is None else {LABEL_NAME: name}, record)
     if found is not None:
         return found
@@ -377,7 +437,7 @@ def declared_ports(labels: dict[str, str]) -> tuple[int, ...]:
 
 def record_prefix(session_id: str) -> str:
     if not SESSION_ID.fullmatch(session_id):
-        raise ValueError(f"not a session id: {session_id!r}")
+        raise Refused(f"not a session id: {session_id!r}")
     return f"sessions/{session_id}"
 
 
@@ -409,9 +469,9 @@ class Session:
                 raise TimeoutError(f"{self.machine.id}: supervisor not up after {timeout_s:.0f} s")
             time.sleep(POLL_S)
 
-    def _up(self) -> bool:  # MUST KILL: accepts an empty ROOT/up as a supervisor from before up held the session id; drop the back-compat branch
+    def _up(self) -> bool:
         rc, out, _ = self.machine.exec(f"cat {self._path('up')}")
-        return rc == 0 and out.strip() in ("", self.id)
+        return rc == 0 and out.strip() == self.id
 
     def extend(self, until: float) -> Lease:
         return self._change_lease("extend", until)
@@ -422,10 +482,11 @@ class Session:
     @contextlib.contextmanager
     def keep(self, every_s: float) -> Generator[Lease]:
         if not MIN_KEEP_EVERY_S <= every_s <= MAX_KEEP_EVERY_S:
-            raise ValueError(f"every_s={every_s}: keep() renews every {MIN_KEEP_EVERY_S} to {MAX_KEEP_EVERY_S} s")
+            raise Refused(f"every_s={every_s}: keep() renews every {MIN_KEEP_EVERY_S} to {MAX_KEEP_EVERY_S} s")
         lease = self.extend(time.time() + 2 * every_s)
         stop = threading.Event()
-        renewer = threading.Thread(target=self._renew, args=(every_s, stop), daemon=False, name=f"box-keep-{self.id}")
+        failed: list[Exception] = []
+        renewer = threading.Thread(target=self._renew, args=(every_s, stop, failed), daemon=False, name=f"box-keep-{self.id}")
         renewer.start()
         try:
             yield lease
@@ -437,16 +498,21 @@ class Session:
             finally:
                 renewer.join()
                 assert not renewer.is_alive()
+        if failed:
+            raise failed[0]
 
-    def _renew(self, every_s: float, stop: threading.Event) -> None:
+    def _renew(self, every_s: float, stop: threading.Event, failed: list[Exception]) -> None:
         while not stop.wait(every_s):
             try:
                 lease = self.extend(time.time() + 2 * every_s)
             except Gone:
                 return
-            except Exception as exc:  # MUST KILL: retries on any Exception (was noqa BLE001); narrow to the exec's transient errors
+            except (Dropped, TimeoutError) as exc:
                 print(f"box: {self.id}: renewing the lease failed, retrying: {exc!r}", file=sys.stderr)
                 continue
+            except Exception as exc:
+                failed.append(exc)
+                raise
             if lease.until <= time.time():
                 return
 
@@ -489,7 +555,7 @@ class Session:
 
     def expose(self, port: int) -> Endpoint:
         if not 0 < port < 65536:
-            raise ValueError(f"port {port}: not a TCP port")
+            raise Refused(f"port {port}: not a TCP port")
         if port in self._endpoints:
             return self._endpoints[port]
         endpoint = self.machine.expose(port)
@@ -509,15 +575,15 @@ class Session:
         left = running.lease.ceiling - time.time()
         timeout_s = left if timeout_s is None else timeout_s
         if not 0 < timeout_s <= left:
-            raise ValueError(f"timeout_s={timeout_s}: more than 0 and at most the {left:.0f} s to the session's ceiling")
+            raise Refused(f"timeout_s={timeout_s}: more than 0 and at most the {left:.0f} s to the session's ceiling")
         inner = f"cd {shlex.quote(cwd)} && {cmd}" if cwd else cmd
         then = f"exec bash -c {shlex.quote(inner)}"
         return self.machine.stream(self._keepalive(then, until=time.time() + timeout_s), timeout_s=timeout_s, quiet_s=quiet_s, pty=pty)
 
-    def shell_argv(self, cwd: str | None = None) -> list[str]:
+    def shell(self, cwd: str | None = None) -> Shell:
         running = self._running_now()
         start = f"cd {shlex.quote(cwd)} && " if cwd else ""
-        return self.machine.shell_argv(self._keepalive(f"{start}exec bash -l", until=running.lease.ceiling))
+        return self.machine.shell(self._keepalive(f"{start}exec bash -l", until=running.lease.ceiling))
 
     def sync(self, repo: str | Path, *, paths: tuple[str, ...] = (), force: bool = False) -> Synced:
         from box import gitsync
@@ -557,22 +623,25 @@ class Session:
 
     def wait(self, timeout_s: float | None = None) -> Ended:
         give_up = None if timeout_s is None else time.monotonic() + timeout_s
-        while not (self._watch() or isinstance(status := self.status(), Ended)):  # MUST KILL: `self._watch() or ...` calls a None-returning function inside the loop condition for its side effect; make the touch its own statement
+        while True:
+            self._watch()
+            status = self.status()
+            if isinstance(status, Ended):
+                return status
             if give_up is not None and time.monotonic() > give_up:
                 raise TimeoutError(f"{self.id}: still {status} after {timeout_s:.0f} s")
             time.sleep(POLL_S)
-        return status
 
     def run(  # noqa: PLR0913
         self, cmd: str, *, max_duration_s: float = 1800.0, on_exit: str | None = None, hook_budget_s: float = 300.0,
         env: dict[str, str] | None = None,
     ) -> Job:  # fmt: skip
         if not 0 < max_duration_s <= MAX_CEILING_S:
-            raise ValueError(f"max_duration_s={max_duration_s}: more than 0 and at most {MAX_CEILING_S} s")
+            raise Refused(f"max_duration_s={max_duration_s}: more than 0 and at most {MAX_CEILING_S} s")
         running = self._running_now()
         left = min(running.lease.until, running.lease.ceiling) - time.time()
         if on_exit and hook_budget_s >= left:
-            raise ValueError(f"hook_budget_s={hook_budget_s} does not fit in the lease's {left:.0f} s left")
+            raise Refused(f"hook_budget_s={hook_budget_s} does not fit in the lease's {left:.0f} s left")
         spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "max_duration_s": max_duration_s, "env": env or {}}
         return self._start(Job(self, new_job_id(), "jobs"), spec)
 
@@ -584,11 +653,16 @@ class Session:
             raise SetupFailed(f"{self.id}: {what} ({cmd}) ended {ending.reason}, exit {ending.exit_code}:\n{out}")
         return job.id
 
-    def serve(self, cmd: str, *, env: dict[str, str] | None = None) -> Job:
+    def serve(self, cmd: str, *, env: dict[str, str] | None = None, name: str | None = None) -> Job:
         self._running_now()
-        if len([name for name in self._check(f"ls {self._path('services')}").split() if not name.endswith(".tmp")]) >= MAX_SERVICES:
-            raise ValueError(f"{self.id}: a session runs at most {MAX_SERVICES} services")
-        return self._start(Job(self, new_job_id(), "services"), {"cmd": cmd, "env": env or {}})
+        if name is not None and not SERVICE_NAME.fullmatch(name):
+            raise Refused(f"service name {name!r}: a lowercase letter, then lowercase letters, digits or '-', at most 32")
+        started = [job_id for job_id in self._check(f"ls {self._path('services')}").split() if not job_id.endswith(".tmp")]
+        if len(started) >= MAX_SERVICES:
+            raise Refused(f"{self.id}: a session runs at most {MAX_SERVICES} services")
+        if name in started:
+            raise Refused(f"{self.id}: a service is already named {name!r}")
+        return self._start(Job(self, name or new_job_id(), "services"), {"cmd": cmd, "env": env or {}})
 
     def _running_now(self) -> Running:
         running = self.status()
@@ -732,9 +806,7 @@ class Job:
                 self.session.wait()
                 yield from read_record(self.session.record, self.session.id).logs(self.id, after=cursor, kind=self.kind)
                 return
-            except TailError:
-                raise
-            except Exception as e:  # MUST KILL: any Exception counts as a dropped stream because Modal's and ssh's errors differ; give Stream a typed drop error
+            except Dropped as e:
                 tries = 1 if tail.frames else tries + 1
                 if tries > FOLLOW_TRIES:
                     raise
@@ -890,7 +962,7 @@ class Lost:
     def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Stream:
         raise Gone(f"{self.id}: gone (known from its record)")
 
-    def shell_argv(self, cmd: str) -> list[str]:
+    def shell(self, cmd: str) -> Shell:
         raise Gone(f"{self.id}: gone (known from its record)")
 
     def write(self, path: str, data: bytes) -> None:
@@ -1028,6 +1100,11 @@ def parse_heartbeat(raw: bytes) -> Heartbeat:
     return Heartbeat(at=float(d["at"]), ttl_s=float(d["ttl_s"]))
 
 
+def recorded_started_at(store: Store, session_id: str) -> float | None:
+    session = _parse_if_present(store, f"{record_prefix(session_id)}/session.json", json.loads)
+    return None if session is None else float(session["started_at"])
+
+
 def _recorded_running(store: Store, prefix: str) -> Running | None:
     session = _parse_if_present(store, f"{prefix}/session.json", json.loads)
     lease = _parse_if_present(store, f"{prefix}/lease.json", parse_lease)
@@ -1069,12 +1146,19 @@ def parse_job_status(raw: bytes) -> JobStatus:
         case "running":
             return JobRunning(float(d["started"]))
         case "hook":
-            return Hooking(Ending(d["reason"], d["exit_code"]))
+            return Hooking(Ending(parse_job_end_reason(d["reason"]), d["exit_code"]))
         case "done":
-            ending = Ending(d["reason"], d["exit_code"], d.get("hook_exit_code"))
+            ending = Ending(parse_job_end_reason(d["reason"]), d["exit_code"], d.get("hook_exit_code"))
             return Done(ending, float(d["started"]) if "started" in d else None, float(d["ended"]))
         case state:
             raise ValueError(f"status.json: unknown job state {state!r}")
+
+
+def parse_job_end_reason(reason: object) -> JobEndReason:
+    for known in get_args(JobEndReason):
+        if reason == known:
+            return known
+    raise ValueError(f"status.json: unknown job end reason {reason!r}")
 
 
 def receipt_json(receipt: Receipt) -> bytes:

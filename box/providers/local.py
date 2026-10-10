@@ -12,12 +12,22 @@ import subprocess
 import termios
 from pathlib import Path
 
-from box.providers.pump import JOIN_S, Pty, Pumped, pipe_reader
-from box.sdk import LABEL_BY, LABEL_NAME, Endpoint, Gone, NameTaken
+from box.providers.pump import JOIN_S, Pty, Pumped, pipe_readers
+from box.sdk import (
+    LABEL_BY,
+    LABEL_NAME,
+    Endpoint,
+    Gone,
+    NameTaken,
+    Refused,
+    Shell,
+    SnapshotImage,
+    parse_image,
+    snapshot_ref,
+)
 from box.store import DirStore, Mount
 
 BASE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local"
-SNAPSHOT = "local-snapshot:"
 
 
 class Local:
@@ -32,13 +42,19 @@ class Local:
     ) -> LocalMachine:  # fmt: skip
         del timeout_s
         del ports
-        if gpu or (image and not image.startswith(SNAPSHOT)):
-            raise NotImplementedError(f"local provider: no gpu/image (got gpu={gpu!r}, image={image!r})")
-        snapshot = self.base / "snapshots" / image.removeprefix(SNAPSHOT) if image else None
+        if gpu:
+            raise NotImplementedError(f"local provider: no gpu (got gpu={gpu!r})")
+        match None if image is None else parse_image(image):
+            case None:
+                snapshot = None
+            case SnapshotImage(provider="local", id=snapshot_id):
+                snapshot = self.base / "snapshots" / snapshot_id
+            case _:
+                raise NotImplementedError(f"local provider: no image but its own snapshots (got image={image!r})")
         if snapshot is not None and not snapshot.is_dir():
             raise LookupError(f"local provider: no snapshot {image!r}")
         if foreign := [m.store.uri for m in mounts if not isinstance(m.store, DirStore)]:
-            raise ValueError(f"local provider: mounts only a DirStore (got {foreign})")
+            raise Refused(f"local provider: mounts only a DirStore (got {foreign})")
         self.base.mkdir(parents=True, exist_ok=True)
         with (self.base / "names.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
@@ -84,7 +100,7 @@ class Local:
         del ttl_s
         snapshot_id = secrets.token_hex(6)
         shutil.copytree(machine.work, self.base / "snapshots" / snapshot_id, symlinks=True)
-        return SNAPSHOT + snapshot_id
+        return snapshot_ref(self.name, snapshot_id)
 
 
 class LocalMachine:
@@ -124,7 +140,7 @@ class LocalMachine:
                 ["bash", "-c", cmd], cwd=self.dir, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 start_new_session=True,
             )  # fmt: skip
-            terminal, readers, send = None, [pipe_reader("stdout", proc.stdout), pipe_reader("stderr", proc.stderr)], None
+            terminal, readers, send = None, pipe_readers(proc), None
 
         def kill() -> None:
             _killpg(proc.pid)
@@ -141,9 +157,9 @@ class LocalMachine:
             readers, kill=kill, wait=wait, timeout_s=timeout_s, quiet_s=quiet_s, check=self._check_alive, label=self.id, send=send,
         )  # fmt: skip
 
-    def shell_argv(self, cmd: str) -> list[str]:
+    def shell(self, cmd: str) -> Shell:
         self._check_alive()
-        return ["bash", "-c", f"cd {shlex.quote(str(self.dir))} || exit 1; {cmd}"]
+        return Shell(["bash", "-c", f"cd {shlex.quote(str(self.dir))} || exit 1; {cmd}"])
 
     def write(self, path: str, data: bytes) -> None:
         self._check_alive()
@@ -186,8 +202,9 @@ class LocalMachine:
         live = {int(row[0]) for row in rows if not row[1].startswith("Z")}
         return not groups & live
 
-    def _groups(self) -> list[int]:  # MUST KILL: misses hook process groups (a hook runs in a session of its own and its pgid is never recorded), so terminate() can leave a hook running; record the hook's pgid
-        jobs = [json.loads(status.read_text()).get("pgid") for status in Path(self.root).glob("*/*/status.json")]
+    def _groups(self) -> list[int]:
+        statuses = [json.loads(status.read_text()) for status in Path(self.root).glob("*/*/status.json")]
+        jobs = [status.get(key) for status in statuses for key in ("pgid", "hook_pgid")]
         return [int((self.dir / "pid").read_text()), *(pgid for pgid in jobs if pgid is not None)]
 
 

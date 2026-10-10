@@ -15,12 +15,28 @@ from pathlib import Path
 from typing import TypeVar
 
 import anyio
+import grpclib.exceptions
 import modal
 from anyio.from_thread import BlockingPortal, start_blocking_portal
 
 from box import gpus
 from box.providers.pump import MAX_SEND_BYTES, Closed, Emit, Pumped, kill_pid_file, with_pid_file
-from box.sdk import LABEL_BY, LABEL_NAME, LABEL_PORTS, Endpoint, Gone, NameTaken, declared_ports
+from box.sdk import (
+    LABEL_BY,
+    LABEL_NAME,
+    Dockerfile,
+    Dropped,
+    Endpoint,
+    Gone,
+    NameTaken,
+    Refused,
+    RegistryImage,
+    Shell,
+    SnapshotImage,
+    declared_ports,
+    parse_image,
+    snapshot_ref,
+)
 from box.store import Mount
 
 APP = "box"
@@ -31,12 +47,15 @@ DEFAULT_PYTHON = "3.13"
 T = TypeVar("T")
 ENDING_S = 10.0
 BOOT_TIMEOUT_S = 900.0
-CALL_TIMEOUT_S = 60.0  # MUST KILL: one 60 s bound for every call after boot, write/read of a put/get tarball of any size included; size the bound by payload
+CALL_TIMEOUT_S = 60.0
+MIN_TRANSFER_BYTES_PER_S = 1 << 20
+MAX_TRANSFER_BYTES = 2 << 30
 CREATE_TIMEOUT_S = 3600.0
 POLL_S = 0.5
 MODAL_TOML = Path.home() / ".modal.toml"
-SNAPSHOT = "modal-snapshot:"
 SNAPSHOT_TIMEOUT_S = 900.0
+assert CALL_TIMEOUT_S + MAX_TRANSFER_BYTES / MIN_TRANSFER_BYTES_PER_S < CREATE_TIMEOUT_S
+STREAM_DROPS = (modal.exception.ConnectionError, grpclib.exceptions.StreamTerminatedError, OSError)
 
 
 @dataclass(frozen=True)
@@ -49,14 +68,14 @@ class ModalToken:
         profiles = tomllib.loads(path.read_text())
         active = [name for name, p in profiles.items() if isinstance(p, dict) and p.get("active") is True]
         if len(active) != 1:
-            raise ValueError(f"{path}: {len(active)} active profiles {active}; want exactly one (`modal profile activate`)")
+            raise Refused(f"{path}: {len(active)} active profiles {active}; want exactly one (`modal profile activate`)")
         return cls.from_profile(active[0], path)
 
     @classmethod
     def from_profile(cls, name: str, path: Path = MODAL_TOML) -> ModalToken:
         profile = tomllib.loads(path.read_text()).get(name)
         if not (isinstance(profile, dict) and isinstance(profile.get("token_id"), str) and isinstance(profile.get("token_secret"), str)):
-            raise ValueError(f"{path}: no profile {name!r} with token_id/token_secret")
+            raise Refused(f"{path}: no profile {name!r} with token_id/token_secret")
         return cls(profile["token_id"], profile["token_secret"])
 
 
@@ -185,12 +204,19 @@ class Modal:
         labels: dict[str, str], timeout_s: int, ports: list[int], mounts: list[Mount],
     ) -> ModalMachine:  # fmt: skip
         if foreign := [m.store.uri for m in mounts if not isinstance(m.store, ModalVolumeStore)]:
-            raise ValueError(f"modal provider: mounts only a ModalVolumeStore (got {foreign})")
+            raise Refused(f"modal provider: mounts only a ModalVolumeStore (got {foreign})")
         if timeout_s > MAX_TIMEOUT_S:
-            raise ValueError(f"modal provider: timeout_s={timeout_s} past Modal's {MAX_TIMEOUT_S} s cap (a ceiling over {MAX_TIMEOUT_S - 600} s)")
-        stores: list[ModalVolumeStore] = [m.store for m in mounts]  # MUST KILL: narrowed by the isinstance check above, which the checker can't see (was type: ignore[misc]); filter with a TypeGuard
-        snapshot = image.removeprefix(SNAPSHOT) if image and image.startswith(SNAPSHOT) else None
-        modal_image, modal_gpu_ = None if snapshot else resolve_image(image), modal_gpu(gpu)
+            raise Refused(f"modal provider: timeout_s={timeout_s} past Modal's {MAX_TIMEOUT_S} s cap (a ceiling over {MAX_TIMEOUT_S - 600} s)")
+        stores = [m.store for m in mounts if isinstance(m.store, ModalVolumeStore)]
+        assert len(stores) == len(mounts), (stores, mounts)
+        match None if image is None else parse_image(image):
+            case SnapshotImage(provider="modal", id=snapshot):
+                modal_image = None
+            case SnapshotImage() as foreign_snapshot:
+                raise Refused(f"modal provider: {image!r} is a {foreign_snapshot.provider} snapshot")
+            case built:
+                snapshot, modal_image = None, resolve_image(built)
+        modal_gpu_ = modal_gpu(gpu)
 
         async def create() -> modal.Sandbox:
             client = await self.client()
@@ -221,7 +247,7 @@ class Modal:
             image = await machine.sandbox.snapshot_filesystem.aio(timeout=int(SNAPSHOT_TIMEOUT_S), ttl=ttl_s)
             return image.object_id
 
-        return SNAPSHOT + self._call(snap, timeout_s=SNAPSHOT_TIMEOUT_S + CALL_TIMEOUT_S)
+        return snapshot_ref(self.name, self._call(snap, timeout_s=SNAPSHOT_TIMEOUT_S + CALL_TIMEOUT_S))
 
     def get(self, machine_id: str) -> ModalMachine:
         async def lookup() -> tuple[modal.Sandbox, dict[str, str]]:
@@ -286,6 +312,13 @@ class ModalVolumeStore:
         self.provider._call(upload, timeout_s=CALL_TIMEOUT_S)
 
 
+@dataclass
+class Executed:
+    rc: int | None = None
+    out: str = ""
+    err: str = ""
+
+
 class ModalMachine:
     root = ROOT
     work = WORK
@@ -298,24 +331,31 @@ class ModalMachine:
         self._booting = booting
 
     def exec(self, cmd: str) -> tuple[int, str, str]:
-        async def run() -> tuple[int, str, str]:
+        async def run() -> Executed:
             p = await self.sandbox.exec.aio("bash", "-c", cmd)
-            results: dict[str, object] = {}  # MUST KILL: dict[str, object] loses the types (was type: ignore[return-value]); gather into typed variables
+            done = Executed()
 
-            async def get(key: str, call: Callable[[], Awaitable[object]]) -> None:
-                results[key] = await call()
+            async def out() -> None:
+                done.out = await p.stdout.read.aio()
+
+            async def err() -> None:
+                done.err = await p.stderr.read.aio()
+
+            async def rc() -> None:
+                done.rc = await p.wait.aio()
 
             async with anyio.create_task_group() as tg:
-                tg.start_soon(get, "out", p.stdout.read.aio)
-                tg.start_soon(get, "err", p.stderr.read.aio)
-                tg.start_soon(get, "rc", p.wait.aio)
-            return results["rc"], results["out"], results["err"]
+                tg.start_soon(out)
+                tg.start_soon(err)
+                tg.start_soon(rc)
+            return done
 
-        rc, out, err = self._live(run)
+        executed = self._live(run)
         # Modal: rc None or -1 is an exec it killed; 137 is an exec in a sandbox mid-death
-        if rc in (None, -1, 137) and self._ends():
+        rc = -1 if executed.rc is None else executed.rc
+        if rc in (-1, 137) and self._ends():
             raise Gone(f"{self.id}: sandbox ended (exit {self.sandbox.returncode}) under `{cmd}`")
-        return rc, out, err
+        return rc, executed.out, executed.err
 
     def stream(self, cmd: str, *, timeout_s: float, quiet_s: float | None = None, pty: bool = False) -> Pumped:
         self.provider._open()
@@ -362,6 +402,8 @@ class ModalMachine:
                 raise Closed from None
             except (modal.exception.NotFoundError, modal.exception.SandboxTerminatedError) as e:
                 raise Gone(f"{self.id}: {e}") from e
+            except STREAM_DROPS as e:
+                raise Dropped(f"{self.id}: the stream of `{cmd}` dropped: {e!r}") from e
             finally:
                 future.cancel()
 
@@ -369,6 +411,8 @@ class ModalMachine:
             try:
                 with contextlib.suppress(Gone):
                     self.exec(kill_pid_file(pid_file))
+            except ProviderClosed as e:
+                raise Dropped(f"{self.id}: the modal provider closed before `{cmd}` was killed") from e
             finally:
                 for future in pumping:
                     future.cancel()
@@ -392,15 +436,17 @@ class ModalMachine:
 
         return Pumped([read], kill=kill, wait=wait, timeout_s=timeout_s, quiet_s=quiet_s, label=self.id, send=write if pty else None)
 
-    def shell_argv(self, cmd: str) -> list[str]:  # MUST KILL: runs `modal shell` on the CLI's ambient credentials, not this provider's token (maybe another workspace); pass the token in the child's env
-        return [sys.executable, "-m", "modal", "shell", self.id, "--cmd", shlex.join(["bash", "-c", cmd])]
+    def shell(self, cmd: str) -> Shell:
+        argv = [sys.executable, "-m", "modal", "shell", self.id, "--cmd", shlex.join(["bash", "-c", cmd])]
+        return Shell(argv, env={"MODAL_TOKEN_ID": self.provider.token.id, "MODAL_TOKEN_SECRET": self.provider.token.secret})
 
     def write(self, path: str, data: bytes) -> None:
-        self._live(lambda: self.sandbox.filesystem.write_bytes.aio(data, path))
+        self._live(lambda: self.sandbox.filesystem.write_bytes.aio(data, path), transfer_s=transfer_timeout_s(len(data)))
 
     def read(self, path: str) -> bytes:
         try:
-            return self._live(lambda: self.sandbox.filesystem.read_bytes.aio(path))
+            size = self._live(lambda: self.sandbox.filesystem.stat.aio(path)).size
+            return self._live(lambda: self.sandbox.filesystem.read_bytes.aio(path), transfer_s=transfer_timeout_s(size))
         except modal.exception.SandboxFilesystemNotFoundError as e:
             raise FileNotFoundError(path) from e
 
@@ -414,16 +460,16 @@ class ModalMachine:
         except Gone:
             return True
 
-    def expose(self, port: int) -> Endpoint:  # MUST KILL: falls back to tunnels() for sandboxes from before LABEL_PORTS; drop the back-compat branch
-        declared = declared_ports(self.labels) if LABEL_PORTS in self.labels else tuple(self._live(self.sandbox.tunnels.aio))
-        if port in declared:
+    def expose(self, port: int) -> Endpoint:
+        if port in declared_ports(self.labels):
             tunnels = self._live(self.sandbox.tunnels.aio)
             return Endpoint(tunnels[port].url)
         creds = self._live(lambda: self.sandbox.create_connect_token.aio(port=port))
         return Endpoint(creds.url.rstrip("/"), {"Authorization": f"Bearer {creds.token}"})
 
-    def _live(self, call: Callable[[], Awaitable[T]]) -> T:
-        timeout_s = BOOT_TIMEOUT_S if self._booting else CALL_TIMEOUT_S
+    def _live(self, call: Callable[[], Awaitable[T]], *, transfer_s: float | None = None) -> T:
+        bound_s = CALL_TIMEOUT_S if transfer_s is None else transfer_s
+        timeout_s = max(BOOT_TIMEOUT_S, bound_s) if self._booting else bound_s
         try:
             result = self.provider._call(call, timeout_s=timeout_s)
         except Hung:
@@ -432,6 +478,8 @@ class ModalMachine:
             raise TimeoutError(f"{self.id}: Modal call hung for {timeout_s:.0f} s; sandbox still reports running") from None
         except (modal.exception.NotFoundError, modal.exception.SandboxTerminatedError) as e:
             raise Gone(f"{self.id}: {e}") from e
+        except modal.exception.ConnectionError as e:
+            raise Dropped(f"{self.id}: {e}") from e
         # a sandbox that is ending raises a bare ConflictError or SandboxFilesystemError
         except (modal.exception.ConflictError, modal.exception.SandboxFilesystemError) as e:
             if type(e) in (modal.exception.ConflictError, modal.exception.SandboxFilesystemError) and self._ends():
@@ -459,19 +507,28 @@ class ModalMachine:
         return hash(self.id)
 
 
+def transfer_timeout_s(n_bytes: int) -> float:
+    assert n_bytes >= 0, n_bytes
+    if n_bytes > MAX_TRANSFER_BYTES:
+        raise Refused(f"modal provider: {n_bytes} bytes in one file transfer; at most {MAX_TRANSFER_BYTES}")
+    return CALL_TIMEOUT_S + n_bytes / MIN_TRANSFER_BYTES_PER_S
+
+
 def modal_gpu(gpu: str | None) -> str | None:
     if gpu is None:
         return None
     name, _, count = gpu.partition(":")
     modal_id = gpus.provider_id(gpus.lookup(name), "modal")
     if modal_id is None:
-        raise ValueError(f"modal provider: Modal does not rent {name!r}")
+        raise Refused(f"modal provider: Modal does not rent {name!r}")
     return f"{modal_id}:{count}" if count else modal_id
 
 
-def resolve_image(image: str | None) -> modal.Image:  # MUST KILL: image is a str sniffed by suffix (Dockerfile path vs OCI ref), and by prefix (SNAPSHOT) in launch; give image a typed union
-    if image is None:
-        return modal.Image.debian_slim(python_version=DEFAULT_PYTHON)
-    if image.lower().endswith("dockerfile"):
-        return modal.Image.from_dockerfile(image, context_dir=Path(image).parent)
-    return modal.Image.from_registry(image)
+def resolve_image(image: Dockerfile | RegistryImage | None) -> modal.Image:
+    match image:
+        case None:
+            return modal.Image.debian_slim(python_version=DEFAULT_PYTHON)
+        case Dockerfile(path=path):
+            return modal.Image.from_dockerfile(path, context_dir=path.parent)
+        case RegistryImage(ref=ref):
+            return modal.Image.from_registry(ref)
