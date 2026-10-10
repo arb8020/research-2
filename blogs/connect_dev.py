@@ -21,6 +21,13 @@ session, so a reload or a new session finds the same workspace; without it each 
 at its end. --persist DIR is what the sandbox sees as $BLOGS_WS_PERSIST: where workspace.py keeps the workspace bundle
 (on Modal, a Volume). A fresh --root with the same --persist is a new sandbox restoring from the bundle.
 
+Workspace checks need the check core's deps (torch, transformers, einops, ...) in the KERNEL's python: workspace.py runs
+`run_checks` with the kernel's interpreter, which is this script's (Jupyter starts kernels with sys.executable). Plain
+`uv run connect_dev.py` uses this file's inline deps (no torch): fine for ch00, not ch01. For workspace pages run it in
+assay's env (its `kernel` dependency group has jupyter_server + ipykernel, same pins as below), from blogs/:
+
+    uv run --project assay python connect_dev.py --root /tmp/ws-root --persist /tmp/ws-persist
+
 --attach-kernel/--attach-token: every session reports that Jupyter (e.g. one in a Modal sandbox, started with the
 relay's flags by verify_workspace.py --modal) instead of starting one here; ending the session leaves it running.
 """
