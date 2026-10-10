@@ -431,6 +431,18 @@ def test_a_session_lists_its_jobs_and_its_services_apart(launch: Callable) -> No
         assert ([j.id for j in s.jobs()], [j.id for j in s.services()]) == ([job.id], [server.id])
 
 
+def test_a_named_service_is_found_by_its_name_and_the_name_is_taken_once(launch: Callable) -> None:
+    with launch(ceiling_s=600) as s:
+        first = s.serve("sleep 999")
+        named = s.serve("sleep 999", name="web")
+        assert named.id == "web"
+        assert sorted(j.id for j in s.services()) == sorted([first.id, "web"])
+        with pytest.raises(sdk.Refused, match="already named 'web'"):
+            s.serve("sleep 999", name="web")
+        with pytest.raises(sdk.Refused, match="service name"):
+            s.serve("sleep 999", name="Web Server")
+
+
 def test_create_returns_before_the_supervisor_is_up_and_launch_is_create_wait_up(name: str, provider: Provider) -> None:
     s = sdk.create(provider, ceiling_s=600, **providers.launch_kw(name))
     assert sdk.attach(provider, session_id=s.id).machine.id == s.machine.id  # it exists, booting or not

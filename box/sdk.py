@@ -49,6 +49,7 @@ MAX_KEEP_EVERY_S = 3600
 POLL_S = 0.5
 RECORD_PATH = "record"
 SESSION_ID = re.compile(r"s-[0-9a-f]{12}")
+SERVICE_NAME = re.compile(r"[a-z][a-z0-9-]{0,31}")
 T = TypeVar("T")
 STREAMS = ("stdout", "stderr")
 LogCursor = tuple[int, int]
@@ -644,11 +645,16 @@ class Session:
             raise SetupFailed(f"{self.id}: {what} ({cmd}) ended {ending.reason}, exit {ending.exit_code}:\n{out}")
         return job.id
 
-    def serve(self, cmd: str, *, env: dict[str, str] | None = None) -> Job:
+    def serve(self, cmd: str, *, env: dict[str, str] | None = None, name: str | None = None) -> Job:
         self._running_now()
-        if len([name for name in self._check(f"ls {self._path('services')}").split() if not name.endswith(".tmp")]) >= MAX_SERVICES:
+        if name is not None and not SERVICE_NAME.fullmatch(name):
+            raise Refused(f"service name {name!r}: a lowercase letter, then lowercase letters, digits or '-', at most 32")
+        started = [job_id for job_id in self._check(f"ls {self._path('services')}").split() if not job_id.endswith(".tmp")]
+        if len(started) >= MAX_SERVICES:
             raise Refused(f"{self.id}: a session runs at most {MAX_SERVICES} services")
-        return self._start(Job(self, new_job_id(), "services"), {"cmd": cmd, "env": env or {}})
+        if name in started:
+            raise Refused(f"{self.id}: a service is already named {name!r}")
+        return self._start(Job(self, name or new_job_id(), "services"), {"cmd": cmd, "env": env or {}})
 
     def _running_now(self) -> Running:
         running = self.status()

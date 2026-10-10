@@ -323,7 +323,8 @@ def test_a_log_line_reaches_the_event_stream_well_under_a_second_after_it_is_wri
     gw = make_relay()
     sid = create(gw)
     wait_running(gw, sid)
-    jupyter = sdk.attach(Local(tmp_path / "machines"), session_id=sid).services()[0]
+    jupyter = relay.kernel_service(sdk.attach(Local(tmp_path / "machines"), session_id=sid))
+    assert jupyter is not None
     arrived: dict[str, float] = {}  # log line -> when the stream delivered it
     stream = threading.Thread(target=lambda: [arrived.setdefault(e.get("text", ""), time.monotonic()) for _, e in events(gw, sid, "ended", on_event=True)])
     stream.start()

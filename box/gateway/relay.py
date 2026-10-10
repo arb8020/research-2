@@ -57,6 +57,7 @@ PROBE_TIMEOUT_S = 5.0
 CLOSE_TIMEOUT_S = 60.0
 REASONS = {"lease": "lease", "released": "stopped", "stopped": "stopped", "idle": "idle", "machine_lost": "machine_lost"}
 JUPYTER_GONE = "machine_lost"
+JUPYTER_SERVICE = "jupyter"
 RECORD_VOLUME = "box-sessions"
 LOCAL_ORIGIN = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 
@@ -252,9 +253,8 @@ def jupyter_ready(kernel: dict[str, str]) -> bool:
         return False
 
 
-def kernel_service(s: sdk.Session) -> sdk.Job | None:  # MUST KILL: finds Jupyter as the session's first service by position; name or label the service
-    services = s.services()
-    return services[0] if services else None
+def kernel_service(s: sdk.Session) -> sdk.Job | None:
+    return next((job for job in s.services() if job.id == JUPYTER_SERVICE), None)
 
 
 def jupyter_cmd(cfg: Config, port: int, origin: str) -> str:
@@ -290,7 +290,7 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
         rec.step("machine", f"supervisor up ({time.monotonic() - t0:.1f} s since connect)")
         if rec.cancelled:
             raise Cancelled
-        job = session.serve(jupyter_cmd(cfg, port, origin), env={"JUPYTER_TOKEN": kernel_token(req.token, rec.session_id)})
+        job = session.serve(jupyter_cmd(cfg, port, origin), env={"JUPYTER_TOKEN": kernel_token(req.token, rec.session_id)}, name=JUPYTER_SERVICE)
         rec.step("machine", "starting Jupyter Server")
         endpoint = session.expose(port)
         rec.step("gateway", f"tunnel open: {endpoint.url}")
