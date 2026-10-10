@@ -11,7 +11,7 @@
 //   @typescript-eslint/no-unsafe-enum-assignment, no-octal (tsc already rejects legacy octal in strict/ESM code).
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["eslint", "typescript"],
+  "plugins": ["eslint", "typescript", "unicorn"],
   "categories": { "correctness": "off" },
   "jsPlugins": [{ "name": "anti-slop", "specifier": "./lint/anti-slop/index.ts" }],
   "rules": {
@@ -161,7 +161,11 @@
     "eslint/use-isnan": ["error", {"enforceForIndexOf": false, "enforceForSwitchCase": true}],
     "eslint/valid-typeof": ["error", {"requireStringLiterals": false}],
 
-    // 3. Vendored anti-slop guards (lint/anti-slop, MIT, dmmulroy/anti-slop).
+    // 3. House convention (not in the ESLint config): a caught error is named `cause`, in catch clauses and
+    // .catch()/.then() rejection callbacks, matching `new Error(msg, { cause })`.
+    "unicorn/catch-error-name": ["error", { "name": "cause" }],
+
+    // 4. Vendored anti-slop guards (lint/anti-slop, MIT, dmmulroy/anti-slop).
     "anti-slop/no-unsafe-dictionary-type": "error",
     "anti-slop/no-chained-type-assertions": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",

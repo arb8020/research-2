@@ -117,9 +117,9 @@ class Kernel {
       this.id = kernel["id"];
       await this.open();
       this.set("idle");
-    } catch (e) {
+    } catch (cause) {
       this.set("lost");
-      throw e;
+      throw cause;
     }
   }
 

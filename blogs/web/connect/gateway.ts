@@ -100,9 +100,9 @@ export async function getSession(gateway: string, id: string, token: Token): Pro
   try {
     const body = await call(`${gateway}/sessions/${encodeURIComponent(id)}`, { headers: { "X-Box-Token": auth(token) } });
     return isJsonObject(body) ? parseStatus(body["status"]) : fail("{session_id, status}", body);
-  } catch (e) {
-    if (e instanceof GatewayError && e.cause === 404) return "gone";
-    throw e;
+  } catch (cause) {
+    if (cause instanceof GatewayError && cause.cause === 404) return "gone";
+    throw cause;
   }
 }
 
@@ -130,9 +130,9 @@ export function subscribe(
     let event: GatewayEvent;
     try {
       event = parseEvent(JSON.parse(String(m.data)));
-    } catch (e) {
+    } catch (cause) {
       source.close();
-      onBadEvent(e instanceof GatewayError ? e : new GatewayError(`gateway: an event that is not JSON: ${String(m.data).slice(0, 300)}`, { cause: e }));
+      onBadEvent(cause instanceof GatewayError ? cause : new GatewayError(`gateway: an event that is not JSON: ${String(m.data).slice(0, 300)}`, { cause }));
       return;
     }
     onEvent(event);
