@@ -18,16 +18,16 @@ export const LEASE_MAX_S = 12 * 3600;
 
 // leaseUntil: when the session ends unless extended (unix s). ceiling: the latest an extend can push it to
 // (start + 12 h). Both required: a status without them is from a gateway older than the lease, and an error.
+// startedAt: when the machine's supervisor started; null only on an ended session whose machine never started.
 interface Times {
   gpu: string | null;
-  startedAt: number;
   leaseUntil: number;
   ceiling: number;
 }
 export type Status =
-  | ({ state: "booting" } & Times)
-  | ({ state: "running"; kernel: KernelAddress } & Times)
-  | ({ state: "ended"; reason: EndedReason } & Times);
+  | ({ state: "booting"; startedAt: number } & Times)
+  | ({ state: "running"; startedAt: number; kernel: KernelAddress } & Times)
+  | ({ state: "ended"; startedAt: number | null; reason: EndedReason } & Times);
 
 export type GatewayEvent =
   | { t: number; kind: "step"; source: "gateway" | "machine"; text: string }
@@ -48,18 +48,20 @@ const isReason = (x: unknown): x is EndedReason => ENDED_REASONS.some((r) => r =
 export function parseStatus(raw: unknown): Status {
   if (!isRecord(raw)) return fail("a status object", raw);
   const { state, gpu, started_at: startedAt, lease_until: leaseUntil, ceiling } = raw;
-  if ((gpu !== null && typeof gpu !== "string") || typeof startedAt !== "number") return fail("status {gpu: string | null, started_at: number}", raw);
+  if (gpu !== null && typeof gpu !== "string") return fail("status {gpu: string | null}", raw);
+  if (startedAt !== null && typeof startedAt !== "number") return fail("status {started_at: number | null}", raw);
   // No fallback to the old "deadline": a gateway without the lease is one this page doesn't speak to.
   if (typeof leaseUntil !== "number" || typeof ceiling !== "number") return fail("status {lease_until: number, ceiling: number} (a gateway with session leases)", raw);
-  if (ceiling < startedAt) return fail("status ceiling: a unix time after started_at", raw);
-  const base = { gpu, startedAt, leaseUntil, ceiling };
-  if (state === "booting") return { state, ...base };
+  if (startedAt !== null && ceiling < startedAt) return fail("status ceiling: a unix time after started_at", raw);
+  const base = { gpu, leaseUntil, ceiling };
+  if (state === "ended") return isReason(raw["reason"]) ? { state, startedAt, ...base, reason: raw["reason"] } : fail(`an ended status with reason in ${ENDED_REASONS.join("|")}`, raw);
+  if (startedAt === null) return fail("status started_at: null only on an ended session", raw);
+  if (state === "booting") return { state, startedAt, ...base };
   if (state === "running") {
     const k = raw["kernel"];
     if (!isRecord(k) || typeof k["url"] !== "string" || typeof k["token"] !== "string") return fail("a running status with kernel {url, token}", raw);
-    return { state, ...base, kernel: { url: k["url"].replace(/\/$/, ""), token: k["token"] } };
+    return { state, startedAt, ...base, kernel: { url: k["url"].replace(/\/$/, ""), token: k["token"] } };
   }
-  if (state === "ended") return isReason(raw["reason"]) ? { state, ...base, reason: raw["reason"] } : fail(`an ended status with reason in ${ENDED_REASONS.join("|")}`, raw);
   return fail("state booting | running | ended", raw);
 }
 
