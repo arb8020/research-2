@@ -13,8 +13,18 @@ from pathlib import Path
 import requests
 
 from box import gpus
-from box.providers.pump import JOIN_S, Pumped, kill_pid_file, pipe_reader, with_pid_file
-from box.sdk import LABEL_BY, LABEL_NAME, LABEL_SESSION, Endpoint, Gone, NameTaken
+from box.providers.pump import JOIN_S, Pumped, kill_pid_file, pipe_readers, with_pid_file
+from box.sdk import (
+    LABEL_BY,
+    LABEL_NAME,
+    LABEL_SESSION,
+    Dropped,
+    Endpoint,
+    Gone,
+    NameTaken,
+    Refused,
+    Shell,
+)
 from box.store import Mount
 
 API = "https://api.runpod.io/v2"
@@ -27,7 +37,6 @@ UP_TIMEOUT_S = 900.0
 EXEC_TIMEOUT_S = 600
 SSH_GRACE_S = 60
 LAUNCH_TRIES = 3
-UNREACHABLE: set[str] = set()  # MUST KILL: process-global mutable set shared by every RunPod instance; make it RunPod state
 SSH_OPTS = [
     "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
     "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
@@ -88,6 +97,7 @@ class RunPod:
         self.http = requests.Session()
         self.http.headers.update({"Authorization": f"Bearer {api_key}", "User-Agent": "box"})
         self.cloud = cloud
+        self.unreachable: set[str] = set()
 
     @classmethod
     def from_env(cls) -> RunPod:
@@ -136,12 +146,12 @@ class RunPod:
         else:
             gpu_id = gpus.provider_id(gpus.lookup(gpu), "runpod")
             if gpu_id is None:
-                raise ValueError(f"runpod: no RunPod id for GPU {gpu!r} in box/gpus.py")
+                raise Refused(f"runpod: no RunPod id for GPU {gpu!r} in box/gpus.py")
             body["gpu"] = {"id": gpu_id, "count": 1}
         for attempt in range(LAUNCH_TRIES):
-            if UNREACHABLE:
+            if self.unreachable:
                 dcs = (self.api("GET", "/catalog/datacenters") or {})["dataCenters"]
-                body["dataCenterIds"] = [dc["id"] for dc in dcs if dc["id"] not in UNREACHABLE]
+                body["dataCenterIds"] = [dc["id"] for dc in dcs if dc["id"] not in self.unreachable]
             pod = self.api("POST", "/pods", body)
             assert pod is not None
             m = RunPodMachine(self, pod)
@@ -150,7 +160,7 @@ class RunPod:
                 return m
             except Unreachable:
                 m.terminate()
-                UNREACHABLE.add(m._pod_dc or "")
+                self.unreachable.add(m._pod_dc or "")
                 if attempt == LAUNCH_TRIES - 1:
                     raise
             except BaseException:
@@ -246,7 +256,7 @@ class RunPodMachine:
             rc = proc.wait(JOIN_S)
             if rc == 255:
                 self._pod()
-                raise ConnectionError(f"runpod: {self.id}: ssh dropped under a stream of `{cmd[:80]}`")
+                raise Dropped(f"runpod: {self.id}: ssh dropped under a stream of `{cmd[:80]}`")
             return rc
 
         def write(data: bytes) -> None:
@@ -255,14 +265,14 @@ class RunPodMachine:
             proc.stdin.flush()
 
         return Pumped(
-            [pipe_reader("stdout", proc.stdout), pipe_reader("stderr", proc.stderr)], kill=kill, wait=wait,
+            pipe_readers(proc), kill=kill, wait=wait,
             timeout_s=timeout_s, quiet_s=quiet_s, label=self.id, send=write if pty else None,
         )
 
-    def shell_argv(self, cmd: str) -> list[str]:
+    def shell(self, cmd: str) -> Shell:
         if (d := self._direct) is None:
             d = self._direct = self._pod()["ssh"]["direct"]
-        return ["ssh", *SSH_OPTS, "-t", "-p", str(d["port"]), f"{d['username']}@{d['host']}", cmd]
+        return Shell(["ssh", *SSH_OPTS, "-t", "-p", str(d["port"]), f"{d['username']}@{d['host']}", cmd])
 
     def write(self, path: str, data: bytes) -> None:
         p = shlex.quote(path)
@@ -289,7 +299,7 @@ class RunPodMachine:
 
     def expose(self, port: int) -> Endpoint:
         if port not in self._http_ports:
-            raise ValueError(f"runpod: port {port} was not declared at launch (ports={self._http_ports}); RunPod has no route for an undeclared one")
+            raise Refused(f"runpod: port {port} was not declared at launch (ports={self._http_ports}); RunPod has no route for an undeclared one")
         return Endpoint(f"https://{self.id}-{port}.proxy.runpod.net")
 
 

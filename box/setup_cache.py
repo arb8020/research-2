@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from box.gitsync import toplevel
+
 if TYPE_CHECKING:
     from box.sdk import Machine
     from box.store import Store
@@ -56,19 +58,16 @@ class SetupRecord:
     timings: dict[str, float] = field(default_factory=dict)
 
 
-def top(repo: Path) -> Path:
-    from box.gitsync import git
-
-    return Path(git(repo, "rev-parse", "--show-toplevel"))
-
-
 def setup_key(spec: SetupSpec, *, provider: str, image: str | None) -> str:
-    root = top(spec.repo)
+    from box.sdk import Dockerfile, parse_image
+
+    root = toplevel(spec.repo)
     h = hashlib.sha256()
     for part in (KEY_VERSION, provider, image or ""):
         h.update(part.encode() + b"\0")
-    if image and image.lower().endswith("dockerfile"):  # MUST KILL: image is a str sniffed by suffix (Dockerfile path vs OCI ref vs a provider's snapshot prefix); give image a typed union
-        h.update(Path(image).read_bytes() + b"\0")
+    parsed = None if image is None else parse_image(image)
+    if isinstance(parsed, Dockerfile):
+        h.update(parsed.path.read_bytes() + b"\0")
     for rel in (spec.script, *spec.lockfiles):
         path = root / rel
         if not path.is_file():

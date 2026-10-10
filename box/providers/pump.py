@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import io
 import os
 import queue
 import select
 import shlex
+import subprocess
 import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
-from typing import IO
+
+from box.sdk import Dropped, Gone, Refused
 
 QUEUE_CHUNKS = 64
 PUT_TICK_S = 0.1
@@ -19,6 +22,7 @@ JOIN_S = 10.0
 READ_BYTES = 64 * 1024
 MAX_SEND_BYTES = 64 * 1024
 SEND_TIMEOUT_S = 10.0
+KILL_FAILURES = (Gone, OSError, subprocess.TimeoutExpired)
 
 Emit = Callable[[str, bytes], None]
 Reader = Callable[[Emit], None]
@@ -98,15 +102,15 @@ class Pumped:
         if now >= self._give_up:
             raise TimeoutError(f"{self.label}: stream ran past {self._timeout_s:.0f} s; killed")
         if self._quiet_s is not None and now - last >= self._quiet_s:
-            raise TimeoutError(f"{self.label}: no output for {self._quiet_s:.0f} s; killed")
+            raise Dropped(f"{self.label}: no output for {self._quiet_s:.0f} s; killed")
 
     def send(self, data: bytes) -> None:
         if self._send is None:
-            raise ValueError(f"{self.label}: not a pty stream: its stdin is closed (stream(pty=True) to type into it)")
+            raise Refused(f"{self.label}: not a pty stream: its stdin is closed (stream(pty=True) to type into it)")
         if len(data) > MAX_SEND_BYTES:
-            raise ValueError(f"{self.label}: send of {len(data)} bytes; at most {MAX_SEND_BYTES} a call")
+            raise Refused(f"{self.label}: send of {len(data)} bytes; at most {MAX_SEND_BYTES} a call")
         if self._closed.is_set() or self._finished:
-            raise ValueError(f"{self.label}: the stream has ended")
+            raise Refused(f"{self.label}: the stream has ended")
         self._send(data)
 
     def close(self) -> None:
@@ -116,17 +120,19 @@ class Pumped:
             self._closed.set()
         with contextlib.suppress(queue.Full):
             self._queue.put_nowait(_WAKE)
-        if not self._finished:
-            try:
-                self._kill()
-            except Exception as e:  # MUST KILL: swallows any kill failure (was noqa BLE001); catch the providers' kill errors only
-                print(f"box: {self.label}: killing a stream's command failed: {e!r}", file=sys.stderr)
-        give_up = time.monotonic() + JOIN_S
-        for t in self._threads:
-            if t is not threading.current_thread():
-                t.join(max(0.0, give_up - time.monotonic()))
-        if stuck := [t.name for t in self._threads if t.is_alive()]:
-            print(f"box: {self.label}: stream readers {stuck} still running {JOIN_S:.0f} s after close", file=sys.stderr)
+        try:
+            if not self._finished:
+                try:
+                    self._kill()
+                except KILL_FAILURES as e:
+                    print(f"box: {self.label}: killing a stream's command failed: {e!r}", file=sys.stderr)
+        finally:
+            give_up = time.monotonic() + JOIN_S
+            for t in self._threads:
+                if t is not threading.current_thread():
+                    t.join(max(0.0, give_up - time.monotonic()))
+            if stuck := [t.name for t in self._threads if t.is_alive()]:
+                print(f"box: {self.label}: stream readers {stuck} still running {JOIN_S:.0f} s after close", file=sys.stderr)
 
     def _pump(self, reader: Reader) -> None:
         item: _Eof | BaseException
@@ -154,7 +160,13 @@ class Pumped:
                 continue
 
 
-def pipe_reader(name: str, pipe: IO[bytes]) -> Reader:  # MUST KILL: pipe typed IO[bytes] though read1 needs a buffered reader (was type: ignore[attr-defined]); type it io.BufferedReader
+def pipe_readers(proc: subprocess.Popen[bytes]) -> list[Reader]:
+    assert isinstance(proc.stdout, io.BufferedReader), proc.stdout
+    assert isinstance(proc.stderr, io.BufferedReader), proc.stderr
+    return [pipe_reader("stdout", proc.stdout), pipe_reader("stderr", proc.stderr)]
+
+
+def pipe_reader(name: str, pipe: io.BufferedReader) -> Reader:
     def read(emit: Emit) -> None:
         with pipe:
             while data := pipe.read1(READ_BYTES):
@@ -200,7 +212,7 @@ class Pty:
         with self._lock:
             while data:
                 if not self._open:
-                    raise ValueError("the stream has ended: its terminal is closed")
+                    raise Refused("the stream has ended: its terminal is closed")
                 if not select.select([], [self.master], [], max(0.0, give_up - time.monotonic()))[1]:
                     raise TimeoutError(f"a terminal took no input for {SEND_TIMEOUT_S:.0f} s")
                 data = data[os.write(self.master, data) :]

@@ -121,6 +121,20 @@ def test_crashed_job_still_runs_its_hook(launch: Callable) -> None:
         assert s.machine.read(f"{job.dir}/hook").decode() == "1 exited partial\n"
 
 
+def test_terminating_a_machine_mid_hook_ends_the_hook_too(launch: Callable, name: str) -> None:
+    if name != "local":
+        pytest.skip("reads the hook's heartbeat from this computer's disk")
+    s = launch(ceiling_s=600)
+    job = s.run("exit 0", max_duration_s=JOB_S, on_exit="while true; do touch $BOX_JOB_DIR/hook-beat; sleep 0.1; done", hook_budget_s=300)
+    beat = Path(job.dir) / "hook-beat"
+    eventually(lambda: isinstance(job.status(), sdk.Hooking) and beat.exists(), timeout_s=60)
+    s.machine.terminate()
+    eventually(s.machine.gone)
+    last = beat.stat().st_mtime
+    time.sleep(0.5)
+    assert beat.stat().st_mtime == last, "the hook still runs on a machine that says it is gone"
+
+
 def test_the_lease_running_out_kills_the_job_in_time_for_its_hook_then_ends_the_box(launch: Callable, provider: Provider, scale: float) -> None:
     s = launch(lease_s=3 * scale, ceiling_s=600)
     job = s.run("sleep 999", max_duration_s=JOB_S, on_exit="echo $BOX_REASON > $BOX_JOB_DIR/hook", hook_budget_s=1 * scale)
@@ -205,6 +219,26 @@ def test_keep_holds_a_short_lease_and_releases_on_the_way_out(launch: Callable, 
         assert s.wait(timeout_s=10 * scale) == Ended("released")
         assert not [t for t in threading.enumerate() if t.name.startswith("box-keep-")]  # the renewer was joined
         s.close()
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_keep_retries_a_dropped_renewal_and_raises_any_other_failure_on_the_way_out(launch: Callable, monkeypatch: pytest.MonkeyPatch, scale: float) -> None:
+    with launch(ceiling_s=600) as s:
+        extend, calls = s.extend, []
+
+        def renewing(until: float) -> sdk.Lease:
+            calls.append(until)
+            if len(calls) == 2:
+                raise sdk.Dropped("a blip")
+            if len(calls) == 3:
+                raise RuntimeError("not a blip")
+            return extend(until)
+
+        monkeypatch.setattr(s, "extend", renewing)
+        with pytest.raises(RuntimeError, match="not a blip"), s.keep(every_s=0.5):
+            eventually(lambda: len(calls) >= 3, timeout_s=10 * scale)
+        assert len(calls) == 3  # the renewer stopped at the failure
+        assert s.wait(timeout_s=10 * scale) == Ended("released")
 
 
 def test_a_job_past_its_max_duration_times_out_and_its_hook_runs(launch: Callable, scale: float) -> None:
@@ -397,6 +431,18 @@ def test_a_session_lists_its_jobs_and_its_services_apart(launch: Callable) -> No
         assert ([j.id for j in s.jobs()], [j.id for j in s.services()]) == ([job.id], [server.id])
 
 
+def test_a_named_service_is_found_by_its_name_and_the_name_is_taken_once(launch: Callable) -> None:
+    with launch(ceiling_s=600) as s:
+        first = s.serve("sleep 999")
+        named = s.serve("sleep 999", name="web")
+        assert named.id == "web"
+        assert sorted(j.id for j in s.services()) == sorted([first.id, "web"])
+        with pytest.raises(sdk.Refused, match="already named 'web'"):
+            s.serve("sleep 999", name="web")
+        with pytest.raises(sdk.Refused, match="service name"):
+            s.serve("sleep 999", name="Web Server")
+
+
 def test_create_returns_before_the_supervisor_is_up_and_launch_is_create_wait_up(name: str, provider: Provider) -> None:
     s = sdk.create(provider, ceiling_s=600, **providers.launch_kw(name))
     assert sdk.attach(provider, session_id=s.id).machine.id == s.machine.id  # it exists, booting or not
@@ -506,7 +552,7 @@ def test_ceilings_past_48_hours_and_leases_past_the_ceiling_are_refused(provider
     now = time.time()  # the supervisor asserts the same of the absolute times it is given (the pair)
     for lease_until, ceiling in ((now + 60, now + MAX_CEILING_S + 1), (now + 120, now + 60)):
         argv = ["--root", str(tmp_path / "root"), "--created-at", repr(now), "--lease-until", repr(lease_until),
-                "--ceiling", repr(ceiling), "--host", "h", "--pid", "1"]  # fmt: skip
+                "--ceiling", repr(ceiling), "--host", "h", "--pid", "1", "--session-id", "s-000000000000"]  # fmt: skip
         done = subprocess.run([sys.executable, str(sdk.SUPERVISOR), *argv], capture_output=True, text=True, timeout=30)
         assert done.returncode != 0
         assert "AssertionError" in done.stderr
@@ -535,7 +581,7 @@ def test_closing_a_stream_kills_its_command(launch: Callable, scale: float) -> N
 
 def test_a_stream_is_bounded_in_time_and_in_silence(launch: Callable, scale: float) -> None:
     with launch(ceiling_s=600) as s:
-        with pytest.raises(TimeoutError, match="no output"), s.machine.stream("echo hi; exec sleep 999", timeout_s=60 * scale, quiet_s=2 * scale) as stream:
+        with pytest.raises(sdk.Dropped, match="no output"), s.machine.stream("echo hi; exec sleep 999", timeout_s=60 * scale, quiet_s=2 * scale) as stream:
             list(stream)
         with pytest.raises(TimeoutError, match="past"), s.machine.stream("while true; do echo .; sleep 0.2; done", timeout_s=3 * scale) as stream:
             list(stream)
@@ -556,3 +602,42 @@ def test_a_follower_that_leaves_and_comes_back_misses_nothing_and_repeats_nothin
         assert "".join(c.text for c in both if c.stream == "stderr") == "e1\ne2\n"
         assert both[-1].end == (len("café ok\n".encode()), len("e1\ne2\n"))
         assert [c.end for c in both] == sorted(c.end for c in both)  # the cursor only moves on
+
+
+def test_a_follower_reconnects_after_a_dropped_stream_and_stops_at_any_other_error(launch: Callable, monkeypatch: pytest.MonkeyPatch) -> None:
+    with launch(ceiling_s=600) as s:
+        job = s.run("echo one; echo two", max_duration_s=JOB_S)
+        job.wait()
+        stream = s.machine.stream
+        failures: list[BaseException] = [sdk.Dropped("the channel went away")]
+
+        def flaky(cmd: str, **kw: object) -> sdk.Stream:
+            if failures:
+                raise failures.pop()
+            return stream(cmd, **kw)
+
+        monkeypatch.setattr(s.machine, "stream", flaky)
+        monkeypatch.setattr(sdk, "FOLLOW_BACKOFF_S", 0.01)
+        assert "".join(c.text for c in job.logs(follow=True)) == "one\ntwo\n"
+        failures.append(RuntimeError("a bug, not a drop"))
+        with pytest.raises(RuntimeError, match="a bug, not a drop"):
+            list(job.logs(follow=True))
+        assert failures == []
+
+
+def test_closing_a_stream_reports_a_failed_kill_and_raises_a_kill_bug_after_joining_its_readers(capsys: pytest.CaptureFixture) -> None:
+    from box.providers.pump import Pumped
+
+    def waits_for_close(emit: Callable[[str, bytes], None]) -> None:
+        time.sleep(0.2)
+
+    for kill_raises, raised in ((ConnectionResetError("the channel went away"), None), (KeyError("a bug"), KeyError)):
+
+        def kill(e: BaseException = kill_raises) -> None:
+            raise e
+
+        stream = Pumped([waits_for_close], kill=kill, wait=lambda: 0, timeout_s=10, quiet_s=None, label="test")
+        with pytest.raises(raised) if raised else contextlib.nullcontext():
+            stream.close()
+        assert not [t for t in threading.enumerate() if t.name.startswith("box-stream-test")]  # joined either way
+    assert "killing a stream's command failed: ConnectionResetError" in capsys.readouterr().err

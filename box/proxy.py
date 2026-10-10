@@ -8,9 +8,9 @@ import threading
 import time
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
-from box.sdk import Endpoint
+from box.sdk import Endpoint, Gone
 
 CHUNK = 65536
 UPSTREAM_TIMEOUT_S = 3600.0
@@ -30,6 +30,8 @@ class Proxy:
         upstream = urlsplit(endpoint.url)
         if upstream.scheme not in ("http", "https"):
             raise ValueError(f"proxy: {endpoint.url}: not http(s)")
+        if upstream.hostname is None:
+            raise ValueError(f"proxy: {endpoint.url}: no host")
         assert every_s > 0, every_s
         self.endpoint = endpoint
         self._on_use, self._every_s = on_use, every_s
@@ -79,7 +81,11 @@ class Proxy:
             if due:
                 self._used_at = time.monotonic()
         if due:
-            self._use()
+            try:
+                self._use()
+            except BaseException:
+                self._end()
+                raise
         return True
 
     def _end(self) -> None:
@@ -100,7 +106,7 @@ class Proxy:
         assert self._on_use is not None
         try:
             self._on_use()
-        except Exception as e:  # MUST KILL: swallows every Exception from on_use (was noqa BLE001); catch only the session-ended errors
+        except (Gone, OSError) as e:
             print(f"box proxy: marking the session used failed: {e!r}", file=sys.stderr)
 
     def _track(self, sock: socket.socket | None, *, add: bool) -> None:
@@ -112,8 +118,10 @@ class Proxy:
             (self._sockets.add if add else self._sockets.discard)(sock)
 
 
-def _handler(proxy: Proxy, upstream: object) -> type[BaseHTTPRequestHandler]:  # MUST KILL: upstream typed `object`, so three uses needed type: ignore[attr-defined]; type it urllib.parse.SplitResult
+def _handler(proxy: Proxy, upstream: SplitResult) -> type[BaseHTTPRequestHandler]:
     connection = http.client.HTTPSConnection if upstream.scheme == "https" else http.client.HTTPConnection
+    host = upstream.hostname
+    assert host is not None, upstream
 
     class Forward(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.0"
@@ -129,7 +137,7 @@ def _handler(proxy: Proxy, upstream: object) -> type[BaseHTTPRequestHandler]:  #
             if not proxy._begin():
                 self.send_error(503, f"box proxy: {MAX_INFLIGHT} requests already in flight")
                 return
-            conn = connection(upstream.hostname, upstream.port, timeout=UPSTREAM_TIMEOUT_S)
+            conn = connection(host, upstream.port, timeout=UPSTREAM_TIMEOUT_S)
             answered = False
             try:
                 proxy._track(self.connection, add=True)

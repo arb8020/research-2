@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-from box import gpus, sdk
+from box import gitsync, gpus, sdk
 from box.setup_cache import SetupSpec
 
 GC_MARGIN_S = 1800
@@ -107,7 +107,7 @@ def run_set_up(a: argparse.Namespace, cmd: str, provider: sdk.Provider, max_dura
     prepared = sdk.read_record(s.record, s.id).setup if s.record else None
     print(f"box: {s.id}: {'booted from ' + str(prepared.image) if prepared and prepared.hit else 'set up'}", file=sys.stderr)
     try:
-        path = s.sync(Path.cwd()).path  # MUST KILL: calls sync only to learn the synced path (create(setup=) already synced); expose that path on the Session or its SetupRecord
+        path = gitsync.tree_path(s.machine.work, gitsync.toplevel(Path.cwd()))
         for local, remote in pairs(a.put, "put"):
             s.put(local, remote)
         job = s.run(f"cd {shlex.quote(path)} && {cmd}", max_duration_s=max_duration_s, on_exit=a.on_exit)
@@ -278,7 +278,7 @@ def main() -> None:
     a = parser().parse_args()
     try:
         code = a.fn(a)
-    except ValueError as e:  # MUST KILL: reads every ValueError (a bug's too) as 'the SDK refused'; give refusals their own exception type
+    except sdk.Refused as e:
         print(f"box: {e}", file=sys.stderr)
         code = 2
     sys.exit(code)
