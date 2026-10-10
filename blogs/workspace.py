@@ -127,10 +127,31 @@ def manifest_lines(state: Path) -> str:
     return "".join(f"{hashlib.sha256((state / f).read_bytes()).hexdigest()}  {f}\n" for f in trusted_files(state))
 
 
+def drop_bytecode(state: Path = STATE) -> list[str]:
+    """Delete every __pycache__ under _blogs/ (as root, before verifying). Python trusts a cached .pyc whose header
+    matches the source's mtime and size, even under -B (-B only stops writing them), so a planted or stale one would run
+    instead of the verified .py: delete them, don't just leave them out of the manifest. Returns what it removed."""
+    removed: list[str] = []
+    for top, dirs, _ in os.walk(state):  # never follows symlinks
+        for name in [d for d in dirs if d == "__pycache__"]:
+            path = Path(top) / name
+            if path.is_symlink():
+                path.unlink()
+            else:
+                shutil.rmtree(path)
+            dirs.remove(name)
+            removed.append(path.relative_to(state).as_posix())
+    return sorted(removed)
+
+
 def verify_trusted(expected: str | None) -> str:
     """_blogs/ must be exactly what the page shipped: MANIFEST.sha256 hashes to `expected` (the page computes it from
-    its own copy), and every trusted file matches its line, with none missing or extra. Returns the manifest's
-    sha256 (the trusted code's fingerprint). Raises Refused with every difference."""
+    its own copy), and every trusted file matches its line, with none missing or extra (after any bytecode caches are
+    deleted: drop_bytecode). Returns the manifest's sha256 (the trusted code's fingerprint). Raises Refused with every
+    difference."""
+    dropped = drop_bytecode(STATE)
+    if dropped:
+        say(f"deleted bytecode caches in _blogs/ before verifying: {', '.join(dropped)}")
     path = STATE / TRUST_MANIFEST
     if not path.is_file():
         raise Refused(f"_blogs/{TRUST_MANIFEST} is missing (reconnect to re-upload the page's trusted code)")
@@ -144,7 +165,7 @@ def verify_trusted(expected: str | None) -> str:
         if len(want) != 64 or not name:
             raise Refused(f"_blogs/{TRUST_MANIFEST}: bad line {line!r}")
         listed[name] = want
-    have = trusted_files()
+    have = trusted_files(STATE)
     wrong = [f"{f} changed" for f in have if f in listed and hashlib.sha256((STATE / f).read_bytes()).hexdigest() != listed[f]]
     wrong += [f"{f} is missing" for f in sorted(set(listed) - set(have))]
     wrong += [f"{f} is not in the manifest" for f in sorted(set(have) - set(listed))]
