@@ -164,7 +164,8 @@ def verify(chapter: str, root: Path = REF) -> bool:
     with tempfile.TemporaryDirectory() as tmp:
         solution = Path(tmp) / "solution"
         write_tree(materialize(chapter, "solution", root), solution)
-        rc = subprocess.run([sys.executable, "run_checks", chapter], cwd=solution, capture_output=True, text=True, check=False)
+        env = {**os.environ, "BLOGS_ASSAY": str(HERE / "assay")}  # the tree's run_checks shim runs the check core
+        rc = subprocess.run([sys.executable, "run_checks", chapter], cwd=solution, capture_output=True, text=True, check=False, env=env)
         print(f"{chapter} solution: run_checks {chapter} -> exit {rc.returncode}")
         ok &= rc.returncode == 0
         start_tree = materialize(chapter, "start", root)
@@ -172,7 +173,7 @@ def verify(chapter: str, root: Path = REF) -> bool:
             # The stub on its own, on top of the solution: does this cell's check notice?
             one = Path(tmp) / f"start-{cell.name}"
             write_tree({**materialize(chapter, "solution", root), cell.file: start_tree[cell.file]}, one)
-            rc = subprocess.run([sys.executable, "run_checks", chapter, cell.name], cwd=one, capture_output=True, text=True, check=False)
+            rc = subprocess.run([sys.executable, "run_checks", chapter, cell.name], cwd=one, capture_output=True, text=True, check=False, env=env)
             print(f"{chapter} start stub {cell.file}: run_checks {chapter} {cell.name} -> exit {rc.returncode} (want 1)")
             ok &= rc.returncode == 1
     return ok
