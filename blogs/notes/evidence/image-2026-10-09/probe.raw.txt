@@ -1,0 +1,49 @@
+### s-085d8a78b10b cell env: status=ok 7.86s 
+--- stdout
+PROBE {"probe": "env", "python": "3.12.15", "torch": "2.14.1+cu126", "torch_cuda": "12.6", "cudnn": 91002, "cuda_available": true, "arch_list": ["sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_90"], "device": "Tesla T4", "capability": [7, 5], "nvidia_smi": "Tesla T4, 610.57.04, 15360 MiB", "os": "Linux-4.19.0-gvisor-x86_64-with-glibc2.41", "cwd": "/box/services/1791586779-35f44d", "gxx": "g++ (Debian 14.2.0-19) 14.2.0", "clang": "Debian clang version 19.1.7 (3+b1)", "git": "git version 2.47.3", "make": "GNU Make 4.4.1", "ccache": "ccache version 4.11.2", "rootfs_mb": "7", "env": {"BLOGS_WS_PERSIST": "/ws/workspace-persist", "HF_HOME": "/ws/hf", "BOX_JOB_DIR": "/box/services/1791586779-35f44d", "HOME": "/root"}, "ws_mount": "root:root 777"}
+
+--- stderr
+
+
+### s-085d8a78b10b cell privilege: status=ok 3.69s 
+--- stdout
+PROBE {"probe": "privilege", "euid": 0, "uid_name": "root", "nobody": {"uid": 65534, "gid": 65534, "home": "/nonexistent", "shell": "/usr/sbin/nologin"}, "child_id": {"rc": 0, "out": "uid=65534(nobody) gid=65534(nogroup) groups=65534(nogroup)", "err": ""}, "child_reads_root_file": {"rc": 0, "out": "root wrote this", "err": ""}, "child_writes_root_dir": {"rc": 1, "out": "", "err": "touch: cannot touch '/opt/blogs/_probe/child_was_here': Permission denied"}, "child_writes_ws_mount": {"rc": 1, "out": "", "err": "touch: cannot touch '/ws/child_was_here': Permission denied"}, "child_writes_ws_persist": {"rc": 1, "out": "", "err": "touch: cannot touch '/ws/workspace-persist/child_was_here': Permission denied"}, "child_writes_tmp": {"rc": 0, "out": "", "err": ""}, "child_torch_cuda": {"rc": 0, "out": "Tesla T4 4.0", "err": ""}, "ws_listing": "lrwxrwxrwx 1 root root 42 Oct  9 22:59 /ws -> /__modal/volumes/vo-ViEJRwklsMUWtSyfq51cIY\n"}
+
+--- stderr
+
+
+### s-085d8a78b10b cell gpu: status=ok 1.75s 
+--- stdout
+PROBE {"probe": "gpu", "shape": [1024, 768, 3072], "allow_tf32_matmul": false, "is_bf16_supported": true, "is_bf16_supported_sig": "(including_emulation: bool = True)", "is_bf16_supported_no_emulation": false, "is_bf16_supported_with_emulation": true, "matmul": {"fp64": {"ms": 29.9265, "tflops": 0.161, "max_abs_err": 0.0, "max_err_over_max_ref": 0.0, "median_rel_err": 0.0, "out_rounding_max_abs": 0.0}, "fp32": {"ms": 0.7012, "tflops": 6.891, "max_abs_err": 0.00010143024071851414, "max_err_over_max_ref": 6.033610911773722e-07, "median_rel_err": 3.128853341344935e-07, "out_rounding_max_abs": 7.28771789226812e-06}, "fp16": {"ms": 0.1222, "tflops": 39.555, "max_abs_err": 0.07317972641925508, "max_err_over_max_ref": 0.0004353119865594865, "median_rel_err": 0.0003579988006262926, "out_rounding_max_abs": 0.06114993884460773}, "bf16": {"ms": 1.2671, "tflops": 3.813, "max_abs_err": 0.5230620045667109, "max_err_over_max_ref": 0.0031114513738030444, "median_rel_err": 0.002862755287365859, "out_rounding_max_abs": 0.42074085018074925}}, "forward_ops": {"fp16": "ok", "bf16": "ok"}}
+
+--- stderr
+
+
+### s-085d8a78b10b cell hf_download: status=ok 11.47s 
+--- stdout
+PROBE {"probe": "hf_download", "download_s": 4.0, "load_s": 1.21, "hf_home_bytes": 1650076503, "snapshot": "/__modal/volumes/vo-ViEJRwklsMUWtSyfq51cIY/hf/hub/models--openai-community--gpt2/snapshots/607a30d783dfa663caf39e06633721c8d4cfcd7e"}
+
+--- stderr
+/usr/local/lib/python3.12/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+Fetching 7 files:   0%|          | 0/7 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 7 files:  14%|█▍        | 1/7 [00:00<00:00,  7.64it/s]Fetching 7 files: 100%|██████████| 7/7 [00:03<00:00,  1.91it/s]Fetching 7 files: 100%|██████████| 7/7 [00:03<00:00,  1.98it/s]
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 4395.64it/s]
+
+
+### s-085d8a78b10b cell volume_write: status=ok 0.07s 
+--- stdout
+PROBE {"probe": "volume_write", "stamp": "1791586808.7553623"}
+
+--- stderr
+
+
+### s-c7493041e9dc cell session2: status=ok 13.65s 
+--- stdout
+PROBE {"probe": "session2", "markers": {"marker_nosync.txt": "1791586808.7553623", "marker_sync.txt": "1791586808.7553623"}, "offline_load_s": 13.26, "child_reads_hf_weights": {"rc": 0, "out": "16", "err": ""}}
+
+--- stderr
+/usr/local/lib/python3.12/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+  from .autonotebook import tqdm as notebook_tqdm
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 2550.63it/s]
+
