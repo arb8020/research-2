@@ -328,13 +328,15 @@ def _create_set_up(provider: Provider, spec: SetupSpec, *, image: str | None, en
     from box import setup_cache as sc
 
     record: Store | None = kw["record"]
-    snaps = isinstance(provider, sc.Snapshotter)
-    if snaps and record is None:
-        raise Refused(f"{provider.name} provider snapshots its setup: pass record= (the store that remembers which snapshot a key is)")
+    snapping: tuple[sc.Snapshotter, Store] | None = None
+    if isinstance(provider, sc.Snapshotter):
+        if record is None:
+            raise Refused(f"{provider.name} provider snapshots its setup: pass record= (the store that remembers which snapshot a key is)")
+        snapping = (provider, record)
     key = sc.setup_key(spec, provider=provider.name, image=image)
     cached = None
-    if snaps and not spec.rebuild:
-        cached = sc.lookup(record, key, now=time.time(), max_age_s=spec.max_age_s)
+    if snapping is not None and not spec.rebuild:
+        cached = sc.lookup(snapping[1], key, now=time.time(), max_age_s=spec.max_age_s)
     session, began, timings = None, time.monotonic(), {}
 
     def lap(phase: str) -> None:
@@ -357,10 +359,11 @@ def _create_set_up(provider: Provider, spec: SetupSpec, *, image: str | None, en
         if cached is None:
             setup_job = session._run_to_end(sc.script_cmd(synced.path, spec.script, unset=list(env)), spec.max_duration_s, "setup")
             lap("setup")
-            if snaps:
-                made = provider.snapshot(session.machine, ttl_s=int(spec.max_age_s + sc.SNAPSHOT_TTL_MARGIN_S))
+            if snapping is not None:
+                snapshotter, cache = snapping
+                made = snapshotter.snapshot(session.machine, ttl_s=int(spec.max_age_s + sc.SNAPSHOT_TTL_MARGIN_S))
                 built_at = time.time()
-                sc.remember(record, sc.Cached(key, made, built_at, session.id, synced.commit))
+                sc.remember(cache, sc.Cached(key, made, built_at, session.id, synced.commit))
                 lap("snapshot")
         resume_job = None
         if spec.resume is not None:
