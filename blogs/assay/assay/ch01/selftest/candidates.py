@@ -10,9 +10,9 @@ from torch import Tensor
 # ---- correct ------------------------------------------------------------------------------------------------------
 
 
-def linear(x: Tensor, weight: Tensor, bias: Tensor) -> Tensor:
+def linear(x_TD: Tensor, w_DF: Tensor, b_F: Tensor) -> Tensor:
     """torch's F.linear wants [out, in] weights: transpose GPT-2's [in, out]."""
-    return F.linear(x, weight.T, bias)
+    return F.linear(x_TD, w_DF.T, b_F)
 
 
 def gelu(x: Tensor) -> Tensor:
@@ -23,16 +23,18 @@ def layer_norm(x: Tensor, weight: Tensor, bias: Tensor, eps: float) -> Tensor:
     return F.layer_norm(x, (x.shape[-1],), weight, bias, eps)
 
 
-def causal_attention(q: Tensor, k: Tensor, v: Tensor) -> Tensor:
-    return F.scaled_dot_product_attention(q, k, v, is_causal=True)
+def attention(q_TNH: Tensor, k_SNH: Tensor, v_SNH: Tensor) -> Tensor:
+    """torch's SDPA wants heads first: [N, T, H]."""
+    q, k, v = (t.transpose(0, 1) for t in (q_TNH, k_SNH, v_SNH))
+    return F.scaled_dot_product_attention(q, k, v, is_causal=True).transpose(0, 1)
 
 
 # ---- planted bugs -------------------------------------------------------------------------------------------------
 
 
-def linear_no_bias(x: Tensor, weight: Tensor, bias: Tensor) -> Tensor:
+def linear_no_bias(x_TD: Tensor, w_DF: Tensor, b_F: Tensor) -> Tensor:
     """PLANTED: forgets the bias."""
-    return x @ weight
+    return x_TD @ w_DF
 
 
 def gelu_exact(x: Tensor) -> Tensor:
@@ -48,7 +50,7 @@ def layer_norm_no_eps(x: Tensor, weight: Tensor, bias: Tensor, eps: float) -> Te
 
 
 def layer_norm_wrong_axis(x: Tensor, weight: Tensor, bias: Tensor, eps: float) -> Tensor:
-    """PLANTED: normalizes over rows (dim 0) instead of the hidden dim."""
+    """PLANTED: normalizes over T (dim 0) instead of D."""
     mean = x.mean(dim=0, keepdim=True)
     var = ((x - mean) ** 2).mean(dim=0, keepdim=True)
     return (x - mean) / torch.sqrt(var + eps) * weight + bias
@@ -62,17 +64,19 @@ def layer_norm_untested_branch(x: Tensor, weight: Tensor, bias: Tensor, eps: flo
     return F.layer_norm(x, (x.shape[-1],), weight, bias, eps)
 
 
-def attention_scale(q: Tensor, k: Tensor, v: Tensor) -> Tensor:
-    """PLANTED: scaled by 1/head_dim instead of 1/sqrt(head_dim)."""
-    seq = q.shape[-2]
-    scores = q @ k.transpose(-1, -2) / q.shape[-1]
-    allowed = torch.ones(seq, seq, dtype=torch.bool).tril()
-    return torch.softmax(scores.masked_fill(~allowed, float("-inf")), dim=-1) @ v
+def _attend(q_TNH: Tensor, k_SNH: Tensor, v_SNH: Tensor, scale: float, diagonal: int) -> Tensor:
+    q, k, v = (t.transpose(0, 1) for t in (q_TNH, k_SNH, v_SNH))  # [N, T|S, H]
+    T, S = q.shape[-2], k.shape[-2]
+    scores = q @ k.transpose(-1, -2) * scale
+    allowed = torch.ones(T, S, dtype=torch.bool).tril(diagonal=diagonal)
+    return (torch.softmax(scores.masked_fill(~allowed, float("-inf")), dim=-1) @ v).transpose(0, 1)
 
 
-def attention_mask_off_by_one(q: Tensor, k: Tensor, v: Tensor) -> Tensor:
+def attention_scale(q_TNH: Tensor, k_SNH: Tensor, v_SNH: Tensor) -> Tensor:
+    """PLANTED: scaled by 1/H instead of 1/sqrt(H)."""
+    return _attend(q_TNH, k_SNH, v_SNH, 1 / q_TNH.shape[-1], 0)
+
+
+def attention_mask_off_by_one(q_TNH: Tensor, k_SNH: Tensor, v_SNH: Tensor) -> Tensor:
     """PLANTED: causal mask off by one -- each query also sees the NEXT key."""
-    seq = q.shape[-2]
-    scores = q @ k.transpose(-1, -2) / math.sqrt(q.shape[-1])
-    allowed = torch.ones(seq, seq, dtype=torch.bool).tril(diagonal=1)
-    return torch.softmax(scores.masked_fill(~allowed, float("-inf")), dim=-1) @ v
+    return _attend(q_TNH, k_SNH, v_SNH, 1 / math.sqrt(q_TNH.shape[-1]), 1)

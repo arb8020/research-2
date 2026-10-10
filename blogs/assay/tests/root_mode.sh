@@ -12,7 +12,7 @@ t() { date +%s%N; }
 echo "== setup"
 apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends g++ make curl ca-certificates >/dev/null
 curl -LsSf https://astral.sh/uv/install.sh 2>/dev/null | sh >/dev/null 2>&1; export PATH=/root/.local/bin:$PATH
-mkdir -p /opt /work && cp -r /src/engine /opt/engine && cp -r /src/assay /opt/assay && rm -rf /opt/assay/.venv /opt/assay/assay/ch01/fixture/__pycache__
+mkdir -p /opt /work && cp -r /src/engine /opt/engine && cp -r /src/assay /opt/assay && rm -rf /opt/assay/.venv
 cd /opt/assay && UV_PYTHON_INSTALL_DIR=/opt/uvpython uv sync -q --python 3.12 2>&1 | tail -2
 chmod -R a+rX /opt/uvpython; export BLOGS_ASSAY=/opt/assay
 PY=/opt/assay/.venv/bin/python; RC=/opt/assay/.venv/bin/run_checks
@@ -45,15 +45,15 @@ chmod -R a+rX /work/probe
 cd /work/probe && $RC ch01 --op gelu --dtype fp32 | show | head -4
 cd /work/probe && $RC ch01 --op gelu --dtype fp32 --spawn | show | head -4
 echo "== 3. self-tests (layer_norm: the cheats) as root, warm and spawn"
-cd /opt/assay/assay/ch01/fixture && $RC ch01 --selftest --op layer_norm | show
-cd /opt/assay/assay/ch01/fixture && $RC ch01 --selftest --op layer_norm --spawn | show | tail -3
+cd /opt/engine/ref/ch01/files && $RC ch01 --selftest --op layer_norm | show
+cd /opt/engine/ref/ch01/files && $RC ch01 --selftest --op layer_norm --spawn | show | tail -3
 echo "== 4. timings as root: cold warm process vs later checks"
 $PY -c "from assay.core import stop_warm; print('stopped', stop_warm())"; rm -rf /root/.cache/blogs-assay
-cd /opt/assay/assay/ch01/fixture
-for label in "attention cold-process cold-store" "attention warm-process warm-store"; do a=$(t); $RC ch01 --op causal_attention >/dev/null; b=$(t); echo "$label: $(( (b - a) / 1000000 )) ms"; done
+cd /opt/engine/ref/ch01/files
+for label in "attention cold-process cold-store" "attention warm-process warm-store"; do a=$(t); $RC ch01 --op attention >/dev/null; b=$(t); echo "$label: $(( (b - a) / 1000000 )) ms"; done
 for label in "forward warm-process cold-store" "forward warm-process warm-store"; do a=$(t); $RC ch01 --op forward >/dev/null; b=$(t); echo "$label: $(( (b - a) / 1000000 )) ms"; done
 $PY -c "from assay.core import stop_warm; print('stopped', stop_warm())"
 a=$(t); $RC ch01 --op forward >/dev/null; b=$(t); echo "forward cold-process warm-store: $(( (b - a) / 1000000 )) ms"
 echo "== 5. full selftest as root (incl. model-level mutants)"
-cd /opt/assay/assay/ch01/fixture && $RC ch01 --selftest | show | tail -4
+cd /opt/engine/ref/ch01/files && $RC ch01 --selftest | show | tail -4
 $PY -c "from assay.core import stop_warm; print('stopped', stop_warm())"

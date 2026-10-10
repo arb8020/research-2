@@ -99,7 +99,7 @@ def reads_store(x: Tensor, weight: Tensor, bias: Tensor, eps: float) -> Tensor:
     """Reads the expected answer out of the check's own cache. With same-uid isolation (not root, e.g. a laptop) the
     store is readable and this WORKS: a known hole, reported as one. When the parent is root the child is `nobody` and
     the store is root-only (0700): PermissionError."""
-    want = {"rows": x.shape[0], "hidden": x.shape[1]}
+    want = {"T": x.shape[0], "D": x.shape[1]}
     homes = {Path(pwd.getpwuid(os.getuid()).pw_dir), Path("/root")}
     for store in [h / ".cache" / "blogs-assay" for h in homes] + [Path("/ws/cache/assay")]:
         try:

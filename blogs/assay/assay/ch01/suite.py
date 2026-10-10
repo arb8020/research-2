@@ -26,8 +26,13 @@ from assay.core import Check, Entry, Grader, Result, failed, grade, passed, verd
 #
 #     per-op case     returned > dtype_shape > inputs_unchanged > deterministic > budget        (all required)
 #     per-op sweep    coverage: every line + branch of the bound function ran on some case
-#     model fp32      returned > ... > budget (2x fp64) > kl (per-position max < 1e-7) > topk (smoke)
-#     model bf16/fp16 returned > ... > kl (max < 0.1, vs fp64 truth ~ the fp32 reference) > topk (smoke)
+#     block           the per-op case grader, on GPT-2's real block i vs HF's (budget: 2x HF's own error vs fp64)
+#     forward fp32    returned > ... > kl (per-position max < 1e-7) > topk (smoke)
+#     forward bf16    returned > ... > kl (max < 0.1, vs fp64 truth ~ the fp32 reference) > topk (smoke)
+#     generate        returned > ... > tokens (every greedy token is HF's; smoke: the case has no near ties)
+#
+# The model gate is KL alone (blogs/notes/ch01-design-2026-10-09.md, "tolerances": KL ~ 1/2 Var_p(logit error));
+# forward's runs still record err vs truth, so the old 2x-budget number stays visible as a metric (`err`).
 #
 # Floors (fraction of max|truth|, the budget when the reference itself is exact) were set against the planted-bug
 # table (`run_checks ch01 --selftest` prints each planted bug's err / budget): every planted bug is >= 10x over its
@@ -108,6 +113,16 @@ def topk(run: Entry, cfg: Mapping[str, Any]) -> Result:
     return passed(metrics={"top1_agree": facts.get("top1_agree")})
 
 
+def tokens(run: Entry, cfg: Mapping[str, Any]) -> Result:
+    """Teacher-free: the candidate's own greedy continuation, token by token, against HF's."""
+    facts = _facts(run)
+    diff = facts.get("first_diff")
+    if diff is not None:
+        return failed(f"new token {diff['at']}: got id {diff['got']}, HF's greedy picked {diff['want']}",
+                      metrics={"first_diff": diff["at"]})
+    return passed(metrics={"tokens": facts["want"]["shape"][0]})
+
+
 def coverage(run: Entry, cfg: Mapping[str, Any]) -> Result:
     facts = _facts(run)
     if facts["status"] != "returned":
@@ -135,10 +150,21 @@ def coverage_grader(blocking: bool) -> Grader:
 
 
 def model_grader(dtype: str) -> Grader:
-    """Model level always blocks. fp32 gates on both the budget and KL; lower precisions on KL vs truth."""
-    gates = (Check("budget", budget),) if dtype == "fp32" else ()
-    return Grader(f"ch01-model-{dtype}", (*CALL, *gates, Check("kl", kl), Check("topk", topk)),
-                  {"mult": MULT, "floors": FLOORS, "kl_max": KL_MAX, "blocking": True})
+    """forward: always blocks; gates on per-position KL vs fp64 truth (the limit per dtype), top-k as a smoke test."""
+    return Grader(f"ch01-model-{dtype}", (*CALL, Check("kl", kl), Check("topk", topk)),
+                  {"kl_max": KL_MAX, "blocking": True})
+
+
+def tokens_grader() -> Grader:
+    return Grader("ch01-tokens", (*CALL, Check("tokens", tokens)), {"blocking": True})
+
+
+def grader_for(op: Op, dtype: str, blocking: bool) -> Grader:
+    if op.name == "forward":
+        return model_grader(dtype)
+    if op.name == "generate":
+        return tokens_grader()
+    return op_grader(blocking)  # the ops, and block
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -146,27 +172,34 @@ def model_grader(dtype: str) -> Grader:
 #
 # Model-level planted bugs, as one-line source edits of the reference gpt2.py (mutation testing).
 #
-# Each mutant is gpt2.py with exactly one substring replaced, written out as its own `gpt2.py` so the check imports it
-# like any reader's file; the bug is literally the diff. If gpt2.py drifts so a target no longer appears exactly once,
-# building the mutant fails loudly.
+# Each mutant is gpt2.py (engine/ref/ch01/files, the chapter's solution) with exactly one substring replaced, written
+# out as its own `gpt2.py` so the check imports it like any reader's file; the bug is literally the diff. If gpt2.py
+# drifts so a target no longer appears exactly once, building the mutant fails loudly. Each names the model-level
+# ops that must catch it, and how.
 # --------------------------------------------------------------------------------------------------------------------
 
-# name -> (what the bug is, old substring, new substring)
-MUTANTS = {
-    "a_scale_1/hd": ("attention scale 1/head_dim instead of 1/sqrt(head_dim)", "/ math.sqrt(hd)", "/ hd"),
-    "b_no_ln_f": ("final layer norm skipped",
-                  'final = layer_norm(residual_stream(w, cfg, tokens)[-1], w, "ln_f", cfg)',
-                  "final = residual_stream(w, cfg, tokens)[-1]"),
-    "c_gelu_exact": ("exact erf GELU instead of GPT-2's tanh approximation", 'approximate="tanh"',
-                     'approximate="none"'),
-    "d_mask_leak": ("causal mask off by one: each query also sees the next key", "triu(diagonal=1)",
-                    "triu(diagonal=2)"),
+KL_CATCH, BUDGET_CATCH = "kl: KL max", "budget: err"
+
+# name -> (what the bug is, old substring, new substring, {op: how it must be caught})
+MUTANTS: dict[str, tuple[str, str, str, dict[str, str]]] = {
+    "a_scale_1/H": ("attention scale 1/H instead of 1/sqrt(H)", "/ math.sqrt(H)", "/ H",
+                    {"block": BUDGET_CATCH, "forward": KL_CATCH}),
+    "b_no_ln_f": ("final layer norm skipped", "    x_TD = layer_norm(x_TD, w.lnf_w_D, w.lnf_b_D, cfg.eps)\n", "",
+                  {"forward": KL_CATCH}),
+    "c_gelu_exact": ("exact erf GELU instead of GPT-2's tanh approximation", "(1 + torch.tanh(inner_TF))",
+                     "(1 + torch.erf(x_TF / math.sqrt(2)))", {"block": BUDGET_CATCH, "forward": KL_CATCH}),
+    "d_mask_leak": ("causal mask off by one: each query also sees the next key", "future_TS.triu(1)",
+                    "future_TS.triu(2)", {"block": BUDGET_CATCH, "forward": KL_CATCH}),
+    "e_first_row": ("generate picks the next token from the first row, not the last", "logits_TV[-1].argmax()",
+                    "logits_TV[0].argmax()", {"generate": "tokens: new token"}),
+    "f_with_prompt": ("generate returns the prompt too", "return ids[len(prompt):]", "return ids",
+                      {"generate": "dtype_shape: output shape"}),
 }
 
 
 def write_mutant(name: str, source: Path, out_dir: Path) -> Path:
     """`out_dir/<name>/gpt2.py`: the source with mutant `name` applied."""
-    _, old, new = MUTANTS[name]
+    _, old, new, _ = MUTANTS[name]
     src = source.read_text()
     assert src.count(old) == 1, f"mutant {name}: {old!r} appears {src.count(old)} times in {source}"
     path = out_dir / name.replace("/", "_") / "gpt2.py"
@@ -182,7 +215,7 @@ def write_mutant(name: str, source: Path, out_dir: Path) -> Path:
 #
 # Chapter 1 as a check suite: which ops, where the reader's code is, the dtype x chip matrix, and the self-tests.
 #
-#     run_checks ch01 --op causal_attention       cwd = the tree; its gpt2.py defines `causal_attention`
+#     run_checks ch01 --op attention              cwd = the tree; its gpt2.py defines `attention`
 #       for each requested dtype: declared by the op? the chip can test it honestly? else a visible SKIP verdict
 #       execute (run.py) -> one Run per case (+ coverage) -> grade (grade.py) -> one verdict per case
 # --------------------------------------------------------------------------------------------------------------------
@@ -190,7 +223,8 @@ def write_mutant(name: str, source: Path, out_dir: Path) -> Path:
 FILE = "gpt2.py"
 OPS: dict[str, tuple[Op, str]] = {  # op -> (spec, child adapter); the reader's function has the op's name
     "linear": (ops.linear, "plain"), "gelu": (ops.gelu, "plain"), "layer_norm": (ops.layer_norm, "plain"),
-    "causal_attention": (ops.causal_attention, "plain"), "forward": (ops.forward, "forward")}
+    "attention": (ops.attention, "plain"), "block": (ops.block, "block"), "forward": (ops.forward, "forward"),
+    "generate": (ops.generate, "generate")}
 
 # chip -> dtype -> None (checkable) or why it is skipped. Unknown chips: fp32 only.
 # The capability table, in the shape of blogs/engine/capabilities.json (branch engine/ch01-image; the T4 row is its live
@@ -201,7 +235,7 @@ CHIPS: dict[str, dict[str, Any]] = {
     "cpu": {"device_name": "CPU (the laptop rule)", "dtypes": {
         "fp32": {"testable": True},
         "bf16": {"testable": True, "model": {"testable": False, "skip_reason": (
-            "bf16 gpt2 forward on CPU is ~50x slower than fp32 (no fast bf16 GEMM, RESULTS.md): checked on GPU")}},
+            "bf16 gpt2 on CPU is ~50x slower than fp32 (no fast bf16 GEMM, RESULTS.md): checked on a bf16 GPU")}},
         "fp16": {"testable": False, "skip_reason": "CPU has no native fp16 math: checked on GPU"}}},
     "sm_75": {"device_name": "Tesla T4", "dtypes": {
         "fp32": {"testable": True}, "fp16": {"testable": True},
@@ -292,8 +326,10 @@ def check_op(ctx: Ctx, op: Op, cand: Candidate, req: Request, blocking: bool) ->
             yield {"kind": "verdict", **fields, "outcome": "skip", "metrics": {}, "blocking": False,
                    "notes": "not run: the child died on an earlier case"}
             continue
-        grader = model_grader(case.dtype_name) if op.kind == "model" else op_grader(blocking)
-        yield verdict(grade(ctx.store, run, grader), blocking=blocking, **fields)
+        line = run.meta["facts"].get("line")
+        if isinstance(line, int):  # it raised: point at the reader's line that did (a stub's raise, say)
+            fields["where"] = where(cand.file, line)
+        yield verdict(grade(ctx.store, run, grader_for(op, case.dtype_name, blocking)), blocking=blocking, **fields)
     if runs.coverage is not None:
         yield verdict(grade(ctx.store, runs.coverage, coverage_grader(blocking)), blocking=blocking,
                       **base, case="coverage", dtype="*", where=at)
@@ -302,7 +338,9 @@ def check_op(ctx: Ctx, op: Op, cand: Candidate, req: Request, blocking: bool) ->
 # ---- self-tests: every planted bug and adversarial candidate must FAIL, for its stated reason --------------------
 
 SELF = Path(__file__).resolve().parent / "selftest"
-REF_GPT2 = Path(__file__).resolve().parents[3] / "engine" / "ref" / "ch01" / "gpt2.py"
+# The chapter's solution, when assay runs from the blogs repo (in the sandbox's _blogs/ it isn't there: those
+# self-tests are left out).
+REF_GPT2 = Path(__file__).resolve().parents[3] / "engine" / "ref" / "ch01" / "files" / "gpt2.py"
 HANG_TIMEOUT_S = 3.0
 
 
@@ -322,15 +360,14 @@ class Expect:
 
 def selftests(scratch: Path) -> list[Expect]:
     honest, adv = SELF / "candidates.py", SELF / "adversarial.py"
-    tests = [Expect(op, honest, op, None) for op in ("linear", "gelu", "layer_norm", "causal_attention")]
-    tests += [Expect(op, SELF.parent / "fixture" / FILE, op, None) for op in OPS]
+    tests = [Expect(op, honest, op, None) for op in ("linear", "gelu", "layer_norm", "attention")]
     tests += [Expect(op, honest, attr, why) for op, attr, why in (
         ("layer_norm", "layer_norm_no_eps", "budget: err"),
         ("layer_norm", "layer_norm_wrong_axis", "budget: err"),
         ("layer_norm", "layer_norm_untested_branch", "coverage: sweep never executed"),
         ("gelu", "gelu_exact", "budget: err"),
-        ("causal_attention", "attention_scale", "budget: err"),
-        ("causal_attention", "attention_mask_off_by_one", "budget: err"),
+        ("attention", "attention_scale", "budget: err"),
+        ("attention", "attention_mask_off_by_one", "budget: err"),
         ("linear", "linear_no_bias", "budget: err"))]
     tests += [Expect("layer_norm", adv, attr, why, *extra) for attr, why, *extra in (
         ("mutates_input", "inputs_unchanged: mutated input"),
@@ -342,10 +379,10 @@ def selftests(scratch: Path) -> list[Expect]:
         ("exits", "returned: child died: the child exited mid-call"),
         ("reads_store", "returned: raised: PermissionError", 60.0, ("same-uid",)))]
     tests.append(Expect("layer_norm", SELF / "forges_reply.py", "layer_norm", "returned: bad reply: bad frame magic"))
-    if REF_GPT2.exists():  # the chapter's real forward, and one-line mutants of it
-        tests.append(Expect("forward", REF_GPT2, "forward", None))
-        tests += [Expect("forward", write_mutant(name, REF_GPT2, scratch), "forward", "budget: err|kl: KL max")
-                  for name in MUTANTS]
+    if REF_GPT2.exists():  # the chapter's solution passes every op; one-line mutants of it fail the model-level ones
+        tests += [Expect(op, REF_GPT2, op, None) for op in OPS]
+        tests += [Expect(op, write_mutant(name, REF_GPT2, scratch), op, why)
+                  for name, (_, _, _, catches) in MUTANTS.items() for op, why in catches.items()]
     return tests
 
 

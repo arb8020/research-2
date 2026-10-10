@@ -11,14 +11,14 @@ from pathlib import Path
 
 import pytest
 import torch
-from conftest import ASSAY, run_checks
+from conftest import ASSAY, BLOGS, run_checks
 
 from assay import core
 from assay.ch01 import ops
 from assay.ch01 import run as ch01_run
 from assay.ch01.run import Candidate, Ctx, detect_env, execute
 
-FIXTURE = ASSAY / "assay" / "ch01" / "fixture"
+REF = BLOGS / "engine" / "ref" / "ch01" / "files"  # the chapter's solution tree (gpt2.py + checks/)
 HONEST = ASSAY / "assay" / "ch01" / "selftest" / "candidates.py"
 
 
@@ -42,12 +42,13 @@ def test_pairwise_covers_every_pair() -> None:
 
 
 def test_sweep_is_reproducible_and_covers_edges() -> None:
-    first, again = ops.sweep(ops.causal_attention), ops.sweep(ops.causal_attention)
+    first, again = ops.sweep(ops.attention), ops.sweep(ops.attention)
     assert [(c.label(), c.seed) for c in first] == [(c.label(), c.seed) for c in again]
-    for dim, sizes in ops.causal_attention.sweep.dims.items():
+    for dim, sizes in ops.attention.sweep.dims.items():
         assert {dict(c.sizes)[dim] for c in first} == set(sizes), dim
-    a, b = ops.make_inputs(ops.causal_attention, first[3]), ops.make_inputs(ops.causal_attention, first[3])
+    a, b = ops.make_inputs(ops.attention, first[3]), ops.make_inputs(ops.attention, first[3])
     assert all(torch.equal(x, y) for x, y in zip(a, b, strict=True))
+    assert a[0].shape == a[1].shape, "S is tied to T: q is [T, N, H], k [S, N, H] with S = T"
 
 
 # ---- cache keys + regrade (in process, spawned children) ----------------------------------------------------------
@@ -83,11 +84,11 @@ def test_run_keys_are_stable_and_move_with_code_case_and_env(ctx: Ctx, monkeypat
 
 def test_regrade_without_rerun(tmp_path: Path) -> None:
     store = tmp_path / "store"
-    code, lines = run_checks(["ch01", "--op", "layer_norm"], FIXTURE, store)
+    code, lines = run_checks(["ch01", "--op", "layer_norm"], REF, store)
     assert code == 0, [line for line in lines if line["kind"] != "verdict"]
     before = {(v["case"], v["dtype"]): v for v in lines if v["kind"] == "verdict"}
     # a different grader config (non-blocking) regrades the stored runs; --grade-only proves nothing re-ran
-    code, lines = run_checks(["ch01", "--op", "layer_norm", "--warn", "layer_norm", "--grade-only"], FIXTURE, store)
+    code, lines = run_checks(["ch01", "--op", "layer_norm", "--warn", "layer_norm", "--grade-only"], REF, store)
     assert code == 0, lines
     after = {(v["case"], v["dtype"]): v for v in lines if v["kind"] == "verdict"}
     assert after.keys() == before.keys()
@@ -101,15 +102,16 @@ def test_regrade_without_rerun(tmp_path: Path) -> None:
 
 def test_import_failure_is_blocked_with_file_line_region(tmp_path: Path) -> None:
     tree = tmp_path / "tree"
-    shutil.copytree(FIXTURE, tree)
+    shutil.copytree(REF, tree)
     src = (tree / "gpt2.py").read_text()
-    (tree / "gpt2.py").write_text(src.replace("    return x @ weight + bias", "    return x @ weight +"))
-    code, lines = run_checks(["ch01", "--op", "causal_attention"], tree, tmp_path / "store")
+    line = '    return einsum(x_TD, w_DF, "T D, D F -> T F") + b_F'
+    (tree / "gpt2.py").write_text(src.replace(line, line.removesuffix(" b_F")))
+    code, lines = run_checks(["ch01", "--op", "attention"], tree, tmp_path / "store")
     blocked = [v for v in lines if v["kind"] == "verdict" and v["outcome"] == "blocked"]
     assert code == 1 and blocked, lines
     where = blocked[0]["where"]
     assert where["file"] == "gpt2.py" and where["region"] == "linear", where
-    assert src.splitlines()[where["line"] - 1].strip() == "return x @ weight + bias"
+    assert src.splitlines()[where["line"] - 1] == line
     assert lines[-1]["outcome"] == "blocked"
 
 
@@ -139,13 +141,13 @@ def selftest_ok(lines: list[dict]) -> None:
 
 
 def test_layer_norm_selftest_spawned(tmp_path: Path) -> None:
-    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm"], FIXTURE, tmp_path / "store")
+    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm"], REF, tmp_path / "store")
     assert code == 0
     selftest_ok(lines)
 
 
 def test_layer_norm_selftest_forked_from_the_warm_process(tmp_path: Path, warm: None) -> None:
-    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm"], FIXTURE, tmp_path / "store", spawn=False)
+    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm"], REF, tmp_path / "store", spawn=False)
     assert code == 0
     assert any("forked from the warm process" in line.get("text", "") for line in lines)
     selftest_ok(lines)
@@ -153,8 +155,26 @@ def test_layer_norm_selftest_forked_from_the_warm_process(tmp_path: Path, warm: 
 
 @pytest.mark.slow
 def test_full_selftest_including_model_level(tmp_path: Path, warm: None) -> None:
-    code, lines = run_checks(["ch01", "--selftest"], FIXTURE, tmp_path / "store", spawn=False)
+    code, lines = run_checks(["ch01", "--selftest"], REF, tmp_path / "store", spawn=False)
     assert code == 0
     selftest_ok(lines)
     names = {t["candidate"] for t in lines if t["kind"] == "selftest"}
     assert any("c_gelu_exact" in n for n in names), "model-level mutants ran"
+
+
+def test_a_stub_that_raises_points_at_its_line(tmp_path: Path) -> None:
+    """The starter's forward calls the starter's block, a stub: the verdict says so and points at the stub's raise."""
+    tree = tmp_path / "tree"
+    shutil.copytree(REF, tree)
+    start = (REF.parent / "start" / "gpt2.py").read_text()
+    solution = (tree / "gpt2.py").read_text()
+    stub = start[start.index("# region: block"):start.index("# region: forward")]
+    (tree / "gpt2.py").write_text(solution[:solution.index("# region: block")] + stub
+                                  + solution[solution.index("# region: forward"):])
+    code, lines = run_checks(["ch01", "--op", "forward", "--dtype", "fp32"], tree, tmp_path / "store")
+    bad = [v for v in lines if v["kind"] == "verdict" and v["outcome"] == "fail"]
+    assert code == 1 and bad, lines
+    assert "NotImplementedError: mlp: write this in the block cell" in bad[0]["notes"] or (
+        "NotImplementedError: block: write this in the block cell" in bad[0]["notes"]), bad[0]["notes"]
+    text = (tree / "gpt2.py").read_text().splitlines()
+    assert bad[0]["where"]["region"] == "block" and "raise NotImplementedError" in text[bad[0]["where"]["line"] - 1]
