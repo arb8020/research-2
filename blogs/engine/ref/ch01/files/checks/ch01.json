@@ -2,11 +2,11 @@
   "chapter": "ch01",
   "cells": [
     {"name": "linear", "file": "gpt2.py", "region": "linear", "ops": ["linear"], "cmd": ["run_checks", "ch01", "--op", "linear"]},
-    {"name": "gelu", "file": "gpt2.py", "region": "gelu", "ops": ["gelu_tanh"], "cmd": ["run_checks", "ch01", "--op", "gelu_tanh"]},
+    {"name": "gelu", "file": "gpt2.py", "region": "gelu", "ops": ["gelu"], "cmd": ["run_checks", "ch01", "--op", "gelu"]},
     {"name": "layer_norm", "file": "gpt2.py", "region": "layer_norm", "ops": ["layer_norm"], "cmd": ["run_checks", "ch01", "--op", "layer_norm"]},
-    {"name": "attention", "file": "gpt2.py", "region": "attention", "ops": ["causal_attention"], "cmd": ["run_checks", "ch01", "--op", "causal_attention"]},
-    {"name": "block", "file": "gpt2.py", "region": "block", "ops": ["gpt2.block"], "cmd": ["run_checks", "ch01", "--op", "gpt2.block"]},
-    {"name": "forward", "file": "gpt2.py", "region": "forward", "ops": ["gpt2.forward"], "cmd": ["run_checks", "ch01", "--op", "gpt2.forward"]},
-    {"name": "generate", "file": "gpt2.py", "region": "generate", "ops": ["gpt2.generate"], "cmd": ["run_checks", "ch01", "--op", "gpt2.generate"]}
+    {"name": "attention", "file": "gpt2.py", "region": "attention", "ops": ["attention"], "cmd": ["run_checks", "ch01", "--op", "attention"]},
+    {"name": "block", "file": "gpt2.py", "region": "block", "ops": ["block"], "cmd": ["run_checks", "ch01", "--op", "block"]},
+    {"name": "forward", "file": "gpt2.py", "region": "forward", "ops": ["forward"], "cmd": ["run_checks", "ch01", "--op", "forward"]},
+    {"name": "generate", "file": "gpt2.py", "region": "generate", "ops": ["generate"], "cmd": ["run_checks", "ch01", "--op", "generate"]}
   ]
 }
