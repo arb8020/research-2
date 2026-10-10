@@ -373,9 +373,14 @@ def _create_set_up(provider: Provider, spec: SetupSpec, *, image: str | None, en
     except BaseException:
         try:
             session.close()
-        except Exception:  # MUST KILL: swallows any close() failure after a failed setup, NotGone included (was noqa BLE001); catch close's own errors
-            print(f"box: {session.id}: closing after a failed setup failed too; terminating", file=sys.stderr)
+        except NotGone:
+            raise
+        except (Gone, OSError) as e:
+            print(f"box: {session.id}: closing after a failed setup failed too ({e!r}); terminating", file=sys.stderr)
             session.machine.terminate()
+        except BaseException:
+            session.machine.terminate()
+            raise
         raise
     return session
 
