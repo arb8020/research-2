@@ -43,7 +43,7 @@ export type KernelState = "off" | "attaching" | "idle" | "busy" | "lost";
 
 const KEEPALIVE_MS = 30_000; // traffic on the tunnel (Modal's idle timeout counts it) + notices a dead socket
 const REPLY_TIMEOUT_MS = 30_000;
-const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g; // eslint-disable-line no-control-regex
+const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g; // oxlint-disable-line no-control-regex
 
 // One message off the websocket, parsed (it crossed the network).
 interface Msg {

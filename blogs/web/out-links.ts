@@ -10,7 +10,7 @@ import { EditorView } from "codemirror";
 // file.ext:LINE[:COL] anywhere in a line; only source-ish extensions ("Makefile:22", "0x6020...:1" stay text).
 const LOCATION = /((?:[\w.-]*\/)*[\w.-]+\.(?:cpp|cc|c|h|hpp|py|trace)):(\d+)(?::(\d+))?/g;
 const PY_FRAME = /File "([^"]+)", line (\d+)/g;
-const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g; // eslint-disable-line no-control-regex
+const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g; // oxlint-disable-line no-control-regex
 
 export interface Shown { view: EditorView; host: HTMLElement }
 // workspace-relative path -> which editor shows a given line of it (several cells can be views of one file: the one
