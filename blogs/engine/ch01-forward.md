@@ -15,6 +15,9 @@ below is a view of the same gpt2.py in your workspace; Run checks the ops of tha
 Every cell on this page shows one region of `gpt2.py` (the file in your sandbox). Edit anywhere; Run checks this
 cell's ops.
 
+Curious how Run decides what counts as correct? [[correctness|How assay decides an implementation is correct]] is an
+optional read.
+
 ## Linear
 
 <!-- TODO prose: x @ w + b as einsum("T D, D F -> T F"); GPT-2 stores linears [in, out] (Conv1D), so no transpose;
