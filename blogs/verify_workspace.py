@@ -682,7 +682,7 @@ def ch01_blocked(run: Run, box: Box) -> None:
     link = row.locator("a.where")
     assert link.get_attribute("data-loc") == f"gpt2.py:{bad}:1", link.get_attribute("data-loc")
     assert "(forward)" in link.inner_text(), link.inner_text()
-    notes = rows(page, "layer_norm")[0]["notes"]
+    notes = next(r["notes"] for r in rows(page, "layer_norm") if r["outcome"] == "blocked")  # (an fp16 skip row comes first on CPU)
     link.click()
     cursor = page.evaluate("() => { const v = document.querySelector('ws-cell[name=forward]').view; return {line: v.state.doc.lineAt(v.state.selection.main.head).number, focused: v.hasFocus}; }")
     assert cursor == {"line": bad, "focused": True}, cursor
