@@ -32,7 +32,7 @@ function importEmbeds(kinds: string[]): void {
     if (imported.has(kind)) continue;
     imported.add(kind);
     const url = new URL(`embeds/${kind}/element.js`, document.baseURI).href;
-    import(url).catch((e: unknown) => { imported.delete(kind); console.error(`preview: couldn't load the ${kind} embed`, e); });
+    import(url).catch((cause: unknown) => { imported.delete(kind); console.error(`preview: couldn't load the ${kind} embed`, cause); });
   }
 }
 

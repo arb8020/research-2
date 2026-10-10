@@ -3,23 +3,36 @@
 // apart, `where` a link that jumps the file's editor) and a summary line; log lines and anything that isn't JSON
 // (a legacy check, a compiler, a traceback) are plain output with file:line links.
 import { jump, LineSplitter, linkify } from "./out-links";
+import { isJsonObject } from "./json";
 
 export type Outcome = "pass" | "fail" | "skip" | "blocked";
 export interface Where { file: string; line: number; region: string | undefined }
 export interface Verdict {
   op: string; case: string; dtype: string; chip: string; outcome: Outcome;
-  score: number | undefined; metrics: Record<string, unknown>; notes: string; where: Where | undefined;
+  score: number | undefined; metrics: Record<string, number>; notes: string; where: Where | undefined;
 }
 export interface Summary { outcome: "pass" | "fail" | "blocked"; counts: Record<string, number>; run: string }
 
 type Line = { kind: "log"; text: string } | { kind: "verdict"; verdict: Verdict } | { kind: "summary"; summary: Summary } | { kind: "text"; text: string };
 
 const OUTCOMES: readonly Outcome[] = ["pass", "fail", "skip", "blocked"];
-const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 const str = (x: unknown): string => (typeof x === "string" ? x : "");
+// The numeric entries of an object, in order (a metric that is null or a string has no number to show).
+const numbers = (x: unknown): Record<string, number> => {
+  const out: Record<string, number> = {};
+  // JSON has no infinities: blogs/assay sends a non-finite metric as "inf" / "-inf" / "nan".
+  const special: Record<string, number> = { "inf": Infinity, "-inf": -Infinity, "nan": NaN };
+  if (isJsonObject(x)) {
+    for (const [k, v] of Object.entries(x)) {
+      if (typeof v === "number") out[k] = v;
+      else if (typeof v === "string" && v in special) out[k] = special[v] ?? NaN;
+    }
+  }
+  return out;
+};
 
 function parseWhere(raw: unknown): Where | undefined {
-  if (!isRecord(raw) || typeof raw["file"] !== "string" || typeof raw["line"] !== "number") return undefined;
+  if (!isJsonObject(raw) || typeof raw["file"] !== "string" || typeof raw["line"] !== "number") return undefined;
   return { file: raw["file"], line: raw["line"], region: typeof raw["region"] === "string" ? raw["region"] : undefined };
 }
 
@@ -28,33 +41,31 @@ export function parseLine(line: string): Line {
   if (!line.startsWith("{")) return { kind: "text", text: line };
   let raw: unknown;
   try { raw = JSON.parse(line); } catch { return { kind: "text", text: line }; }
-  if (!isRecord(raw)) return { kind: "text", text: line };
+  if (!isJsonObject(raw)) return { kind: "text", text: line };
   if (raw["kind"] === "log" && typeof raw["text"] === "string") return { kind: "log", text: raw["text"] };
   if (raw["kind"] === "verdict" && typeof raw["op"] === "string") {
     const outcome = OUTCOMES.find((o) => o === raw["outcome"]);
     if (outcome === undefined) return { kind: "text", text: line };
     return { kind: "verdict", verdict: {
       op: raw["op"], case: str(raw["case"]), dtype: str(raw["dtype"]), chip: str(raw["chip"]), outcome,
-      score: typeof raw["score"] === "number" ? raw["score"] : undefined, metrics: isRecord(raw["metrics"]) ? raw["metrics"] : {},
+      score: typeof raw["score"] === "number" ? raw["score"] : undefined, metrics: numbers(raw["metrics"]),
       notes: str(raw["notes"]), where: parseWhere(raw["where"]),
     } };
   }
   if (raw["kind"] === "summary") {
     const o = raw["outcome"];
-    if ((o === "pass" || o === "fail" || o === "blocked") && isRecord(raw["counts"])) {
-      const counts: Record<string, number> = {};
-      for (const [k, v] of Object.entries(raw["counts"])) if (typeof v === "number") counts[k] = v;
-      return { kind: "summary", summary: { outcome: o, counts, run: str(raw["run"]) } };
+    if ((o === "pass" || o === "fail" || o === "blocked") && isJsonObject(raw["counts"])) {
+      return { kind: "summary", summary: { outcome: o, counts: numbers(raw["counts"]), run: str(raw["run"]) } };
     }
   }
   return { kind: "text", text: line };
 }
 
 // The gate metrics a row prefers to show (blogs/assay: err as a fraction of its budget, per-position KL, tokens), in
-// order; a non-finite one arrives as the string "inf" / "nan" (JSON has no infinities).
+// order.
 const KEY_METRICS: readonly (readonly [string, string])[] = [["ratio", "err/budget"], ["kl_max", "KL max"], ["first_diff", "first bad token"], ["tokens", "tokens"]];
-const shown = (x: unknown): string | undefined =>
-  typeof x === "number" ? String(Number(x.toPrecision(3))) : typeof x === "string" && /^-?(inf|nan)$/.test(x) ? x : undefined;
+const shown = (x: number | undefined): string | undefined =>
+  x === undefined ? undefined : Number.isFinite(x) ? String(Number(x.toPrecision(3))) : Number.isNaN(x) ? "nan" : x > 0 ? "inf" : "-inf";
 
 // The one number a row shows: its gate's metric if it has one, else the first metric with a value, else the score.
 function keyMetric(v: Verdict): string {
@@ -62,9 +73,7 @@ function keyMetric(v: Verdict): string {
     const value = shown(v.metrics[k]);
     if (value !== undefined) return `${label} ${value}`;
   }
-  for (const [k, value] of Object.entries(v.metrics)) {
-    if (typeof value === "number") return `${k} ${String(Number(value.toPrecision(3)))}`;
-  }
+  for (const [k, value] of Object.entries(v.metrics)) return `${k} ${shown(value) ?? ""}`;
   return v.score === undefined ? "" : `score ${String(v.score)}`;
 }
 
@@ -76,7 +85,7 @@ function whereLink(where: Where): HTMLElement {
   a.dataset["loc"] = `${where.file}:${String(where.line)}:1`;
   a.onclick = (e) => {
     e.preventDefault();
-    try { jump(where.file, where.line, 1); } catch (err) { a.title = String(err); }
+    try { jump(where.file, where.line, 1); } catch (cause) { a.title = String(cause); }
   };
   return a;
 }

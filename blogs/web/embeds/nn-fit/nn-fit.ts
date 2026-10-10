@@ -909,7 +909,7 @@ export class NnFit extends HTMLElement {
     const onStderr = (text: string): void => { console.warn(`<nn-fit> remote stderr: ${text}`); };
     runCode(remoteCode(config), onStdout, onStderr).then(
       (result) => { this.#remoteDone(run, result); },
-      (err: unknown) => { this.#remoteDone(run, { status: "aborted", reason: String(err) }); }, // runCode resolves its failures; this is a bug
+      (cause: unknown) => { this.#remoteDone(run, { status: "aborted", reason: String(cause) }); }, // runCode resolves its failures; this is a bug
     );
   }
 
@@ -918,8 +918,8 @@ export class NnFit extends HTMLElement {
     if (end === null) return "the remote run ended without its final state";
     try {
       loadState(this.#net, this.#opt, end.state);
-    } catch (err) {
-      return err instanceof Error ? err.message : String(err);
+    } catch (cause) {
+      return cause instanceof Error ? cause.message : String(cause);
     }
     this.#steps = end.step;
     this.#trainMs = end.seconds * 1000;
@@ -934,10 +934,10 @@ export class NnFit extends HTMLElement {
     run.stopping = true;
     this.#announce("Stopping the remote run.");
     this.#syncControls();
-    interrupt().catch((err: unknown) => {
+    interrupt().catch((cause: unknown) => {
       if (this.#remote !== run && this.#grokFlight !== run) return;
       run.stopping = false; // still running: Stop can be pressed again
-      this.#announce(`Couldn't stop the remote run: ${String(err)}`);
+      this.#announce(`Couldn't stop the remote run: ${String(cause)}`);
       this.#syncControls();
     });
   }
@@ -948,8 +948,8 @@ export class NnFit extends HTMLElement {
     let line: RemoteLine;
     try {
       line = parseLine(text);
-    } catch (err) {
-      run.failure = err instanceof Error ? err.message : String(err);
+    } catch (cause) {
+      run.failure = cause instanceof Error ? cause.message : String(cause);
       this.#stopRemote();
       return;
     }
@@ -1023,7 +1023,7 @@ export class NnFit extends HTMLElement {
     const onStderr = (text: string): void => { console.warn(`<nn-fit> remote stderr: ${text}`); };
     runCode(code, onStdout, onStderr).then(
       (result) => { this.#grokDone(flight, result); },
-      (err: unknown) => { this.#grokDone(flight, { status: "aborted", reason: String(err) }); }, // runCode resolves its failures; this is a bug
+      (cause: unknown) => { this.#grokDone(flight, { status: "aborted", reason: String(cause) }); }, // runCode resolves its failures; this is a bug
     );
   }
 
@@ -1053,8 +1053,8 @@ export class NnFit extends HTMLElement {
           flight.end = line;
           break;
       }
-    } catch (err) {
-      flight.failure = err instanceof Error ? err.message : String(err);
+    } catch (cause) {
+      flight.failure = cause instanceof Error ? cause.message : String(cause);
       this.#stopRemote();
       return;
     }

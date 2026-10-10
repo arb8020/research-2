@@ -229,8 +229,8 @@ class WorkspaceCell extends HTMLElement {
       this.setAttribute("data-loaded", this.doc.from ?? "workspace");
       if (this.queued) { this.queued = false; void this.start(); }
       this.gate();
-    }, (e: unknown) => {
-      this.loadError = `couldn't load the workspace: ${String(e)}`;
+    }, (cause: unknown) => {
+      this.loadError = `couldn't load the workspace: ${String(cause)}`;
       this.gate();
     });
   }
@@ -241,7 +241,7 @@ class WorkspaceCell extends HTMLElement {
 
   private async runOrStop(): Promise<void> {
     if (this.job !== undefined) {
-      await stopCheck(this.job).catch((e: unknown) => { this.status(`stop failed: ${String(e)}`, "fail"); });
+      await stopCheck(this.job).catch((cause: unknown) => { this.status(`stop failed: ${String(cause)}`, "fail"); });
       return;
     }
     if (this.queued) { this.queued = false; this.gate(); return; } // a second click cancels the queued run
@@ -277,7 +277,7 @@ class WorkspaceCell extends HTMLElement {
     out.dataset["outcome"] = result.status === "exited" ? output.summary?.outcome ?? (result.exit === 2 ? "infra" : String(result.exit)) : result.status;
     out.classList.add(this.verdict[1] === "pass" ? "pass" : "fail");
     this.gate();
-    await refreshStatus(this.chapter).catch((e: unknown) => { this.verdict = [`status failed: ${String(e)}`, "fail"]; });
+    await refreshStatus(this.chapter).catch((cause: unknown) => { this.verdict = [`status failed: ${String(cause)}`, "fail"]; });
     this.gate();
   }
 
