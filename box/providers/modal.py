@@ -41,6 +41,7 @@ from box.store import Mount
 
 APP = "box"
 ROOT = "/box"
+RECORD_VOLUME = "box-sessions"
 WORK = "/work"
 MAX_TIMEOUT_S = 24 * 3600  # Modal refuses a sandbox timeout over 24 h
 DEFAULT_PYTHON = "3.13"
@@ -226,9 +227,10 @@ class Modal:
             volumes = {path: modal.Volume.from_name(v, create_if_missing=True, client=client) for path, v in self.volumes.items()}
             for m, store in zip(mounts, stores, strict=True):
                 volumes[f"{ROOT}/{m.path}"] = (await store.volume()).with_mount_options(sub_path=f"/{m.prefix}")
+            # a Modal Volume v2 commits a sandbox's writes on `sync <mount>`
             return await modal.Sandbox.create.aio(
                 *entrypoint, app=await self.app(), name=labels.get(LABEL_NAME), image=modal_image, gpu=modal_gpu_, region=self.region,
-                env={**env, "BOX_ROOT": ROOT}, tags=labels, timeout=timeout_s, client=client,
+                env={**env, "BOX_ROOT": ROOT, **({"BOX_RECORD_SYNC": "1"} if mounts else {})}, tags=labels, timeout=timeout_s, client=client,
                 encrypted_ports=ports, volumes=volumes,
             )  # fmt: skip
 
@@ -241,6 +243,9 @@ class Modal:
                 raise
             raise LookupError(f"modal provider: no snapshot image {snapshot} (past its ttl, or deleted): {e}") from e
         return ModalMachine(self, sandbox, labels, booting=True)
+
+    def record_store(self) -> ModalVolumeStore:
+        return ModalVolumeStore(RECORD_VOLUME, provider=self)
 
     def snapshot(self, machine: ModalMachine, *, ttl_s: int) -> str:
         async def snap() -> str:
@@ -273,9 +278,6 @@ class Modal:
 
 
 class ModalVolumeStore:
-    # a Modal Volume v2 commits a sandbox's writes on `sync <mount>`
-    sync_writes = True
-
     def __init__(self, name: str, *, provider: Modal) -> None:
         self.name = name
         self.uri = f"modal-volume://{name}"

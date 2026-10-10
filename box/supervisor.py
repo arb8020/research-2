@@ -220,7 +220,6 @@ def supervise_main(argv: list[str]) -> None:
     p.add_argument("--idle-timeout-s", type=float, default=0.0, help="end after this long with no job and no connection; 0 = never")
     p.add_argument("--ports", type=lambda s: [int(p) for p in s.split(",") if p], default=[], help="exposed ports, comma-separated")
     p.add_argument("--record", default="", help="record the session into this directory (a mounted store), relative to --root")
-    p.add_argument("--record-sync", action="store_true", help="run `sync <record dir>` after each flush (Modal Volumes)")
     p.add_argument(
         "--on-shutdown", default=os.environ.get("BOX_ON_SHUTDOWN", ""),
         help="bash run last, to end the machine itself (a provider sets BOX_ON_SHUTDOWN, e.g. its API's delete)",
@@ -235,7 +234,7 @@ def supervise_main(argv: list[str]) -> None:
     put(root / SESSION, dump(Started(time.time(), a.created_at, a.ceiling)))
     put(root / LEASE, dump(Lease(a.lease_until, a.ceiling)))
     put(root / AUDIT, dump_audit([LeaseChange("create", a.lease_until, a.created_at, a.host, a.pid)]))
-    recorder = Recorder(root, root / a.record, sync=a.record_sync) if a.record else None
+    recorder = Recorder(root, root / a.record, sync=os.environ.get("BOX_RECORD_SYNC") == "1") if a.record else None
     try:
         if recorder:
             recorder.start()

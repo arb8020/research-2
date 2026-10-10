@@ -119,7 +119,7 @@ def test_connect_run_a_cell_end(make_relay: Callable[..., str]) -> None:
     sid = create(gw)
     boot = events(gw, sid, "running")
     steps = [e["text"] for _, e in boot if e["kind"] == "step"]
-    assert steps[0] == "checking your Modal token" and any("Jupyter Server ready" in s for s in steps), steps
+    assert steps[0].startswith("creating sandbox") and any("Jupyter Server ready" in s for s in steps), steps
     assert all(isinstance(e["t"], float) and e["t"] > 1.7e9 for _, e in boot)  # unix seconds
     assert any(e["kind"] == "log" for _, e in boot), "Jupyter's startup log streams as machine log events"
     code, running = status(gw, sid)

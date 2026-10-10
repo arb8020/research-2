@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import shlex
+import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
@@ -10,7 +12,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from box.gitsync import toplevel
 
 if TYPE_CHECKING:
-    from box.sdk import Machine
+    from box.sdk import Machine, Provider, Session
     from box.store import Store
 
 MAX_AGE_S = 72 * 3600
@@ -113,3 +115,66 @@ def parse_setup_record(raw: bytes) -> SetupRecord:
 def script_cmd(path: str, script: str, *, unset: list[str]) -> str:
     drop = "".join(f" -u {shlex.quote(name)}" for name in sorted(unset))
     return f"cd {shlex.quote(path)} && exec env{drop} bash {shlex.quote(script)}"
+
+
+@dataclass(frozen=True)
+class Snapping:
+    snapshotter: Snapshotter
+    cache: Store
+
+
+@dataclass(frozen=True)
+class Plan:
+    spec: SetupSpec
+    key: str
+    base: str | None
+    snapping: Snapping | None
+    cached: Cached | None
+
+    @property
+    def image(self) -> str | None:
+        return self.base if self.cached is None else self.cached.image
+
+
+def plan_setup(provider: Provider, spec: SetupSpec, *, image: str | None, record: Store | None) -> Plan:
+    from box.sdk import Refused
+
+    snapping = None
+    if isinstance(provider, Snapshotter):
+        if record is None:
+            raise Refused(f"{provider.name} provider snapshots its setup: pass record= (the store that remembers which snapshot a key is)")
+        snapping = Snapping(provider, record)
+    key = setup_key(spec, provider=provider.name, image=image)
+    cached = None if snapping is None or spec.rebuild else lookup(snapping.cache, key, now=time.time(), max_age_s=spec.max_age_s)
+    return Plan(spec, key, image, snapping, cached)
+
+
+def prepare(session: Session, plan: Plan, *, unset: list[str], began: float) -> SetupRecord:
+    from box.sdk import record_prefix
+
+    spec, cached, timings = plan.spec, plan.cached, {}
+
+    def lap(phase: str) -> None:
+        timings[phase] = round(time.monotonic() - began - sum(timings.values()), 3)
+
+    lap("boot")
+    synced = session.sync(spec.repo, paths=spec.paths)
+    lap("sync")
+    setup_job, image, built_at = None, plan.image if cached else None, cached.built_at if cached else None
+    if cached is None:
+        setup_job = session.run_to_end(script_cmd(synced.path, spec.script, unset=unset), max_duration_s=spec.max_duration_s, what="setup").id
+        lap("setup")
+        if plan.snapping is not None:
+            image = plan.snapping.snapshotter.snapshot(session.machine, ttl_s=int(spec.max_age_s + SNAPSHOT_TTL_MARGIN_S))
+            built_at = time.time()
+            remember(plan.snapping.cache, Cached(plan.key, image, built_at, session.id, synced.commit))
+            lap("snapshot")
+    resume_job = None
+    if spec.resume is not None:
+        resume_job = session.run_to_end(script_cmd(synced.path, spec.resume, unset=[]), max_duration_s=spec.max_duration_s, what="resume").id
+        lap("resume")
+    prepared = SetupRecord(plan.key, cached is not None, image, plan.base or "", built_at, setup_job, resume_job, timings)
+    if session.record is not None:
+        session.record.put(f"{record_prefix(session.id)}/setup.json", setup_record_json(prepared))
+    print(f"box: {session.id}: {f'booted from {image}' if prepared.hit else 'set up'}", file=sys.stderr)
+    return prepared

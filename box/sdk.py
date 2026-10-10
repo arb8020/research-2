@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import dataclasses
 import io
 import json
 import os
@@ -21,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar, get_args
 
 from box.gitsync import Synced
-from box.setup_cache import SetupRecord, SetupSpec, parse_setup_record
+from box.setup_cache import SetupRecord, SetupSpec, parse_setup_record, plan_setup, prepare
 from box.store import Mount, Store
 from box.supervisor import (
     ACTIVITY,
@@ -95,7 +96,7 @@ FOLLOW_QUIET_S = 10.0
 FOLLOW_TRIES = 5
 FOLLOW_BACKOFF_S = 1.0
 TAIL_ERR_BYTES = 4096
-SETUP_BOOT_TIMEOUT_S = 900.0
+CLOSE_ON_ERROR_S = 60.0
 SETUP_FAIL_TAIL = 4000
 
 
@@ -146,6 +147,7 @@ class Provider(Protocol):
     ) -> Machine: ...  # fmt: skip
     def get(self, machine_id: str) -> Machine: ...
     def list(self, labels: dict[str, str] | None = None) -> list[Machine]: ...
+    def record_store(self) -> Store | None: ...
     def close(self) -> None: ...
 
 
@@ -235,33 +237,50 @@ class Receipt:
         return self.ended.reason != "machine_lost"
 
 
-def launch(provider: Provider, *, boot_timeout_s: float = 900.0, **create_kw: Any) -> Session:
-    session = create(provider, **create_kw)
+def launch(  # noqa: PLR0913
+    provider: Provider, *, setup: SetupSpec | None = None, image: str | None = None, env: dict[str, str] | None = None,
+    record: Store | None = None, boot_timeout_s: float = 900.0, **create_kw: Any,
+) -> Session:  # fmt: skip
+    began = time.monotonic()
+    plan = None if setup is None else plan_setup(provider, setup, image=image, record=record)
+    hit = plan is not None and plan.cached is not None
     try:
+        session = create(provider, image=image if plan is None else plan.image, env=env, record=record, fresh_root=hit, **create_kw)
+    except LookupError as e:
+        if not hit:
+            raise
+        print(f"box: setup {plan.key[:12]}: snapshot {plan.image} is gone ({e}); setting up again", file=sys.stderr)
+        return launch(provider, setup=dataclasses.replace(setup, rebuild=True), image=image, env=env, record=record, boot_timeout_s=boot_timeout_s, **create_kw)
+    with closing_on_error(session):
         session.wait_up(boot_timeout_s)
-    except BaseException:
-        session.machine.terminate()
-        raise
+        if plan is not None:
+            prepare(session, plan, unset=list(env or {}), began=began)
     return session
+
+
+@contextlib.contextmanager
+def closing_on_error(session: Session) -> Generator[Session]:
+    try:
+        yield session
+    except BaseException:
+        try:
+            session.close(timeout_s=CLOSE_ON_ERROR_S)
+        except NotGone:
+            raise
+        except (Gone, OSError) as e:
+            print(f"box: {session.id}: closing after a failure failed too ({e!r}); terminating", file=sys.stderr)
+            session._live().terminate()
+        except BaseException:
+            session._live().terminate()
+            raise
+        raise
 
 
 def create(  # noqa: PLR0913
     provider: Provider, *, lease_s: float | None = None, ceiling_s: float = CEILING_S, gpu: str | None = None,
     image: str | None = None, env: dict[str, str] | None = None, labels: dict[str, str] | None = None,
     idle_timeout_s: float = 0.0, ports: tuple[int, ...] = (), record: Store | None = None, session_id: str | None = None,
-    name: str | None = None, setup: SetupSpec | None = None,
-) -> Session:  # fmt: skip
-    kw = {"lease_s": lease_s, "ceiling_s": ceiling_s, "gpu": gpu, "labels": labels, "idle_timeout_s": idle_timeout_s,
-          "ports": ports, "record": record, "session_id": session_id, "name": name}  # fmt: skip
-    if setup is not None:
-        return _create_set_up(provider, setup, image=image, env=env or {}, **kw)
-    return _create(provider, image=image, env=env, **kw)
-
-
-def _create(  # noqa: PLR0913
-    provider: Provider, *, lease_s: float | None, ceiling_s: float, gpu: str | None, image: str | None,
-    env: dict[str, str] | None, labels: dict[str, str] | None, idle_timeout_s: float, ports: tuple[int, ...],
-    record: Store | None, session_id: str | None, name: str | None, fresh_root: bool = False,
+    name: str | None = None, fresh_root: bool = False,
 ) -> Session:  # fmt: skip
     session_id = new_session_id() if session_id is None else session_id
     if not SESSION_ID.fullmatch(session_id):
@@ -286,7 +305,7 @@ def _create(  # noqa: PLR0913
         "--created-at", repr(created_at), "--lease-until", repr(lease.until), "--ceiling", repr(lease.ceiling),
         "--host", socket.gethostname(), "--pid", str(os.getpid()), "--session-id", session_id,
         "--idle-timeout-s", str(idle_timeout_s), "--ports", ",".join(map(str, ports)),
-        *(["--record", RECORD_PATH, *(["--record-sync"] if record.sync_writes else [])] if record else []),
+        *(["--record", RECORD_PATH] if record else []),
     ]  # fmt: skip
     install = "import base64,os,zlib; open(os.environ['BOX_ROOT'] + '/supervisor.py', 'wb').write(zlib.decompress(base64.b64decode(os.environ['BOX_SUPERVISOR'])))"
     clear = f'find "$BOX_ROOT" -mindepth 1 -maxdepth 1 ! -name {RECORD_PATH} -exec rm -rf {{}} + && ' if fresh_root else ""
@@ -310,70 +329,6 @@ def _create(  # noqa: PLR0913
             machine.terminate()
             raise
     return Session(machine, record=record)
-
-
-def _create_set_up(provider: Provider, spec: SetupSpec, *, image: str | None, env: dict[str, str], **kw: Any) -> Session:  # MUST KILL: narrowing the checker can't follow (`snaps` holds an isinstance, record checked non-None earlier: three type: ignores); split the snapshot path into a function taking a Snapshotter and a Store
-    from box import setup_cache as sc
-
-    record: Store | None = kw["record"]
-    snapping: tuple[sc.Snapshotter, Store] | None = None
-    if isinstance(provider, sc.Snapshotter):
-        if record is None:
-            raise Refused(f"{provider.name} provider snapshots its setup: pass record= (the store that remembers which snapshot a key is)")
-        snapping = (provider, record)
-    key = sc.setup_key(spec, provider=provider.name, image=image)
-    cached = None
-    if snapping is not None and not spec.rebuild:
-        cached = sc.lookup(snapping[1], key, now=time.time(), max_age_s=spec.max_age_s)
-    session, began, timings = None, time.monotonic(), {}
-
-    def lap(phase: str) -> None:
-        timings[phase] = round(time.monotonic() - began - sum(timings.values()), 3)
-
-    if cached is not None:
-        try:
-            session = _create(provider, image=cached.image, env=env, fresh_root=True, **kw)
-        except LookupError as e:
-            print(f"box: setup {key[:12]}: snapshot {cached.image} is gone ({e}); setting up again", file=sys.stderr)
-            cached = None
-    if session is None:
-        session = _create(provider, image=image, env=env, **kw)
-    try:
-        session.wait_up(SETUP_BOOT_TIMEOUT_S)
-        lap("boot")
-        synced = session.sync(spec.repo, paths=spec.paths)
-        lap("sync")
-        setup_job, made, built_at = None, cached.image if cached else None, cached.built_at if cached else None
-        if cached is None:
-            setup_job = session._run_to_end(sc.script_cmd(synced.path, spec.script, unset=list(env)), spec.max_duration_s, "setup")
-            lap("setup")
-            if snapping is not None:
-                snapshotter, cache = snapping
-                made = snapshotter.snapshot(session.machine, ttl_s=int(spec.max_age_s + sc.SNAPSHOT_TTL_MARGIN_S))
-                built_at = time.time()
-                sc.remember(cache, sc.Cached(key, made, built_at, session.id, synced.commit))
-                lap("snapshot")
-        resume_job = None
-        if spec.resume is not None:
-            resume_job = session._run_to_end(sc.script_cmd(synced.path, spec.resume, unset=[]), spec.max_duration_s, "resume")
-            lap("resume")
-        if record is not None:
-            prepared = SetupRecord(key=key, hit=cached is not None, image=made, base=image or "", built_at=built_at,
-                                   setup_job=setup_job, resume_job=resume_job, timings=timings)  # fmt: skip
-            record.put(f"{record_prefix(session.id)}/setup.json", sc.setup_record_json(prepared))
-    except BaseException:
-        try:
-            session.close()
-        except NotGone:
-            raise
-        except (Gone, OSError) as e:
-            print(f"box: {session.id}: closing after a failed setup failed too ({e!r}); terminating", file=sys.stderr)
-            session.machine.terminate()
-        except BaseException:
-            session.machine.terminate()
-            raise
-        raise
-    return session
 
 
 def supervisor_env() -> str:
@@ -667,13 +622,13 @@ class Session:
         spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "max_duration_s": max_duration_s, "env": env or {}}
         return self._start(Job(self, new_job_id(), "jobs"), spec)
 
-    def _run_to_end(self, cmd: str, max_duration_s: float, what: str) -> str:
+    def run_to_end(self, cmd: str, *, max_duration_s: float, what: str) -> Job:
         job = self.run(cmd, max_duration_s=max_duration_s)
         ending = job.wait()
         if ending != Ending("exited", 0):
             out = "".join(chunk.text for chunk in job.logs())[-SETUP_FAIL_TAIL:]
             raise SetupFailed(f"{self.id}: {what} ({cmd}) ended {ending.reason}, exit {ending.exit_code}:\n{out}")
-        return job.id
+        return job
 
     def serve(self, cmd: str, *, env: dict[str, str] | None = None, name: str | None = None) -> Job:
         self._running_now()
@@ -907,14 +862,14 @@ class TailReader:
         return [LogChunk(stream, raw[:cut].decode(errors="replace"), self.cursor)]
 
 
-def run_job(
+def run_job(  # noqa: PLR0913
     provider: Provider, cmd: str, *, max_duration_s: float, put: list[tuple[str, str]] = (),
-    get: list[tuple[str, str]] = (), on_exit: str | None = None, **launch_kw: object,
+    get: list[tuple[str, str]] = (), on_exit: str | None = None, setup: SetupSpec | None = None, **launch_kw: Any,
 ) -> Ending:  # fmt: skip
-    with launch(provider, **launch_kw) as s:
+    with launch(provider, setup=setup, **launch_kw) as s:
         for local, remote in put:
             s.put(local, remote)
-        job = s.run(cmd, max_duration_s=max_duration_s, on_exit=on_exit)
+        job = s.run(in_tree(s, setup, cmd), max_duration_s=max_duration_s, on_exit=on_exit)
         sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
         for chunk in job.logs(follow=True):
             sinks[chunk.stream].write(chunk.text)
@@ -1072,6 +1027,14 @@ def parse_receipt(raw: bytes) -> Receipt:
     if d["supervisor_confirmed"] is not receipt.supervisor_confirmed:
         raise ValueError(f"receipt.json: supervisor_confirmed {d['supervisor_confirmed']!r} contradicts reason {receipt.ended.reason!r}")
     return receipt
+
+
+def in_tree(session: Session, setup: SetupSpec | None, cmd: str) -> str:
+    from box import gitsync
+
+    if setup is None:
+        return cmd
+    return f"cd {shlex.quote(gitsync.tree_path(session._live().work, gitsync.toplevel(setup.repo)))} && {cmd}"
 
 
 def ignored(rel: str, ignore: tuple[str, ...]) -> bool:

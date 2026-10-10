@@ -38,3 +38,14 @@ def test_a_token_never_prints(tmp_path: Path) -> None:
     token = ModalToken.from_config(config(tmp_path, ACTIVE))
     assert "ak-work" not in repr(token)
     assert "as-work" not in repr(token)
+
+
+@pytest.mark.live
+def test_a_bad_token_fails_create_before_any_sandbox() -> None:
+    import modal
+
+    from box import sdk
+    from box.providers.modal import Modal
+
+    with Modal(token=ModalToken("ak-bad", "as-bad"), region="us") as provider, pytest.raises(modal.exception.AuthError, match="Token"):
+        sdk.create(provider, ceiling_s=60, image="python:3.13-slim", labels={"box.purpose": "token-check"})
