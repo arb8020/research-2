@@ -78,7 +78,7 @@ function sessionUrl(): string {
 const SESSION = sessionUrl();
 let state: SessionState = { passed: {}, wasm: {} };
 
-const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g; // eslint-disable-line no-control-regex
+const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g; // oxlint-disable-line no-control-regex
 
 async function refresh(): Promise<void> {
   state = parseState(await (await fetch(`${SESSION}/state`)).json());
