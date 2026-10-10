@@ -69,7 +69,7 @@ function whereLink(where: Where): HTMLElement {
   a.dataset["loc"] = `${where.file}:${String(where.line)}:1`;
   a.onclick = (e) => {
     e.preventDefault();
-    try { jump(where.file, where.line, 1); } catch (err) { a.title = String(err); }
+    try { jump(where.file, where.line, 1); } catch (cause) { a.title = String(cause); }
   };
   return a;
 }
