@@ -51,6 +51,31 @@ def test_sweep_is_reproducible_and_covers_edges() -> None:
     assert a[0].shape == a[1].shape, "S is tied to T: q is [T, N, H], k [S, N, H] with S = T"
 
 
+def test_frontier_gives_the_exact_allclose_ratio_for_any_tolerance() -> None:
+    gen = torch.Generator().manual_seed(0)
+    truth = torch.randn(64, 33, generator=gen, dtype=torch.float64) * 10
+    truth[0, :5] = 2.5  # ties in |T|
+    out = (truth + torch.randn(64, 33, generator=gen, dtype=torch.float64) * 1e-3).float()
+    points = ops.frontier(out, truth)
+    assert len(points) < truth.numel() // 10, "the frontier is a small summary"
+    err, size = (out.double() - truth).abs(), truth.abs()
+    for atol, rtol in ((1e-4, 0.0), (0.0, 1e-3), (1.5e-4, 1e-5), (2e-2, 2e-2), (1.0, 1e-9)):
+        brute = float((err / (atol + rtol * size)).max())
+        assert ops.tolerance_ratio(points, atol, rtol)[0] == pytest.approx(brute, rel=1e-12), (atol, rtol)
+    out[3, 4] = float("nan")
+    assert ops.tolerance_ratio(ops.frontier(out, truth), 1.0, 1.0)[0] == math.inf
+    assert ops.tolerance_ratio([[0.0, "inf"]], 1.0, 1.0)[0] == math.inf, "the store writes inf as a string"
+
+
+def test_op_inputs_include_offset_cases() -> None:
+    for name in ("linear", "gelu", "layer_norm", "attention"):
+        cases = ops.sweep(ops.REGISTRY[name])
+        offset = [c for c in cases if c.inputs == "offset"]
+        assert offset and len(offset) < len(cases), name
+        x = ops.make_inputs(ops.REGISTRY[name], offset[0])[0].double()
+        assert 2.0 < float(x.mean()) < 4.0 or x.numel() < 4, (name, float(x.mean()))
+
+
 # ---- cache keys + regrade (in process, spawned children) ----------------------------------------------------------
 
 
@@ -86,11 +111,11 @@ def test_regrade_without_rerun(tmp_path: Path) -> None:
     store = tmp_path / "store"
     code, lines = run_checks(["ch01", "--op", "layer_norm"], REF, store)
     assert code == 0, [line for line in lines if line["kind"] != "verdict"]
-    before = {(v["case"], v["dtype"]): v for v in lines if v["kind"] == "verdict"}
+    before = {(v["case"], v["dtype"]): v for v in lines if v["kind"] == "verdict" and v["outcome"] != "skip"}
     # a different grader config (non-blocking) regrades the stored runs; --grade-only proves nothing re-ran
     code, lines = run_checks(["ch01", "--op", "layer_norm", "--warn", "layer_norm", "--grade-only"], REF, store)
     assert code == 0, lines
-    after = {(v["case"], v["dtype"]): v for v in lines if v["kind"] == "verdict"}
+    after = {(v["case"], v["dtype"]): v for v in lines if v["kind"] == "verdict" and v["outcome"] != "skip"}
     assert after.keys() == before.keys()
     assert all(after[k]["run"] == before[k]["run"] for k in before), "same runs"
     assert all(after[k]["grade"] != before[k]["grade"] for k in before), "new grades"

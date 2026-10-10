@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from assay.ch01 import ops
-from assay.ch01.ops import SHORT, Op, band, sweep
+from assay.ch01.ops import SHORT, Op, sweep, tolerance_ratio
 from assay.ch01.run import Candidate, Ctx, detect_env, execute, where
 from assay.core import Check, Entry, Grader, Result, failed, grade, passed, verdict
 
@@ -24,23 +24,35 @@ from assay.core import Check, Entry, Grader, Result, failed, grade, passed, verd
 # Chapter 1's graders: ordered checks over a stored Run's facts. Thresholds live here, as grader config, so changing
 # one regrades stored runs without re-running anything.
 #
-#     per-op case     returned > dtype_shape > inputs_unchanged > deterministic > budget        (all required)
+#     per-op case     returned > dtype_shape > inputs_unchanged > deterministic > allclose      (all required)
 #     per-op sweep    coverage: every line + branch of the bound function ran on some case
-#     block           the per-op case grader, on GPT-2's real block i vs HF's (budget: 2x HF's own error vs fp64)
+#     block           the per-op case grader, on GPT-2's real block i vs HF's in fp64
 #     forward fp32    returned > ... > kl (per-position max < 1e-7) > topk (smoke)
 #     forward bf16    returned > ... > kl (max < 0.1, vs fp64 truth ~ the fp32 reference) > topk (smoke)
 #     generate        returned > ... > tokens (every greedy token is HF's; smoke: the case has no near ties)
 #
-# The model gate is KL alone (blogs/notes/ch01-design-2026-10-09.md, "tolerances": KL ~ 1/2 Var_p(logit error));
-# forward's runs still record err vs truth, so the old 2x-budget number stays visible as a metric (`err`).
+# Chapter 1 keeps correctness simple: allclose against fp64 truth, one (atol, rtol) per dtype, for every op; KL + top-k
+# for the model. The principled per-op tolerances (BLAS-style ratio for contractions, Monte Carlo arithmetic for
+# composites) arrive with the kernel chapters (blogs/notes/ch01-design-2026-10-09.md, "tolerances").
 #
-# Floors (fraction of max|truth|, the budget when the reference itself is exact) were set against the planted-bug
-# table (`run_checks ch01 --selftest` prints each planted bug's err / budget): every planted bug is >= 10x over its
-# budget at fp32, and every correct candidate is under it.
+# TOL was picked from data (2026-10-09, CPU; `run_checks ch01 --selftest` prints each candidate's worst ratio per
+# dtype). Correct = the reference run in the dtype (naive, like a reader's), torch's own F.* (candidates.py), HF's
+# block and the chapter's solution. "sweep" = the cases graded; "grid" = every size x both input kinds (a scratch
+# measurement, to see past the pairwise sweep). Ratio = worst |C - T| / (atol + rtol |T|):
+#
+#     fp32 (1.5e-4, 1e-5)  correct: sweep <= 0.04, grid <= 0.34 (torch's linear, centered D=768: 768 terms cancel);
+#                          block <= 0.17 (HF's own block 10). bugs: exact-erf GELU 3.1 (max 4.7e-4 from tanh's),
+#                          block GELU mutant 36, every other bug >= 7e3
+#     fp16 (2e-2, 2e-2)    correct: sweep <= 0.30, grid <= 0.41 (naive layer_norm on offset inputs: the mean rounds to
+#                          fp16). bugs >= 43, except exact GELU 0.02 (an expected miss)
+#     bf16 (0.15, 0.15)    correct: sweep <= 0.43, grid <= 0.47 (naive layer_norm, offset); block <= 0.64 (the
+#                          solution's block 10). bugs >= 5.5, except exact GELU 0.02 (expected miss)
+#
+# fp32's atol sits between torch's linear (0.51 at 1e-4) and exact GELU (4.7 at 1e-4): ~3x margin each way. Low
+# precision only has to catch gross bugs; a subtle one there is an expected miss, stated per dtype in the self-test.
 # --------------------------------------------------------------------------------------------------------------------
 
-FLOORS = {"fp32": 2e-5, "fp16": 1e-3, "bf16": 2e-2}
-MULT = 2.0
+TOL = {"fp32": (1.5e-4, 1e-5), "fp16": (2e-2, 2e-2), "bf16": (0.15, 0.15)}  # dtype -> (atol, rtol) vs fp64 truth
 KL_MAX = {"fp32": 1e-7, "fp16": 0.1, "bf16": 0.1}  # fp32: correct 5e-10, exact-GELU bug 4e-5; bf16: ~2x HF's own
 
 
@@ -83,13 +95,18 @@ def deterministic(run: Entry, cfg: Mapping[str, Any]) -> Result:
     return passed()
 
 
-def budget(run: Entry, cfg: Mapping[str, Any]) -> Result:
+def allclose(run: Entry, cfg: Mapping[str, Any]) -> Result:
+    """Every element within atol + rtol |T| of the fp64 truth T. Metric `ratio`: the worst |C - T| / (atol + rtol |T|)
+    (<= 1 passes); `ref_ratio`: the same for the reference run in this dtype, for context."""
     facts = _facts(run)
-    limit = band(facts["ref_err"], facts["scale"], _dtype(run), cfg["mult"], cfg["floors"])
-    err = float(facts["err"])
-    metrics = {"err": err, "budget": limit, "ratio": err / limit if limit else math.inf, "ref_err": facts["ref_err"]}
-    if not (math.isfinite(err) and err <= limit):
-        return failed(f"err {err:.3g} > budget {limit:.3g}", metrics=metrics)
+    atol, rtol = cfg["tol"][_dtype(run)]
+    ratio, at, err = tolerance_ratio(facts["frontier"], atol, rtol)
+    ref = facts.get("ref_frontier")
+    metrics = {"ratio": ratio, "err": float(facts["err"]), "atol": atol, "rtol": rtol,
+               "ref_ratio": tolerance_ratio(ref, atol, rtol)[0] if ref is not None else None}
+    if not (math.isfinite(ratio) and ratio <= 1.0):
+        return failed(f"|out - fp64 truth| up to {ratio:.3g}x the tolerance (atol {atol:g} + rtol {rtol:g} |T|; worst "
+                      f"element: error {err:.3g} where |T| = {at:.3g})", metrics=metrics)
     return passed(metrics=metrics)
 
 
@@ -141,8 +158,7 @@ CALL = (Check("returned", returned), Check("dtype_shape", dtype_shape), Check("i
 
 
 def op_grader(blocking: bool) -> Grader:
-    return Grader("ch01-op", (*CALL, Check("budget", budget)),
-                  {"mult": MULT, "floors": FLOORS, "blocking": blocking})
+    return Grader("ch01-op", (*CALL, Check("allclose", allclose)), {"tol": TOL, "blocking": blocking})
 
 
 def coverage_grader(blocking: bool) -> Grader:
@@ -178,23 +194,27 @@ def grader_for(op: Op, dtype: str, blocking: bool) -> Grader:
 # ops that must catch it, and how.
 # --------------------------------------------------------------------------------------------------------------------
 
-KL_CATCH, BUDGET_CATCH = "kl: KL max", "budget: err"
+KL_CATCH, TOL_CATCH = "kl: KL max", "allclose: |out - fp64 truth|"
 
 # name -> (what the bug is, old substring, new substring, {op: how it must be caught})
 MUTANTS: dict[str, tuple[str, str, str, dict[str, str]]] = {
     "a_scale_1/H": ("attention scale 1/H instead of 1/sqrt(H)", "/ math.sqrt(H)", "/ H",
-                    {"block": BUDGET_CATCH, "forward": KL_CATCH}),
+                    {"block": TOL_CATCH, "forward": KL_CATCH}),
     "b_no_ln_f": ("final layer norm skipped", "    x_TD = layer_norm(x_TD, w.lnf_w_D, w.lnf_b_D, cfg.eps)\n", "",
                   {"forward": KL_CATCH}),
     "c_gelu_exact": ("exact erf GELU instead of GPT-2's tanh approximation", "(1 + torch.tanh(inner_TF))",
-                     "(1 + torch.erf(x_TF / math.sqrt(2)))", {"block": BUDGET_CATCH, "forward": KL_CATCH}),
+                     "(1 + torch.erf(x_TF / math.sqrt(2)))", {"block": TOL_CATCH, "forward": KL_CATCH}),
     "d_mask_leak": ("causal mask off by one: each query also sees the next key", "future_TS.triu(1)",
-                    "future_TS.triu(2)", {"block": BUDGET_CATCH, "forward": KL_CATCH}),
+                    "future_TS.triu(2)", {"block": TOL_CATCH, "forward": KL_CATCH}),
     "e_first_row": ("generate picks the next token from the first row, not the last", "logits_TV[-1].argmax()",
                     "logits_TV[0].argmax()", {"generate": "tokens: new token"}),
     "f_with_prompt": ("generate returns the prompt too", "return ids[len(prompt):]", "return ids",
                       {"generate": "dtype_shape: output shape"}),
 }
+
+
+# dtypes where a mutant is below that dtype's gate (bf16's KL 0.1 and allclose 0.15 are for gross bugs): expected misses
+MUTANT_MISSED: dict[str, tuple[str, ...]] = {"c_gelu_exact": ("fp16", "bf16")}
 
 
 def write_mutant(name: str, source: Path, out_dir: Path) -> Path:
@@ -344,11 +364,16 @@ REF_GPT2 = Path(__file__).resolve().parents[3] / "engine" / "ref" / "ch01" / "fi
 HANG_TIMEOUT_S = 3.0
 
 
+LOW = ("fp16", "bf16")
+
+
 @dataclass(frozen=True)
 class Expect:
     """`caught_by` None: must PASS (a correct candidate). Else must FAIL with "<check>: <notes>" containing it (or one
-    of its `|`-separated alternatives). `hole_when`: isolation modes where not catching it is a known, reported hole
-    (not a self-test failure). The candidate is `attr` in `file`, checked as `op`."""
+    of its `|`-separated alternatives): at every dtype that ran when `every_dtype` (a numerical planted bug), else on
+    some verdict. `missed_at`: dtypes where the bug is too subtle for that dtype's tolerance; every verdict there must
+    PASS (an expected miss, stated rather than hidden). `hole_when`: isolation modes where not catching it is a known,
+    reported hole (not a self-test failure). The candidate is `attr` in `file`, checked as `op`."""
 
     op: str
     file: Path
@@ -356,19 +381,21 @@ class Expect:
     caught_by: str | None
     call_timeout: float = 60.0
     hole_when: tuple[str, ...] = ()
+    every_dtype: bool = False
+    missed_at: tuple[str, ...] = ()
 
 
 def selftests(scratch: Path) -> list[Expect]:
     honest, adv = SELF / "candidates.py", SELF / "adversarial.py"
     tests = [Expect(op, honest, op, None) for op in ("linear", "gelu", "layer_norm", "attention")]
-    tests += [Expect(op, honest, attr, why) for op, attr, why in (
-        ("layer_norm", "layer_norm_no_eps", "budget: err"),
-        ("layer_norm", "layer_norm_wrong_axis", "budget: err"),
-        ("layer_norm", "layer_norm_untested_branch", "coverage: sweep never executed"),
-        ("gelu", "gelu_exact", "budget: err"),
-        ("attention", "attention_scale", "budget: err"),
-        ("attention", "attention_mask_off_by_one", "budget: err"),
-        ("linear", "linear_no_bias", "budget: err"))]
+    tests += [Expect(op, honest, attr, why, every_dtype=True, missed_at=missed) for op, attr, why, missed in (
+        ("layer_norm", "layer_norm_no_eps", TOL_CATCH, ()),
+        ("layer_norm", "layer_norm_wrong_axis", TOL_CATCH, ()),
+        ("gelu", "gelu_exact", TOL_CATCH, LOW),  # tanh vs erf: 2e-4 relative, under fp16/bf16's tolerance
+        ("attention", "attention_scale", TOL_CATCH, ()),
+        ("attention", "attention_mask_off_by_one", TOL_CATCH, ()),
+        ("linear", "linear_no_bias", TOL_CATCH, ()))]
+    tests.append(Expect("layer_norm", honest, "layer_norm_untested_branch", "coverage: sweep never executed"))
     tests += [Expect("layer_norm", adv, attr, why, *extra) for attr, why, *extra in (
         ("mutates_input", "inputs_unchanged: mutated input"),
         ("cached_result", "dtype_shape: output shape"),
@@ -381,31 +408,52 @@ def selftests(scratch: Path) -> list[Expect]:
     tests.append(Expect("layer_norm", SELF / "forges_reply.py", "layer_norm", "returned: bad reply: bad frame magic"))
     if REF_GPT2.exists():  # the chapter's solution passes every op; one-line mutants of it fail the model-level ones
         tests += [Expect(op, REF_GPT2, op, None) for op in OPS]
-        tests += [Expect(op, write_mutant(name, REF_GPT2, scratch), op, why)
+        tests += [Expect(op, write_mutant(name, REF_GPT2, scratch), op, why, missed_at=MUTANT_MISSED.get(name, ()))
                   for name, (_, _, _, catches) in MUTANTS.items() for op, why in catches.items()]
     return tests
 
 
+def _hits(verdict_: dict[str, Any], caught_by: str) -> bool:
+    return verdict_["outcome"] in ("fail", "blocked") and any(alt in verdict_["notes"] for alt in caught_by.split("|"))
+
+
 def run_selftest(ctx: Ctx, test: Expect, req: Request) -> dict[str, Any]:
-    """Grade one self-test candidate; caught = some failing verdict says why, in the stated words."""
+    """Grade one self-test candidate against its expectation, per dtype: caught (in the stated words), an expected
+    miss (passes at a dtype in `missed_at`), or a correct candidate passing."""
     op, adapter = OPS[test.op]
     sub = Ctx(ctx.store, ctx.env, ctx.iso, ctx.log, ctx.startup_timeout, test.call_timeout, ctx.warm)
-    blocking = True
-    verdicts = list(check_op(sub, op, Candidate(test.file, test.attr, adapter), req, blocking))
-    fails = [v for v in verdicts if v["outcome"] in ("fail", "blocked")]
-    ratios = [v["metrics"].get("ratio") for v in verdicts if isinstance(v["metrics"].get("ratio"), float)]
-    kls = [v["metrics"].get("kl_max") for v in verdicts if isinstance(v["metrics"].get("kl_max"), float)]
+    verdicts = list(check_op(sub, op, Candidate(test.file, test.attr, adapter), req, blocking=True))
+    ran = [v for v in verdicts if v["outcome"] != "skip"]
+    dtypes = sorted({v["dtype"] for v in ran} - {"*"})
+    anywhere = [v for v in ran if v["dtype"] == "*"]  # coverage, a blocked import: they count for every dtype
+    per: dict[str, dict[str, Any]] = {}
+    for dtype in dtypes:
+        rows = [v for v in ran if v["dtype"] == dtype]
+        ratios = [v["metrics"]["ratio"] for v in rows if isinstance(v["metrics"].get("ratio"), float)]
+        kls = [v["metrics"]["kl_max"] for v in rows if isinstance(v["metrics"].get("kl_max"), float)]
+        fails = [v for v in rows + anywhere if v["outcome"] in ("fail", "blocked")]
+        if test.caught_by is None:
+            state = "pass" if not fails else "WRONGLY FAILED"
+        elif dtype in test.missed_at:
+            state = "missed (expected)" if not fails else "CAUGHT (expected a miss: update missed_at)"
+        else:
+            state = "caught" if any(_hits(v, test.caught_by) for v in rows + anywhere) else (
+                "caught for another reason" if fails else "MISSED")
+        per[dtype] = {"state": state, "cases": len(rows), "worst_ratio": max(ratios, default=None),
+                      "best_ratio": min(ratios, default=None), "kl_max": max(kls, default=None)}
+    fails = [v for v in ran if v["outcome"] in ("fail", "blocked")]
     if test.caught_by is None:
         ok, by = not fails, (fails[0]["notes"] if fails else "")
     else:
-        hits = [v for v in fails if any(alt in v["notes"] for alt in test.caught_by.split("|"))]
-        ok, by = bool(hits), (hits or fails or [{"notes": "(nothing failed)"}])[0]["notes"]
+        hits = [v for v in fails if _hits(v, test.caught_by) and v["dtype"] not in test.missed_at]
+        misses_clean = all(per[d]["state"] == "missed (expected)" for d in dtypes if d in test.missed_at)
+        caught_each = all(per[d]["state"] == "caught" for d in dtypes if d not in test.missed_at)
+        ok = bool(hits) and misses_clean and (caught_each or not test.every_dtype)
+        by = (hits or fails or [{"notes": "(nothing failed)"}])[0]["notes"]
     hole = not ok and ctx.iso.mode in test.hole_when
     return {"kind": "selftest", "op": test.op, "candidate": f"{_short(test.file)}:{test.attr}",
-            "expect": test.caught_by or "pass",
-            "ok": ok or hole, "hole": hole, "by": by[:300], "cases": len(verdicts),
-            "worst_ratio": max(ratios, default=None), "best_ratio": min(ratios, default=None),
-            "kl_max": max(kls, default=None)}
+            "expect": test.caught_by or "pass", "missed_at": list(test.missed_at),
+            "ok": ok or hole, "hole": hole, "by": by[:300], "cases": len(verdicts), "dtypes": per}
 
 
 def _short(path: Path) -> str:

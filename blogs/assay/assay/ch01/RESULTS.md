@@ -1,6 +1,6 @@
 # ch01 gpt2 forward vs HuggingFace: measurements
 
-> Historical evidence for the ch01 thresholds (assay/ch01/suite.py: FLOORS, KL_MAX) and prompt choice (ops.py PROMPTS).
+> Historical evidence for the ch01 thresholds (assay/ch01/suite.py: KL_MAX; the per-op 2x-budget floors it also backed were replaced by allclose, suite.py TOL) and prompt choice (ops.py PROMPTS).
 > The code that generated it (`measure/`, branch `engine/ch01-forward` at f461aea1) was folded into assay and removed:
 > its metrics are ops.py's numerics, its mutants suite.py's MUTANTS, its prompts ops.py's texts. Raw jsonl: same commit.
 

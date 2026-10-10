@@ -25,7 +25,7 @@ from typing import Any
 
 import torch
 
-from assay.ch01.ops import NAMES, Case, Op, band, make_inputs, reduce_output, reference_stats
+from assay.ch01.ops import NAMES, Case, Op, make_inputs, reduce_output, reference_stats
 from assay.core import (
     Child,
     ChildDied,
@@ -318,8 +318,8 @@ def _send(fd: int, header: dict[str, Any], blobs: dict[str, bytes]) -> None:
 #       run keys             candidate file sha256 + attr + case + env + runner code fp + expected key
 #       all in the store?    -> done, no child at all (a warm check never imports the reader's code)
 #       else one Child       load -> blocked (import / bind error) | ready
-#                            per case: call -> facts (returned? dtype, shape, inputs unchanged, deterministic, err vs
-#                            truth, logit reductions) -> store "run"
+#                            per case: call -> facts (returned? dtype, shape, inputs unchanged, deterministic, error
+#                            frontier vs truth, logit reductions) -> store "run"
 #                            finish -> coverage of the bound function's lines -> store "run" (case "coverage")
 # A died / timed-out call is recorded for grading but not cached (it may be the machine, not the code), and the cases
 # after it are reported as not run.
@@ -327,8 +327,7 @@ def _send(fd: int, header: dict[str, Any], blobs: dict[str, bytes]) -> None:
 
 ASSAY = Path(__file__).resolve().parents[1]  # .../assay (the package)
 RUN_CODE = ("core.py", "ch01/ops.py", "ch01/run.py")
-KEEP_FULL_BYTES = 16 << 20  # outputs up to this size are stored whole; bigger ones only when they look wrong
-STORAGE_MULT, STORAGE_FLOORS = 2.0, {"fp32": 2e-5, "fp16": 1e-3, "bf16": 2e-2}  # "looks wrong", for storage only
+KEEP_FULL_BYTES = 16 << 20  # outputs up to this size are stored whole; bigger ones only when malformed
 
 
 class InfraError(Exception):
@@ -500,7 +499,7 @@ def _call(ctx: Ctx, child: Child, case: Case, inputs: tuple, exp: Entry) -> tupl
     header_args, blobs = pack_args(inputs)
     want = {"dtype": exp.meta["dtype"], "shape": exp.meta["shape"]}
     base = {"want": want, "ref_err": exp.meta["ref_err"], "scale": exp.meta["scale"],
-            "ref_kl_max": exp.meta.get("ref_kl_max")}
+            "ref_kl_max": exp.meta.get("ref_kl_max"), "ref_frontier": exp.meta.get("ref_frontier")}
     try:
         child.send({"kind": "call", "args": header_args, "dtype": case.dtype_name}, blobs, ctx.call_timeout)
         reply, got = child.recv(ctx.call_timeout)
@@ -533,9 +532,8 @@ def _call(ctx: Ctx, child: Child, case: Case, inputs: tuple, exp: Entry) -> tupl
         if "reduced" in reduced:
             files["reduced.json"] = json.dumps(reduced.pop("reduced")).encode()
         facts.update(reduced)
-    looks_wrong = facts["out"] != want or not facts.get("finite", False) or facts["err"] > band(
-        facts["ref_err"], facts["scale"], case.dtype_name, STORAGE_MULT, STORAGE_FLOORS)
-    if out.numel() * out.element_size() <= KEEP_FULL_BYTES or looks_wrong:
+    malformed = facts["out"] != want or not facts.get("finite", False)
+    if out.numel() * out.element_size() <= KEEP_FULL_BYTES or malformed:
         files["out.bin"] = raw(out)
     return facts, files
 
