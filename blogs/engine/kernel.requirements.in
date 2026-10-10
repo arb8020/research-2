@@ -8,5 +8,6 @@ safetensors==0.8.0
 numpy==2.5.3
 jaxtyping==0.3.11
 coverage==7.16.2
+einops==0.8.2                # ch01's gpt2.py: einsum / rearrange / reduce in shape letters
 jupyter_server~=2.17         # what box's relay runs (jupyter_cmd: python3 -m jupyter_server)
 ipykernel~=7.1
