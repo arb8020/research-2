@@ -6,6 +6,9 @@
 
 <!-- wip: chapter 1 slice: the cells, checks and workspace are real; the prose is placeholder (TODO: the author writes it) -->
 
+<!-- TODO prose (placeholder): Click Connect now: the first connect builds your sandbox, which takes about
+3 minutes. Keep reading while it does; your edits are kept and Run waits for it. -->
+
 <!-- TODO prose: what this chapter builds (GPT-2 small, one sequence, greedy decode) and how cells work: every cell
 below is a view of the same gpt2.py in your workspace; Run checks the ops of that cell against the whole file as it is. -->
 
@@ -14,7 +17,8 @@ cell's ops.
 
 ## Linear
 
-<!-- TODO prose: x @ W^T + b; the [out, in] layout; why load() transposes GPT-2's Conv1D weights. -->
+<!-- TODO prose: x @ w + b as einsum("T D, D F -> T F"); GPT-2 stores linears [in, out] (Conv1D), so no transpose;
+the shape-suffix names (x_TD, w_DF) and the letters. -->
 
 ```python cell=linear file=gpt2.py
 ```
@@ -35,7 +39,8 @@ cell's ops.
 
 ## Attention
 
-<!-- TODO prose: q k^T / sqrt(head_dim), the causal mask, softmax, then v; heads as a leading dim. -->
+<!-- TODO prose: "T N H, S N H -> N T S" scores / sqrt(H), the causal mask (key s <= query t), softmax over S, then
+"N T S, S N H -> T N H"; self_attention: load() gave w_qkv_D3NH (c_attn unfused) and w_o_NHD. -->
 
 ```python cell=attention file=gpt2.py
 ```
