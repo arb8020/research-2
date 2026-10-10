@@ -11,6 +11,7 @@
 import { createSession, endSession, extendSession, getSession, subscribe } from "./gateway";
 import type { EndedReason, GatewayEvent, Status, Token } from "./gateway";
 import { attach, detach, onKernelState } from "./kernel";
+import { isJsonObject } from "../json";
 
 export type Phase =
   | { kind: "disconnected"; failure: string | undefined }
@@ -108,11 +109,10 @@ export function savedToken(): Token | undefined {
 
 function storedSession(): Stored | undefined {
   const raw = readJson(SESSION_KEY);
-  if (typeof raw !== "object" || raw === null) return undefined;
-  const r: Partial<Record<string, unknown>> = { ...raw };
-  const gpu = r["gpu"];
-  if (typeof r["gateway"] !== "string" || typeof r["session_id"] !== "string" || r["provider"] !== "modal" || (gpu !== null && typeof gpu !== "string")) return undefined;
-  return { gateway: r["gateway"], session_id: r["session_id"], provider: "modal", gpu };
+  if (!isJsonObject(raw)) return undefined;
+  const gpu = raw["gpu"];
+  if (typeof raw["gateway"] !== "string" || typeof raw["session_id"] !== "string" || raw["provider"] !== "modal" || (gpu !== null && typeof gpu !== "string")) return undefined;
+  return { gateway: raw["gateway"], session_id: raw["session_id"], provider: "modal", gpu };
 }
 
 // ---- transitions ----
