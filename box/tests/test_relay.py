@@ -438,3 +438,42 @@ def test_image_and_volume_flags_reach_the_modal_provider() -> None:
         assert access.provider.volumes == {"/ws": "blogs-ws", "/hf": "weights"}
     finally:
         access.close()
+
+
+class NeverGone(Counted):
+    """A provider whose machines terminate but which says it still has them (a sandbox that may bill on)."""
+
+    def launch(self, **kw: object) -> object:
+        return NeverGoneMachine(self.inner.launch(**kw))
+
+
+class NeverGoneMachine:
+    def __init__(self, inner: object) -> None:
+        self.inner = inner
+
+    def gone(self) -> bool:
+        raise sdk.NotGone(f"{self.inner.id}: its provider still has it")
+
+    def __getattr__(self, attr: str) -> object:
+        return getattr(self.inner, attr)
+
+
+def test_a_machine_that_will_not_go_after_a_failed_boot_is_said_not_swallowed(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    provider = NeverGone(Local(tmp_path / "machines"), [])
+    cfg = relay.Config(
+        access=lambda token: relay.Access(provider, DirStore(tmp_path / "records")), image=None, gpus=(None,),
+        labels={"box.purpose": "relay-test"}, origins=re.compile(relay.LOCAL_ORIGIN), python="false", ip="127.0.0.1", port=free_port,
+    )  # fmt: skip
+    server = relay.serve(cfg, free_port())
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    gw = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        got = events(gw, create(gw), "ended")
+    finally:
+        server.shutdown()
+        server.server_close()
+    steps = [e["text"] for _, e in got if e["kind"] == "step"]
+    assert any("may still be running (and billing)" in s for s in steps), steps
+    assert got[-1][1]["status"]["reason"] == "boot_failed"
+    wide = [json.loads(line) for line in capsys.readouterr().err.splitlines() if line.startswith("{")]
+    assert [e["event"] for e in wide if e.get("event")] == ["not_gone"], wide

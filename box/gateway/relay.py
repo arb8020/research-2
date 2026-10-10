@@ -306,8 +306,10 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
         rec.finish(status)
     except Cancelled:
         rec.step("gateway", "ended while booting")
-        end_quietly(session)
-        rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="stopped"))
+        try:
+            end_after_boot(rec, session)
+        finally:
+            rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="stopped"))
     except Exception as e:
         if rec.cancelled:
             rec.step("gateway", "ended while booting")
@@ -315,20 +317,25 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
             return
         print(f"relay: boot {rec.session_id} failed: {e!r}", file=sys.stderr)
         rec.step("gateway", f"boot failed: {type(e).__name__}: {e}")
-        end_quietly(session)
-        rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="boot_failed"))
+        try:
+            end_after_boot(rec, session)
+        finally:
+            rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="boot_failed"))
 
 
 class Cancelled(Exception):
     pass
 
 
-def end_quietly(session: sdk.Session | None) -> None:
+def end_after_boot(rec: Boot, session: sdk.Session | None) -> None:
     if session is None:
         return
     try:
         session.close(timeout_s=CLOSE_TIMEOUT_S)
-    except Exception as e:  # MUST KILL: swallows any close() failure, NotGone included (a machine that may still bill); let NotGone surface
+    except sdk.NotGone as e:
+        rec.step("gateway", f"sandbox {session.machine.id} may still be running (and billing): {e}")
+        sys.stderr.write(json.dumps({"t": round(time.time(), 3), "event": "not_gone", "session": session.id, "machine": session.machine.id, "error": str(e)}) + "\n")
+    except (sdk.Gone, OSError) as e:
         print(f"relay: closing {session.id} after a failed boot: {e!r}", file=sys.stderr)
 
 
