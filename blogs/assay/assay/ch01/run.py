@@ -116,7 +116,8 @@ def unpack_args(header: list[Any], blobs: dict[str, bytes]) -> tuple:
 #                                                                                        | bind_error
 #     call {args, dtype} + arg blobs                 out0 = fn(clones); out1 = fn(clones)
 #                                                    -> returned {out spec, sha256 of out1 and of every arg after each
-#                                                       run} + out0's bytes | raised {error}
+#                                                       run} + out0's bytes | raised {error, line: the deepest frame in
+#                                                       the reader's file, e.g. the stub that raised}
 #     finish                                         coverage.stop()                  -> coverage {missing lines/branches}
 #
 # Only run 0's output crosses the pipe in full; run 1 and the inputs-after come back as digests, which the parent
@@ -164,7 +165,7 @@ def _serve(in_fd: int, out_fd: int, fn: Callable[..., Any], device: str, tracer:
             return
         assert header["kind"] == "call", header
         args = unpack_args(header["args"], blobs)
-        reply, out = _call_twice(fn, args, NAMES[header["dtype"]], device)
+        reply, out = _call_twice(fn, args, NAMES[header["dtype"]], device, path)
         _send(out_fd, reply, out)
 
 
@@ -203,30 +204,66 @@ def _plain(module: Any, attr: str, device: str) -> Callable[..., Any]:
     return call
 
 
-def _forward(module: Any, attr: str, device: str) -> Callable[..., Any]:
-    """gpt2.py's model contract: `load(dtype) -> (weights, config)`, `forward(weights, config, tokens) -> logits`.
-    Weights load once per dtype (inside the first call, under its timeout)."""
+def _model(module: Any, attr: str, device: str) -> tuple[Callable[..., Any], Callable[[torch.dtype], Any]]:
+    """gpt2.py's model contract: `load(dtype, device) -> (weights, config)` (given code), then the op's function.
+    Weights load once per dtype, inside the first call (under its timeout)."""
     for name in ("load", attr):
         if not hasattr(module, name):
             raise AttributeError(f"{Path(module.__file__).name} defines no `{name}`")
     loaded: dict[torch.dtype, Any] = {}
 
-    def call(tokens: torch.Tensor, *, dtype: torch.dtype) -> Any:
+    def weights(dtype: torch.dtype) -> Any:
         if dtype not in loaded:
-            weights, config = module.load(dtype)
-            loaded[dtype] = ({k: v.to(device) for k, v in weights.items()}, config)
-        weights, config = loaded[dtype]
+            loaded[dtype] = module.load(dtype, device)
+        return loaded[dtype]
+
+    return getattr(module, attr), weights
+
+
+def _forward(module: Any, attr: str, device: str) -> Callable[..., Any]:
+    """forward(weights, config, tokens_T) -> logits [T, V]."""
+    fn, weights = _model(module, attr, device)
+
+    def call(tokens_T: torch.Tensor, *, dtype: torch.dtype) -> Any:
+        w, cfg = weights(dtype)
         with torch.no_grad():
-            return getattr(module, attr)(weights, config, tokens)
+            return fn(w, cfg, tokens_T)
 
     return call
 
 
-ADAPTERS = {"plain": _plain, "forward": _forward}
+def _block(module: Any, attr: str, device: str) -> Callable[..., Any]:
+    """block(x_TD, weights.layers[i], config) -> [T, D]; x arrives fp32 and is cast to the case's dtype here."""
+    fn, weights = _model(module, attr, device)
+
+    def call(x_TD: torch.Tensor, layer: int, *, dtype: torch.dtype) -> Any:
+        w, cfg = weights(dtype)
+        with torch.no_grad():
+            return fn(x_TD.to(dtype), w.layers[layer], cfg)
+
+    return call
 
 
-def _call_twice(fn: Callable[..., Any], args: tuple, dtype: torch.dtype,
-                device: str) -> tuple[dict[str, Any], dict[str, bytes]]:
+def _generate(module: Any, attr: str, device: str) -> Callable[..., Any]:
+    """generate(weights, config, prompt ids (a list), n) -> n new ids (a list), returned as an int64 tensor."""
+    fn, weights = _model(module, attr, device)
+
+    def call(prompt_T: torch.Tensor, n: int, *, dtype: torch.dtype) -> Any:
+        w, cfg = weights(dtype)
+        with torch.no_grad():
+            ids = fn(w, cfg, prompt_T.tolist(), n)
+        if not (isinstance(ids, list) and all(isinstance(i, int) for i in ids)):
+            return ids  # not a list of ints: returned as is, and the check says what it was
+        return torch.tensor(ids, dtype=torch.int64)
+
+    return call
+
+
+ADAPTERS = {"plain": _plain, "forward": _forward, "block": _block, "generate": _generate}
+
+
+def _call_twice(fn: Callable[..., Any], args: tuple, dtype: torch.dtype, device: str,
+                path: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
     """Two runs on fresh clones; digests of run 1's output and of the args right after each run."""
     out0: torch.Tensor | None = None
     digests: dict[str, Any] = {"args_after": []}
@@ -236,7 +273,8 @@ def _call_twice(fn: Callable[..., Any], args: tuple, dtype: torch.dtype,
         try:
             out = fn(*clones, dtype=dtype)
         except Exception as exc:  # noqa: BLE001 -- a raising candidate is a verdict
-            return {"kind": "raised", "error": f"{type(exc).__name__}: {exc}"[:2000]}, {}
+            return {"kind": "raised", "error": f"{type(exc).__name__}: {exc}"[:2000],
+                    "line": _where(exc, path)["line"]}, {}
         if type(out) is not torch.Tensor:
             return {"kind": "raised", "error": f"returned {type(out).__module__}.{type(out).__qualname__}, "
                                                f"want a plain torch.Tensor"}, {}
@@ -316,7 +354,7 @@ class Ctx:
 class Candidate:
     file: Path
     attr: str
-    adapter: str  # child.ADAPTERS: "plain" | "forward"
+    adapter: str  # ADAPTERS: "plain" | "forward" | "block" | "generate"
 
     def fp(self) -> dict[str, str]:
         return {"file": self.file.name, "sha256": sha256(self.file.read_bytes()), "attr": self.attr,
@@ -467,7 +505,8 @@ def _call(ctx: Ctx, child: Child, case: Case, inputs: tuple, exp: Entry) -> tupl
         child.send({"kind": "call", "args": header_args, "dtype": case.dtype_name}, blobs, ctx.call_timeout)
         reply, got = child.recv(ctx.call_timeout)
         if reply["kind"] == "raised":
-            return {**base, "status": "raised", "notes": f"raised: {reply.get('error')}"}, {}
+            line = reply.get("line") if isinstance(reply.get("line"), int) else None
+            return {**base, "status": "raised", "notes": f"raised: {reply.get('error')}", "line": line}, {}
         if reply["kind"] != "returned":
             raise ProtocolError(f"unexpected reply kind {reply['kind']!r}")
         out = decode(reply.get("out"), got.get("out", b""))

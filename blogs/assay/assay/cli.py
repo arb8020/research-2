@@ -1,6 +1,6 @@
 """run_checks: a chapter's checks on the tree in the cwd. JSON lines on stdout; exit 0 pass, 1 fail or blocked, 2 infra.
 
-    run_checks ch01 --op causal_attention            one op (repeatable); default: every op of the chapter
+    run_checks ch01 --op attention                   one op (repeatable); default: every op of the chapter
     run_checks ch01 --op forward --dtype fp32        dtypes (repeatable); default: every dtype the op declares
     run_checks ch01 --warn layer_norm / --warn-all   that op's (every op's) failures don't block; model level always does
     run_checks ch01 --selftest [--op X]              planted bugs + cheats must FAIL for their stated reason, correct
