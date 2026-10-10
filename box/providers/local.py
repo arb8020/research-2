@@ -26,6 +26,7 @@ from box.sdk import (
     snapshot_ref,
 )
 from box.store import DirStore, Mount
+from box.supervisor import STATUS, job_pgids
 
 BASE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local"
 
@@ -203,9 +204,8 @@ class LocalMachine:
         return not groups & live
 
     def _groups(self) -> list[int]:
-        statuses = [json.loads(status.read_text()) for status in Path(self.root).glob("*/*/status.json")]
-        jobs = [status.get(key) for status in statuses for key in ("pgid", "hook_pgid")]
-        return [int((self.dir / "pid").read_text()), *(pgid for pgid in jobs if pgid is not None)]
+        jobs = [pgid for status in Path(self.root).glob(f"*/*/{STATUS}") for pgid in job_pgids(status.read_bytes())]
+        return [int((self.dir / "pid").read_text()), *jobs]
 
 
 def restore(snapshot: Path, work: Path) -> None:
@@ -221,7 +221,6 @@ def _take_terminal() -> None:
     fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
 
-def _killpg(pgid: int | None) -> None:
-    if pgid is not None:
-        with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.killpg(pgid, signal.SIGKILL)
+def _killpg(pgid: int) -> None:
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(pgid, signal.SIGKILL)

@@ -3,17 +3,20 @@ from __future__ import annotations
 import argparse
 import contextlib
 import ctypes
+import dataclasses
 import fcntl
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Literal, TypeVar, get_args
 
 TICK_S = 0.2
 KILL_GRACE_S = 10.0
@@ -35,6 +38,164 @@ KINDS = ("jobs", "services")
 LEASE_OPS = ("create", "extend", "release")
 MAX_LEASE_AUDIT = 1024
 PR_SET_PDEATHSIG = 1
+SESSION, LEASE, AUDIT, ENDED, HEARTBEAT, UP = "session.json", "lease.json", "lease-audit.json", "ended.json", "heartbeat.json", "up"
+ACTIVITY, WATCH, STOP = "activity", "watch", "stop"
+SPEC, STATUS, KILL = "spec.json", "status.json", "kill"
+CHUNK = re.compile(r"(stdout|stderr)\.(\d+)\.(\d+)")
+EndReason = Literal["lease", "released", "stopped", "idle", "machine_lost"]
+JobEndReason = Literal["exited", "killed", "timeout", "lease", "released", "stopped", "idle", "refused"]
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class Started:
+    started_at: float
+    created_at: float
+    ceiling: float
+
+
+@dataclass(frozen=True)
+class Lease:
+    until: float
+    ceiling: float
+    released: bool = False
+
+    def __post_init__(self) -> None:
+        if self.until > self.ceiling:
+            raise ValueError(f"lease until {self.until} is past its ceiling {self.ceiling}")
+
+
+@dataclass(frozen=True)
+class LeaseChange:
+    op: str
+    until: float
+    at: float
+    host: str
+    pid: int
+    n: int = 1
+
+    def __post_init__(self) -> None:
+        if self.op not in LEASE_OPS:
+            raise ValueError(f"lease audit: unknown op {self.op!r}")
+
+
+@dataclass(frozen=True)
+class Heartbeat:
+    at: float
+    ttl_s: float
+
+    def fresh(self, now: float) -> bool:
+        return now - self.at < self.ttl_s
+
+
+@dataclass(frozen=True)
+class Ended:
+    reason: EndReason
+
+    def __post_init__(self) -> None:
+        if self.reason not in get_args(EndReason):
+            raise ValueError(f"unknown end reason {self.reason!r}")
+
+
+@dataclass(frozen=True)
+class Ending:
+    reason: JobEndReason
+    exit_code: int | None
+    hook_exit_code: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.reason not in get_args(JobEndReason):
+            raise ValueError(f"unknown job end reason {self.reason!r}")
+
+
+@dataclass(frozen=True)
+class Queued:
+    pass
+
+
+@dataclass(frozen=True)
+class JobRunning:
+    started_at: float
+
+
+@dataclass(frozen=True)
+class Hooking:
+    ending: Ending
+
+
+@dataclass(frozen=True)
+class Done:
+    ending: Ending
+    started_at: float | None
+    ended_at: float
+
+
+JobStatus = Queued | JobRunning | Hooking | Done
+
+
+def dump(x: object, **extra: object) -> bytes:
+    return json.dumps({**dataclasses.asdict(x), **extra}).encode()
+
+
+def load(cls: type[T], raw: bytes) -> T:  # noqa: UP047
+    return fields_of(cls, json.loads(raw))
+
+
+def fields_of(cls: type[T], d: dict) -> T:  # noqa: UP047
+    return cls(**{f.name: d[f.name] for f in dataclasses.fields(cls)})
+
+
+def load_ended(raw: bytes) -> Ended:
+    ended = load(Ended, raw)
+    if ended.reason == "machine_lost":
+        raise ValueError("ended.json: machine_lost is never a supervisor's word")
+    return ended
+
+
+def dump_audit(audit: list[LeaseChange]) -> bytes:
+    return json.dumps([dataclasses.asdict(c) for c in audit]).encode()
+
+
+def load_audit(raw: bytes) -> list[LeaseChange]:
+    return [fields_of(LeaseChange, d) for d in json.loads(raw)]
+
+
+def dump_job(status: JobRunning | Hooking | Done, pgids: list[int]) -> bytes:
+    match status:
+        case JobRunning(started_at=started):
+            d = {"state": "running", "started": started}
+        case Hooking(ending=ending):
+            d = {"state": "hook", **dataclasses.asdict(ending)}
+        case Done(ending=ending, started_at=started, ended_at=ended):
+            d = {"state": "done", **dataclasses.asdict(ending), "started": started, "ended": ended}
+    return json.dumps({**d, "pgids": pgids}).encode()
+
+
+def load_job(raw: bytes) -> JobRunning | Hooking | Done:
+    d = json.loads(raw)
+    match d["state"]:
+        case "running":
+            return JobRunning(float(d["started"]))
+        case "hook":
+            return Hooking(fields_of(Ending, d))
+        case "done":
+            return Done(fields_of(Ending, d), None if d["started"] is None else float(d["started"]), float(d["ended"]))
+    raise ValueError(f"status.json: unknown job state {d['state']!r}")
+
+
+def job_pgids(raw: bytes) -> list[int]:
+    return [int(pgid) for pgid in json.loads(raw)["pgids"]]
+
+
+def chunk_name(stream: str, n: int, end: int) -> str:
+    assert stream in STREAMS, stream
+    assert 0 < n <= MAX_CHUNKS, n
+    return f"{stream}.{n:0{CHUNK_DIGITS}d}.{end}"
+
+
+def parse_chunk(name: str) -> tuple[int, str, int] | None:
+    m = CHUNK.fullmatch(name)
+    return None if m is None else (int(m[2]), m[1], int(m[3]))
 
 
 def main(argv: list[str]) -> None:
@@ -71,25 +232,25 @@ def supervise_main(argv: list[str]) -> None:
     root = Path(a.root)
     for kind in KINDS:
         (root / kind).mkdir(parents=True, exist_ok=True)
-    put(root / "session.json", json.dumps({"started_at": time.time(), "created_at": a.created_at, "ceiling": a.ceiling}).encode())
-    put(root / "lease.json", json.dumps({"until": a.lease_until, "ceiling": a.ceiling, "released": False}).encode())
-    put(root / "lease-audit.json", json.dumps([audit_entry("create", a.lease_until, a.created_at, a.host, a.pid)]).encode())
+    put(root / SESSION, dump(Started(time.time(), a.created_at, a.ceiling)))
+    put(root / LEASE, dump(Lease(a.lease_until, a.ceiling)))
+    put(root / AUDIT, dump_audit([LeaseChange("create", a.lease_until, a.created_at, a.host, a.pid)]))
     recorder = Recorder(root, root / a.record, sync=a.record_sync) if a.record else None
     try:
         if recorder:
             recorder.start()
-        (root / "activity").touch()
-        (root / "up").write_text(a.session_id)
+        (root / ACTIVITY).touch()
+        (root / UP).write_text(a.session_id)
         reason = supervise(root, a.idle_timeout_s, a.ports)
     finally:
         if recorder:
             recorder.close()
-    ended = {"reason": reason, "at": time.time()}
+    ended = dump(Ended(reason), at=time.time())
     try:
         if recorder:
             recorder.finish(ended)
     finally:
-        put(root / "ended.json", json.dumps(ended).encode())
+        put(root / ENDED, ended)
         linger(root)
         if a.on_shutdown:
             subprocess.run(["bash", "-c", a.on_shutdown], check=False)
@@ -103,64 +264,53 @@ def lease_main(argv: list[str]) -> None:
     p.add_argument("--host", required=True)
     p.add_argument("--pid", type=int, required=True)
     a = p.parse_args(argv)
-    print(json.dumps(change_lease(Path(a.root), a.op, a.until, a.host, a.pid)))
+    sys.stdout.buffer.write(dump(change_lease(Path(a.root), a.op, a.until, a.host, a.pid)))
 
 
-def change_lease(root: Path, op: str, until: float, host: str, pid: int) -> dict:
+def change_lease(root: Path, op: str, until: float, host: str, pid: int) -> Lease:
     with (root / "lease.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         lease = read_lease(root)
         now = time.time()
         changed = next_lease(lease, op, until, now)
         if changed != lease:
-            put(root / "lease.json", json.dumps(changed).encode())
-            audit = json.loads((root / "lease-audit.json").read_text())
-            put(root / "lease-audit.json", json.dumps(next_audit(audit, audit_entry(op, changed["until"], now, host, pid))).encode())
+            put(root / LEASE, dump(changed))
+            audit = load_audit((root / AUDIT).read_bytes())
+            put(root / AUDIT, dump_audit(next_audit(audit, LeaseChange(op, changed.until, now, host, pid))))
     return changed
 
 
-def next_lease(lease: dict, op: str, until: float, now: float) -> dict:
+def next_lease(lease: Lease, op: str, until: float, now: float) -> Lease:
     assert op in ("extend", "release"), op
-    assert lease["until"] <= lease["ceiling"], lease
-    if lease["released"] or lease["until"] <= now:
+    if lease.released or lease.until <= now:
         return lease
     if op == "release":
-        return {**lease, "until": now, "released": True}
-    extended = {**lease, "until": max(lease["until"], min(until, lease["ceiling"]))}
-    assert extended["until"] >= lease["until"], (lease, extended)
-    assert extended["until"] <= lease["ceiling"], (lease, extended)
+        return dataclasses.replace(lease, until=now, released=True)
+    extended = dataclasses.replace(lease, until=max(lease.until, min(until, lease.ceiling)))
+    assert extended.until >= lease.until, (lease, extended)
     return extended
 
 
-def audit_entry(op: str, until: float, at: float, host: str, pid: int) -> dict:
-    assert op in LEASE_OPS, op
-    return {"op": op, "until": until, "at": at, "host": host, "pid": pid, "n": 1}
-
-
-def next_audit(audit: list[dict], entry: dict) -> list[dict]:
+def next_audit(audit: list[LeaseChange], entry: LeaseChange) -> list[LeaseChange]:
     last = audit[-1] if audit else None
-    if last is not None and (last["op"], last["host"], last["pid"]) == (entry["op"], entry["host"], entry["pid"]):
-        return [*audit[:-1], {**entry, "n": last["n"] + 1}]
+    if last is not None and (last.op, last.host, last.pid) == (entry.op, entry.host, entry.pid):
+        return [*audit[:-1], dataclasses.replace(entry, n=last.n + 1)]
     if len(audit) >= MAX_LEASE_AUDIT:
-        raise RuntimeError(f"lease audit full ({MAX_LEASE_AUDIT} entries): refusing {entry['op']}")
+        raise RuntimeError(f"lease audit full ({MAX_LEASE_AUDIT} entries): refusing {entry.op}")
     return [*audit, entry]
 
 
-def read_lease(root: Path) -> dict:
-    raw = json.loads((root / "lease.json").read_text())
-    lease = {"until": float(raw["until"]), "ceiling": float(raw["ceiling"]), "released": bool(raw["released"])}
-    if lease["until"] > lease["ceiling"]:
-        raise ValueError(f"{root}/lease.json: until {lease['until']} past ceiling {lease['ceiling']}")
-    return lease
+def read_lease(root: Path) -> Lease:
+    return load(Lease, (root / LEASE).read_bytes())
 
 
-def lease_end(lease: dict) -> tuple[float, str]:
-    return min(lease["until"], lease["ceiling"]), "released" if lease["released"] else "lease"
+def lease_end(lease: Lease) -> tuple[float, str]:
+    return lease.until, "released" if lease.released else "lease"
 
 
 def linger(root: Path) -> None:
     def reading() -> bool:
-        watch = root / "watch"
+        watch = root / WATCH
         return watch.exists() and time.time() - watch.stat().st_mtime < WATCH_TTL_S
 
     until = time.monotonic() + LINGER_S
@@ -170,68 +320,70 @@ def linger(root: Path) -> None:
 
 def supervise(root: Path, idle_timeout_s: float, ports: list[int]) -> str:
     done: set[str] = set()
-    services: dict[Path, subprocess.Popen] = {}
+    services: dict[Path, tuple[subprocess.Popen, float]] = {}
     while (end := session_end(root, idle_timeout_s)) is None:
         tend_services(root, services)
         if idle_timeout_s and connected(ports):
-            (root / "activity").touch()
+            (root / ACTIVITY).touch()
         job_dir = next_job(root, done)
         if job_dir is None:
             time.sleep(TICK_S)
             continue
         done.add(job_dir.name)
         run_job(root, job_dir, lambda: tend_services(root, services))
-        (root / "activity").touch()
+        (root / ACTIVITY).touch()
     stop_services(services, end)
     return end
 
 
-def tend_services(root: Path, services: dict[Path, subprocess.Popen]) -> None:
+def tend_services(root: Path, services: dict[Path, tuple[subprocess.Popen, float]]) -> None:
     for job_dir in sorted((root / "services").iterdir()):
-        if job_dir in services or (job_dir / "status.json").exists() or not (job_dir / "spec.json").exists():
+        if job_dir in services or (job_dir / STATUS).exists() or not (job_dir / SPEC).exists():
             continue
         if len(services) >= MAX_SERVICES:
-            put(job_dir / "status.json", json.dumps({"state": "done", "reason": "refused", "exit_code": None, "ended": time.time()}).encode())
+            put(job_dir / STATUS, dump_job(Done(Ending("refused", None), None, time.time()), []))
             continue
-        spec = json.loads((job_dir / "spec.json").read_text())
-        env = {**spec.get("env", {}), "BOX_JOB_ID": job_dir.name, "BOX_JOB_DIR": str(job_dir)}
-        services[job_dir] = child = spawn(spec["cmd"], env, job_dir, stdout=job_dir / "stdout", stderr=job_dir / "stderr")
-        put(job_dir / "status.json", json.dumps({"state": "running", "started": time.time(), "pgid": child.pid}).encode())
-    for job_dir, child in services.items():
-        if child.poll() is None and (job_dir / "kill").exists():
+        services[job_dir] = start(job_dir, read_spec(job_dir))
+    for job_dir, (child, _) in services.items():
+        if child.poll() is None and (job_dir / KILL).exists():
             kill_group(child)
-            end_service(job_dir, "killed", child.returncode)
-        elif child.poll() is not None and service_state(job_dir) == "running":
-            end_service(job_dir, "exited", child.returncode)
+            end_service(job_dir, services[job_dir], "killed")
+        elif child.poll() is not None and running(job_dir):
+            end_service(job_dir, services[job_dir], "exited")
 
 
-def stop_services(services: dict[Path, subprocess.Popen], reason: str) -> None:
-    for job_dir, child in services.items():
+def stop_services(services: dict[Path, tuple[subprocess.Popen, float]], reason: str) -> None:
+    for job_dir, (child, started) in services.items():
         if child.poll() is None:
             kill_group(child)
-            end_service(job_dir, reason, child.returncode)
-        elif service_state(job_dir) == "running":
-            end_service(job_dir, "exited", child.returncode)
+            end_service(job_dir, (child, started), reason)
+        elif running(job_dir):
+            end_service(job_dir, (child, started), "exited")
 
 
-def end_service(job_dir: Path, reason: str, code: int | None) -> None:
-    status = json.loads((job_dir / "status.json").read_text())
-    put(job_dir / "status.json", json.dumps({**status, "state": "done", "reason": reason, "exit_code": code, "ended": time.time()}).encode())
+def end_service(job_dir: Path, service: tuple[subprocess.Popen, float], reason: str) -> None:
+    child, started = service
+    put(job_dir / STATUS, dump_job(Done(Ending(reason, child.returncode), started, time.time()), [child.pid]))
 
 
-def service_state(job_dir: Path) -> str:
-    return json.loads((job_dir / "status.json").read_text())["state"]
+def running(job_dir: Path) -> bool:
+    return isinstance(load_job((job_dir / STATUS).read_bytes()), JobRunning)
+
+
+def lease_over(root: Path, budget: float = 0.0) -> str | None:
+    if (root / STOP).exists():
+        return "stopped"
+    end_at, reason = lease_end(read_lease(root))
+    return reason if time.time() >= end_at - budget else None
 
 
 def session_end(root: Path, idle_timeout_s: float) -> str | None:
-    if (root / "stop").exists():
-        return "stopped"
-    end_at, reason = lease_end(read_lease(root))
-    if time.time() >= end_at:
-        return reason
-    if idle_timeout_s and time.time() - (root / "activity").stat().st_mtime >= idle_timeout_s:
-        return "idle"
-    return None
+    idle = idle_timeout_s and time.time() - (root / ACTIVITY).stat().st_mtime >= idle_timeout_s
+    return lease_over(root) or ("idle" if idle else None)
+
+
+def job_end(root: Path, job_dir: Path, killed_at: float, budget: float) -> str | None:
+    return lease_over(root, budget) or ("timeout" if time.monotonic() >= killed_at else "killed" if (job_dir / KILL).exists() else None)
 
 
 def connected(ports: list[int]) -> bool:
@@ -250,34 +402,29 @@ def established_local_ports() -> list[int]:
 
 
 def next_job(root: Path, done: set[str]) -> Path | None:
-    pending = [d for d in (root / "jobs").iterdir() if d.name not in done and (d / "spec.json").exists()]
-    return min(pending, key=lambda d: (d / "spec.json").stat().st_mtime, default=None)
+    pending = [d for d in (root / "jobs").iterdir() if d.name not in done and (d / SPEC).exists()]
+    return min(pending, key=lambda d: (d / SPEC).stat().st_mtime, default=None)
 
 
-def job_end(root: Path, job_dir: Path, killed_at: float, budget: float) -> str | None:
-    if (root / "stop").exists():
-        return "stopped"
-    end_at, reason = lease_end(read_lease(root))
-    if time.time() >= end_at - budget:
-        return reason
-    if time.monotonic() >= killed_at:
-        return "timeout"
-    if (job_dir / "kill").exists():
-        return "killed"
-    return None
+def read_spec(job_dir: Path) -> dict:
+    spec = json.loads((job_dir / SPEC).read_text())
+    return {**spec, "env": {**spec.get("env", {}), "BOX_JOB_ID": job_dir.name, "BOX_JOB_DIR": str(job_dir)}}
+
+
+def start(job_dir: Path, spec: dict) -> tuple[subprocess.Popen, float]:
+    child = spawn(spec["cmd"], spec["env"], job_dir, stdout=job_dir / "stdout", stderr=job_dir / "stderr")
+    started = time.time()
+    put(job_dir / STATUS, dump_job(JobRunning(started), [child.pid]))
+    return child, started
 
 
 def run_job(root: Path, job_dir: Path, tick: Callable[[], None]) -> None:
-    spec = json.loads((job_dir / "spec.json").read_text())
-    spec["env"] = {**spec.get("env", {}), "BOX_JOB_ID": job_dir.name, "BOX_JOB_DIR": str(job_dir)}
+    spec = read_spec(job_dir)
     budget = float(spec.get("hook_budget_s", 300)) if spec.get("on_exit") else 0.0
     max_duration_s = float(spec["max_duration_s"])
     assert 0 < max_duration_s <= MAX_CEILING_S, max_duration_s
-    child = spawn(spec["cmd"], spec["env"], job_dir, stdout=job_dir / "stdout", stderr=job_dir / "stderr")
+    child, started = start(job_dir, spec)
     killed_at = time.monotonic() + max_duration_s
-    status = {"state": "running", "started": time.time(), "pgid": child.pid}
-    put(job_dir / "status.json", json.dumps(status).encode())
-
     reason = None
     while (code := child.poll()) is None:
         if (reason := job_end(root, job_dir, killed_at, budget)) is not None:
@@ -286,20 +433,16 @@ def run_job(root: Path, job_dir: Path, tick: Callable[[], None]) -> None:
             break
         tick()
         time.sleep(TICK_S)
-    reason = reason or "exited"
-
-    status.update(state="hook" if spec.get("on_exit") else "done", reason=reason, exit_code=code, ended=time.time())
+    ending, ended = Ending(reason or "exited", code), time.time()
     if not spec.get("on_exit"):
-        put(job_dir / "status.json", json.dumps(status).encode())
+        put(job_dir / STATUS, dump_job(Done(ending, started, ended), [child.pid]))
         return
-    env = {**spec["env"], "BOX_EXIT_CODE": str(code), "BOX_REASON": reason}
-    timeout = max(0.0, min(budget, read_lease(root)["ceiling"] - time.time()))
+    env = {**spec["env"], "BOX_EXIT_CODE": str(code), "BOX_REASON": ending.reason}
+    timeout = max(0.0, min(budget, read_lease(root).ceiling - time.time()))
     hook = spawn(spec["on_exit"], env, job_dir, stdout=job_dir / "hook.stdout", stderr=job_dir / "hook.stderr")
-    status["hook_pgid"] = hook.pid
-    put(job_dir / "status.json", json.dumps(status).encode())
-    status["hook_exit_code"] = wait_hook(hook, timeout)
-    status["state"] = "done"
-    put(job_dir / "status.json", json.dumps(status).encode())
+    put(job_dir / STATUS, dump_job(Hooking(ending), [child.pid, hook.pid]))
+    hooked = dataclasses.replace(ending, hook_exit_code=wait_hook(hook, timeout))
+    put(job_dir / STATUS, dump_job(Done(hooked, started, ended), [child.pid, hook.pid]))
 
 
 def spawn(cmd: str, env: dict[str, str], job_dir: Path, *, stdout: Path, stderr: Path) -> subprocess.Popen:
@@ -367,11 +510,11 @@ class Recorder:
             self.thread.join()
         assert not self.thread.is_alive()
 
-    def finish(self, ended: dict) -> None:
+    def finish(self, ended: bytes) -> None:
         self.close()
         try:
             self.flush(final=True)
-            put(self.dest / "ended.json", json.dumps(ended).encode())
+            put(self.dest / ENDED, ended)
             self.commit()
         except STORE_FAILURES as e:
             print(f"box supervisor: recording into {self.dest} failed at the end: {e!r}", file=sys.stderr, flush=True)
@@ -389,11 +532,11 @@ class Recorder:
             last = time.monotonic()
 
     def flush(self, *, final: bool) -> None:
-        for name in ("session.json", "lease.json", "lease-audit.json"):
+        for name in (SESSION, LEASE, AUDIT):
             self.copy(name, (self.root / name).read_bytes())
         for job_dir in self.job_dirs():
             self.flush_job(job_dir, final=final)
-        put(self.dest / "heartbeat.json", json.dumps({"at": time.time(), "ttl_s": HEARTBEAT_TTL_S}).encode())
+        put(self.dest / HEARTBEAT, dump(Heartbeat(time.time(), HEARTBEAT_TTL_S)))
         self.commit()
 
     def job_dirs(self) -> list[Path]:
@@ -403,12 +546,12 @@ class Recorder:
         job = f"{job_dir.parent.name}/{job_dir.name}"
         for code in sorted((job_dir / "code").glob("*")):
             self.copy(f"{job}/code/{code.name}", code.read_bytes())
-        if (job_dir / "spec.json").exists():
-            self.copy(f"{job}/spec.json", recorded_spec((job_dir / "spec.json").read_bytes()))
-        status = (job_dir / "status.json").read_bytes() if (job_dir / "status.json").exists() else None
+        if (job_dir / SPEC).exists():
+            self.copy(f"{job}/{SPEC}", recorded_spec((job_dir / SPEC).read_bytes()))
+        status = (job_dir / STATUS).read_bytes() if (job_dir / STATUS).exists() else None
         caught_up = all([self.record_output(job_dir, stream, final=final) for stream in STREAMS])
         if status is not None and caught_up:
-            self.copy(f"{job}/status.json", status)
+            self.copy(f"{job}/{STATUS}", status)
 
     def record_output(self, job_dir: Path, stream: str, *, final: bool) -> bool:
         job, src = f"{job_dir.parent.name}/{job_dir.name}", job_dir / stream
@@ -426,7 +569,7 @@ class Recorder:
             n = self.chunks.get(job, 0) + 1
             if n > MAX_CHUNKS:
                 raise RuntimeError(f"{job}: more than {MAX_CHUNKS} chunks of output")
-            put(self.dest / job / f"{stream}.{n:0{CHUNK_DIGITS}d}.{offset + cut}", data[:cut])
+            put(self.dest / job / chunk_name(stream, n, offset + cut), data[:cut])
             self.chunks[job] = n
             self.offsets[(job, stream)] = offset + cut
             if not final:
@@ -473,9 +616,9 @@ def tail(job_dir: Path, offsets: list[int], max_s: float, out: BinaryIO) -> str:
     give_up = time.monotonic() + max_s
     last_beat = 0.0
     while True:
-        status = job_dir / "status.json"
-        done = status.exists() and json.loads(status.read_bytes()).get("state") == "done"
-        ended = (root / "ended.json").exists()
+        status = job_dir / STATUS
+        done = status.exists() and isinstance(load_job(status.read_bytes()), Done)
+        ended = (root / ENDED).exists()
         sent = False
         for i, name in enumerate(STREAMS):
             with contextlib.suppress(FileNotFoundError), (job_dir / name).open("rb") as f:
@@ -493,7 +636,7 @@ def tail(job_dir: Path, offsets: list[int], max_s: float, out: BinaryIO) -> str:
         if time.monotonic() - last_beat >= TAIL_BEAT_S:
             out.write(b"beat\n")
             with contextlib.suppress(OSError):
-                (root / "watch").touch()
+                (root / WATCH).touch()
             last_beat = time.monotonic()
         out.flush()
         if not sent:
