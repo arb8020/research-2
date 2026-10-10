@@ -339,14 +339,11 @@ def forward_logs(rec: Boot, job: sdk.Job) -> sdk.JobRead:
 
 
 def log_lines(chunks: list[sdk.LogChunk], after: sdk.LogCursor) -> Iterator[tuple[str, str, sdk.LogCursor]]:
-    out, err = after
+    cursor = after
     for chunk in chunks:
         for line in chunk.text.splitlines(keepends=True):
-            if chunk.stream == "stdout":
-                out += len(line.encode())
-            else:
-                err += len(line.encode())
-            yield chunk.stream, line.rstrip("\n"), (out, err)
+            cursor = sdk.advance(cursor, chunk.stream, len(line.encode()))
+            yield chunk.stream, line.rstrip("\n"), cursor
 
 
 @dataclass
@@ -688,12 +685,12 @@ class Handler(BaseHTTPRequestHandler):
             if route == ("POST", 1, None) and parts == ["sessions"]:
                 code, body = 202, relay.create(*self.create_request())
             elif sid is not None and route == ("GET", 2, None):
-                code, body = 200, {"session_id": sid, "status": relay.get(sid, parse_token(self.headers.get("X-Box-Token", "")))}
+                code, body = 200, {"session_id": sid, "status": relay.get(sid, self.token())}
             elif sid is not None and route == ("POST", 3, "end"):
-                code, body = 200, {"session_id": sid, "status": relay.end(sid, parse_token(self.headers.get("X-Box-Token", "")))}
+                code, body = 200, {"session_id": sid, "status": relay.end(sid, self.token())}
             elif sid is not None and route == ("POST", 3, "extend"):
                 until = parse_extend(self.body())
-                code, body = 200, {"session_id": sid, "status": relay.extend(sid, parse_token(self.headers.get("X-Box-Token", "")), until)}
+                code, body = 200, {"session_id": sid, "status": relay.extend(sid, self.token(), until)}
             elif sid is not None and route == ("GET", 3, "events"):
                 self.events(t0, sid, parse_token((parse_qs(url.query).get("token") or [""])[0]))
                 return
@@ -704,6 +701,9 @@ class Handler(BaseHTTPRequestHandler):
             body = {"error": f"{type(e).__name__}: {e}" if code == 502 else str(e)}
         self.reply(code, body)
         self.wide(code, t0, session=sid or body.get("session_id"), **({"error": body["error"]} if "error" in body else {}))
+
+    def token(self) -> ModalToken:
+        return parse_token(self.headers.get("X-Box-Token", ""))
 
     def body(self) -> bytes:
         raw = self.headers.get("Content-Length", "0")

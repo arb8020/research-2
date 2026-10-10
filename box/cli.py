@@ -7,9 +7,10 @@ import re
 import socket
 import sys
 import time
+from collections.abc import Generator
 from pathlib import Path
 
-from box import gpus, sdk
+from box import files, gpus, sdk
 from box.setup_cache import SetupSpec
 
 GC_MARGIN_S = 1800
@@ -72,45 +73,52 @@ def run(a: argparse.Namespace, cmd: str, provider: sdk.Provider) -> int:
     kw = {"gpu": a.gpu, "image": a.image, "lease_s": a.lease, "ceiling_s": a.ceiling, "labels": {"box.cmd": cmd[:200], "box.user": user()},
           "setup": setup, "record": provider.record_store() if setup else None}  # fmt: skip
     if not a.detach:
-        ending = sdk.run_job(provider, cmd, max_duration_s=max_duration_s, put=pairs(a.put, "put"), get=pairs(a.get, "get"), on_exit=a.on_exit, **kw)
-        print(f"box: {ending.reason}, exit {ending.exit_code}", file=sys.stderr)
-        return ending.exit_code if ending.exit_code is not None else 1
+        return finished(sdk.run_job(provider, cmd, max_duration_s=max_duration_s, put=pairs(a.put, "put"), get=pairs(a.get, "get"), on_exit=a.on_exit, **kw))
     if a.get:
         raise SystemExit("box run: --detach brings nothing home; save results from --on-exit instead")
     s = sdk.launch(provider, idle_timeout_s=DETACH_IDLE_S, **kw)
     with sdk.closing_on_error(s):
         for local, remote in pairs(a.put, "put"):
-            s.put(local, remote)
+            files.put(s.machine, local, remote)
         s.run(sdk.in_tree(s, setup, cmd), max_duration_s=max_duration_s, on_exit=a.on_exit)
     print(s.id)
     print(f"box attach {s.id}    # status\nbox logs {s.id} -f   # follow\nbox extend {s.id} 1h  # more lease\nbox kill {s.id}      # stop", file=sys.stderr)
     return 0
 
 
-def cmd_logs(a: argparse.Namespace) -> int:
+def finished(ending: sdk.Ending) -> int:
+    print(f"box: {ending.reason}, exit {ending.exit_code}", file=sys.stderr)
+    return ending.exit_code if ending.exit_code is not None else 1
+
+
+@contextlib.contextmanager
+def attached(a: argparse.Namespace) -> Generator[sdk.Session]:
     with contextlib.closing(make_provider(a.provider)) as provider:
-        return logs(a, sdk.attach(provider, session_id=a.id))
+        yield sdk.attach(provider, session_id=a.id)
 
 
-def logs(a: argparse.Namespace, s: sdk.Session) -> int:
-    jobs = s.jobs()
-    if not jobs:
-        print(f"box: {a.id} has no job", file=sys.stderr)
-        return 2
-    sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
-    try:
-        for chunk in jobs[-1].logs(follow=a.follow):
-            sinks[chunk.stream].write(chunk.text)
-            sinks[chunk.stream].flush()
-        status = jobs[-1].status()
-    except sdk.Gone:
-        print(f"box: {a.id} is gone (its logs went with it)", file=sys.stderr)
-        return 2
-    if not isinstance(status, sdk.Done):
+def cmd_logs(a: argparse.Namespace) -> int:
+    with attached(a) as s:
+        jobs = s.jobs()
+        if not jobs:
+            print(f"box: {a.id} has no job", file=sys.stderr)
+            return 2
+        try:
+            ending = jobs[-1].tee() if a.follow else printed(jobs[-1])
+        except sdk.Gone:
+            print(f"box: {a.id} is gone (its logs went with it)", file=sys.stderr)
+            return 2
+    if ending is None:
         print(f"box: {a.id} still running; -f to follow", file=sys.stderr)
         return 0
-    print(f"box: {status.ending.reason}, exit {status.ending.exit_code}", file=sys.stderr)
-    return status.ending.exit_code if status.ending.exit_code is not None else 1
+    return finished(ending)
+
+
+def printed(job: sdk.Job) -> sdk.Ending | None:
+    for chunk in job.logs():
+        (sys.stdout if chunk.stream == "stdout" else sys.stderr).write(chunk.text)
+    status = job.status()
+    return status.ending if isinstance(status, sdk.Done) else None
 
 
 def cmd_who(a: argparse.Namespace) -> int:
@@ -126,8 +134,7 @@ def cmd_who(a: argparse.Namespace) -> int:
 
 
 def cmd_attach(a: argparse.Namespace) -> int:
-    with contextlib.closing(make_provider(a.provider)) as provider:
-        s = sdk.attach(provider, session_id=a.id)
+    with attached(a) as s:
         match s.status():
             case sdk.Running(started_at=started_at, lease=lease):
                 print(f"{a.id}: running since {time.strftime('%H:%M:%S', time.localtime(started_at))}; lease until {until(lease.until)}, ceiling {until(lease.ceiling)}")
@@ -140,27 +147,26 @@ def cmd_attach(a: argparse.Namespace) -> int:
 
 
 def cmd_extend(a: argparse.Namespace) -> int:
-    with contextlib.closing(make_provider(a.provider)) as provider:
-        lease = sdk.attach(provider, session_id=a.id).extend(time.time() + a.duration)
+    with attached(a) as s:
+        lease = s.extend(time.time() + a.duration)
     print(f"box: {a.id}: lease until {until(lease.until)}, ceiling {until(lease.ceiling)}")
     return 0
 
 
 def cmd_release(a: argparse.Namespace) -> int:
-    with contextlib.closing(make_provider(a.provider)) as provider:
-        lease = sdk.attach(provider, session_id=a.id).release()
+    with attached(a) as s:
+        lease = s.release()
     print(f"box: {a.id}: released; its lease ended {time.strftime('%H:%M:%S', time.localtime(lease.until))}")
     return 0
 
 
 def cmd_kill(a: argparse.Namespace) -> int:
-    with contextlib.closing(make_provider(a.provider)) as provider:
-        try:
-            s = sdk.attach(provider, session_id=a.id)
-        except LookupError as exc:
-            print(f"box: refusing to stop {a.id}: {exc}", file=sys.stderr)
-            return 2
-        r = s.close()
+    try:
+        with attached(a) as s:
+            r = s.close()
+    except LookupError as exc:
+        print(f"box: refusing to stop {a.id}: {exc}", file=sys.stderr)
+        return 2
     print(f"box: {r.session_id} {r.machine_id}: ended {r.ended.reason} (supervisor {'confirmed' if r.supervisor_confirmed else 'silent'}), machine gone {time.strftime('%H:%M:%S', time.localtime(r.machine_gone_at))}")
     return 0
 

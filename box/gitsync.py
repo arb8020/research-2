@@ -41,7 +41,6 @@ class Moved(Exception):
 
 PROBE = """
 set -euo pipefail
-touch "$TOUCH"
 command -v git >/dev/null || { echo "box sync: no git on the machine (its image needs git)" >&2; exit "$NO_GIT"; }
 mkdir -p "$W" && { [ -d "$G" ] || git init -q --bare "$G"; }
 if [ -e "$T/.git" ]; then git -C "$T" log -1 --format='own %H%norigin %s' HEAD; fi
@@ -74,11 +73,11 @@ git -C "$T" update-ref --no-deref HEAD "$NEW" "$cur"
 """
 
 
-def sync(machine: Machine, repo: Path, *, paths: tuple[str, ...], force: bool, keep: str, touch: str) -> Synced:  # noqa: PLR0913  # MUST KILL: touch= (the session's activity file) rides on the probe exec, a session concern inside gitsync; let the caller prepend its own command
+def sync(machine: Machine, repo: Path, *, paths: tuple[str, ...], force: bool, keep: str) -> Synced:
     top = toplevel(repo)
     origin = f"{ORIGIN}{top}"
     where = {"W": machine.work, "G": f"{machine.work}/{STORE}", "T": tree_path(machine.work, top), "WT": top.name}
-    rc, out, err = machine.exec(assign({**where, **EXIT_CODES, "TOUCH": touch}) + PROBE)
+    rc, out, err = machine.exec(assign({**where, **EXIT_CODES}) + PROBE)
     if rc == NO_GIT:
         raise RuntimeError(err.strip())
     if rc != 0:
