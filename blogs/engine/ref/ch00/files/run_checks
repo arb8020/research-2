@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""run_checks <chapter> [cell] [--op NAME]...: this tree's checks, through the blogs check core (assay).
+
+    ./run_checks ch00 ring      the ring cell's checks
+    ./run_checks ch00           every cell's, in order (the chapter check; a harbor task runs this)
+
+JSON lines on stdout ({"kind": "log" | "verdict" | "summary"}); exit 0 pass, 1 fail, 2 infrastructure error.
+The core is trusted code that lives outside this tree: $BLOGS_ASSAY names the dir holding the `assay` package, else
+the nearest `_blogs/` above this file holding `assay/` (the sandbox layout: the page ships the package there), else the
+blogs repo's own `assay/` project above it. (The page doesn't run this file: workspace.py runs `python -P -m assay.cli`
+directly; this is for running checks by hand.)
+"""
+
+import os
+import sys
+from pathlib import Path
+
+
+def assay_root() -> Path | None:
+    """The dir to put on sys.path: it holds the `assay` package."""
+    if os.environ.get("BLOGS_ASSAY"):
+        return Path(os.environ["BLOGS_ASSAY"])
+    for parent in Path(__file__).resolve().parents:
+        for candidate in (parent / "_blogs", parent / "assay", parent):
+            if (candidate / "assay" / "cli.py").is_file():
+                return candidate
+    return None
+
+
+root = assay_root()
+if root is None:
+    print('{"kind": "log", "text": "run_checks: cannot find the check core (set BLOGS_ASSAY)"}', flush=True)
+    sys.exit(2)
+sys.path.insert(0, str(root))
+from assay.cli import main  # noqa: E402
+
+sys.exit(main())

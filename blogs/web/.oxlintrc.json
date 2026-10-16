@@ -1,0 +1,11 @@
+// Project config for blogs/web. Rules live in oxlint.base.json (canonical copy: ~/dotfiles/lint/).
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": ["./oxlint.base.json"],
+  "options": {
+    "typeAware": true,
+    "denyWarnings": true,
+    "reportUnusedDisableDirectives": "error"
+  },
+  "ignorePatterns": ["build/**", "node_modules/**", "lint/anti-slop/**"]
+}

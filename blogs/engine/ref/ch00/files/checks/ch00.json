@@ -1,0 +1,8 @@
+{
+  "chapter": "ch00",
+  "cells": [
+    {"name": "ring", "file": "ring.cpp", "region": null, "ops": ["ring"], "cmd": ["run_checks", "ch00", "--op", "ring"]},
+    {"name": "loop", "file": "loop.cpp", "region": null, "ops": ["loop"], "cmd": ["run_checks", "ch00", "--op", "loop"]},
+    {"name": "budget", "file": "budget.py", "region": null, "ops": ["budget"], "cmd": ["run_checks", "ch00", "--op", "budget"]}
+  ]
+}

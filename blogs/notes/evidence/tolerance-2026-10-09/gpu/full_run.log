@@ -1,0 +1,22 @@
+✓ Initialized. View run at 
+https://modal.com/apps/arb8020/main/ap-5JOaMGOhbzqhK7TE2SAoui
+✓ Created objects.
+├── 🔨 Created mount 
+│   /private/tmp/claude-501/-Users-chiraagbalu-research-2/928304da-3203-429c-a0b
+│   4-3e1786bf37ef/scratchpad/tolerance-proto/gpu/modal_run.py
+├── 🔨 Created mount 
+│   /private/tmp/claude-501/-Users-chiraagbalu-research-2/928304da-3203-429c-a0b
+│   4-3e1786bf37ef/scratchpad/tolerance-proto/gpu/probe_rpr.py
+├── 🔨 Created mount 
+│   /private/tmp/claude-501/-Users-chiraagbalu-research-2/928304da-3203-429c-a0b
+│   4-3e1786bf37ef/scratchpad/tolerance-proto/gpu/proto_gpu.py
+├── 🔨 Created function run_t4.
+├── 🔨 Created function run_l4.
+└── 🔨 Created function probe_l4.
+probe -> /private/tmp/claude-501/-Users-chiraagbalu-research-2/928304da-3203-429c-a0b4-3e1786bf37ef/scratchpad/tolerance-proto/gpu/probe ['probe_rpr_lt0.jsonl', 'probe_rpr_lt0.log', 'probe_rpr_lt1.jsonl', 'probe_rpr_lt1.log']
+T4 -> /private/tmp/claude-501/-Users-chiraagbalu-research-2/928304da-3203-429c-a0b4-3e1786bf37ef/scratchpad/tolerance-proto/gpu/T4 ['cost.md', 'cost_opmath.md', 'cost_seq.md', 'cost_seq16.md', 'cost_seq16_opmath.md', 'env.txt', 'log_main.txt', 'log_opmath.txt', 'log_seq.txt', 'log_seq16.txt', 'log_seq16_opmath.txt', 'mde.md', 'mde_opmath.md', 'mde_seq.md', 'mde_seq16.md', 'mde_seq16_opmath.md', 'results.csv', 'results.md', 'results_opmath.csv', 'results_opmath.md', 'results_seq.csv', 'results_seq.md', 'results_seq16.csv', 'results_seq16.md', 'results_seq16_opmath.csv', 'results_seq16_opmath.md', 'wall.txt', 'xcheck_seq16.csv']
+L4 -> /private/tmp/claude-501/-Users-chiraagbalu-research-2/928304da-3203-429c-a0b4-3e1786bf37ef/scratchpad/tolerance-proto/gpu/L4 ['cost.md', 'cost_opmath.md', 'cost_seq.md', 'cost_seq16.md', 'cost_seq16_opmath.md', 'env.txt', 'log_main.txt', 'log_opmath.txt', 'log_seq.txt', 'log_seq16.txt', 'log_seq16_opmath.txt', 'mde.md', 'mde_opmath.md', 'mde_seq.md', 'mde_seq16.md', 'mde_seq16_opmath.md', 'results.csv', 'results.md', 'results_opmath.csv', 'results_opmath.md', 'results_seq.csv', 'results_seq.md', 'results_seq16.csv', 'results_seq16.md', 'results_seq16_opmath.csv', 'results_seq16_opmath.md', 'wall.txt', 'xcheck_seq16.csv']
+Stopping app - local entrypoint completed.
+✓ App completed. View run at 
+https://modal.com/apps/arb8020/main/ap-5JOaMGOhbzqhK7TE2SAoui
+DONE
