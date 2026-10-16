@@ -1,0 +1,40 @@
+[project]
+name = "blogs-assay"
+version = "0.1.0"
+description = "The check core (run -> immutable Run, grade -> Grade, report) and its chapter instantiations"
+requires-python = ">=3.12"
+dependencies = [
+    # assay core + ch00 are stdlib only; these are ch01 (numerics)
+    "torch>=2.5,<3",
+    "coverage>=7.6",
+    "jaxtyping>=0.3",
+    "transformers>=5.0",
+    "safetensors>=0.4",
+    "huggingface_hub>=0.24",
+    "einops>=0.8",
+]
+
+[project.scripts]
+run_checks = "assay.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["assay"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+# The local stand-in for the sandbox image's Jupyter (blogs/connect_dev.py runs under this env, so the kernel and the
+# checks it runs have assay's deps): `uv run --project assay python connect_dev.py ...` from blogs/.
+kernel = [
+    "ipykernel~=7.1",
+    "jupyter-server~=2.17",
+]
+
+[tool.uv]
+default-groups = ["dev", "kernel"]
+
+[tool.pytest.ini_options]
+markers = ["slow: loads gpt2 / runs the full suite (minutes)"]

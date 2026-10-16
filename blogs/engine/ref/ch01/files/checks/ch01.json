@@ -1,0 +1,12 @@
+{
+  "chapter": "ch01",
+  "cells": [
+    {"name": "linear", "file": "gpt2.py", "region": "linear", "ops": ["linear"], "cmd": ["run_checks", "ch01", "--op", "linear"]},
+    {"name": "gelu", "file": "gpt2.py", "region": "gelu", "ops": ["gelu"], "cmd": ["run_checks", "ch01", "--op", "gelu"]},
+    {"name": "layer_norm", "file": "gpt2.py", "region": "layer_norm", "ops": ["layer_norm"], "cmd": ["run_checks", "ch01", "--op", "layer_norm"]},
+    {"name": "attention", "file": "gpt2.py", "region": "attention", "ops": ["attention"], "cmd": ["run_checks", "ch01", "--op", "attention"]},
+    {"name": "block", "file": "gpt2.py", "region": "block", "ops": ["block"], "cmd": ["run_checks", "ch01", "--op", "block"]},
+    {"name": "forward", "file": "gpt2.py", "region": "forward", "ops": ["forward"], "cmd": ["run_checks", "ch01", "--op", "forward"]},
+    {"name": "generate", "file": "gpt2.py", "region": "generate", "ops": ["generate"], "cmd": ["run_checks", "ch01", "--op", "generate"]}
+  ]
+}
