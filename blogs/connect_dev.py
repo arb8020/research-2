@@ -4,7 +4,7 @@
 # ///
 """A fake Connect gateway for UI work: box/CONTRACT-gateway.md with no cloud. Not the real relay.
 
-    uv run connect_dev.py [--port 8790] [--boot-delay 0.6] [--deadline 3600] [--root DIR] [--persist DIR]
+    uv run connect_dev.py [--port 8790] [--boot-delay 0.6] [--root DIR] [--persist DIR]
     uv run connect_dev.py --attach-kernel URL --attach-token TOKEN     # report a Jupyter that already runs elsewhere
 
 POST /sessions emits a few gateway/machine "step" events with delays, then starts a local Jupyter Server
@@ -30,12 +30,20 @@ assay's env (its `kernel` dependency group has jupyter_server + ipykernel, same 
 
 --attach-kernel/--attach-token: every session reports that Jupyter (e.g. one in a Modal sandbox, started with the
 relay's flags by verify_workspace.py --modal) instead of starting one here; ending the session leaves it running.
+
+Lease: POST /sessions takes lease_s (60..43200, default 5400); the session ends with reason "lease" at
+lease_until. POST /sessions/{id}/extend {until}, as the real relay (box/gateway/relay.py, Relay.extend):
+409 while booting; running: lease_until = min(until, ceiling) (start + 12 h), never shorter (an until at or
+before lease_until is a no-op, 200 with the status as it is); ended: a no-op, 200 with the ended status.
+Fake only, not in the contract:
+POST /dev/sessions/{id}/expire ends the lease now (so a check can see a lease run out without waiting).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import secrets
 import shutil
@@ -56,6 +64,8 @@ from urllib.parse import parse_qs, urlparse
 GPUS = (None, "T4", "L4", "A10G")  # what the page offers (web/connect/panel.ts GPUS)
 MAX_EVENTS = 5000  # per session; a longer boot log is a bug in this fake
 MAX_SESSIONS = 32
+LEASE_MIN_S, LEASE_MAX_S, LEASE_DEFAULT_S = 60, 12 * 3600, 90 * 60  # contract: lease_s range and default
+CEILING_S = 12 * 3600  # an extend can't push the lease past started_at + this
 JUPYTER_READY_S = 60
 SSE_PING_S = 15
 
@@ -79,18 +89,13 @@ EOF
 """
 
 
-# The relay contract's lease fields (box/CONTRACT-gateway.md @ 42c05b12), minimally: lease_until = --deadline,
-# no extend, ended reason "lease". The full fake lease (lease_s, extend) is on blogs/lease.
-CEILING_S = 12 * 3600
-
-
 @dataclass
 class Session:
     id: str
     token: str  # "id:secret", compared on every call
     gpu: str | None
     started_at: float
-    deadline: float
+    lease_until: float
     state: str = "booting"
     reason: str | None = None
     kernel: dict[str, str] | None = None
@@ -101,13 +106,30 @@ class Session:
     changed: threading.Condition = field(default_factory=threading.Condition)
 
     def status(self) -> dict[str, Any]:
-        s: dict[str, Any] = {"state": self.state, "gpu": self.gpu, "started_at": self.started_at,
-                             "lease_until": self.deadline, "ceiling": self.started_at + CEILING_S, "deadline": self.deadline}
+        s: dict[str, Any] = {
+            "state": self.state, "gpu": self.gpu, "started_at": self.started_at,
+            "lease_until": self.lease_until, "ceiling": self.ceiling,
+        }  # fmt: skip
         if self.reason is not None:
             s["reason"] = self.reason
         if self.kernel is not None:
             s["kernel"] = self.kernel
         return s
+
+    @property
+    def ceiling(self) -> float:
+        return self.started_at + CEILING_S
+
+    def extend(self, until: float) -> None:
+        """Push the lease to `until`, clamped to the ceiling, never shorter. Caller holds `changed` and checked it runs."""
+        assert self.state == "running", f"extend on {self.state} session {self.id}"
+        lease_until = min(max(until, self.lease_until), self.ceiling)
+        if lease_until == self.lease_until:
+            return  # a shorter (or equal) re-ask never cuts the lease; at the ceiling, nothing moves it
+        self.lease_until = lease_until
+        self.step("gateway", f"lease extended to {time.strftime('%H:%M:%S', time.localtime(self.lease_until))}"
+                  f"{' (the 12 h ceiling)' if self.lease_until == self.ceiling else ''}")  # fmt: skip
+        self.emit("status", status=self.status())
 
     def emit(self, kind: str, **fields: Any) -> None:
         with self.changed:
@@ -157,7 +179,7 @@ class Machine:
 
 
 def boot(session: Session, machine: Machine) -> None:
-    """The fake machine's life: steps, a real Jupyter Server, then running until ended or past its deadline."""
+    """The fake machine's life: steps, a real Jupyter Server, then running until ended or past its lease."""
     delay = machine.delay
     session.step("gateway", "checking your Modal token")
     time.sleep(delay)
@@ -198,7 +220,7 @@ def boot(session: Session, machine: Machine) -> None:
     session.step("machine", "Jupyter Server ready")
     session.emit("status", status=session.status())
     while session.state != "ended":
-        if time.time() > session.deadline:
+        if time.time() >= session.lease_until:
             session.end("lease")
         elif session.proc.poll() is not None:
             session.end("machine_lost")
@@ -206,7 +228,7 @@ def boot(session: Session, machine: Machine) -> None:
 
 
 def attach_running(session: Session, kernel: dict[str, str]) -> None:
-    """A session whose machine is someone else's Jupyter: wait for it to answer, report it, keep the deadline."""
+    """A session whose machine is someone else's Jupyter: wait for it to answer, report it, keep the lease."""
     session.step("machine", f"attaching to the Jupyter at {kernel['url']}")
     if not wait_for_jupyter(kernel["url"], kernel["token"], session):
         session.step("machine", "that Jupyter never answered")
@@ -218,7 +240,7 @@ def attach_running(session: Session, kernel: dict[str, str]) -> None:
         session.state, session.kernel = "running", dict(kernel)
     session.emit("status", status=session.status())
     while session.state != "ended":
-        if time.time() > session.deadline:
+        if time.time() >= session.lease_until:
             session.end("lease")
         time.sleep(1)
 
@@ -257,7 +279,6 @@ def next_batch(session: Session, sent: int) -> list[dict[str, Any]] | None:
 class Handler(BaseHTTPRequestHandler):
     server_version = "connect-dev/0"
     machine: Machine
-    deadline_s: float
 
     def log_message(self, fmt: str, *args: Any) -> None:
         sys.stderr.write(f"{self.command} {self.path.split('?')[0]} {args[1] if len(args) > 1 else ''}\n")
@@ -304,27 +325,65 @@ class Handler(BaseHTTPRequestHandler):
         elif len(parts) == 3 and parts[0] == "sessions" and parts[2] == "end":
             if (session := self.session(parts[1], query)) is not None:
                 session.end("stopped")
-                self.reply(200, {"status": session.status()})
+                self.reply(200, {"session_id": session.id, "status": session.status()})
+        elif len(parts) == 3 and parts[0] == "sessions" and parts[2] == "extend":
+            if (session := self.session(parts[1], query)) is not None:
+                self.extend(session)
+        elif len(parts) == 4 and parts[:2] == ["dev", "sessions"] and parts[3] == "expire":
+            if (session := self.session(parts[2], query)) is not None:
+                with session.changed:
+                    session.lease_until = min(session.lease_until, time.time())
+                self.reply(200, {"status": session.status()})  # boot()'s loop ends it ("lease") within a second
         else:
             self.reply(404, {"error": f"no route POST {self.path}"})
 
-    def create(self) -> None:
+    def body(self) -> Any:
+        """The request's JSON body, or None after replying 400."""
         try:
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+            return json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+        except ValueError as e:
+            self.reply(400, {"error": f"expected a JSON body: {e!r}"})
+            return None
+
+    def extend(self, session: Session) -> None:
+        body = self.body()
+        if body is None:
+            return
+        until = body.get("until") if isinstance(body, dict) else None
+        if isinstance(until, bool) or not isinstance(until, (int, float)) or not math.isfinite(until):
+            self.reply(400, {"error": f"expected {{until: unix seconds}}, got {body!r}"})
+            return
+        with session.changed:  # an RLock: the checks and the extend see one state (boot() may end it meanwhile)
+            if session.state == "booting":
+                self.reply(409, {"error": f"{session.id} is still booting: extend once it is running"})
+                return
+            if session.state == "running":
+                session.extend(until)
+            self.reply(200, {"session_id": session.id, "status": session.status()})  # ended: a no-op, as the relay
+
+    def create(self) -> None:
+        body = self.body()
+        if body is None:
+            return
+        try:
             provider, token, gpu = body["provider"], body["token"], body.get("gpu")
             tid, tsecret = token["id"], token["secret"]
-        except (ValueError, KeyError, TypeError) as e:
-            self.reply(400, {"error": f"expected {{provider, token: {{id, secret}}, gpu}}: {e!r}"})
+            lease_s = body.get("lease_s", LEASE_DEFAULT_S)
+        except (KeyError, TypeError, AttributeError) as e:
+            self.reply(400, {"error": f"expected {{provider, token: {{id, secret}}, gpu, lease_s?}}: {e!r}"})
             return
         if provider != "modal" or gpu not in GPUS or not isinstance(tid, str) or not isinstance(tsecret, str) or not tid or not tsecret:
             self.reply(400, {"error": f"provider must be modal, gpu one of {GPUS}, token id/secret non-empty strings"})
+            return
+        if isinstance(lease_s, bool) or not isinstance(lease_s, int) or not LEASE_MIN_S <= lease_s <= LEASE_MAX_S:
+            self.reply(400, {"error": f"lease_s must be whole seconds in {LEASE_MIN_S}..{LEASE_MAX_S}, got {lease_s!r}"})
             return
         with LOCK:
             if len(SESSIONS) >= MAX_SESSIONS:
                 self.reply(429, {"error": f"connect_dev.py holds at most {MAX_SESSIONS} sessions; restart it"})
                 return
             now = time.time()
-            session = Session(f"fake-{secrets.token_hex(4)}", f"{tid}:{tsecret}", gpu, now, now + self.deadline_s)
+            session = Session(f"fake-{secrets.token_hex(4)}", f"{tid}:{tsecret}", gpu, now, now + lease_s)
             SESSIONS[session.id] = session
         session.emit("status", status=session.status())
         threading.Thread(target=boot, args=(session, self.machine), daemon=True).start()
@@ -370,7 +429,6 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8790)
     ap.add_argument("--boot-delay", type=float, default=0.6, help="seconds between fake boot steps")
-    ap.add_argument("--deadline", type=float, default=3600, help="session lifetime in seconds")
     ap.add_argument("--root", type=Path, help="Jupyter's root_dir for every session, kept after it (default: a temp dir per session)")
     ap.add_argument("--persist", type=Path, help="$BLOGS_WS_PERSIST in the sandbox: where workspace.py keeps the workspace bundle")
     ap.add_argument("--attach-kernel", help="a running Jupyter's URL to report instead of starting one (needs --attach-token)")
@@ -389,7 +447,7 @@ def main() -> None:
     root = args.root.resolve() if args.root else None
     persist = args.persist.resolve() if args.persist else None
     attach = {"url": args.attach_kernel.rstrip("/"), "token": args.attach_token} if args.attach_kernel else None
-    Handler.machine, Handler.deadline_s = Machine(shim_dir, args.boot_delay, root, persist, attach), args.deadline
+    Handler.machine = Machine(shim_dir, args.boot_delay, root, persist, attach)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.daemon_threads = True
     signal.signal(signal.SIGTERM, stop)  # `kill` and uv (which forwards TERM, not a non-tty INT) end sessions too
