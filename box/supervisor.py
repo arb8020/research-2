@@ -19,6 +19,7 @@ TICK_S = 0.2
 KILL_GRACE_S = 10.0
 LINGER_S = 30.0
 WATCH_TTL_S = 5.0
+RELEASE_GRACE_S = 5.0
 PROC_TCP = ("/proc/net/tcp", "/proc/net/tcp6")
 TCP_ESTABLISHED = "01"
 STREAMS = ("stdout", "stderr")
@@ -163,9 +164,13 @@ def linger(root: Path, ended: dict) -> None:
         watch = root / "watch"
         return watch.stat().st_mtime if watch.exists() else 0.0
 
+    start = time.monotonic()
     owed = ended["reason"] == "released"
-    until = time.monotonic() + LINGER_S
-    while time.monotonic() < until and (time.time() - watched_at() < WATCH_TTL_S or owed and watched_at() < ended["at"]):
+    while time.monotonic() - start < LINGER_S:
+        watched = time.time() - watched_at() < WATCH_TTL_S
+        unread = owed and watched_at() < ended["at"] and time.monotonic() - start < RELEASE_GRACE_S
+        if not watched and not unread:
+            return
         time.sleep(TICK_S)
 
 
