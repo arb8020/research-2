@@ -90,7 +90,7 @@ def supervise_main(argv: list[str]) -> None:
             recorder.finish(ended)
     finally:
         put(root / "ended.json", json.dumps(ended).encode())
-        linger(root)
+        linger(root, ended)
         if a.on_shutdown:
             subprocess.run(["bash", "-c", a.on_shutdown], check=False)
 
@@ -158,13 +158,14 @@ def lease_end(lease: dict) -> tuple[float, str]:
     return min(lease["until"], lease["ceiling"]), "released" if lease["released"] else "lease"
 
 
-def linger(root: Path) -> None:
-    def reading() -> bool:
+def linger(root: Path, ended: dict) -> None:
+    def watched_at() -> float:
         watch = root / "watch"
-        return watch.exists() and time.time() - watch.stat().st_mtime < WATCH_TTL_S
+        return watch.stat().st_mtime if watch.exists() else 0.0
 
+    owed = ended["reason"] == "released"
     until = time.monotonic() + LINGER_S
-    while time.monotonic() < until and reading():
+    while time.monotonic() < until and (time.time() - watched_at() < WATCH_TTL_S or owed and watched_at() < ended["at"]):
         time.sleep(TICK_S)
 
 
