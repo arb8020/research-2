@@ -46,6 +46,7 @@ BACKSTOP_MARGIN_S = 600
 MAX_ENV_VALUE = 32768  # Modal's limit on one secret value; Sandbox.create passes env as a secret
 MIN_KEEP_EVERY_S = 0.5
 MAX_KEEP_EVERY_S = 3600
+KEEP_TRIES = 5
 POLL_S = 0.5
 RECORD_PATH = "record"
 SESSION_ID = re.compile(r"s-[0-9a-f]{12}")
@@ -71,6 +72,10 @@ class Refused(ValueError):
 
 
 class Dropped(ConnectionError):
+    pass
+
+
+class Lapsed(TimeoutError):
     pass
 
 
@@ -480,13 +485,39 @@ class Session:
         return self._change_lease("release", 0.0)
 
     @contextlib.contextmanager
-    def keep(self, every_s: float) -> Generator[Lease]:
+    def keep(
+        self, every_s: float, *, clock: Callable[[], float] = time.time, sleep: Callable[[threading.Event, float], bool] = threading.Event.wait,
+    ) -> Generator[Lease]:  # fmt: skip
         if not MIN_KEEP_EVERY_S <= every_s <= MAX_KEEP_EVERY_S:
             raise Refused(f"every_s={every_s}: keep() renews every {MIN_KEEP_EVERY_S} to {MAX_KEEP_EVERY_S} s")
-        lease = self.extend(time.time() + 2 * every_s)
+        spare_s = every_s
+        retry_s = min(POLL_S, spare_s / KEEP_TRIES)
         stop = threading.Event()
         failed: list[Exception] = []
-        renewer = threading.Thread(target=self._renew, args=(every_s, stop, failed), daemon=False, name=f"box-keep-{self.id}")
+
+        def renew(lease: Lease) -> None:
+            dropped: Exception | None = None
+            while not stop.is_set():
+                left_s = lease.until - clock()
+                if left_s <= 0:
+                    failed.append(Lapsed(f"{self.id}: the lease ran out at {lease.until:.3f} under keep(every_s={every_s}) (last failure: {dropped!r})"))
+                    return
+                due_s = left_s if lease.until >= lease.ceiling else left_s - spare_s
+                if due_s > 0:
+                    sleep(stop, min(due_s, every_s))
+                    continue
+                try:
+                    lease = self.extend(clock() + every_s + spare_s)
+                except (Dropped, TimeoutError) as exc:
+                    print(f"box: {self.id}: renewing the lease failed, retrying in {retry_s:g} s: {exc!r}", file=sys.stderr)
+                    dropped = exc
+                    sleep(stop, retry_s)
+                except Exception as exc:
+                    failed.append(exc)
+                    return
+
+        lease = self.extend(clock() + every_s + spare_s)
+        renewer = threading.Thread(target=renew, args=(lease,), daemon=False, name=f"box-keep-{self.id}")
         renewer.start()
         try:
             yield lease
@@ -500,21 +531,6 @@ class Session:
                 assert not renewer.is_alive()
         if failed:
             raise failed[0]
-
-    def _renew(self, every_s: float, stop: threading.Event, failed: list[Exception]) -> None:
-        while not stop.wait(every_s):
-            try:
-                lease = self.extend(time.time() + 2 * every_s)
-            except Gone:
-                return
-            except (Dropped, TimeoutError) as exc:
-                print(f"box: {self.id}: renewing the lease failed, retrying: {exc!r}", file=sys.stderr)
-                continue
-            except Exception as exc:
-                failed.append(exc)
-                raise
-            if lease.until <= time.time():
-                return
 
     def _change_lease(self, op: Literal["extend", "release"], until: float) -> Lease:
         root = self.machine.root
