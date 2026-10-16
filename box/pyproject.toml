@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = ["anyio>=4.10", "modal>=1.5", "requests", "research"]  # anyio: the Modal provider's loop (4.10: start_blocking_portal(name=))
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-testmon", "jupyter_server~=2.17", "ipykernel~=7.1", "websockets>=13"]
+dev = ["pytest", "pytest-testmon", "jupyter_server~=2.17", "ipykernel~=7.1", "websockets>=13", "pytest-xdist>=3.8.0"]
 # --provider colab: the official Colab CLI's modules (box/providers/colab.py reads their internals; pinned)
 colab = ["google-colab-cli==0.7.4; python_version >= '3.12'"]  # it needs 3.12+
 
