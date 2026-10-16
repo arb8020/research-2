@@ -208,22 +208,51 @@ def test_extend_clamps_at_the_ceiling_and_a_shorter_extend_is_a_no_op(launch: Ca
         assert s.status().lease == longest
 
 
+class Ticks:
+    def __init__(self, park_at: float = float("inf")) -> None:
+        self.slept = 0.0
+        self.park_at = park_at
+        self.parked_at: float | None = None
+        self.parked = threading.Event()
+
+    def clock(self) -> float:
+        return time.time() + self.slept
+
+    def sleep(self, stop: threading.Event, s: float) -> bool:
+        if self.clock() >= self.park_at:
+            self.parked_at = self.clock()
+            self.parked.set()
+            return stop.wait()
+        self.slept += s
+        return stop.is_set()
+
+
+def join_renewer(s: sdk.Session, timeout_s: float) -> None:
+    for thread in [t for t in threading.enumerate() if t.name == f"box-keep-{s.id}"]:
+        thread.join(timeout_s)
+        assert not thread.is_alive()
+
+
 def test_keep_holds_a_short_lease_and_releases_on_the_way_out(launch: Callable, scale: float) -> None:
     for raises in (False, True):
-        s = launch(lease_s=2 * scale, ceiling_s=600)
-        with contextlib.suppress(KeyError), s.keep(every_s=0.5 * scale):
-            time.sleep(4 * scale)  # twice the first lease: only the renewals keep it
-            assert isinstance(s.status(), Running)
+        every_s = 5 * scale
+        s = launch(lease_s=2 * every_s, ceiling_s=600)
+        first = s.status().lease
+        ticks = Ticks(park_at=time.time() + 4 * every_s)
+        with contextlib.suppress(KeyError), s.keep(every_s=every_s, clock=ticks.clock, sleep=ticks.sleep) as kept:
+            assert ticks.parked.wait(timeout=30 * scale)
+            running = s.status()
+            assert isinstance(running, Running)
+            assert first.until < kept.until < ticks.parked_at < running.lease.until
             if raises:
                 raise KeyError("the body failed")
         assert s.wait(timeout_s=10 * scale) == Ended("released")
-        assert not [t for t in threading.enumerate() if t.name.startswith("box-keep-")]  # the renewer was joined
+        assert not [t for t in threading.enumerate() if t.name.startswith("box-keep-")]
         s.close()
 
 
-@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_keep_retries_a_dropped_renewal_and_raises_any_other_failure_on_the_way_out(launch: Callable, monkeypatch: pytest.MonkeyPatch, scale: float) -> None:
-    with launch(ceiling_s=600) as s:
+    with launch(lease_s=60, ceiling_s=600) as s:
         extend, calls = s.extend, []
 
         def renewing(until: float) -> sdk.Lease:
@@ -235,10 +264,30 @@ def test_keep_retries_a_dropped_renewal_and_raises_any_other_failure_on_the_way_
             return extend(until)
 
         monkeypatch.setattr(s, "extend", renewing)
-        with pytest.raises(RuntimeError, match="not a blip"), s.keep(every_s=0.5):
-            eventually(lambda: len(calls) >= 3, timeout_s=10 * scale)
-        assert len(calls) == 3  # the renewer stopped at the failure
+        ticks = Ticks()
+        with pytest.raises(RuntimeError, match="not a blip"), s.keep(every_s=5, clock=ticks.clock, sleep=ticks.sleep):
+            join_renewer(s, 10 * scale)
+            assert len(calls) == 3
+            assert calls[2] - calls[1] < 5
         assert s.wait(timeout_s=10 * scale) == Ended("released")
+
+
+def test_keep_raises_lapsed_when_the_lease_runs_out_between_renewals(launch: Callable, monkeypatch: pytest.MonkeyPatch, scale: float) -> None:
+    with launch(lease_s=60, ceiling_s=600) as s:
+        extend, calls = s.extend, []
+
+        def dropping(until: float) -> sdk.Lease:
+            calls.append(until)
+            if len(calls) > 1:
+                raise sdk.Dropped("down")
+            return extend(until)
+
+        monkeypatch.setattr(s, "extend", dropping)
+        ticks = Ticks()
+        with pytest.raises(sdk.Lapsed, match="ran out"), s.keep(every_s=5, clock=ticks.clock, sleep=ticks.sleep) as lease:
+            join_renewer(s, 10 * scale)
+            assert len(calls) > 2
+            assert ticks.clock() >= lease.until
 
 
 def test_a_job_past_its_max_duration_times_out_and_its_hook_runs(launch: Callable, scale: float) -> None:
