@@ -81,6 +81,10 @@ class Config:
     port: Callable[[], int] = lambda: PORT
     idle_timeout_s: float = IDLE_TIMEOUT_S
 
+    def __post_init__(self) -> None:
+        if not sdk.MIN_IDLE_S <= self.idle_timeout_s <= READER_CEILING_S:
+            raise ValueError(f"relay: idle_timeout_s={self.idle_timeout_s}: {sdk.MIN_IDLE_S:g} to {READER_CEILING_S} s (a boot marks its session used every idle/4 s)")
+
 
 @dataclass(frozen=True)
 class CreateRequest:
@@ -290,12 +294,13 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
         rec.step("machine", f"supervisor up ({time.monotonic() - t0:.1f} s since connect)")
         if rec.cancelled:
             raise Cancelled
-        job = session.serve(jupyter_cmd(cfg, port, origin), env={"JUPYTER_TOKEN": kernel_token(req.token, rec.session_id)}, name=JUPYTER_SERVICE)
-        rec.step("machine", "starting Jupyter Server")
-        endpoint = session.expose(port)
-        rec.step("gateway", f"tunnel open: {endpoint.url}")
-        kernel = {"url": endpoint.url, "token": kernel_token(req.token, rec.session_id)}
-        wait_for_jupyter(rec, job, kernel)
+        with session.using():
+            job = session.serve(jupyter_cmd(cfg, port, origin), env={"JUPYTER_TOKEN": kernel_token(req.token, rec.session_id)}, name=JUPYTER_SERVICE)
+            rec.step("machine", "starting Jupyter Server")
+            endpoint = session.expose(port)
+            rec.step("gateway", f"tunnel open: {endpoint.url}")
+            kernel = {"url": endpoint.url, "token": kernel_token(req.token, rec.session_id)}
+            wait_for_jupyter(rec, job, kernel)
         if rec.cancelled:
             raise Cancelled
         running = session.status()
@@ -318,18 +323,28 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
         print(f"relay: boot {rec.session_id} failed: {e!r}", file=sys.stderr)
         rec.step("gateway", f"boot failed: {type(e).__name__}: {e}")
         try:
-            end_after_boot(rec, session)
-        finally:
+            ended = end_after_boot(rec, session)
+        except BaseException:
             rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="boot_failed"))
+            raise
+        rec.finish(wire("ended", rec.gpu, rec.created_at, rec.lease, reason="boot_failed" if ended is None else REASONS[ended.reason]))
 
 
 class Cancelled(Exception):
     pass
 
 
-def end_after_boot(rec: Boot, session: sdk.Session | None) -> None:
+def end_after_boot(rec: Boot, session: sdk.Session | None) -> Ended | None:
     if session is None:
-        return
+        return None
+    try:
+        before = session.status()
+    finally:
+        close_after_boot(rec, session)
+    return before if isinstance(before, Ended) else None
+
+
+def close_after_boot(rec: Boot, session: sdk.Session) -> None:
     try:
         session.close(timeout_s=CLOSE_TIMEOUT_S)
     except sdk.NotGone as e:
