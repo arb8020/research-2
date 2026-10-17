@@ -10,6 +10,7 @@ import shutil
 import signal
 import subprocess
 import termios
+import time
 from pathlib import Path
 
 from box.providers.pump import JOIN_S, Pty, Pumped, pipe_readers
@@ -27,6 +28,7 @@ from box.sdk import (
 )
 from box.store import DirStore, Mount
 
+PS_ENV = {**os.environ, "LC_ALL": "C"}
 BASE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "box" / "local"
 
 
@@ -180,32 +182,37 @@ class LocalMachine:
 
     def alive(self) -> bool:
         try:
-            pid = (self.dir / "pid").read_text()
+            pid, recorded_at = int((self.dir / "pid").read_text()), (self.dir / "pid").stat().st_mtime
         except FileNotFoundError:
             return False
-        stat = subprocess.run(["ps", "-o", "stat=", "-p", pid], capture_output=True, text=True).stdout.strip()
-        return bool(stat) and not stat.startswith("Z")
+        out = subprocess.run(["ps", "-o", "stat=,lstart=", "-p", str(pid)], capture_output=True, text=True, env=PS_ENV).stdout.split()
+        return bool(out) and not out[0].startswith("Z") and parse_lstart(out[1:]) <= recorded_at
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, LocalMachine) and other.dir == self.dir
 
     def terminate(self) -> None:
-        for pgid in self._groups():
+        for pgid in self._live_groups():
             _killpg(pgid)
 
     def gone(self) -> bool:
         # macOS has no PR_SET_PDEATHSIG: jobs outlive a SIGKILLed supervisor, so alive() is not gone()
-        groups = set(self._groups())
-        assert groups, self.id
-        listing = subprocess.run(["ps", "-A", "-o", "pgid=,stat="], capture_output=True, text=True, check=True).stdout
-        rows = [line.split() for line in listing.splitlines() if line.strip()]
-        live = {int(row[0]) for row in rows if not row[1].startswith("Z")}
-        return not groups & live
+        return not self._live_groups()
 
-    def _groups(self) -> list[int]:
-        statuses = [json.loads(status.read_text()) for status in Path(self.root).glob("*/*/status.json")]
-        jobs = [status.get(key) for status in statuses for key in ("pgid", "hook_pgid")]
-        return [int((self.dir / "pid").read_text()), *(pgid for pgid in jobs if pgid is not None)]
+    def _live_groups(self) -> set[int]:
+        recorded = self._groups()
+        assert recorded, self.id
+        listing = subprocess.run(["ps", "-A", "-o", "pid=,pgid=,stat=,lstart="], capture_output=True, text=True, check=True, env=PS_ENV).stdout
+        rows = [line.split() for line in listing.splitlines() if line.strip()]
+        started = {int(row[0]): parse_lstart(row[3:]) for row in rows}
+        live = {int(row[1]) for row in rows if not row[2].startswith("Z")}
+        return {pgid for pgid, recorded_at in recorded if pgid in live and (pgid not in started or started[pgid] <= recorded_at)}
+
+    def _groups(self) -> list[tuple[int, float]]:
+        statuses = [(json.loads(status.read_text()), status.stat().st_mtime) for status in Path(self.root).glob("*/*/status.json")]
+        jobs = [(status.get(key), at) for status, at in statuses for key in ("pgid", "hook_pgid")]
+        supervisor = (int((self.dir / "pid").read_text()), (self.dir / "pid").stat().st_mtime)
+        return [supervisor, *((pgid, at) for pgid, at in jobs if pgid is not None)]
 
 
 def restore(snapshot: Path, work: Path) -> None:
@@ -215,6 +222,10 @@ def restore(snapshot: Path, work: Path) -> None:
     trees = [str(dot.parent) for dot in work.glob("*/.git")]
     if trees:
         subprocess.run(["git", "--git-dir", str(store), "worktree", "repair", *trees], check=True, capture_output=True)
+
+
+def parse_lstart(fields: list[str]) -> float:
+    return time.mktime(time.strptime(" ".join(fields), "%a %b %d %H:%M:%S %Y"))
 
 
 def _take_terminal() -> None:
