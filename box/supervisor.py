@@ -34,6 +34,7 @@ assert 2 * MAX_CEILING_S / TICK_S < MAX_CHUNKS, "a chunk number that fits CHUNK_
 MAX_SERVICES = 8
 KINDS = ("jobs", "services")
 LEASE_OPS = ("create", "extend", "release")
+END_LOCK = "end.lock"
 MAX_LEASE_AUDIT = 1024
 PR_SET_PDEATHSIG = 1
 
@@ -44,6 +45,8 @@ def main(argv: list[str]) -> None:
             lease_main(argv[1:])
         case ["tail"]:
             tail_main(argv[1:])
+        case ["submit"]:
+            submit_main(argv[1:])
         case _:
             supervise_main(argv)
 
@@ -105,6 +108,30 @@ def lease_main(argv: list[str]) -> None:
     p.add_argument("--pid", type=int, required=True)
     a = p.parse_args(argv)
     print(json.dumps(change_lease(Path(a.root), a.op, a.until, a.host, a.pid)))
+
+
+def submit_main(argv: list[str]) -> None:
+    p = argparse.ArgumentParser(prog="supervisor.py submit")
+    p.add_argument("--root", required=True)
+    p.add_argument("--kind", choices=KINDS, required=True)
+    p.add_argument("--id", required=True, help="the job's id: ROOT/KIND/ID.spec.tmp moves to ROOT/KIND/ID/spec.json")
+    a = p.parse_args(argv)
+    ending = submit(Path(a.root), a.kind, a.id)
+    print(json.dumps({} if ending is None else {"reason": ending}))
+
+
+def submit(root: Path, kind: str, job_id: str) -> str | None:
+    assert kind in KINDS, kind
+    tmp = root / kind / f"{job_id}.spec.tmp"
+    with (root / END_LOCK).open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if (root / "ending").exists():
+            tmp.unlink()
+            return (root / "ending").read_text()
+        (root / kind / job_id).mkdir(exist_ok=True)
+        tmp.replace(root / kind / job_id / "spec.json")
+        (root / "activity").touch()
+    return None
 
 
 def change_lease(root: Path, op: str, until: float, host: str, pid: int) -> dict:
@@ -177,7 +204,7 @@ def linger(root: Path, ended: dict) -> None:
 def supervise(root: Path, idle_timeout_s: float, ports: list[int]) -> str:
     done: set[str] = set()
     services: dict[Path, subprocess.Popen] = {}
-    while (end := session_end(root, idle_timeout_s)) is None:
+    while (end := decide_end(root, idle_timeout_s)) is None:
         tend_services(root, services)
         if idle_timeout_s and connected(ports):
             (root / "activity").touch()
@@ -229,15 +256,28 @@ def service_state(job_dir: Path) -> str:
     return json.loads((job_dir / "status.json").read_text())["state"]
 
 
+def decide_end(root: Path, idle_timeout_s: float) -> str | None:
+    with (root / END_LOCK).open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        end = session_end(root, idle_timeout_s)
+        if end is not None:
+            put(root / "ending", end.encode())
+    return end
+
+
 def session_end(root: Path, idle_timeout_s: float) -> str | None:
     if (root / "stop").exists():
         return "stopped"
     end_at, reason = lease_end(read_lease(root))
     if time.time() >= end_at:
         return reason
-    if idle_timeout_s and time.time() - (root / "activity").stat().st_mtime >= idle_timeout_s:
+    if idle_timeout_s and time.time() - (root / "activity").stat().st_mtime >= idle_timeout_s and not pending(root):
         return "idle"
     return None
+
+
+def pending(root: Path) -> bool:
+    return any(not (spec.parent / "status.json").exists() for kind in KINDS for spec in (root / kind).glob("*/spec.json"))
 
 
 def connected(ports: list[int]) -> bool:

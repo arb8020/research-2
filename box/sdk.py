@@ -205,6 +205,12 @@ class NotGone(TimeoutError):
     pass
 
 
+class NotRunning(RuntimeError):
+    def __init__(self, session_id: str, status: Status) -> None:
+        super().__init__(f"{session_id}: cannot start anything on a session that is {status}")
+        self.status = status
+
+
 @dataclass(frozen=True)
 class Receipt:
     session_id: str
@@ -683,7 +689,7 @@ class Session:
     def _running_now(self) -> Running:
         running = self.status()
         if not isinstance(running, Running):
-            raise RuntimeError(f"{self.id}: cannot start anything on a session that is {running}")
+            raise NotRunning(self.id, running)
         return running
 
     def _start(self, job: Job, spec: dict) -> Job:
@@ -692,7 +698,10 @@ class Session:
         work, code = shlex.quote(self.machine.work), shlex.quote(f"{job.dir}/code")
         heads = (f'for t in {work}/*/; do if [ -e "$t.git" ] && h=$(git -C "$t" rev-parse HEAD 2>/dev/null); '
                  f'then mkdir -p {code} && echo "$h" > {code}/"$(basename "$t")"; fi; done; ')  # fmt: skip
-        self._check(f"{heads}mkdir -p {job.dir} && mv {tmp} {job.dir}/spec.json")
+        submit = ["python3", self._path("supervisor.py"), "submit", "--root", self.machine.root, "--kind", job.kind, "--id", job.id]
+        refused = self._check(f"{heads}{shlex.join(submit)}")
+        if json.loads(refused):
+            raise NotRunning(self.id, parse_ended(refused.encode()))
         return job
 
     def put(self, local: str | Path, remote: str, ignore: tuple[str, ...] = ()) -> None:
