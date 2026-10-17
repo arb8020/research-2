@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Every boot of a kelpie box (after the code is synced on top of the setup's snapshot): bring the
+# builds of the synced code up to date. Fast when nothing changed (both steps are no-ops or incremental).
+set -euo pipefail
+cd kelpie
+bash .box/xgrammar
+bash .box/libkelpie

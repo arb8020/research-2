@@ -92,6 +92,20 @@ Colab (`.../infra/colab-architecture.md`):
 - spike-modal REPORT.md never written; its numbers live only in blogs HANDOFF and `.evidence/`.
 - Modal tokens have no sandbox-only scope: a pasted reader token can do anything in that workspace (`vmux-modal-auth.md`).
 
+## Overnight result (2026-10-09, reader path built)
+
+The page connects to a Modal T4 and runs cells there (video + report: the "Reader Path Overnight" artifact).
+Branches: `box/reader-path` (integration; includes `box/relay`, `box/gateway-do`), `blogs/connect` (integration).
+Decisions taken overnight: `box/DECISIONS-reader-path.md`. Contract: `box/CONTRACT-gateway.md`.
+- **Keep-alive settled: yes.** Open tunnel connections, exec, stdin keep a sandbox alive; jobs don't. The supervisor
+  owns idleness (no job + no open connection to an exposed port); Modal's idle_timeout is never shorter than the deadline.
+- **Session owner reopened and compared** (`box/gateway-do/COMPARISON.md`): A relay (machine owns) is the default;
+  C (DO fan-out) is the upgrade for live logs / many readers; B (DO owns) works but stores the reader token in
+  Cloudflare and split authority (one race found + fixed; proxied ws kept a machine alive past idle, not fixed).
+- **Durable record:** `launch(record=ModalVolumeStore("box-sessions"))` in the reader's workspace; env values never recorded.
+- **Open:** `deadline_s` counts from boot but Modal's backstop from create (boot > 600 s is killed early, no hooks);
+  R2 not enabled on the Cloudflare account; code mounts (`Mount` exists, unused); RunPod expose/mounts never run live.
+
 ## Next session: the reader path (kickoff, 2026-10-09)
 
 **Target (the author's words):** open the page -> a top-right header **Connect** (Colab-style) -> connect your own Modal -> cells run against the connected GPU; `nvidia-smi` works.

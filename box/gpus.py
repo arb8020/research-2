@@ -1,44 +1,41 @@
-"""GPU names across providers: one canonical name -> VRAM and each provider's own id for it.
-
-`box run --gpu NAME` takes a canonical name (case-insensitive). Prices live in gpus.json, which
-`box gpus --sync` rewrites from the providers' live price APIs; the table below is hand-kept.
-"""
-
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 from pathlib import Path
 
-PRICES = Path(__file__).resolve().parent / "gpus.json"  # {provider: {canonical name: $/hr per GPU}}
-PROVIDERS = ("modal", "runpod")
+PRICES = Path(__file__).resolve().parent / "gpus.json"
+PROVIDERS = ("modal", "runpod", "colab")
 
 
 @dataclass(frozen=True)
 class Gpu:
     name: str
     vram_gb: int
-    modal: str | None  # Modal's gpu= string (modal.com/docs/guide/gpu)
-    runpod: str | None  # RunPod gpuTypeId (the public `gpuTypes { id }` GraphQL query)
+    modal: str | None
+    runpod: str | None
+    colab: str | None = None
 
 
 GPUS = (
-    Gpu("T4", 16, "T4", None),
-    Gpu("L4", 24, "L4", "NVIDIA L4"),
+    Gpu("T4", 16, "T4", None, colab="T4"),
+    Gpu("L4", 24, "L4", "NVIDIA L4", colab="L4"),
     Gpu("A10G", 24, "A10", None),
     Gpu("RTX-4090", 24, None, "NVIDIA GeForce RTX 4090"),
     Gpu("RTX-5090", 32, None, "NVIDIA GeForce RTX 5090"),
-    Gpu("A100-40GB", 40, "A100-40GB", "NVIDIA A100-SXM4-40GB"),
+    Gpu("A100-40GB", 40, "A100-40GB", "NVIDIA A100-SXM4-40GB", colab="A100"),
     Gpu("L40S", 48, "L40S", "NVIDIA L40S"),
     Gpu("A100-80GB", 80, "A100-80GB", "NVIDIA A100-SXM4-80GB"),
-    Gpu("H100", 80, "H100", "NVIDIA H100 80GB HBM3"),
-    Gpu("RTX-PRO-6000", 96, "RTX-PRO-6000", "NVIDIA RTX PRO 6000 Blackwell Server Edition"),
+    Gpu("H100", 80, "H100", "NVIDIA H100 80GB HBM3", colab="H100"),
+    Gpu("RTX-PRO-6000", 96, "RTX-PRO-6000", "NVIDIA RTX PRO 6000 Blackwell Server Edition", colab="G4"),
     Gpu("H200", 141, "H200", "NVIDIA H200"),
     Gpu("B200", 180, "B200", "NVIDIA B200"),
     Gpu("B300", 288, "B300", "NVIDIA B300 SXM6 AC"),
+    Gpu("TPU-v5e-1", 16, None, None, colab="V5E1"),
+    Gpu("TPU-v6e-1", 32, None, None, colab="V6E1"),
 )
 
-# billing.rates() keys that are not gpu_hour_cost_<modal id, lowercased, - -> _>
+# Modal's billing.rates() keys that break the gpu_hour_cost_<modal id> pattern
 MODAL_RATE_KEYS = {"A10G": "gpu_hour_cost_a10g", "RTX-PRO-6000": "gpu_hour_cost_rtx6000"}
 RUNPOD_GRAPHQL = "https://api.runpod.io/graphql"
 
@@ -65,7 +62,6 @@ def modal_rate_key(gpu: Gpu) -> str:
 
 
 def sync_modal() -> tuple[dict[str, float], list[str]]:
-    """Modal's live $/hr per canonical name, and the rate keys no GPU here maps to (new cards)."""
     import modal
 
     rates = modal.Workspace.from_context().billing.rates()
@@ -75,8 +71,6 @@ def sync_modal() -> tuple[dict[str, float], list[str]]:
 
 
 def sync_runpod() -> tuple[dict[str, float], list[str]]:
-    """RunPod's secure-cloud list price per canonical name (public query, no key), and the
-    secure-cloud gpuTypeIds no GPU here maps to."""
     import requests
 
     query = "{ gpuTypes { id secureCloud securePrice } }"
@@ -88,7 +82,6 @@ def sync_runpod() -> tuple[dict[str, float], list[str]]:
 
 
 def sync() -> list[str]:
-    """Rewrite gpus.json from the live APIs; the lines to print (unmapped ids, missing prices)."""
     modal_prices, modal_unmapped = sync_modal()
     runpod_prices, runpod_unmapped = sync_runpod()
     PRICES.write_text(json.dumps({"modal": modal_prices, "runpod": runpod_prices}, indent=2) + "\n")
@@ -101,12 +94,12 @@ def sync() -> list[str]:
 
 def table() -> str:
     p = prices()
-    rows = [("name", "vram", "modal", "$/hr", "runpod", "$/hr")]
+    rows = [("name", "vram", "modal", "$/hr", "runpod", "$/hr", "colab")]
     for g in GPUS:
         rows.append((
             g.name, f"{g.vram_gb}G",
             g.modal or "-", _price(p["modal"].get(g.name)),
-            g.runpod or "-", _price(p["runpod"].get(g.name)),
+            g.runpod or "-", _price(p["runpod"].get(g.name)), g.colab or "-",
         ))  # fmt: skip
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
     return "\n".join("  ".join(c.ljust(w) for c, w in zip(r, widths, strict=True)).rstrip() for r in rows)

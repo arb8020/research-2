@@ -1,0 +1,11 @@
+readers http://localhost:8797 producer <gateway-tunnel> session fanout-1791525059117
+POST->SSE latency ms: p50=19.9 p90=24.9 max=218.2
+WS->SSE latency ms: p50=7.9 p90=9.7 max=10.4
+ok: reconnect replay count 31 (got 31)
+ok: replayed lines in order, none duplicated
+ok: reader a saw all 51 live events (got 51)
+ok: event ids are contiguous
+ok: gap notice: "replay gap: 150 events dropped"
+ok: ring replay holds exactly 1000 (got 1000)
+ok: ring replay ends at the latest seq
+status {"session_id":"fanout-1791525059117","status":{"state":"booting","gpu":null,"started_at":1791525061191,"deadline":null}}

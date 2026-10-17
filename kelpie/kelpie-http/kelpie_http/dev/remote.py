@@ -6,7 +6,7 @@
       put  this kelpie tree -> TREE, observe/ -> RESEARCH/observe                   # ~1.5 MB gzipped
       run  python -m kelpie_http.dev.job: setup (setup.py) against /data, then cmd  # one job
       attached: stream its logs, then close (the machine ends)
-      --detach: release and print the id; the machine ends itself after the job (`box logs <id> -f`)
+      --detach: print the id; the machine ends itself once idle after the job (`box logs <id> -f`)
 
 The image is oci/Dockerfile plus kelpie-http's locked python deps, written as one Dockerfile and
 built by the provider (cached by its bytes). Results stay on the volume at /data. Runs in box's
@@ -17,6 +17,7 @@ library, box and its provider; the job (job.py, setup.py) runs on the box, which
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import os
 import shlex
@@ -27,6 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from box import sdk
+from box.cli import DETACH_IDLE_S, user
 
 from kelpie_http.dev.local import KELPIE, xgrammar_submodule_sha
 
@@ -125,27 +127,29 @@ def job_cmd(where: Where, *, submodule_sha: str, models: list[str], timeout: int
 def make_provider(name: str, volume: str) -> sdk.Provider:
     """modal: the volume at /data. local: no volume (it tests the wiring, not the GPU)."""
     if name == "modal":
-        from box.modal_provider import Modal
+        from box.providers.modal import Modal, ModalToken
 
-        return Modal(volumes={DATA: volume})
+        return Modal(token=ModalToken.from_config(), region=None, volumes={DATA: volume})  # unpinned, as before
     if name == "local":
-        from box.local_provider import Local
+        from box.providers.local import Local
 
         return Local()
     raise SystemExit(f"kelpie remote: unknown provider {name!r}; known: modal, local")
 
 
-def start(a: argparse.Namespace, cmd: str) -> tuple[sdk.Session, sdk.Job]:
+def start(a: argparse.Namespace, cmd: str, provider: sdk.Provider) -> tuple[sdk.Session, sdk.Job]:
     """launch, put the trees, queue the job. A failure after launch closes the machine: one with
-    no job would idle until its deadline."""
+    no job would idle until its ceiling."""
     local = a.provider == "local"
     s = sdk.launch(
-        make_provider(a.provider, a.volume),
+        provider,
         gpu=None if local else a.gpu,
         image=None if local else dockerfile(KELPIE),
-        deadline_s=a.timeout + GRACE_S,
+        ceiling_s=a.timeout + GRACE_S,
+        idle_timeout_s=DETACH_IDLE_S if a.detach else 0.0,  # detached: idle ends it once the job is done
         labels={
             "box.cmd": cmd[:200],
+            "box.user": user(),
             "kelpie.tree": str(KELPIE),
             "kelpie.volume": "" if local else a.volume,
         },
@@ -158,6 +162,7 @@ def start(a: argparse.Namespace, cmd: str) -> tuple[sdk.Session, sdk.Job]:
         sha = xgrammar_submodule_sha(KELPIE)
         job = s.run(
             job_cmd(where, submodule_sha=sha, models=a.model, timeout=a.timeout, cmd=cmd),
+            max_duration_s=a.timeout + GRACE_S,  # setup + cmd (cmd has its own --timeout inside)
             env={"BOX_ID": s.id},
         )
     except BaseException:
@@ -170,9 +175,9 @@ def follow(s: sdk.Session, job: sdk.Job) -> int:
     """The job's output on this terminal until it ends; the machine ends however this returns."""
     sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
     with s:
-        for stream, text in job.logs(follow=True):
-            sinks[stream].write(text)
-            sinks[stream].flush()
+        for chunk in job.logs(follow=True):
+            sinks[chunk.stream].write(chunk.text)
+            sinks[chunk.stream].flush()
         ending = job.wait()
     print(f"kelpie remote: {s.id} {ending.reason}, exit {ending.exit_code}", file=sys.stderr)
     return ending.exit_code if ending.reason == "exited" and ending.exit_code is not None else 1
@@ -227,10 +232,10 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     a = parser().parse_args(argv)
     cmd = " ".join(a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd) or "nvidia-smi"
-    s, job = start(a, cmd)
-    if not a.detach:
-        return follow(s, job)
-    s.release()
+    with contextlib.closing(make_provider(a.provider, a.volume)) as provider:  # Modal: joins its loop thread
+        s, job = start(a, cmd, provider)
+        if not a.detach:
+            return follow(s, job)
     print(s.id)
     print(
         f"box logs {s.id} -f    # follow (exits with the job's status)\nbox kill {s.id}       # stop",

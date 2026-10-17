@@ -14,13 +14,14 @@ from REMOTE. Attached, REMOTE/runs comes home into runs/ of this checkout; detac
 from __future__ import annotations
 
 import argparse
+import contextlib
 import shlex
 import subprocess
 import sys
 from pathlib import Path
 
 from box import sdk
-from box.cli import make_provider
+from box.cli import DETACH_IDLE_S, make_provider, user
 
 ROOT = Path(__file__).resolve().parent.parent  # the checkout whose code is uploaded
 REMOTE = "/workspace/research"
@@ -77,26 +78,32 @@ def main() -> int:
     job = " && ".join(steps)
     on_exit = f"cd {remote} && {a.on_exit}" if a.on_exit else None
 
+    with contextlib.closing(make_provider(a.provider)) as provider:  # Modal: joins its loop thread
+        return launch(a, provider, cmd, job, remote, on_exit)
+
+
+def launch(a: argparse.Namespace, provider: sdk.Provider, cmd: str, job: str, remote: str, on_exit: str | None) -> int:  # noqa: PLR0913
+    local = a.provider == "local"
     s = sdk.launch(
-        make_provider(a.provider), gpu=None if local else a.gpu, image=None if local else IMAGE,
-        deadline_s=a.timeout, labels={"box.cmd": cmd[:200], "box.tree": str(ROOT)},
+        provider, gpu=None if local else a.gpu, image=None if local else IMAGE,
+        ceiling_s=a.timeout, labels={"box.cmd": cmd[:200], "box.tree": str(ROOT), "box.user": user()},
+        idle_timeout_s=DETACH_IDLE_S if a.detach else 0.0,  # detached: idle ends it once the job (and hook) is done
     )  # fmt: skip
     if a.detach:
         for d in ("robots", "observe"):
             s.put(ROOT / d, f"{remote}/{d}", ignore=IGNORE)
-        s.run(job, on_exit=on_exit)
-        s.release()  # the machine ends itself after the job and its hook
+        s.run(job, max_duration_s=a.timeout, on_exit=on_exit)
         print(s.id)
         print(f"box --provider {a.provider} logs {s.id} -f    # follow", file=sys.stderr)
         return 0
     with s:  # however this process leaves, the session ends: the job is killed, its hook runs
         for d in ("robots", "observe"):
             s.put(ROOT / d, f"{remote}/{d}", ignore=IGNORE)
-        j = s.run(job, on_exit=on_exit)
+        j = s.run(job, max_duration_s=a.timeout, on_exit=on_exit)
         sinks = {"stdout": sys.stdout, "stderr": sys.stderr}
-        for stream, text in j.logs(follow=True):
-            sinks[stream].write(text)
-            sinks[stream].flush()
+        for chunk in j.logs(follow=True):
+            sinks[chunk.stream].write(chunk.text)
+            sinks[chunk.stream].flush()
         ending = j.wait()
         if s.machine.exec(f"test -d {remote}/runs")[0] == 0:
             s.get(f"{remote}/runs", ROOT / "runs")

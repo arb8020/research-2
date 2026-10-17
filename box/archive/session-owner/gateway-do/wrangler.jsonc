@@ -1,0 +1,24 @@
+// Variants (B) /b and (C) /c of the reader-path gateway: one Worker, one SQLite Durable Object class each.
+// Deploy: scripts/up.sh (relays + quick tunnels + `wrangler deploy --var RELAY_B:.. --var RELAY_C:..`).
+// Secret PUSH_SECRET: `wrangler secret put PUSH_SECRET` (scripts/up.sh, from .push-secret; never in git).
+{
+  "name": "box-gateway-do",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "FANOUT", "class_name": "FanoutDO" },
+      { "name": "OWNER", "class_name": "OwnerDO" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FanoutDO", "OwnerDO"] }],
+  "vars": {
+    "RELAY_B": "http://localhost:8792",
+    "RELAY_C": "http://localhost:8791",
+    "DEADLINE_S": "1200",
+    "SILENT_S": "20",
+    "RING_SIZE": "2000",
+    "HEARTBEAT_MS": "15000"
+  },
+  "observability": { "enabled": true }
+}
