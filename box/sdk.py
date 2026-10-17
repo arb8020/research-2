@@ -40,7 +40,8 @@ RESERVED = (LABEL_BY, LABEL_SESSION, LABEL_CEILING, LABEL_NAME, LABEL_IDLE, LABE
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,62}")
 NAME_TRIES = 3
 KEEPALIVE_S = 60.0
-MIN_KEEPALIVE_S = 1.0
+MIN_KEEPALIVE_S = 0.25
+MIN_IDLE_S = 4 * MIN_KEEPALIVE_S
 CEILING_S = 3600
 BACKSTOP_MARGIN_S = 600
 MAX_ENV_VALUE = 32768  # Modal's limit on one secret value; Sandbox.create passes env as a secret
@@ -293,8 +294,8 @@ def _create(  # noqa: PLR0913
         raise Refused(f"labels {clash} are box's own (launch stamps them)")
     if name is not None and not NAME.fullmatch(name):
         raise Refused(f"name {name!r}: letters, digits, '.', '_', '-', at most 63, starting with a letter or digit")
-    if not 0 <= idle_timeout_s <= MAX_CEILING_S:
-        raise Refused(f"idle_timeout_s={idle_timeout_s}: 0 (never idle) to {MAX_CEILING_S} s")
+    if idle_timeout_s != 0 and not MIN_IDLE_S <= idle_timeout_s <= MAX_CEILING_S:
+        raise Refused(f"idle_timeout_s={idle_timeout_s}: 0 (never idle), or {MIN_IDLE_S:g} to {MAX_CEILING_S} s")
     lease_s = ceiling_s if lease_s is None else lease_s
     if not 0 < ceiling_s <= MAX_CEILING_S:
         raise Refused(f"ceiling_s={ceiling_s}: a ceiling is more than 0 and at most {MAX_CEILING_S} s (48 h)")
@@ -481,7 +482,7 @@ class Session:
             time.sleep(POLL_S)
 
     def _up(self) -> bool:
-        rc, out, _ = self.machine.exec(f"cat {self._path('up')}")
+        rc, out, _ = self.machine.exec(f"cat {self._path('up')} && touch {self._path('activity')}")
         return rc == 0 and out.strip() == self.id
 
     def extend(self, until: float) -> Lease:
@@ -610,8 +611,8 @@ class Session:
     def sync(self, repo: str | Path, *, paths: tuple[str, ...] = (), force: bool = False) -> Synced:
         from box import gitsync
 
-        keep = f"refs/box/{self.name or self.id}"
-        synced = gitsync.sync(self.machine, Path(repo), paths=paths, force=force, keep=keep, touch=self._path("activity"))
+        with self.using():
+            synced = gitsync.sync(self.machine, Path(repo), paths=paths, force=force, keep=f"refs/box/{self.name or self.id}")
         if self.record is not None:
             entry = {"commit": synced.commit, "path": synced.path, "pack_bytes": synced.pack_bytes, "local": str(Path(repo).resolve()), "at": time.time()}
             self.record.put(f"{record_prefix(self.id)}/syncs/{time.time_ns()}.json", json.dumps(entry).encode())
@@ -619,6 +620,38 @@ class Session:
 
     def touch(self) -> None:
         self._touch("activity")
+
+    @contextlib.contextmanager
+    def using(self) -> Iterator[None]:
+        if not float(self.machine.labels.get(LABEL_IDLE) or 0):
+            yield
+            return
+        every_s = self._keepalive_every_s()
+        stop = threading.Event()
+        failed: list[Exception] = []
+
+        def mark() -> None:
+            while True:
+                try:
+                    self.touch()
+                except Gone:
+                    return
+                except Exception as exc:
+                    failed.append(exc)
+                    return
+                if stop.wait(every_s):
+                    return
+
+        marker = threading.Thread(target=mark, daemon=False, name=f"box-use-{self.id}")
+        marker.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            marker.join()
+            assert not marker.is_alive()
+        if failed:
+            raise failed[0]
 
     def _keepalive_every_s(self) -> float:
         idle_s = float(self.machine.labels.get(LABEL_IDLE) or 0)
@@ -660,12 +693,13 @@ class Session:
     ) -> Job:  # fmt: skip
         if not 0 < max_duration_s <= MAX_CEILING_S:
             raise Refused(f"max_duration_s={max_duration_s}: more than 0 and at most {MAX_CEILING_S} s")
-        running = self._running_now()
-        left = min(running.lease.until, running.lease.ceiling) - time.time()
-        if on_exit and hook_budget_s >= left:
-            raise Refused(f"hook_budget_s={hook_budget_s} does not fit in the lease's {left:.0f} s left")
-        spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "max_duration_s": max_duration_s, "env": env or {}}
-        return self._start(Job(self, new_job_id(), "jobs"), spec)
+        with self.using():
+            running = self._running_now()
+            left = min(running.lease.until, running.lease.ceiling) - time.time()
+            if on_exit and hook_budget_s >= left:
+                raise Refused(f"hook_budget_s={hook_budget_s} does not fit in the lease's {left:.0f} s left")
+            spec = {"cmd": cmd, "on_exit": on_exit, "hook_budget_s": hook_budget_s, "max_duration_s": max_duration_s, "env": env or {}}
+            return self._start(Job(self, new_job_id(), "jobs"), spec)
 
     def _run_to_end(self, cmd: str, max_duration_s: float, what: str) -> str:
         job = self.run(cmd, max_duration_s=max_duration_s)
@@ -676,15 +710,16 @@ class Session:
         return job.id
 
     def serve(self, cmd: str, *, env: dict[str, str] | None = None, name: str | None = None) -> Job:
-        self._running_now()
         if name is not None and not SERVICE_NAME.fullmatch(name):
             raise Refused(f"service name {name!r}: a lowercase letter, then lowercase letters, digits or '-', at most 32")
-        started = [job_id for job_id in self._check(f"ls {self._path('services')}").split() if not job_id.endswith(".tmp")]
-        if len(started) >= MAX_SERVICES:
-            raise Refused(f"{self.id}: a session runs at most {MAX_SERVICES} services")
-        if name in started:
-            raise Refused(f"{self.id}: a service is already named {name!r}")
-        return self._start(Job(self, name or new_job_id(), "services"), {"cmd": cmd, "env": env or {}})
+        with self.using():
+            self._running_now()
+            started = [job_id for job_id in self._check(f"ls {self._path('services')}").split() if not job_id.endswith(".tmp")]
+            if len(started) >= MAX_SERVICES:
+                raise Refused(f"{self.id}: a session runs at most {MAX_SERVICES} services")
+            if name in started:
+                raise Refused(f"{self.id}: a service is already named {name!r}")
+            return self._start(Job(self, name or new_job_id(), "services"), {"cmd": cmd, "env": env or {}})
 
     def _running_now(self) -> Running:
         running = self.status()
@@ -707,12 +742,13 @@ class Session:
     def put(self, local: str | Path, remote: str, ignore: tuple[str, ...] = ()) -> None:
         root = Path(local)
         buf = io.BytesIO()
-        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-            for child in sorted(root.iterdir()):
-                tar.add(child, arcname=child.name, filter=lambda i: None if ignored(i.name, ignore) else i)
         tmp = self._path(f"put-{secrets.token_hex(3)}.tgz")
-        self.machine.write(tmp, buf.getvalue())
-        self._check(f"mkdir -p {shlex.quote(remote)} && tar xzf {tmp} --no-same-owner -C {shlex.quote(remote)} && rm {tmp}")
+        with self.using():
+            with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+                for child in sorted(root.iterdir()):
+                    tar.add(child, arcname=child.name, filter=lambda i: None if ignored(i.name, ignore) else i)
+            self.machine.write(tmp, buf.getvalue())
+            self._check(f"mkdir -p {shlex.quote(remote)} && tar xzf {tmp} --no-same-owner -C {shlex.quote(remote)} && rm {tmp}")
 
     def get(self, remote: str, local: str | Path) -> None:
         tmp = self._path(f"get-{secrets.token_hex(3)}.tgz")
