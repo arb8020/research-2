@@ -28,7 +28,7 @@ Config (JSON, built by grok.ts: grokConfig):
 
 Output: one JSON object per line on stdout, flushed as it goes:
 
-    {"kind": "start", "device", "device_name", "torch", "params": 226k, "train": 3830, "test": 8939}
+    {"kind": "start", "device", "device_name", "torch", "params": 226k, "train": 3831, "test": 8938, "model"}
     {"kind": "tick", "step", "seconds", "loss", "accuracy", "test_loss", "test_accuracy"}
     {"kind": "end", "reason": "steps" | "time" | "interrupted", "step", "seconds"}
 
@@ -63,6 +63,7 @@ LR = 1e-3
 WEIGHT_DECAY = 1.0
 BETAS = (0.9, 0.98)
 WARMUP_STEPS = 10
+MODEL = f"1-layer transformer (d {D_MODEL}, {HEADS} heads, MLP {D_MLP}) · AdamW lr {LR:g}, weight decay {WEIGHT_DECAY:g}"
 
 LOG_RATIO = 1.03  # ticks at least this far apart in log(step): ~330 points up to 20k steps
 MAX_P = 257  # the eval batch is p^2 pairs
@@ -304,7 +305,7 @@ def describe(device: torch.device, run: Run) -> dict:
     params = sum(w.numel() for w in run.weights.values())
     return {
         "kind": "start", "device": device.type, "device_name": name, "torch": torch.__version__,
-        "params": params, "train": len(run.data.train), "test": len(run.data.test),
+        "params": params, "train": len(run.data.train), "test": len(run.data.test), "model": MODEL,
     }  # fmt: skip
 
 
