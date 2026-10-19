@@ -16,7 +16,8 @@ materialize(chN, "solution") stacks the series' files/ up to chN (a later chapte
 out). materialize(chN, "start") is the solution of the chapter before with chN's files/ and then chN's start/ on top.
 The cells are listed in the tree itself, in checks/chNN.json ({name, file, region, ops, cmd}), so workspace.py in the
 sandbox, the page and the check command read the same list. A cell's region names a `# region: <name>` ...
-`# endregion` block in its file (display only: the page scrolls to and highlights it); the build checks it exists.
+`# endregion` block in its file (the page scrolls to and highlights it; `verify` swaps in just that block's stub); the
+build checks it exists.
 
 The check command (cmd[0], e.g. run_checks) is trusted code, not part of the tree: TRUSTED_SRC below is the one place
 that says which package the page ships as _blogs/assay/ and `verify` runs from. `verify` runs it with assay's own uv
@@ -36,20 +37,16 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import workspace
 
 HERE = Path(__file__).resolve().parent
 REF = HERE / "engine" / "ref"
-# The trusted check code: the check core package (blogs/assay/assay), shipped by the page as _blogs/assay/
-# (build_page.py) and run by workspace.py as `python -P -m assay.cli` (workspace.COMMANDS). Only its .py files ship:
-# no tests, venv, caches or notes.
 TRUSTED_SRC = HERE / "assay" / "assay"
 ASSAY_PROJECT = HERE / "assay"
 CHAPTER = re.compile(r"ch\d{2}")
-MAX_TREE_FILES = 2000  # a chapter tree past this is a mistake (build output copied in?)
-# Fixed identity and dates: the same reference always makes the same commits, so bundles are reproducible.
+MAX_TREE_FILES = 2000
 GIT_ENV = {"GIT_AUTHOR_NAME": "blogs-ref", "GIT_AUTHOR_EMAIL": "ref@blogs.local", "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
            "GIT_COMMITTER_NAME": "blogs-ref", "GIT_COMMITTER_EMAIL": "ref@blogs.local", "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"}  # fmt: skip
 
@@ -62,7 +59,7 @@ class File:
     executable: bool
 
 
-Tree = dict[str, File]  # tree-relative POSIX path -> file
+Tree = dict[str, File]
 
 
 @dataclass(frozen=True)
@@ -81,8 +78,6 @@ def chapters(root: Path = REF) -> list[str]:
 
 
 def lineage(chapter: str, root: Path = REF) -> list[str]:
-    """The chapters whose files make up `chapter`'s tree, oldest first: the series up to it, or just itself if it is
-    standalone."""
     order = chapters(root)
     assert chapter in order, f"no {chapter} under {root}; chapters are {order}"
     if (root / chapter / "STANDALONE").exists():
@@ -90,14 +85,18 @@ def lineage(chapter: str, root: Path = REF) -> list[str]:
     return [ch for ch in order[: order.index(chapter) + 1] if not (root / ch / "STANDALONE").exists()]
 
 
-def region_span(text: str, region: str) -> tuple[int, int] | None:
-    """1-based (first, last) lines of `# region: <region>` ... its `# endregion`, or None if either marker is missing."""
+class Region(NamedTuple):
+    first_line: int
+    last_line: int
+
+
+def region_span(text: str, region: str) -> Region | None:
     lines = text.split("\n")
     starts = [i for i, line in enumerate(lines) if line.strip() == f"# region: {region}"]
     if len(starts) != 1:
         return None
     ends = [i for i in range(starts[0] + 1, len(lines)) if lines[i].strip() == "# endregion"]
-    return (starts[0] + 1, ends[0] + 1) if ends else None
+    return Region(starts[0] + 1, ends[0] + 1) if ends else None
 
 
 def read_layer(folder: Path) -> Tree:
@@ -109,7 +108,6 @@ def read_layer(folder: Path) -> Tree:
 
 
 def cells(tree: Tree, chapter: str) -> list[Cell]:
-    """The chapter's cells, in order, from checks/<chapter>.json in its tree (the file the sandbox reads too)."""
     key = f"checks/{chapter}.json"
     assert key in tree, f"{chapter}: the tree has no {key}"
     raw = json.loads(tree[key].data)
@@ -140,7 +138,7 @@ def materialize(chapter: str, kind: Kind, root: Path = REF) -> Tree:
         assert path in start, f"{chapter}: cell file {path} has no stub in {chapter}/start/"
         assert start[path].data != tree[path].data, f"{chapter}/start/{path} is the solution itself"
     tree.update(start)
-    cells(tree, chapter)  # the start file keeps every region's markers too
+    cells(tree, chapter)
     return tree
 
 
@@ -160,7 +158,6 @@ def git(repo: Path, *args: str, stdin: bytes | None = None) -> str:
 
 
 def commit_tree(repo: Path, tree: Tree, message: str, tag: str) -> None:
-    """Make the work tree exactly `tree`, commit it, tag it (annotated tags would carry dates; lightweight ones are enough)."""
     for p in repo.iterdir():
         if p.name == ".git":
             continue
@@ -175,7 +172,6 @@ def commit_tree(repo: Path, tree: Tree, message: str, tag: str) -> None:
 
 
 def build_repo(out: Path, root: Path = REF, upto: str | None = None) -> Path:
-    """The tagged reference repo: for each chapter, chNN/start then chNN/solution, on one line of history."""
     assert not out.exists() or not any(out.iterdir()), f"{out} is not empty"
     out.mkdir(parents=True, exist_ok=True)
     git(out, "init", "-q", "-b", "main")
@@ -186,22 +182,19 @@ def build_repo(out: Path, root: Path = REF, upto: str | None = None) -> Path:
 
 
 def reader_bundle(chapter: str, out: Path, root: Path = REF) -> Path:
-    """A bundle with one ref, chNN/start, for the reader's sandbox. History reaches back through earlier chapters'
-    solutions (they are this chapter's starting point anyway) but never this chapter's solution or later ones."""
     with tempfile.TemporaryDirectory() as tmp:
         repo = build_repo(Path(tmp) / "ref", root, upto=chapter)
         git(repo, "bundle", "create", "-q", str(out.resolve()), f"refs/tags/{chapter}/start")
         listed = git(repo, "bundle", "list-heads", str(out.resolve()))
         assert listed.split()[1:] == [f"refs/tags/{chapter}/start"], f"bundle refs: {listed}"
-        solution = git(repo, "rev-parse", f"{chapter}/solution").strip()
         reachable = git(repo, "rev-list", f"{chapter}/start").split()
-        assert solution not in reachable, f"{chapter}/solution is reachable from {chapter}/start"
+        for tag in git(repo, "tag", "--list", "*/solution").split():
+            if tag.split("/")[0] >= chapter:
+                assert git(repo, "rev-parse", tag).strip() not in reachable, f"{tag} is reachable from {chapter}/start"
     return out
 
 
 def stage_trusted(out: Path) -> str:
-    """Write the trusted code the page ships into `out` (its _blogs/): workspace.py, TRUSTED_SRC's .py files as
-    assay/, and MANIFEST.sha256 over both. Returns the manifest's sha256 (the page passes it to every check)."""
     assert not (out / "assay").exists(), f"{out}/assay already exists"
     out.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(HERE / "workspace.py", out / "workspace.py")
@@ -217,14 +210,12 @@ def stage_trusted(out: Path) -> str:
 
 
 def assay_python() -> str:
-    """The interpreter of assay's uv env (synced first): what runs checks outside the sandbox."""
     out = subprocess.run(["uv", "run", "--project", str(ASSAY_PROJECT), "--frozen", "python", "-c", "import sys; print(sys.executable)"],
                          capture_output=True, text=True, check=True)  # fmt: skip
     return out.stdout.strip().splitlines()[-1]
 
 
 def run_cell(cell: Cell, tree: Path, trusted: Path, python: str) -> tuple[int, str]:
-    """(exit code, the last verdict-or-summary line that says why) of the cell's cmd on `tree`."""
     argv, extra = workspace.command(list(cell.cmd), trusted, python)
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", **extra}
     proc = subprocess.run(argv, cwd=tree, capture_output=True, text=True, check=False, env=env)
@@ -243,10 +234,17 @@ def run_cell(cell: Cell, tree: Path, trusted: Path, python: str) -> tuple[int, s
     return proc.returncode, why
 
 
+def stub_only(cell: Cell, solution: File, start: File) -> File:
+    if cell.region is None:
+        return start
+    ours, theirs = solution.data.decode(), start.data.decode()
+    mine, stub = region_span(ours, cell.region), region_span(theirs, cell.region)
+    assert mine is not None and stub is not None, f"cell {cell.name}: region {cell.region!r} is missing from {cell.file}"
+    lines = ours.split("\n")[: mine[0] - 1] + theirs.split("\n")[stub[0] - 1 : stub[1]] + ours.split("\n")[mine[1] :]
+    return File("\n".join(lines).encode(), solution.executable)
+
+
 def verify(chapter: str, root: Path = REF) -> bool:
-    """Every cell's check passes on the reference solution, and fails with that cell's start file swapped in (else the
-    stub gives the reader nothing to do). Runs the staged trusted code (TRUSTED_SRC) with assay's python, as the
-    sandbox would with its image's."""
     ok = True
     python = assay_python()
     with tempfile.TemporaryDirectory() as tmp:
@@ -261,7 +259,7 @@ def verify(chapter: str, root: Path = REF) -> bool:
             print(f"{chapter} solution: {' '.join(cell.cmd)} -> exit {rc} (want 0) {why}", flush=True)
             ok &= rc == 0
             one = Path(tmp) / f"start-{cell.name}"
-            write_tree({**solution_tree, cell.file: start_tree[cell.file]}, one)
+            write_tree({**solution_tree, cell.file: stub_only(cell, solution_tree[cell.file], start_tree[cell.file])}, one)
             rc, why = run_cell(cell, one, trusted, python)
             print(f"{chapter} start {cell.file}: {' '.join(cell.cmd)} -> exit {rc} (want 1) {why}", flush=True)
             ok &= rc == 1

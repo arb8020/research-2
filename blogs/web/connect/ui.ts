@@ -1,29 +1,20 @@
-// <connect-pill>: the header's Connect control on opted-in pages (build_page.py puts it in the corner).
-//
-//   pill      disconnected "Connect" | connecting "connecting… (step)" | connected "● T4 · 1h 28m left"
-//   panel     disconnected: provider, token (paste, or the saved one masked + Sign out), GPU, session length, Connect
-//             otherwise:    summary, lease (ends, time left), Extend…, Details, Disconnect (Cancel while connecting), Sign out
-//   drawer    Details: slides in from the right; the session's steps and machine log, follow + copy
-//
-// Anything may open the panel with document.dispatchEvent(new Event("connect:open")) (cells' "Connect to run").
 import { must } from "../dom";
 import type { Limits } from "./gateway";
 import { connect, currentPhase, disconnect, extend, limits, logLines, onLog, onPhase, resume, savedToken, signOut } from "./session";
 import type { LogLine, Phase } from "./session";
 
-// [value sent as gpu, label]. Modal's ids; $/h from box/gpus.json (2026-10). CPU-only is the cheap way to try it.
 const GPUS: readonly (readonly [gpu: string | null, label: string])[] = [
   ["T4", "T4 · 16 GB · $0.59/h"],
   ["L4", "L4 · 24 GB · $0.80/h"],
   ["A10G", "A10G · 24 GB · $1.10/h"],
   [null, "CPU only · no GPU"],
 ];
-// Session length presets in seconds, those within the gateway's limits, with its default and its most; "custom" takes minutes.
 const LENGTHS = [30 * 60, 60 * 60, 90 * 60, 2 * 3600, 4 * 3600, 8 * 3600];
-// Extend by seconds; 0 = all the way to the ceiling.
-const EXTENDS = [30 * 60, 3600, 2 * 3600, 4 * 3600, 0];
-const ENDING_SOON_S = 10 * 60; // the pill's dot turns red
+const TO_CEILING = 0;
+const EXTENDS = [30 * 60, 3600, 2 * 3600, 4 * 3600, TO_CEILING];
+const ENDING_SOON_S = 10 * 60;
 const TICK_MS = 10_000;
+const SCROLL_SLACK_PX = 8;
 
 const gpuName = (gpu: string | null): string => gpu ?? "CPU";
 const span = (s: number): string => (s % 3600 === 0 ? `${String(s / 3600)} h` : s % 60 === 0 ? `${String(s / 60)} min` : `${String(s)} s`);
@@ -38,7 +29,6 @@ function duration(seconds: number): string {
 }
 const uptime = (startedAt: number): string => duration(now() - startedAt);
 const left = (until: number): string => `${duration(until - now())} left`;
-// "15:02", or "Sat 01:30" when it isn't today (12 h can cross midnight).
 function endsAt(t: number): string {
   const d = new Date(t * 1000);
   const hm = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -107,8 +97,8 @@ const DRAWER = `
 class ConnectPill extends HTMLElement {
   private readonly drawer = document.createElement("aside");
   private tick: ReturnType<typeof setInterval> | undefined;
-  private autoTop = 0; // where following last scrolled the log to
-  private announced: Phase["kind"] | undefined; // a lease update re-renders "connected"; say it once
+  private lastFollowScrollTop = 0;
+  private announced: Phase["kind"] | undefined;
   private limits: Limits | string | undefined;
 
   connectedCallback(): void {
@@ -149,7 +139,7 @@ class ConnectPill extends HTMLElement {
     const minutes = must(this, "input[name=length-min]", HTMLInputElement);
     minutes.min = String(Math.ceil(minS / 60));
     minutes.max = String(Math.floor(maxS / 60));
-    must(this, "select[name=extend-by]", HTMLSelectElement).innerHTML = EXTENDS.map((s) => option(String(s), s === 0 ? `to ${this.ceilingText()}` : `+${span(s)}`)).join("");
+    must(this, "select[name=extend-by]", HTMLSelectElement).innerHTML = EXTENDS.map((s) => option(String(s), s === TO_CEILING ? `to ${this.ceilingText()}` : `+${span(s)}`)).join("");
     must(this, ".connect-go", HTMLButtonElement).disabled = false;
     this.render(currentPhase());
   }
@@ -176,14 +166,14 @@ class ConnectPill extends HTMLElement {
 
   private wirePanel(): void {
     const form = must(this, ".connect-form", HTMLFormElement);
-    this.pill.onclick = () => { this.open(this.panel.hidden !== false); }; // hidden is boolean | "until-found"
+    this.pill.onclick = () => { this.open(this.panel.hidden !== false); };
     form.onsubmit = (e) => {
       e.preventDefault();
       const id = must(form, "input[name=token-id]", HTMLInputElement).value.trim();
       const secret = must(form, "input[name=token-secret]", HTMLInputElement).value.trim();
       const token = savedToken() ?? { id, secret };
       const choice = must(form, "select[name=gpu]", HTMLSelectElement).value;
-      const leaseS = this.lengthS(); // the form's min/max/required blocked submit unless this is in range
+      const leaseS = this.lengthS();
       if (leaseS === undefined) throw new Error("connect form submitted with an invalid session length");
       this.open(false);
       this.pill.focus();
@@ -194,7 +184,7 @@ class ConnectPill extends HTMLElement {
     const minutes = must(custom, "input", HTMLInputElement);
     length.onchange = () => {
       custom.hidden = length.value !== "custom";
-      minutes.disabled = custom.hidden; // a hidden required input would block submit
+      minutes.disabled = custom.hidden;
       if (!custom.hidden) { if (minutes.value === "" && typeof this.limits === "object") minutes.value = String(Math.round(this.limits.lease.defaultS / 60)); minutes.focus(); }
       this.renderEnds();
     };
@@ -213,7 +203,6 @@ class ConnectPill extends HTMLElement {
     document.addEventListener("pointerdown", (e) => { if (!this.panel.hidden && !(e.target instanceof Node && this.contains(e.target))) this.open(false); });
   }
 
-  // The session length the form asks for, in seconds; undefined if the custom minutes are out of range.
   private lengthS(): number | undefined {
     if (typeof this.limits !== "object") return undefined;
     const choice = must(this, "select[name=length]", HTMLSelectElement).value;
@@ -248,10 +237,9 @@ class ConnectPill extends HTMLElement {
     };
     go.onclick = () => {
       const p = currentPhase();
-      if (p.kind !== "connected") return; // the button is hidden then
+      if (p.kind !== "connected") return;
       const add = Number(by.value);
-      // Ask for what the reader picked, uncapped: the gateway clamps to the ceiling and we show where it landed.
-      const until = add === 0 ? p.ceiling : Math.max(p.leaseUntil, now()) + add;
+      const until = add === TO_CEILING ? p.ceiling : Math.max(p.leaseUntil, now()) + add;
       go.disabled = true;
       result.textContent = "Now ends …";
       extend(until).then(() => {
@@ -271,13 +259,13 @@ class ConnectPill extends HTMLElement {
     const list = must(this.drawer, ".drawer-log", HTMLOListElement);
     const follow = must(this.drawer, ".drawer-follow", HTMLInputElement);
     must(this.drawer, ".drawer-close", HTMLButtonElement).onclick = () => { this.showDrawer(false); this.pill.focus(); };
-    // Following only scrolls down, so a scroll up from where it left the list is the reader's: stop following.
-    // Back at the bottom: follow again.
     list.onscroll = () => {
-      if (list.scrollTop < this.autoTop - 8) follow.checked = false;
-      else if (list.scrollHeight - list.scrollTop - list.clientHeight < 8) follow.checked = true;
+      const readerScrolledUp = list.scrollTop < this.lastFollowScrollTop - SCROLL_SLACK_PX;
+      const backAtBottom = list.scrollHeight - list.scrollTop - list.clientHeight < SCROLL_SLACK_PX;
+      if (readerScrolledUp) follow.checked = false;
+      else if (backAtBottom) follow.checked = true;
     };
-    follow.onchange = () => { if (follow.checked) { list.scrollTop = list.scrollHeight; this.autoTop = list.scrollTop; } };
+    follow.onchange = () => { if (follow.checked) { list.scrollTop = list.scrollHeight; this.lastFollowScrollTop = list.scrollTop; } };
     const copy = must(this.drawer, ".drawer-copy", HTMLButtonElement);
     copy.onclick = () => {
       const { lines, dropped } = logLines();
@@ -293,7 +281,7 @@ class ConnectPill extends HTMLElement {
     if (!on) return;
     this.render(currentPhase());
     const list = must(this.drawer, ".drawer-log", HTMLOListElement);
-    if (must(this.drawer, ".drawer-follow", HTMLInputElement).checked) { list.scrollTop = list.scrollHeight; this.autoTop = list.scrollTop; }
+    if (must(this.drawer, ".drawer-follow", HTMLInputElement).checked) { list.scrollTop = list.scrollHeight; this.lastFollowScrollTop = list.scrollTop; }
     must(this.drawer, "h2", HTMLHeadingElement).focus();
   }
 
@@ -313,7 +301,7 @@ class ConnectPill extends HTMLElement {
     const { dropped } = logLines();
     while (list.children.length > logLines().lines.length) list.firstElementChild?.remove();
     list.dataset["dropped"] = String(dropped);
-    if (must(this.drawer, ".drawer-follow", HTMLInputElement).checked) { list.scrollTop = list.scrollHeight; this.autoTop = list.scrollTop; }
+    if (must(this.drawer, ".drawer-follow", HTMLInputElement).checked) { list.scrollTop = list.scrollHeight; this.lastFollowScrollTop = list.scrollTop; }
   }
 
   private announce(p: Phase): void {
@@ -351,7 +339,7 @@ class ConnectPill extends HTMLElement {
     must(form, ".connect-token-saved", HTMLDivElement).hidden = token === undefined;
     const fresh = must(form, ".connect-token-new", HTMLFieldSetElement);
     fresh.hidden = token !== undefined;
-    fresh.disabled = token !== undefined; // a hidden required input would block submit
+    fresh.disabled = token !== undefined;
     must(form, ".connect-token-mask", HTMLElement).textContent = token === undefined ? "" : mask(token.id);
     must(menu, ".connect-summary", HTMLParagraphElement).textContent = p.kind === "connected"
       ? `${gpuName(p.gpu)} on Modal · up ${uptime(p.startedAt)}` : p.kind === "connecting" ? `Connecting: ${p.step}` : "";
@@ -360,7 +348,6 @@ class ConnectPill extends HTMLElement {
     this.renderLease(menu, p);
   }
 
-  // The menu's lease line and Extend…: hidden until connected; Extend… disabled at the ceiling.
   private renderLease(menu: HTMLDivElement, p: Phase): void {
     const line = must(menu, ".connect-lease", HTMLParagraphElement);
     const opener = must(menu, ".connect-extend-open", HTMLButtonElement);

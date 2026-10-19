@@ -1,21 +1,3 @@
-"""Local stand-in for a reader's session (later: a Modal sandbox behind a Cloudflare Durable Object).
-
-    uv run session.py rl/01-flappy.md [--port 8787] [--timeout 30]
-
-    POST /run {cell, source}   streams NDJSON (application/x-ndjson), one object per line:
-                                 {"out": "..."}                                  repeated, as output arrives
-                                 {"result": {"passed": bool, "message": "..."}}  exactly once, last
-                               message is one short line: "passed", the FAIL reason, "locked: X has not passed yet"
-    GET  /state                {"passed": {cell: latest passing source}, "wasm": {cell: "/wasm/<hash>/<cell>.js"}}
-    GET  /wasm/<hash>/<file>   play widget built from a reader's passing C cell
-
-Running cell X: check.run_cell with the given blocks, the reader's latest passing source for every
-cell before X, the posted source as X, then X's check (and budget). run_cell runs each in a fresh
-subprocess, so a crash or a hang in reader code kills only that subprocess, and returns a check.Result
-whose message becomes the result line. Reader code can only print into "out", so it can't fake a pass.
-Only a pass updates .session/<chapter>/state.json.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -48,10 +30,15 @@ def build_wasm(env: Block, store: Path) -> tuple[str, float]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="Local stand-in for a reader's session: runs a chapter's cells for its page (check.run_cell).",
+        epilog="POST /run {cell, source}  NDJSON: {\"out\"} lines as output arrives, then exactly one {\"result\": {passed, message}}\n"
+               "GET  /state                {\"passed\": {cell: source}, \"wasm\": {cell: url}}\n"
+               "GET  /wasm/<hash>/<file>   the play widget built from a reader's passing C cell",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("chapter", type=Path)
     ap.add_argument("--port", type=int, default=8787)
-    ap.add_argument("--timeout", type=float, default=30)
+    ap.add_argument("--timeout", type=float, default=30, help="seconds a cell may run before it is killed")
     args = ap.parse_args()
     store = HERE / ".session" / args.chapter.with_suffix("").name
     state_path = store / "state.json"

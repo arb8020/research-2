@@ -1,17 +1,22 @@
-"""Accessibility lint for a built chapter page: axe-core in headless Chromium, every theme x light/dark.
-
-    uv run --with playwright a11y.py [url]      # default http://localhost:8010/01-flappy/
-
-Needs the page served (python3 -m http.server 8010 -d dist). Exits 1 if any violation is found.
-A page with [[links]] is audited twice per theme x scheme: as loaded, and with the first link's preview card open.
-"""
-
+import argparse
 import sys
+from urllib.error import URLError
+from urllib.request import urlopen
 
 from playwright.sync_api import Browser, sync_playwright
 
 AXE = "https://cdn.jsdelivr.net/npm/axe-core@4.10.2/axe.min.js"
-URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8010/01-flappy/"
+SERVE = "python3 -m http.server 8010 -d dist"
+_ap = argparse.ArgumentParser(
+    description="Accessibility lint for a built chapter page: axe-core in headless Chromium, every theme x light/dark, "
+                "and again with the first [[link]]'s preview card open. Exits 1 on any violation.",
+    epilog=f"needs the page served: {SERVE}")
+_ap.add_argument("url", nargs="?", default="http://localhost:8010/01-flappy/")
+URL = _ap.parse_args().url
+try:
+    urlopen(URL)
+except URLError as e:
+    sys.exit(f"nothing at {URL} ({e.reason}); serve dist/ first: {SERVE}")
 
 
 def audit(browser: Browser, theme: str, scheme: str, card: bool) -> list[dict]:

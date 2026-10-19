@@ -1,18 +1,13 @@
-// <nn-fit>'s grokking dataset, the page side: the config grok_train.py trains from, the code sent to the
-// kernel, parsing the lines it prints, and the accuracy-vs-step plot. Remote only: the model (a 1-layer
-// transformer on a + b mod p) needs the connected session. The wire format is documented once, at the top of
-// grok_train.py.
-import source from "./grok_train.py"; // the program's text, bundled at build time (esbuild text loader)
+import programText from "./grok_train.py";
 import type { StopReason } from "./remote";
 import { int, num, numOrNaN, reason, record, str } from "./remote";
 import type { JsonObject } from "../../json";
 
-export const GROK_P = 113; // Nanda et al. 2023's modulus
-export const TRAIN_FRACTIONS: readonly number[] = [0.3, 0.4, 0.5]; // 0.3 is Nanda's; more pairs grok in fewer steps
-export const GROK_TICK_SECONDS = 0.1; // at most this long between ticks (more come at log-spaced steps early on)
-export const MAX_GROK_POINTS = 20_000; // plotted ticks kept; past it every other one is dropped
+export const GROK_P = 113;
+export const TRAIN_FRACTIONS: readonly number[] = [0.3, 0.4, 0.5];
+export const GROK_TICK_SECONDS = 0.1;
+export const MAX_GROK_POINTS = 20_000;
 
-// The JSON grok_train.py parses (field names are its).
 export interface GrokConfig {
   readonly run: string;
   readonly p: number;
@@ -26,13 +21,11 @@ export interface GrokConfig {
   readonly tick_seconds: number;
 }
 
-// The Python the kernel runs: the program in its own namespace, then run(config, runs). `runs` is a kernel
-// global the program keeps its weights in between Train presses (a run continues where it stopped).
 export function grokCode(config: GrokConfig): string {
   return [
     `_nn_fit_grok_runs = globals().setdefault("_nn_fit_grok_runs", {})`,
     `_nn_fit = {"__name__": "nn_fit_grok"}`,
-    `exec(compile(${JSON.stringify(source)}, "grok_train.py", "exec"), _nn_fit)`,
+    `exec(compile(${JSON.stringify(programText)}, "grok_train.py", "exec"), _nn_fit)`,
     `try:`,
     `    _nn_fit["run"](${JSON.stringify(JSON.stringify(config))}, _nn_fit_grok_runs)`,
     `finally:`,
@@ -40,13 +33,12 @@ export function grokCode(config: GrokConfig): string {
   ].join("\n");
 }
 
-// One point of the curve: the metrics after `step` steps.
 export interface GrokPoint {
   readonly step: number;
-  readonly seconds: number; // training time when it was measured
-  readonly loss: number; // training pairs (NaN if it diverged)
+  readonly seconds: number;
+  readonly loss: number;
   readonly accuracy: number;
-  readonly testLoss: number; // the other pairs
+  readonly testLoss: number;
   readonly testAccuracy: number;
 }
 
@@ -64,7 +56,6 @@ function fraction(obj: JsonObject, key: string, where: string): number {
   return v;
 }
 
-// Parse one line, or throw with what was wrong (the line crossed a network).
 export function parseGrokLine(text: string): GrokLine {
   const where = `grok line ${text.length > 80 ? `${text.slice(0, 80)}…` : text}`;
   let raw: unknown;
@@ -92,8 +83,6 @@ export function parseGrokLine(text: string): GrokLine {
   }
 }
 
-// Append a tick's point, keeping at most MAX_GROK_POINTS: when full, every other point goes (the first and the
-// newest stay), so the curve keeps its shape at half the resolution.
 export function addPoint(points: GrokPoint[], point: GrokPoint): GrokPoint[] {
   const last = points.at(-1);
   if (last !== undefined && point.step < last.step) throw new Error(`grok tick at step ${String(point.step)} after step ${String(last.step)}`);
@@ -102,12 +91,9 @@ export function addPoint(points: GrokPoint[], point: GrokPoint): GrokPoint[] {
   return kept;
 }
 
-export const GROKKED = 0.95; // test accuracy that counts as generalised
+export const GROKKED = 0.95;
 
-// The first point past GROKKED test accuracy, or null.
 export const grokked = (points: readonly GrokPoint[]): GrokPoint | null => points.find((p) => p.testAccuracy > GROKKED) ?? null;
-
-// --- the plot: train and test accuracy against step, log x ---
 
 export interface GrokColors {
   readonly fg: string;
@@ -117,15 +103,13 @@ export interface GrokColors {
   readonly test: string;
 }
 
-const MIN_DECADES = 3; // the x axis starts at 1..1000 steps and grows a decade at a time
-const PAD = { left: 40, right: 12, top: 12, bottom: 24 }; // CSS px around the plot area, for the axis labels
+const MIN_DECADES = 3;
+const PAD = { left: 40, right: 12, top: 12, bottom: 24 };
 
 const stepLabel = (decade: number): string => (decade >= 6 ? `${String(10 ** (decade - 6))}M` : decade >= 3 ? `${String(10 ** (decade - 3))}k` : String(10 ** decade));
 
-// Decades on the x axis: enough to hold `maxStep`, at least MIN_DECADES.
 export const grokDecades = (maxStep: number): number => Math.max(MIN_DECADES, Math.ceil(Math.log10(Math.max(1, maxStep))));
 
-// Points at step 0 have no place on a log axis: the curve starts at step 1.
 export function paintGrok(ctx: CanvasRenderingContext2D, w: number, h: number, points: readonly GrokPoint[], c: GrokColors): void {
   const decades = grokDecades(points.at(-1)?.step ?? 1);
   const plotW = w - PAD.left - PAD.right;
@@ -152,12 +136,12 @@ export function paintGrok(ctx: CanvasRenderingContext2D, w: number, h: number, p
   }
   ctx.stroke();
 
-  const plotted = points.filter((p) => p.step >= 1);
+  const onLogAxis = points.filter((p) => p.step >= 1);
   for (const [key, colour] of [["accuracy", c.train], ["testAccuracy", c.test]] as const) {
     ctx.strokeStyle = colour;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    plotted.forEach((p, i) => {
+    onLogAxis.forEach((p, i) => {
       if (i === 0) ctx.moveTo(px(p.step), py(p[key])); else ctx.lineTo(px(p.step), py(p[key]));
     });
     ctx.stroke();

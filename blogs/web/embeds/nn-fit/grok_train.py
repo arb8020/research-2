@@ -1,43 +1,3 @@
-"""<nn-fit>'s grokking dataset: a + b mod p, trained on the connected kernel (remote only; torch, cuda if there).
-
-The setup is Nanda et al. 2023, "Progress measures for grokking via mechanistic interpretability" (arXiv
-2301.05217; code: github.com/mechanistic-interpretability-grokking/progress-measures-paper): p = 113, 30% of the p^2 pairs to train on, a 1-layer
-transformer (d_model 128, 4 heads of 32, ReLU MLP 512, no LayerNorm) reading "a b =" and predicting the sum at
-"=", full-batch AdamW (lr 1e-3, weight decay 1, betas 0.9, 0.98, 10 warmup steps), cross-entropy in float64.
-The model fits the training pairs within a few hundred steps and generalises (groks) thousands of steps later
-(~5k steps here; a T4 does ~240 steps/s, a laptop CPU ~40). Power et al. 2022 ("Grokking", arXiv 2201.02177)
-found the effect with minibatches; this follows Nanda et al.'s full-batch setup instead (no batch sampling).
-Only the "=" position's output is computed: with one layer nothing at the other positions reaches it, so this is
-the same function, ~3x cheaper.
-
-The page bundles this file as text (esbuild's text loader); grok.ts: grokCode sends it with the config inlined.
-Unlike remote_train.py the weights stay on the kernel between Train presses (226k parameters plus AdamW's state
-is too much to send in a JSON line): `runs`, a dict the kernel keeps, maps the page's run id to its weights.
-Standalone, one run from step 0:
-
-    uv run --with torch python web/embeds/nn-fit/grok_train.py config.json      # or the config on stdin
-
-Config (JSON, built by grok.ts: grokConfig):
-
-    run                    the page's id for this training run (a new id = fresh weights)
-    p, train_fraction      the modulus (a prime) and the share of the p^2 pairs trained on
-    split_seed, init_seed  which pairs are training pairs; the initial weights
-    step, seconds          where the run is: 0, 0 starts it; otherwise it must be where the kernel's copy is
-    max_steps, max_seconds when it stops: absolute, like the widget's budgets
-    tick_seconds           at most this long between ticks
-
-Output: one JSON object per line on stdout, flushed as it goes:
-
-    {"kind": "start", "device", "device_name", "torch", "params": 226k, "train": 3831, "test": 8938, "model"}
-    {"kind": "tick", "step", "seconds", "loss", "accuracy", "test_loss", "test_accuracy"}
-    {"kind": "end", "reason": "steps" | "time" | "interrupted", "step", "seconds"}
-
-A tick's metrics are for the weights after `step` steps, on the training pairs and on the rest (test). Ticks
-come at log-spaced steps (each at least LOG_RATIO times the last) and at least every tick_seconds, so a log-x
-plot gets points all along. Non-finite numbers print as null. The last tick comes right before "end". An
-interrupt (SIGINT: a kernel interrupt, Ctrl-C) stops between steps; the run can then be continued.
-"""
-
 import json
 import math
 import signal
@@ -55,7 +15,6 @@ import torch.nn.functional as F
 
 StopReason = Literal["steps", "time", "interrupted"]
 
-# Nanda et al. 2023 (module docstring).
 D_MODEL = 128
 HEADS = 4
 D_MLP = 512
@@ -65,9 +24,9 @@ BETAS = (0.9, 0.98)
 WARMUP_STEPS = 10
 MODEL = f"1-layer transformer (d {D_MODEL}, {HEADS} heads, MLP {D_MLP}) · AdamW lr {LR:g}, weight decay {WEIGHT_DECAY:g}"
 
-LOG_RATIO = 1.03  # ticks at least this far apart in log(step): ~330 points up to 20k steps
-MAX_P = 257  # the eval batch is p^2 pairs
-MAX_RUNS = 4  # runs kept on the kernel; the oldest goes first
+LOG_RATIO = 1.03
+MAX_P = 257
+MAX_RUNS = 4
 MAX_STEPS = 10**9
 MAX_SECONDS = 3600.0
 MIN_TICK_SECONDS = 0.05
@@ -85,9 +44,6 @@ class Config:
     max_steps: int
     max_seconds: float
     tick_seconds: float
-
-
-# --- parsing (the boundary: the config crossed a network) ---
 
 
 def field(raw: dict, key: str, kind: type | tuple[type, ...]) -> object:
@@ -135,14 +91,11 @@ def parse_config(raw: object) -> Config:
     )  # fmt: skip
 
 
-# --- data and model ---
-
-
 @dataclass(frozen=True)
 class Data:
-    tokens: torch.Tensor  # (p^2, 3): a, b, "=" (token p), every pair
-    labels: torch.Tensor  # (p^2,): (a + b) mod p
-    train: torch.Tensor  # indices into the pairs
+    tokens: torch.Tensor
+    labels: torch.Tensor
+    train: torch.Tensor
     test: torch.Tensor
 
 
@@ -152,12 +105,12 @@ def make_data(p: int, train_fraction: float, seed: int, device: torch.device) ->
     order = torch.randperm(p * p, generator=torch.Generator().manual_seed(seed))
     cut = round(train_fraction * p * p)
     assert 0 < cut < p * p, "train_fraction leaves an empty split"
-    tokens = torch.stack([a, b, torch.full_like(a, p)], dim=1)
+    equals_token = p
+    tokens = torch.stack([a, b, torch.full_like(a, equals_token)], dim=1)
     return Data(tokens.to(device), ((a + b) % p).to(device), order[:cut].to(device), order[cut:].to(device))
 
 
 def init_params(p: int, seed: int, device: torch.device) -> dict[str, torch.Tensor]:
-    """N(0, 1) / sqrt(fan-in), biases zero: like Nanda's code, which scales most weights by 1/sqrt(d_model)."""
     g = torch.Generator().manual_seed(seed)
 
     def randn(*shape: int, fan_in: int) -> torch.Tensor:
@@ -174,25 +127,22 @@ def init_params(p: int, seed: int, device: torch.device) -> dict[str, torch.Tens
 
 
 def logits(w: dict[str, torch.Tensor], tokens: torch.Tensor) -> torch.Tensor:
-    """(n, 3) tokens -> (n, p) logits at "=": attention from "=" over a, b, "=", then the MLP, residual stream."""
-    x = F.embedding(tokens, w["embed"]) + w["pos"]  # (n, 3, d); embedding's backward is ~2x faster than indexing's
+    x = F.embedding(tokens, w["embed"]) + w["pos"]
     n = x.shape[0]
     head = D_MODEL // HEADS
-    q, k, v = (x @ w["qkv"]).view(n, 3, 3, HEADS, head).unbind(2)  # each (n, 3, heads, head)
-    attn = torch.softmax((q[:, -1:] * k).sum(-1) / math.sqrt(head), dim=1)  # "=" attends to all 3: (n, 3, heads)
+    q, k, v = (x @ w["qkv"]).view(n, 3, 3, HEADS, head).unbind(2)
+    attn = torch.softmax((q[:, -1:] * k).sum(-1) / math.sqrt(head), dim=1)
     r = x[:, -1] + (attn[..., None] * v).sum(1).reshape(n, D_MODEL) @ w["out"]
     r = r + torch.relu(r @ w["mlp_in"] + w["mlp_in_b"]) @ w["mlp_out"] + w["mlp_out_b"]
     return r @ w["unembed"]
 
 
 def loss_of(out: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-    return F.cross_entropy(out.to(torch.float64), labels)  # float64, as Nanda: float32 stalls near zero loss
+    return F.cross_entropy(out.to(torch.float64), labels)
 
 
 @dataclass
 class Run:
-    """One training run on the kernel: what persists between Train presses."""
-
     data: Data
     weights: dict[str, torch.Tensor]
     opt: torch.optim.Optimizer
@@ -208,8 +158,6 @@ def new_run(config: Config, device: torch.device) -> Run:
 
 
 def find_run(runs: dict[str, Run], config: Config, device: torch.device) -> Run:
-    """The run to continue, or a new one at step 0. A run the kernel doesn't have can't continue: it lived on
-    another session, or was dropped (MAX_RUNS)."""
     run = runs.get(config.run)
     if run is None and config.step > 0:
         raise ValueError(f"run {config.run} is not on this kernel (another session, or dropped): reset the weights to start over")
@@ -221,9 +169,6 @@ def find_run(runs: dict[str, Run], config: Config, device: torch.device) -> Run:
         del runs[next(iter(runs))]
     runs[config.run] = new_run(config, device)
     return runs[config.run]
-
-
-# --- output ---
 
 
 def finite(v: float) -> float | None:
@@ -243,13 +188,8 @@ def tick(run: Run, step: int, seconds: float) -> dict:
         }  # fmt: skip
 
 
-# --- the loop ---
-
-
 @contextmanager
 def interrupt_flag() -> Iterator[Callable[[], bool]]:
-    """SIGINT sets a flag instead of raising, so training stops between steps rather than inside an AdamW
-    update (as remote_train.py). Off the main thread Python can't catch signals: no flag."""
     if threading.current_thread() is not threading.main_thread():
         yield lambda: False
         return
@@ -266,7 +206,6 @@ def next_tick_step(step: int) -> int:
 
 
 def train(config: Config, run: Run, emit: Callable[[dict], None], clock: Callable[[], float]) -> StopReason:
-    """Full-batch AdamW from where the run is until a budget runs out or an interrupt; emits ticks, then "end"."""
     assert run.step == config.step, "find_run hands over the run the page is at"
     began = clock()
     last_tick = began
@@ -314,7 +253,6 @@ def print_line(obj: dict) -> None:
 
 
 def run(config_json: str, runs: dict[str, Run]) -> StopReason:
-    """The kernel entry point: parse, find or start the run, say where it runs, train, printing JSON lines."""
     config = parse_config(json.loads(config_json))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     current = find_run(runs, config, device)

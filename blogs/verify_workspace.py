@@ -101,30 +101,27 @@ CHROME = sorted(glob.glob(os.path.expanduser(
     "~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")))[-1]  # fmt: skip
 TOKEN = ("ak-verify-workspace-0001", "as-verify-workspace-secret")
 SOLUTION = {path: f.data.decode() for path, f in ref.materialize(CH, "solution").items()}
-BROKEN_STATEMENT = "    r->tail += 1;\n"  # in ring_push; the broken ring.cpp drops its ';'
-TOL_FAIL = "allclose: |out - fp64 truth| up to "  # an op row failing its tolerance (assay ch01 suite.py)
+BROKEN_STATEMENT = "    r->tail += 1;\n"
+TOL_FAIL = "allclose: |out - fp64 truth| up to "
 HANG = "void sched_step(const Request* reqs, Ring* waiting, u32 budget, Batch* out) {\n"
 SCRATCH = "print('scratch ran while the check was running:', 6 * 7)"
-CHECK_TIMEOUT_MS = 180_000  # a cold ch01 model check computes HF's fp64 truth first
+CHECK_TIMEOUT_MS = 180_000
 SAVE_WAIT_S = 15
+JUPYTER_FIRST_START_POLLS = 240
 CELLS = 3
-
-
-# ---- the sandbox seam: a local Jupyter root, or a Modal sandbox (ws_modal.ModalBox) ----
 
 
 class Box(Protocol):
     name: str
-    persist: str  # $BLOGS_WS_PERSIST as the sandbox sees it
+    persist: str
     token: tuple[str, str]
 
     def gateway_args(self) -> list[str]: ...
     def sessions(self) -> list[str]: ...
-    def sh(self, cmd: str) -> str: ...  # bash -c in the Jupyter root (the kernel's cwd); raises on a non-zero exit
+    def sh(self, cmd: str) -> str: ...
 
 
 class LocalBox:
-    """The local relay starts Jupyter itself, a root per session under machines/; the box is just the directories."""
 
     token = TOKEN
 
@@ -162,14 +159,10 @@ class Run:
         self.log.append(text)
 
     def shot(self, name: str, cell: str | None = None) -> None:
-        """The viewport, or (cell=) that ws-cell whole: its editor, verdict table and log."""
         if cell is None:
             self.page.screenshot(path=self.out / f"{name}.png")
         else:
             self.page.locator(f"ws-cell[name={cell}]").screenshot(path=self.out / f"{name}.png")
-
-
-# ---- small helpers ----
 
 
 def git(box: Box, *args: str) -> str:
@@ -188,7 +181,6 @@ def wait_saved(box: Box, file: str, text: str) -> None:
 
 
 def set_doc(page: Page, cell: str, text: str) -> None:
-    """Replace a ws-cell's editor text, as typing would (the cell saves it, debounced)."""
     page.evaluate("([n, s]) => { const v = document.querySelector(`ws-cell[name=${n}]`).view; v.dispatch({changes: {from: 0, to: v.state.doc.length, insert: s}}); }", [cell, text])
 
 
@@ -200,7 +192,6 @@ DONE = "(n) => { const c = document.querySelector(`ws-cell[name=${n}]`); return 
 
 
 def run_cell(page: Page, cell: str) -> tuple[str, str, float]:
-    """Click Run; wait for the verdict. Returns (status text, output text, seconds from click to verdict)."""
     el = page.locator(f"ws-cell[name={cell}]")
     el.scroll_into_view_if_needed()
     t0 = time.perf_counter()
@@ -211,7 +202,6 @@ def run_cell(page: Page, cell: str) -> tuple[str, str, float]:
 
 
 def bundle_note(output: str) -> tuple[float, int]:
-    """(KiB, ms) from workspace.py's PASS line: 'bundle 8.8 KiB saved in 36 ms'."""
     m = re.search(r"bundle ([\d.]+) KiB saved in (\d+) ms", output)
     assert m, f"no bundle line in the output:\n{output}"
     return float(m[1]), int(m[2])
@@ -226,9 +216,6 @@ def connect(page: Page, token: tuple[str, str], cells: int = CELLS) -> None:
     page.locator(".connect-go").click()
     page.wait_for_selector("connect-pill[data-phase=connected]", timeout=120_000)
     page.wait_for_function(f"document.querySelectorAll('ws-cell[data-loaded]').length === {cells}", timeout=120_000)
-
-
-# ---- launch / cleanup ----
 
 
 class Quiet(SimpleHTTPRequestHandler):
@@ -275,9 +262,6 @@ def alive(pids: set[int]) -> set[int]:
 
 
 class Gateway:
-    """box's relay in front of one box, started by this script and only stopped by it. Remembers every process
-    it spawned (locally: supervisors, Jupyter, kernels, check jobs) so stop() can prove they all ended."""
-
     def __init__(self, port: int, box: Box, out: Path) -> None:
         self.box = box
         self.url = f"http://127.0.0.1:{port}"
@@ -303,9 +287,6 @@ class Gateway:
         return f"cleanup: ended {ended}; the relay ({self.box.name}) stopped; all {len(self.seen)} processes it started are gone"
 
 
-# ---- doctor ----
-
-
 def doctor_page(name: str) -> str:
     dist = HERE / "dist" / name
     for f in ("index.html", "page.js", "_blogs/workspace.py", "_blogs/assay/cli.py", "_blogs/MANIFEST.sha256", "ref.bundle"):
@@ -328,9 +309,6 @@ def doctor_workspace(run: Run, box: Box) -> None:
     run.say(f"doctor: workspace {run.page.evaluate('document.documentElement.dataset.workspaceBoot')}; tag ref/ch00/start; every cell runnable (no gating)")
 
 
-# ---- drive ----
-
-
 def step_compile_error(run: Run, box: Box) -> None:
     page = run.page
     broken = SOLUTION["ring.cpp"].replace(BROKEN_STATEMENT, BROKEN_STATEMENT.replace(";", ""))
@@ -346,8 +324,8 @@ def step_compile_error(run: Run, box: Box) -> None:
     assert ring_links, f"no ring.cpp link in the output; links {locs}\n{out}"
     target = ring_links[0]
     link_line = int(target.split(":")[1])
-    # clang points past the statement (its own line); gcc points at the next token (the next line)
-    assert link_line in (line, line + 1), f"the error points at line {link_line}; the broken statement is line {line}"
+    assert link_line in (line, line + 1), (f"the error points at line {link_line}; the broken statement is line {line} "
+                                           "(clang points past the statement, its own line; gcc at the next token, the next line)")
     page.locator(f"ws-cell[name=ring] .cell-out a.out-link[data-loc='{target}']").first.click()
     cursor = page.evaluate("() => { const v = document.querySelector('ws-cell[name=ring]').view; const h = v.state.selection.main.head; return {line: v.state.doc.lineAt(h).number, focused: v.hasFocus}; }")
     assert cursor == {"line": link_line, "focused": True}, cursor
@@ -377,7 +355,7 @@ def step_reload_from_workspace(run: Run, box: Box) -> None:
     set_doc(page, "loop", draft)
     wait_saved(box, "loop.cpp", draft)
     saves = []
-    for i in range(5):  # a few more edits for a save-latency sample
+    for i in range(5):
         text = draft + f"// edit {i}\n"
         set_doc(page, "loop", text)
         wait_saved(box, "loop.cpp", text)
@@ -491,14 +469,12 @@ def drive(run: Run, gateway: Gateway) -> Gateway:
 def box_factory(modal: bool, out: Path, stack: ExitStack) -> Callable[[str], Box]:
     if not modal:
         return lambda name: LocalBox(name, out)
-    import ws_modal  # only with --modal: needs the modal package and a Modal token
+    import ws_modal
 
     volume = f"blogs-verify-workspace-{os.getpid()}"
     stack.callback(ws_modal.delete_volume, volume)
     return lambda name: ws_modal.ModalBox(name, volume)
 
-
-# ---- ch01: one gpt2.py, region cells over one shared doc ----
 
 CH1 = "ch01"
 PAGE1 = "ch01-forward"
@@ -514,14 +490,12 @@ def region_text(text: str, name: str) -> str:
 
 
 def replace_in_view(page: Page, cell: str, old: str, new: str) -> None:
-    """Replace `old` with `new` in one cell's view of the shared doc, as typing there would."""
     page.evaluate("""([n, a, b]) => { const v = document.querySelector(`ws-cell[name=${n}]`).view; const i = v.state.doc.toString().indexOf(a);
                      if (i < 0) throw new Error(`not in ${n}'s view: ${a.slice(0, 60)}`);
                      v.dispatch({changes: {from: i, to: i + a.length, insert: b}, userEvent: "input.type"}); }""", [cell, old, new])  # fmt: skip
 
 
 def put_region(page: Page, cell: str, name: str, text: str) -> None:
-    """Set region `name` (edited through `cell`'s view) to its text in `text`."""
     replace_in_view(page, cell, region_text(doc(page, cell), name), region_text(text, name))
 
 
@@ -530,9 +504,6 @@ def line_of(text: str, needle: str) -> int:
 
 
 def scrolled_to_region(page: Page, cell: str) -> None:
-    """The view was fitted to its region: the region's start marker is the first visible line (or just below it), or,
-    when the file ends too soon for that (a cell is at least MIN_LINES tall), the view is scrolled to the end and the
-    marker is on screen."""
     page.wait_for_function("""(n) => { const v = document.querySelector(`ws-cell[name=${n}]`).view; const d = v.state.doc;
         let start = 0; for (let i = 1; i <= d.lines; i++) if (d.line(i).text.trim() === `# region: ${n}`) { start = i; break; }
         const s = v.scrollDOM, top = d.lineAt(v.lineBlockAtHeight(s.scrollTop + 1).from).number;
@@ -551,8 +522,6 @@ def check_log(page: Page, cell: str) -> str:
 
 
 def record(run: Run, label: str, cell: str, took: float | None) -> None:
-    """One check's timings: click -> verdict (None: queued before Connect), the check worker's own time, and whether
-    it had to start the warm process (imports torch + transformers) or forked from a running one."""
     log = check_log(run.page, cell)
     done = re.findall(r"done in ([\d.]+)s", log)
     run.timings.setdefault("checks", []).append({
@@ -562,7 +531,6 @@ def record(run: Run, label: str, cell: str, took: float | None) -> None:
 
 
 def rows(page: Page, cell: str) -> list[dict[str, str]]:
-    """The verdict table under a cell: outcome, op · case, dtype, the key metric, notes (incl. the where link)."""
     return page.evaluate("""(n) => [...document.querySelectorAll(`ws-cell[name=${n}] tr.verdict`)].map((tr) => {
         const td = tr.querySelectorAll('td'); return {outcome: tr.dataset.outcome, case: td[0].textContent,
         dtype: td[1].textContent, metric: td[4].textContent, notes: td[5].textContent}; })""", cell)  # fmt: skip
@@ -574,8 +542,6 @@ def metric_value(row: dict[str, str], label: str) -> float:
 
 
 def stop_warm(box: Box) -> str:
-    """Stop the assay warm process (a fork server the first check starts; idle ones exit after 30 min). -B: no
-    __pycache__ in _blogs/assay (workspace.py would refuse every check: files the manifest doesn't list)."""
     return box.sh(f"PYTHONPATH=_blogs {shlex.quote(ref.assay_python())} -B -c 'from assay.core import stop_warm; print(stop_warm())'").strip()
 
 
@@ -585,19 +551,19 @@ def ch01_before_connect(run: Run, gateway: Gateway) -> None:
     put_region(page, "linear", "linear", SOL1)
     want = region_text(SOL1, "linear")
     assert want in doc(page, "gelu"), "the gelu cell's view of gpt2.py doesn't show the edit made in the linear cell"
-    stored = page.evaluate("JSON.parse(localStorage.getItem('blogs.ws.ch01.gpt2.py')).text")
+    stored = page.evaluate("JSON.parse(localStorage.getItem('blogs.ws.v1.ch01.gpt2.py')).text")
     assert want in stored, "the edit isn't in the browser's draft"
     run.shot("1-edited-before-connect")
     page.locator("ws-cell[name=linear] .run").click()
     expect(page.locator("ws-cell[name=linear] .cell-status")).to_have_text("waiting for sandbox: connect to run")
-    expect(page.locator(".connect-panel")).to_be_visible()  # Run opened the Connect panel
+    expect(page.locator(".connect-panel")).to_be_visible()
     t0 = time.perf_counter()
     page.fill("input[name=token-id]", box.token[0])
     page.fill("input[name=token-secret]", box.token[1])
     page.locator(".connect-go").click()
     page.wait_for_function("document.querySelector('ws-cell[name=linear] .cell-status').textContent.startsWith('waiting for sandbox (')", timeout=30_000)
     waiting = page.locator("ws-cell[name=linear] .cell-status").inner_text()
-    put_region(page, "layer_norm", "layer_norm", SOL1)  # still editable while the sandbox boots
+    put_region(page, "layer_norm", "layer_norm", SOL1)
     run.shot("1-connecting-queued")
     page.wait_for_function(DONE, arg="linear", timeout=CHECK_TIMEOUT_MS)
     page.wait_for_function(f"document.querySelectorAll('ws-cell[data-loaded]').length === {CELLS1}", timeout=120_000)
@@ -620,7 +586,7 @@ def ch01_before_connect(run: Run, gateway: Gateway) -> None:
 
 
 GELU_TANH = "(1 + torch.tanh(inner_TF))"
-GELU_ERF = "(1 + torch.erf(x_TF / math.sqrt(2)))"  # the planted bug: exact GELU, not GPT-2's tanh approximation
+GELU_ERF = "(1 + torch.erf(x_TF / math.sqrt(2)))"
 
 
 def ch01_gelu(run: Run, box: Box) -> None:
@@ -635,7 +601,6 @@ def ch01_gelu(run: Run, box: Box) -> None:
     page.keyboard.press("ControlOrMeta+Shift+z")
     for cell in ("gelu", "attention"):
         assert region_text(doc(page, cell), "gelu") == region_text(SOL1, "gelu"), f"redo didn't restore the gelu edit in {cell}"
-    # a planted bug, typed into the cell: exact (erf) GELU
     replace_in_view(page, "gelu", GELU_TANH, GELU_ERF)
     before = head(box)
     status, _, took = run_cell(page, "gelu")
@@ -655,7 +620,7 @@ def ch01_gelu(run: Run, box: Box) -> None:
     status, _, took = run_cell(page, "gelu")
     record(run, "gelu, fixed (warm process, cold store)", "gelu", took)
     assert status.startswith("passed"), status
-    got = [r for r in rows(page, "gelu") if r["outcome"] != "skip"]  # fp16 on CPU: a visible skip
+    got = [r for r in rows(page, "gelu") if r["outcome"] != "skip"]
     assert got and all(r["outcome"] == "pass" for r in got), got
     ratios = [metric_value(r, "err/tol") for r in got if r["metric"].startswith("err/tol")]
     assert ratios and max(ratios) < 1, ratios
@@ -681,7 +646,7 @@ def ch01_blocked(run: Run, box: Box) -> None:
     link = row.locator("a.where")
     assert link.get_attribute("data-loc") == f"gpt2.py:{bad}:1", link.get_attribute("data-loc")
     assert "(forward)" in link.inner_text(), link.inner_text()
-    notes = next(r["notes"] for r in rows(page, "layer_norm") if r["outcome"] == "blocked")  # (an fp16 skip row comes first on CPU)
+    notes = next(r["notes"] for r in rows(page, "layer_norm") if r["outcome"] == "blocked")
     link.click()
     cursor = page.evaluate("() => { const v = document.querySelector('ws-cell[name=forward]').view; return {line: v.state.doc.lineAt(v.state.selection.main.head).number, focused: v.hasFocus}; }")
     assert cursor == {"line": bad, "focused": True}, cursor
@@ -700,17 +665,17 @@ def ch01_fail_at_stub(run: Run, box: Box) -> None:
     record(run, "forward, attention still a stub (raises; first forward: computes HF's fp64 truth)", "forward", took)
     assert status.startswith("failed"), f"{status}\n{out}"
     text = doc(page, "attention")
-    stub = line_of(text, '"self_attention: write this in the attention cell"') - 1  # the raise's first line
-    assert text.split("\n")[stub - 1].strip() == "raise NotImplementedError(", text.split("\n")[stub - 1]
+    stub_raise_line = line_of(text, '"self_attention: write this in the attention cell"') - 1
+    assert text.split("\n")[stub_raise_line - 1].strip() == "raise NotImplementedError(", text.split("\n")[stub_raise_line - 1]
     fail = page.locator("ws-cell[name=forward] tr.verdict.fail").first
     loc = fail.locator("a.where").get_attribute("data-loc")
-    assert loc == f"gpt2.py:{stub}:1", (loc, stub)
+    assert loc == f"gpt2.py:{stub_raise_line}:1", (loc, stub_raise_line)
     assert "(attention)" in fail.locator("a.where").inner_text()
     notes = rows(page, "forward")
     first = next(r for r in notes if r["outcome"] == "fail")["notes"]
     assert "NotImplementedError: self_attention: write this in the attention cell" in first, first
     run.say(f"4 Run forward with attention still a stub -> '{status}': '{first}' (any order: forward runs block runs the "
-            f"stub; the link names the raise, line {stub}, in the attention region)")  # fmt: skip
+            f"stub; the link names the raise, line {stub_raise_line}, in the attention region)")  # fmt: skip
 
 
 def ch01_missing_marker(run: Run, box: Box) -> None:
@@ -729,12 +694,10 @@ def ch01_missing_marker(run: Run, box: Box) -> None:
             f"still checked ('{status}'); marker restored, note gone")  # fmt: skip
 
 
-NO_SCALE = "    scores_NTS = scores_NTS / math.sqrt(H)\n"  # the planted bug: attention without its 1/sqrt(H)
+NO_SCALE = "    scores_NTS = scores_NTS / math.sqrt(H)\n"
 
 
 def ch01_attention_and_model(run: Run, box: Box) -> None:
-    """A planted attention bug fails with numbers; fixed it passes; then the model-level cells pass on real GPT-2 and
-    show bf16 as a visible SKIP (the capability table: no bf16 model checks on CPU)."""
     page = run.page
     put_region(page, "attention", "attention", SOL1.replace(NO_SCALE, ""))
     status, _, took = run_cell(page, "attention")
@@ -762,7 +725,7 @@ def ch01_attention_and_model(run: Run, box: Box) -> None:
         assert "checked on a bf16 GPU" in skip[0]["notes"], skip[0]
         values = [metric_value(r, label) for r in passing]
         if cell == "forward":
-            assert max(values) < 1e-7, values  # the fp32 model gate
+            assert max(values) < 1e-7, values
         skip_row = page.locator(f"ws-cell[name={cell}] tr.verdict.skip")
         assert skip_row.evaluate("(r) => getComputedStyle(r).fontStyle") == "italic", "SKIP isn't styled apart"
         run.shot(f"6-{cell}-pass-skip", cell)
@@ -771,7 +734,6 @@ def ch01_attention_and_model(run: Run, box: Box) -> None:
 
 
 def ch01_infra(run: Run, box: Box) -> None:
-    """A real infrastructure failure: the check store (in the persist dir) unreadable. Not the reader's code: exit 2."""
     page = run.page
     store = f"{box.persist}/cache/assay"
     mode = box.sh(f"stat -f %Lp {shlex.quote(store)} 2>/dev/null || stat -c %a {shlex.quote(store)}").strip()
@@ -823,7 +785,6 @@ def ch01_reload(run: Run, box: Box) -> None:
 
 
 def ch01_timings(run: Run, box: Box) -> None:
-    """The same checks against a cold and a warm warm-process, the store already holding every expected answer."""
     page = run.page
     for cell in ("layer_norm", "forward"):
         run.say(f"10 stop the warm process: {stop_warm(box)}")
@@ -838,8 +799,7 @@ def ch01_timings(run: Run, box: Box) -> None:
 def ch01_conflict(run: Run, old: Gateway) -> Gateway:
     page = run.page
     run.say(old.stop())
-    # A draft from another device: the whole solution, built on a commit this workspace never had.
-    page.evaluate("(t) => localStorage.setItem('blogs.ws.ch01.gpt2.py', JSON.stringify({text: t, acked: true, base: '0000000'}))", SOL1)
+    page.evaluate("(t) => localStorage.setItem('blogs.ws.v1.ch01.gpt2.py', JSON.stringify({text: t, acked: true, base: '0000000'}))", SOL1)
     box = run.new_box("sandbox2")
     gateway = Gateway(run.gateway_port, box, run.out)
     page.reload()
@@ -896,7 +856,7 @@ def drive_ch01(run: Run, gateway: Gateway) -> Gateway:
 class Story:
     chapter: Path
     page: str
-    first: str  # a cell checked before Connect
+    pre_connect_cell: str
     drive: Callable[[Run, Gateway], Gateway]
 
 
@@ -916,7 +876,7 @@ def run_story(name: str, story: Story, args: argparse.Namespace, out: Path, brow
     print(f"== {name}: launch", flush=True)
     with ExitStack() as stack:
         new_box = box_factory(args.modal, out, stack)
-        context = browser.new_context(viewport={"width": 1100, "height": 900})  # fresh localStorage per story
+        context = browser.new_context(viewport={"width": 1100, "height": 900})
         page = context.new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
         run = Run(page, out, new_box, args.gateway_port)
@@ -926,7 +886,7 @@ def run_story(name: str, story: Story, args: argparse.Namespace, out: Path, brow
             run.say(doctor_page(story.page))
             gateway = Gateway(args.gateway_port, box, out)
             page.goto(f"{origin}/{story.page}/?gateway=http://localhost:{args.gateway_port}")
-            expect(page.locator(f"ws-cell[name={story.first}] .cell-status")).to_have_text("not connected: edits are kept in this browser")
+            expect(page.locator(f"ws-cell[name={story.pre_connect_cell}] .cell-status")).to_have_text("not connected: edits are kept in this browser")
             print(f"== {name}: drive", flush=True)
             gateway = story.drive(run, gateway)
         except Exception:

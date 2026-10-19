@@ -52,15 +52,10 @@ RUNOUT_S = 20
 
 
 def created_at(status: dict[str, Any]) -> float:
-    """When the session was created: its ceiling is creation + 12 h. Not started_at: on the real relay that is when the
-    machine's supervisor came up (seconds after the POST), while the lease and ceiling count from the POST."""
     return float(status["ceiling"]) - CEILING_S
 
 
 def left(until: float) -> str:
-    """The page's "Xh MMm" (web/connect/ui.ts duration) for the time to until, as a regex taking this minute or the one
-    before (the countdown ticks while expect waits). From the lease, not a fixed length: on the real relay the lease
-    counts from the POST, so a slow boot has already used some of it when the pill first shows connected."""
     minutes = int((until - time.time()) // 60)
     shown = [f"{m}m" if m < 60 else f"{m // 60}h {m % 60:02d}m" for m in (minutes, minutes - 1)]
     return "(" + "|".join(map(re.escape, shown)) + ")"
@@ -107,7 +102,6 @@ def open_menu(page: Page) -> None:
 
 
 def bad_token(browser: Browser, url: str) -> None:
-    """A token the gateway rejects: the pill comes back to Connect with a red dot and the panel says why."""
     context = browser.new_context(viewport={"width": 1000, "height": 800}, device_scale_factor=2)
     page = context.new_page()
     page.goto(url)
@@ -146,7 +140,6 @@ def story(context: BrowserContext, url: str, token: tuple[str, str], gateway: st
     expect(page.locator("scratch-cell .connect-to-run")).to_be_visible()
     page.screenshot(path=OUT / "1-disconnected.png")
 
-    # "Connect to run" opens the panel; RunPod is there but disabled.
     page.locator("scratch-cell .connect-to-run").click()
     expect(page.locator(".connect-panel")).to_be_visible()
     expect(page.locator("input[value=runpod]")).to_be_disabled()
@@ -184,7 +177,6 @@ def story(context: BrowserContext, url: str, token: tuple[str, str], gateway: st
     paste(page, PID)
     pid = run_cell(page).strip()
 
-    # Stop interrupts a long run.
     paste(page, LONG)
     page.locator("scratch-cell .run").click()
     page.wait_for_function("document.querySelector('scratch-cell .cell-out').textContent.includes('\\n5\\n')", timeout=30_000)
@@ -196,7 +188,6 @@ def story(context: BrowserContext, url: str, token: tuple[str, str], gateway: st
     print(f"  stop: {status!r}")
     page.locator("scratch-cell").screenshot(path=OUT / "6-stopped.png")
 
-    # Reload: same session, same kernel, no new POST /sessions.
     before = len(posts)
     page.reload()
     page.wait_for_selector("connect-pill[data-phase=connected]", timeout=60_000)
@@ -213,7 +204,6 @@ def story(context: BrowserContext, url: str, token: tuple[str, str], gateway: st
 
 
 def lease(browser: Browser, url: str, token: tuple[str, str], gateway: str, gpu: str | None, runout: bool) -> None:
-    """Session length: custom 150 min (721 is refused), the countdown, Extend +1 h, then +4 h until clamped at the ceiling."""
     context = browser.new_context(viewport={"width": 1100, "height": 760}, device_scale_factor=2)
     context.add_init_script(f"localStorage.setItem('connect.token.modal', JSON.stringify({{id: '{token[0]}', secret: '{token[1]}'}}))")
     page = context.new_page()
@@ -253,7 +243,6 @@ def lease_runout(page: Page, url: str, token: tuple[str, str], gateway: str) -> 
 
 
 def lease_connect(page: Page, url: str, token: tuple[str, str], gateway: str, label: str) -> str:
-    """The panel's session length: 90 min by default, 721 min refused, custom 150 min sent as lease_s. Returns the session id."""
     creates: list[str] = []
     page.on("request", lambda r: creates.append(r.url) if r.method == "POST" and r.url.rstrip("/").endswith("/sessions") else None)
     page.goto(url)
@@ -262,7 +251,6 @@ def lease_connect(page: Page, url: str, token: tuple[str, str], gateway: str, la
     expect(page.locator(".connect-ends")).to_contain_text("Ends at")
     page.screenshot(path=LEASE_OUT / "1-panel-default.png")
 
-    # More than 12 h can't be sent: the form refuses 721 minutes.
     page.select_option("select[name=length]", "custom")
     page.fill("input[name=length-min]", "721")
     expect(page.locator(".connect-ends")).to_contain_text("12 h at most")
@@ -289,7 +277,6 @@ def lease_connect(page: Page, url: str, token: tuple[str, str], gateway: str, la
 
 
 def lease_extend(page: Page, sid: str, token: tuple[str, str], gateway: str, label: str) -> None:
-    """Extend +1 h, then +4 h until the gateway clamps the lease at its ceiling (start + 12 h)."""
     open_menu(page)
     expect(page.locator(".connect-lease")).to_contain_text(re.compile(rf"{left(gateway_call(gateway, f'/sessions/{sid}', token)['status']['lease_until'])} left"))
     page.screenshot(path=LEASE_OUT / "3-menu.png")
@@ -314,7 +301,6 @@ def lease_extend(page: Page, sid: str, token: tuple[str, str], gateway: str, lab
     expect(page.locator(".connect-lease")).to_contain_text(re.compile(rf"{left(extended['lease_until'])} left"))
     print(f"  extend +1 h: lease now {round((extended['lease_until'] - created_at(extended)) / 60)} min after creation")
 
-    # +4 h, +4 h, +4 h: the third asks past the ceiling (start + 12 h) and is clamped to it.
     for _ in range(3):
         if page.locator(".connect-extend").is_hidden():
             page.locator(".connect-extend-open").click()
@@ -332,7 +318,6 @@ def lease_extend(page: Page, sid: str, token: tuple[str, str], gateway: str, lab
 
 
 def lease_shorter(sid: str, token: tuple[str, str], gateway: str) -> None:
-    """An until before lease_until (here: a minute after the start) never cuts the lease: 200, the status unchanged."""
     before = gateway_call(gateway, f"/sessions/{sid}", token)["status"]
     after = gateway_call(gateway, f"/sessions/{sid}/extend", token, method="POST", body={"until": before["started_at"] + 60})["status"]
     assert after["state"] == "running" and after["lease_until"] == before["lease_until"], f"a shorter extend moved the lease: {before} -> {after}"
@@ -340,7 +325,6 @@ def lease_shorter(sid: str, token: tuple[str, str], gateway: str) -> None:
 
 
 def ended_elsewhere(browser: Browser, url: str, token: tuple[str, str], gateway: str) -> None:
-    """A status without lease_until is a gateway error the page names; a session ended outside the page says so."""
     context = browser.new_context(viewport={"width": 1100, "height": 760}, device_scale_factor=2)
     context.add_init_script(f"localStorage.setItem('connect.token.modal', JSON.stringify({{id: '{token[0]}', secret: '{token[1]}'}}))")
     page = context.new_page()
@@ -352,14 +336,13 @@ def ended_elsewhere(browser: Browser, url: str, token: tuple[str, str], gateway:
     page.wait_for_selector("connect-pill[data-phase=connected]", timeout=600_000)
     sid = page.evaluate("JSON.parse(localStorage.getItem('connect.session')).session_id")
 
-    # Reattach (reload) against a gateway that leaves lease_until out: no guessing from deadline.
     kernel_tokens: list[str] = []
 
     def strip(route: Route) -> None:
         response = route.fetch()
         body = response.json()
         del body["status"]["lease_until"]
-        kernel_tokens.append(body["status"]["kernel"]["token"])  # running: the status carries Jupyter's token
+        kernel_tokens.append(body["status"]["kernel"]["token"])
         route.fulfill(response=response, json=body)
 
     pattern = re.compile(rf"/sessions/{re.escape(sid)}$")
@@ -375,9 +358,9 @@ def ended_elsewhere(browser: Browser, url: str, token: tuple[str, str], gateway:
     print(f"  status without lease_until: {failure!r}")
     page.unroute(pattern)
 
-    page.reload()  # the session still runs: a real gateway reattaches
+    page.reload()
     page.wait_for_selector("connect-pill[data-phase=connected]", timeout=60_000)
-    gateway_call(gateway, f"/sessions/{sid}/end", token, method="POST")  # as another tab's Disconnect, or a box release
+    gateway_call(gateway, f"/sessions/{sid}/end", token, method="POST")
     page.wait_for_selector("connect-pill[data-phase=disconnected][data-failed]", timeout=30_000)
     expect(page.locator(".connect-label")).to_have_text("Connect")
     expect(page.locator(".connect-announce")).to_have_text(re.compile(r"^Disconnected: the session was stopped outside this page"))
@@ -409,7 +392,6 @@ def wind_down(page: Page, token: tuple[str, str]) -> None:
 
 
 def phone_and_dark(browser: Browser, url: str, token: tuple[str, str]) -> None:
-    """Connected at phone width (dark): no sideways scroll, pill/panel/drawer fit."""
     context = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=3, is_mobile=True, has_touch=True, color_scheme="dark")
     context.add_init_script(f"localStorage.setItem('connect.token.modal', JSON.stringify({{id: '{token[0]}', secret: '{token[1]}'}}))")
     page = context.new_page()
@@ -437,7 +419,6 @@ def phone_and_dark(browser: Browser, url: str, token: tuple[str, str]) -> None:
 
 
 def axe(browser: Browser, url: str, token: tuple[str, str]) -> None:
-    """axe on the connected page: panel (session menu) open, then the drawer with a full log, every theme x scheme."""
     found = 0
     for theme in ("classic", "paper"):
         for scheme in ("light", "dark"):

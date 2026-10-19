@@ -1,22 +1,3 @@
-// The connected session's Jupyter kernel (box/CONTRACT-gateway.md "Cells"): one kernel per session, at
-// status.kernel.url with its token. Cells and embeds run code here; session.ts attaches and detaches it.
-//
-// Public API (stable; the nn-fit remote backend imports it):
-//   runCode(code, onStdout, onStderr?) -> Promise<RunResult>   one execute_request; output streams as it arrives
-//   interrupt()                        -> Promise<void>        Jupyter interrupt (a running cell ends with KeyboardInterrupt)
-//   kernelState()                      -> KernelState          "off" until connected
-//   onKernelState(listener)            -> unsubscribe          called on every change
-//   runJob(id, argv, cwd, onOutput)    -> Promise<JobResult>   a background subprocess (jobs.py): the kernel is free
-//                                                              as soon as it starts; output streams until it exits
-//   killJob(id)                        -> Promise<void>        SIGTERM to the job's process group
-//   kernelAddress()                    -> KernelAddress | undefined  for the Contents API (connect/contents.ts)
-//
-// Every bundle on a page gets its own copy of this module (esbuild bundles page.ts and each embed separately), so
-// the one live kernel lives in a window slot: whichever copy runs first creates it, every copy uses it.
-//
-// Wire: Jupyter Server REST + the kernel websocket (protocol 5.3). The token goes in the query string: a browser
-// can't set headers on a WebSocket, and query-only auth keeps fetches simple (no CORS preflight).
-
 import JOBS_PY from "./jobs.py";
 import { isJsonObject } from "../json";
 import type { JsonObject } from "../json";
@@ -28,24 +9,23 @@ export interface KernelAddress {
 
 export type RunResult =
   | { status: "ok" }
-  | { status: "error"; ename: string; evalue: string; traceback: string } // a Python exception (ANSI stripped)
-  | { status: "aborted"; reason: string }; // never ran or never finished: not connected, connection lost, kernel died
+  | { status: "error"; ename: string; evalue: string; traceback: string }
+  | { status: "aborted"; reason: string };
 
-// A background job ends with its exit code (negative: killed by that signal), or it never started (the launching
-// cell raised), or the page lost it (socket dropped, kernel restarted: the process may still be running).
-export type JobResult = { status: "exited"; exit: number } | Exclude<RunResult, { status: "ok" }>;
+export type JobResult =
+  | { status: "exited"; code: number }
+  | { status: "killed"; signal: number }
+  | { status: "lost"; reason: string }
+  | Exclude<RunResult, { status: "ok" }>;
 
-const JOB_MIME = "application/vnd.blogs.job+json"; // jobs.py's end-of-job marker
+const JOB_MIME = "application/vnd.blogs.job+json";
 
-// off: no session. attaching: finding/starting the kernel. idle/busy: ready (busy = a runCode is in flight).
-// lost: the kernel stopped answering; session.ts decides whether the session is gone.
 export type KernelState = "off" | "attaching" | "idle" | "busy" | "lost";
 
-const KEEPALIVE_MS = 30_000; // traffic on the tunnel (Modal's idle timeout counts it) + notices a dead socket
+const KEEPALIVE_MS = 30_000;
 const REPLY_TIMEOUT_MS = 30_000;
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g; // oxlint-disable-line no-control-regex
 
-// One message off the websocket, parsed (it crossed the network).
 interface Msg {
   type: string;
   parent: string | undefined;
@@ -66,18 +46,17 @@ const text = (content: JsonObject, key: string): string => {
   return typeof v === "string" ? v : "";
 };
 
-// The content of an execute_request (the only request the page sends with a non-empty content).
 interface ExecuteRequest {
   code: string; silent: boolean; store_history: boolean; user_expressions: Record<string, never>;
   allow_stdin: boolean; stop_on_error: boolean;
 }
 
-interface Gone { gone: string } // the socket closed or the kernel died before a reply
+interface Gone { gone: string }
 type Handler = (msg: Msg | Gone) => void;
 
 class Kernel {
   state: KernelState = "off";
-  address: KernelAddress | undefined; // read by kernelAddress() (the Contents API needs the same URL + token)
+  address: KernelAddress | undefined;
   private id: string | undefined;
   private ws: WebSocket | undefined;
   private keepalive: ReturnType<typeof setInterval> | undefined;
@@ -102,7 +81,6 @@ class Kernel {
     return `${this.address.url}${path}?token=${encodeURIComponent(this.address.token)}`;
   }
 
-  // Find the session's kernel (another page of this session may have started it) or start one; open its socket.
   async attach(address: KernelAddress): Promise<void> {
     if (this.address?.url === address.url && this.address.token === address.token && this.ws?.readyState === WebSocket.OPEN) return;
     this.detach();
@@ -111,7 +89,6 @@ class Kernel {
     try {
       const listed: unknown = await (await fetch(this.api("/api/kernels"))).json();
       const first = Array.isArray(listed) ? listed.find(isJsonObject) : undefined;
-      // No Content-Type: a text/plain body keeps this a simple request; Jupyter parses it as JSON anyway.
       const kernel: unknown = first ?? await (await fetch(this.api("/api/kernels"), { method: "POST", body: JSON.stringify({ name: "python3" }) })).json();
       if (!isJsonObject(kernel) || typeof kernel["id"] !== "string") throw new Error(`kernel: /api/kernels gave no id: ${JSON.stringify(kernel)}`);
       this.id = kernel["id"];
@@ -142,14 +119,13 @@ class Kernel {
       this.ws = ws;
       ws.onmessage = (e) => { this.receive(parseMsg(JSON.parse(String(e.data)))); };
       ws.onclose = () => {
-        if (this.ws !== ws) return; // detached on purpose
+        if (this.ws !== ws) return;
         clearInterval(this.keepalive);
         this.abortAll("the connection to the kernel dropped");
         this.set("lost");
         reject(new Error("kernel websocket closed"));
       };
       ws.onopen = () => {
-        // The kernel answers kernel_info once it is really up.
         this.request("kernel_info_request").then(() => {
           clearInterval(this.keepalive);
           this.keepalive = setInterval(() => { this.ping(); }, KEEPALIVE_MS);
@@ -159,9 +135,6 @@ class Kernel {
     });
   }
 
-  // On the control channel: a busy kernel (a long cell, e.g. nn-fit's remote run) doesn't answer the shell
-  // channel until the cell ends, so a shell ping timed out and closed the socket ~30-60 s into any longer run.
-  // ipykernel answers kernel_info on control while busy (7.4 on the relay's machine: 0.1 s).
   private ping(): void {
     this.request("kernel_info_request", "control").catch(() => { this.ws?.close(); });
   }
@@ -176,7 +149,6 @@ class Kernel {
     return id;
   }
 
-  // A request answered by one reply on the same channel, or rejected after REPLY_TIMEOUT_MS / when the socket goes.
   private request(type: string, channel: "shell" | "control" = "shell"): Promise<Msg> {
     return new Promise((resolve, reject) => {
       const id = this.send(type, {}, channel);
@@ -239,9 +211,6 @@ class Kernel {
     });
   }
 
-  // A job: one execute_request starts the subprocess (installing jobs.py first if this kernel lacks it). Unlike
-  // run(), the handler outlives the reply: the job's output keeps arriving under this request's msg_id until the
-  // JOB_MIME marker. The kernel counts as busy only until the reply (the job itself doesn't occupy it).
   job(id: string, argv: string[], cwd: string, onOutput: (text: string) => void): Promise<JobResult> {
     if (this.state !== "idle" && this.state !== "busy") return Promise.resolve({ status: "aborted", reason: "not connected" });
     const code = `if "_blogs_jobs" not in globals():\n    exec(${JSON.stringify(JOBS_PY)})\n_blogs_jobs.start(${JSON.stringify(id)}, ${JSON.stringify(argv)}, ${JSON.stringify(cwd)})`;
@@ -269,16 +238,17 @@ class Kernel {
         resolve(result);
       };
       this.pending.set(msgId, (msg) => {
-        if ("gone" in msg) { finish({ status: "aborted", reason: msg.gone }); return; }
+        if ("gone" in msg) { finish({ status: "lost", reason: `${msg.gone} (the job may still be running)` }); return; }
         const c = msg.content;
         if (msg.type === "stream") onOutput(text(c, "text"));
         else if (msg.type === "display_data" && isJsonObject(c["data"]) && isJsonObject(c["data"][JOB_MIME])) {
           const marker = c["data"][JOB_MIME];
           if (typeof marker["exit"] !== "number") throw new Error(`kernel: job marker without an exit code: ${JSON.stringify(marker)}`);
-          finish({ status: "exited", exit: marker["exit"] });
+          const rc = marker["exit"];
+          finish(rc < 0 ? { status: "killed", signal: -rc } : { status: "exited", code: rc });
         } else if (msg.type === "execute_reply") {
           const reply = parseReply(c);
-          if (reply.status !== "ok") finish(reply); // the job never started
+          if (reply.status !== "ok") finish(reply);
           else done();
         }
       });
@@ -302,7 +272,7 @@ function parseReply(c: JsonObject): RunResult {
 
 declare global {
   interface Window {
-    blogsConnectKernel?: Kernel; // the shared slot (see the top of this file)
+    blogsConnectKernel?: Kernel;
   }
 }
 const kernel: Kernel = (window.blogsConnectKernel ??= new Kernel());
@@ -320,6 +290,5 @@ export const kernelAddress = (): KernelAddress | undefined => kernel.address;
 export const kernelState = (): KernelState => kernel.state;
 export const onKernelState = (listener: (state: KernelState) => void): (() => void) => kernel.subscribe(listener);
 
-// session.ts only: attach when the session is running, detach when it ends or the reader disconnects.
 export const attach = (address: KernelAddress): Promise<void> => kernel.attach(address);
 export const detach = (): void => { kernel.detach(); };

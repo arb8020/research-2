@@ -1,27 +1,3 @@
-"""```nn-fit fence -> <nn-fit>: one `key: value` line per setting; keys are the element's attributes.
-
-    dataset: wave            draw | wave | spiral | grok (modular arithmetic; trains only when connected)
-    activation: tanh         linear | relu | tanh | sigmoid
-    layers: 2                hidden layers, 0..4
-    width: 8                 units per hidden layer, 1..16
-    widths: 8,4              per-layer units instead (up to 4 of 1..16)
-    lr: 0.03                 Adam learning rate, 1e-4..1
-    samples: 128             training points, 4..512
-    noise: 0.1               sigma in y units, 0..0.5
-    wiggles: 4               random wave: Fourier terms K, 1..20
-    roughness: 1.5           random wave: alpha, 0.5 (rough)..3 (smooth)
-    stages: 1                random wave: composed series d, 1..4
-    seed: 1                  random wave: which curve, 0..2^31
-    step-budget: 2000        positive integer, or off
-    time-budget: 5           seconds, or off
-    train-fraction: 0.3      grok: share of the a + b mod p pairs trained on, 0.3..0.5
-
-Every key is optional (the element has defaults; an empty fence is the default widget). Blank lines are
-skipped. An unknown or repeated key, or a value outside the list above, fails the build with its line.
-The element snaps lr, samples, noise, roughness, the budgets and train-fraction to its nearest slider stop.
-The widget is drawn entirely by element.ts (web/embeds/nn-fit/nn-fit.ts); without JS it is empty.
-"""
-
 from __future__ import annotations
 
 import math
@@ -62,23 +38,22 @@ def or_off(check: Callable[[str], bool]) -> Callable[[str], bool]:
     return lambda v: v == "off" or check(v)
 
 
-# key -> (accepts the value?, what it accepts, for the error). Mirrors the header of nn-fit.ts.
 KEYS: dict[str, tuple[Callable[[str], bool], str]] = {
     "dataset": (one_of(DATASETS), " | ".join(DATASETS)),
     "activation": (one_of(ACTIVATIONS), " | ".join(ACTIVATIONS)),
-    "layers": (integer(0, MAX_LAYERS), f"an integer in 0..{MAX_LAYERS}"),
-    "width": (integer(1, MAX_WIDTH), f"an integer in 1..{MAX_WIDTH}"),
-    "widths": (widths, f"up to {MAX_LAYERS} comma-separated integers in 1..{MAX_WIDTH}"),
-    "lr": (number(1e-4, 1), "a number in 1e-4..1"),
-    "samples": (integer(4, 512), "an integer in 4..512"),
-    "noise": (number(0, 0.5), "a number in 0..0.5"),
-    "wiggles": (integer(1, 20), "an integer in 1..20"),
-    "roughness": (number(0.5, 3), "a number in 0.5..3"),
-    "stages": (integer(1, 4), "an integer in 1..4"),
-    "seed": (integer(0, 2**31), "an integer in 0..2^31"),
+    "layers": (integer(0, MAX_LAYERS), f"an integer in 0..{MAX_LAYERS} (hidden layers)"),
+    "width": (integer(1, MAX_WIDTH), f"an integer in 1..{MAX_WIDTH} (units per hidden layer)"),
+    "widths": (widths, f"up to {MAX_LAYERS} comma-separated integers in 1..{MAX_WIDTH} (units per hidden layer)"),
+    "lr": (number(1e-4, 1), "a number in 1e-4..1 (Adam learning rate)"),
+    "samples": (integer(4, 512), "an integer in 4..512 (training points)"),
+    "noise": (number(0, 0.5), "a number in 0..0.5 (σ in y units)"),
+    "wiggles": (integer(1, 20), "an integer in 1..20 (random wave: Fourier terms K)"),
+    "roughness": (number(0.5, 3), "a number in 0.5 (rough)..3 (smooth) (random wave: alpha)"),
+    "stages": (integer(1, 4), "an integer in 1..4 (random wave: composed series d)"),
+    "seed": (integer(0, 2**31), "an integer in 0..2^31 (random wave: which curve)"),
     "step-budget": (or_off(integer(1, 10**9)), "a positive integer, or off"),
     "time-budget": (or_off(number(1e-3, 1e6)), "a positive number of seconds, or off"),
-    "train-fraction": (number(0.3, 0.5), "a number in 0.3..0.5"),
+    "train-fraction": (number(0.3, 0.5), "a number in 0.3..0.5 (grok only: share of the a + b mod p pairs trained on)"),
 }
 
 

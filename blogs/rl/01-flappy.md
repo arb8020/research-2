@@ -462,6 +462,7 @@ import numpy as np
 import torch
 
 OBS_DIM, N_ACTIONS = 2, 2
+VEC_LOG_CAP_TOO_SMALL = -1
 
 
 class Flappy:
@@ -503,7 +504,7 @@ class Flappy:
     def log(self) -> dict[str, float]:
         buf = ctypes.create_string_buffer(4096)
         size = self.lib.vec_log(self.handle, buf, len(buf))
-        assert size >= 0, "vec_log buffer too small"
+        assert size != VEC_LOG_CAP_TOO_SMALL, "vec_log buffer too small"
         lines = buf.raw[:size].decode().splitlines()
         return {key: float(value) for key, value in (line.split("=") for line in lines)}
 ```

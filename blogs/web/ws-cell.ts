@@ -1,11 +1,3 @@
-// <ws-cell>: a cell over the reader's workspace (```python cell=X file=F in the chapter). Its editor is one view of
-// the page's shared document for F (workspace-file.ts): every cell over gpt2.py edits the same text. The cell shows
-// its region (checks/chNN.json "region": the lines between `# region: X` and `# endregion`) scrolled into view and
-// highlighted, in a bounded height, with a toggle to show the whole file; a missing marker only costs that (the cell
-// shows the top of the file and says so). Run saves the file, then `workspace.py check` runs the cell's cmd as a
-// background job; its JSON lines render as a verdict table (check-output.ts). No gating: every cell can run.
-// A region cell also has a "reference" toggle: a read-only editor under its own, showing that region of the chapter's
-// solution (the build puts it in a <template class="reference">). It never touches the reader's doc.
 import { basicSetup } from "codemirror";
 import type { EditorView } from "codemirror";
 import { Decoration, EditorView as View, ViewPlugin } from "@codemirror/view";
@@ -21,13 +13,13 @@ import { CheckOutput } from "./check-output";
 import { WorkspaceFile } from "./workspace-file";
 import { bootWorkspace, checkCell, onWorkspace, refreshStatus, stopCheck, workspaceStatus } from "./workspace";
 
-const MAX_LINES = 40; // a bounded cell is at most this many lines tall (its region + a line of context each side)
-const MIN_LINES = 20; // ...and at least this many: a stub region is a few lines, and the reader needs room to write
-const UNREGIONED_LINES = 18; // a region cell whose markers are missing (at load) shows this much of the top of the file
+const MAX_LINES = 40;
+const MIN_LINES = 20;
+const UNREGIONED_LINES = 18;
+const CONTENT_PADDING_PX = 10;
 
-interface Span { first: number; last: number } // 1-based lines, markers included
+interface Span { first: number; last: number }
 
-// The `# region: <name>` ... `# endregion` lines in doc, or undefined if either marker is missing.
 export function findRegion(doc: Text, name: string): Span | undefined {
   for (let i = 1; i <= doc.lines; i++) {
     if (doc.line(i).text.trim() !== `# region: ${name}`) continue;
@@ -56,27 +48,27 @@ function regionHighlight(name: string): Extension {
 type Verdict = readonly [text: string, cls: string];
 
 function verdictOf(result: JobResult, out: CheckOutput, seconds: string): Verdict {
+  if (result.status === "killed") return [`stopped (${seconds})`, "fail"];
   if (result.status === "exited") {
-    if (result.exit === 0) return [`passed (${seconds})`, "pass"];
-    if (result.exit === 1) {
+    if (result.code === 0) return [`passed (${seconds})`, "pass"];
+    if (result.code === 1) {
       const where = out.firstWhere();
       const at = where === undefined ? "" : `: ${where.file}:${String(where.line)}${where.region === undefined ? "" : ` (${where.region})`}`;
       return [out.summary?.outcome === "blocked" ? `blocked (${seconds})${at}` : `failed (${seconds})${at}`, "fail"];
     }
-    if (result.exit === 2) return [`not run (infrastructure): ${out.refusal ?? "see the output"}`, "fail"];
-    if (result.exit < 0) return [`stopped (${seconds})`, "fail"];
-    return [`check exited ${String(result.exit)}: see the output`, "fail"];
+    if (result.code === 2) return [`not run (infrastructure): ${out.refusal ?? "see the output"}`, "fail"];
+    return [`check exited ${String(result.code)}: see the output`, "fail"];
   }
   return result.status === "error" ? [`couldn't start the check: ${result.ename}: ${result.evalue}`, "fail"] : [result.reason, "fail"];
 }
 
 class WorkspaceCell extends HTMLElement {
-  view!: EditorView; // verify_workspace.py drives it as `.view`
+  view!: EditorView;
   private doc!: WorkspaceFile;
-  private job: string | undefined; // the running check's job id
-  private queued = false; // Run pressed before the sandbox was ready: runs once it is
+  private runningJobId: string | undefined;
+  private queued = false;
   private expanded = false;
-  referenceView: EditorView | undefined; // made on the first "reference" press (tests read it, like `.view`)
+  referenceView: EditorView | undefined;
   private verdict: Verdict | undefined;
   private loadError: string | undefined;
 
@@ -84,7 +76,7 @@ class WorkspaceCell extends HTMLElement {
   private get file(): string { return attr(this, "data-file"); }
   private get name(): string { return attr(this, "name"); }
   private get region(): string | null { return this.getAttribute("data-region"); }
-  get lastSaveMs(): number | undefined { return this.doc.lastSaveMs; } // for verify_workspace.py
+  get lastSaveMs(): number | undefined { return this.doc.lastSaveMs; }
 
   connectedCallback(): void {
     const lang = attr(this, "data-lang");
@@ -108,7 +100,7 @@ class WorkspaceCell extends HTMLElement {
     this.doc = WorkspaceFile.of(this.chapter, this.file, start);
     this.view = this.doc.view([
       vimExtension(), basicSetup, syntax(lang), look(`${this.name}: ${this.file} (${lang})`),
-      View.lineWrapping, // never a sideways scroll: a reader's long line wraps; shipped code is held to 80 columns
+      View.lineWrapping,
       region === null ? [] : regionHighlight(region),
       this.hideReferenceOnEdit(),
     ], this, (line) => this.holds(line));
@@ -131,8 +123,6 @@ class WorkspaceCell extends HTMLElement {
     });
     if (kernelState() === "idle" || kernelState() === "busy") this.ensureLoaded();
     this.fit();
-    // Offscreen, CodeMirror only estimates line heights (and wrapped lines are taller than estimated), so the region
-    // scrolled to at mount drifts once the cell is measured. Fit again the first time the cell comes into view.
     const seen = new IntersectionObserver((entries) => {
       if (!entries.some((e) => e.isIntersecting)) return;
       seen.disconnect();
@@ -142,12 +132,9 @@ class WorkspaceCell extends HTMLElement {
     this.gate();
   }
 
-  // Show/hide the solution's region in its own read-only editor. The reader's doc is never touched. It is for reading,
-  // not copying: no selection, copy/cut/drag are blocked (a speed bump, not security: the page source has it), and it
-  // closes as soon as the reader edits this cell (hideReferenceOnEdit).
   private toggleReference(lang: string, text: string, want?: boolean): void {
     const box = must(this, ".cell-reference", HTMLDivElement);
-    const show = want ?? box.hidden; // no argument: toggle
+    const show = want ?? box.hidden;
     const button = must(this, ".show-reference", HTMLButtonElement);
     if (this.referenceView === undefined) {
       this.referenceView = new View({ parent: box, state: EditorState.create({ doc: text, extensions: [
@@ -161,7 +148,6 @@ class WorkspaceCell extends HTMLElement {
     button.setAttribute("aria-expanded", String(show));
   }
 
-  // An edit made in this cell (its view has focus) closes the reference.
   private hideReferenceOnEdit(): Extension {
     return View.updateListener.of((u) => {
       if (!u.docChanged || !u.view.hasFocus || this.referenceView === undefined) return;
@@ -179,7 +165,6 @@ class WorkspaceCell extends HTMLElement {
     return span !== undefined && line >= span.first && line <= span.last;
   }
 
-  // "region X not found" while its markers are missing (checks don't care: they pick ops by name).
   private note(): void {
     const el = must(this, ".cell-note", HTMLParagraphElement);
     const region = this.region;
@@ -188,8 +173,6 @@ class WorkspaceCell extends HTMLElement {
     el.textContent = missing ? `no "# region: ${region}" ... "# endregion" in ${this.file}: nothing to highlight (Run still checks ${this.name}'s ops)` : "";
   }
 
-  // Size the editor to the region (bounded) or the whole file (expanded), and scroll the region to the top. Runs at
-  // mount, after each load and on expand/collapse; never on an edit (it would fight the reader's scrolling).
   private fit(): void {
     this.note();
     const editor = must(this, ".cell-editor", HTMLDivElement);
@@ -198,7 +181,6 @@ class WorkspaceCell extends HTMLElement {
     editor.classList.toggle("bounded", !this.expanded);
     editor.classList.toggle("expanded", this.expanded);
     const v = this.view;
-    // Measured after the frame: a load that replaced the whole doc resets the scroller in its own measure pass.
     requestAnimationFrame(() => {
       v.requestMeasure({
         read: () => {
@@ -212,10 +194,7 @@ class WorkspaceCell extends HTMLElement {
           return { at, height: Math.min(Math.max(bottom - top, MIN_LINES * v.defaultLineHeight), MAX_LINES * v.defaultLineHeight) };
         },
         write: ({ at, height }) => {
-          editor.style.setProperty("--cell-h", `${String(Math.ceil(height + 10))}px`); // + the content's padding
-          // Scroll by position, not pixels: CodeMirror resolves it at its next measure, with the real (wrapped)
-          // line heights, so the region stays at the top once estimated heights are replaced by measured ones.
-          // (dispatched after this measure pass: an update can't start inside one)
+          editor.style.setProperty("--cell-h", `${String(Math.ceil(height + CONTENT_PADDING_PX))}px`);
           requestAnimationFrame(() => { v.dispatch({ effects: View.scrollIntoView(this.expanded ? 0 : at, { y: "start" }) }); });
         },
       });
@@ -240,11 +219,11 @@ class WorkspaceCell extends HTMLElement {
   }
 
   private async runOrStop(): Promise<void> {
-    if (this.job !== undefined) {
-      await stopCheck(this.job).catch((cause: unknown) => { this.status(`stop failed: ${String(cause)}`, "fail"); });
+    if (this.runningJobId !== undefined) {
+      await stopCheck(this.runningJobId).catch((cause: unknown) => { this.status(`stop failed: ${String(cause)}`, "fail"); });
       return;
     }
-    if (this.queued) { this.queued = false; this.gate(); return; } // a second click cancels the queued run
+    if (this.queued) { this.queued = false; this.gate(); return; }
     if (!this.ready()) {
       this.queued = true;
       if (currentPhase().kind === "disconnected") document.dispatchEvent(new Event("connect:open"));
@@ -261,7 +240,7 @@ class WorkspaceCell extends HTMLElement {
     out.removeAttribute("data-outcome");
     const output = new CheckOutput(out);
     const id = crypto.randomUUID();
-    this.job = id;
+    this.runningJobId = id;
     this.setAttribute("data-job", id);
     this.verdict = ["checking…", ""];
     this.gate();
@@ -271,10 +250,10 @@ class WorkspaceCell extends HTMLElement {
       ? await checkCell(id, this.chapter, this.name, attr(this, "data-trusted"), (t) => { output.feed(t); })
       : { status: "aborted" as const, reason: `couldn't save ${this.file} to the workspace: ${this.doc.saveError}` };
     output.end();
-    this.job = undefined;
+    this.runningJobId = undefined;
     this.removeAttribute("data-job");
     this.verdict = verdictOf(result, output, `${((performance.now() - started) / 1000).toFixed(2)}s`);
-    out.dataset["outcome"] = result.status === "exited" ? output.summary?.outcome ?? (result.exit === 2 ? "infra" : String(result.exit)) : result.status;
+    out.dataset["outcome"] = result.status === "exited" ? output.summary?.outcome ?? (result.code === 2 ? "infra" : String(result.code)) : result.status;
     out.classList.add(this.verdict[1] === "pass" ? "pass" : "fail");
     this.gate();
     await refreshStatus(this.chapter).catch((cause: unknown) => { this.verdict = [`status failed: ${String(cause)}`, "fail"]; });
@@ -286,7 +265,7 @@ class WorkspaceCell extends HTMLElement {
     const phase = currentPhase();
     const run = must(this, ".run", HTMLButtonElement);
     must(this, ".connect-to-run", HTMLButtonElement).hidden = kernelUp || phase.kind !== "disconnected";
-    run.textContent = this.job !== undefined ? "Stop" : this.queued ? "Cancel" : "Run";
+    run.textContent = this.runningJobId !== undefined ? "Stop" : this.queued ? "Cancel" : "Run";
     this.toggleAttribute("data-queued", this.queued);
     const conflict = this.doc.conflict;
     const banner = must(this, ".cell-conflict", HTMLDivElement);
@@ -294,7 +273,7 @@ class WorkspaceCell extends HTMLElement {
     must(banner, "span", HTMLSpanElement).textContent = conflict === undefined ? ""
       : `Your sandbox restored passing code (commit ${conflict.head}) that this browser's draft of ${this.file} wasn't built on. Showing the sandbox's version.`;
     if (this.doc.saveError !== undefined) { this.status(`couldn't save to the workspace: ${this.doc.saveError}`, "fail"); return; }
-    if (this.job !== undefined) { this.status(...(this.verdict ?? ["checking…", ""])); return; }
+    if (this.runningJobId !== undefined) { this.status(...(this.verdict ?? ["checking…", ""])); return; }
     if (this.queued) {
       const step = phase.kind === "connecting" ? ` (${phase.step})` : "";
       this.status(phase.kind === "disconnected" ? "waiting for sandbox: connect to run" : `waiting for sandbox${step}… runs when it's up`, "");

@@ -1,23 +1,3 @@
-"""Embeds: interactive or media blocks a chapter places with a fence whose language names the kind.
-
-    ```carousel
-    ...the embed's own text format...
-    ```
-
-or, to keep the data out of the prose, an empty fence naming a file next to the chapter:
-
-    ```carousel file=01-flappy-highlights.carousel
-    ```
-
-Each kind is one folder, web/embeds/<kind>/, found by build_page.py at build time (no registry):
-    embed.py     render(src: str, line: int) -> str: the fence body or file= contents (its first line is
-                 line `line` of the chapter, or 1 for a file) -> the HTML that replaces the fence. Bad input fails the build with a line.
-    element.ts   the custom element(s) that HTML uses; `npm run build` bundles it to
-                 web/build/embeds/<kind>/element.js; pages that use the kind load it (link previews: on first open).
-    element.css  optional styles, linked only on pages that use the kind.
-A new embed is a new folder; nothing here or in build_page.py changes.
-"""
-
 from __future__ import annotations
 
 import importlib.util
@@ -42,18 +22,15 @@ def discover() -> dict[str, Embed]:
         assert spec is not None and spec.loader is not None, f"can't load {py}"
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        assert callable(getattr(module, "render", None)), f"{py} must define render(src, line) -> str"
+        assert callable(getattr(module, "render", None)), (
+            f"{py.relative_to(WEB.parent)} needs render(src: str, line: int) -> str (an embed is web/embeds/<kind>/: embed.py, "
+            "element.ts, optional element.css)")
         assert (py.parent / "element.ts").exists(), f"{py.parent} has embed.py but no element.ts"
         found[kind] = Embed(kind, module.render)
     return found
 
 
 def install(eager: set[str], lazy: set[str], out: Path) -> str:
-    """Copy the used kinds' built files into the page dir; return the <head> tags that load them.
-
-    `eager` kinds are in the page itself: their CSS and script load with it. `lazy` kinds appear only in link
-    previews: their CSS loads with the page (cheap) and <page-link> imports their script on its first open.
-    """
     tags = []
     for kind in sorted(eager | lazy):
         dest = out / "embeds" / kind

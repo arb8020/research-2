@@ -1,11 +1,3 @@
-"""Checks for grok_train.py: the model, continuing a run across calls, ticks, interrupt, bad configs.
-
-    cd web && npm run test:nn-fit-grok        # CPU, ~10 s
-
-Throws (exit 1) on the first failure; prints one line per check. Grokking itself (p = 113, test accuracy past
-95% after ~5k steps) takes ~2 min on a laptop CPU: remote_e2e.py --grok checks it on a real GPU.
-"""
-
 import importlib.util
 import json
 import math
@@ -21,7 +13,7 @@ PROGRAM = HERE / "grok_train.py"
 spec = importlib.util.spec_from_file_location("grok_train", PROGRAM)
 assert spec is not None and spec.loader is not None
 gt = importlib.util.module_from_spec(spec)
-sys.modules["grok_train"] = gt  # dataclasses look their module up by name
+sys.modules["grok_train"] = gt
 spec.loader.exec_module(gt)
 
 PARAMS_113 = 226_688
@@ -36,7 +28,7 @@ def check(ok: bool, message: str) -> None:
 
 
 def frozen_clock() -> float:
-    return 0.0  # no time passes: only the log-spaced ticks come
+    return 0.0
 
 
 def train(config: dict, runs: dict) -> list[dict]:
@@ -65,7 +57,6 @@ def learns() -> None:
 
 
 def continues() -> None:
-    """Two calls (0 -> 100 -> 200) on one runs dict are one run 0 -> 200: same weights, same metrics."""
     whole = train({**SMALL, "max_steps": 200}, {})
     runs: dict = {}
     first = train({**SMALL, "max_steps": 100}, runs)
@@ -103,7 +94,6 @@ def ticks() -> None:
 
 
 def interrupt() -> None:
-    """SIGINT mid-run (a kernel interrupt): a last tick and "end" with reason "interrupted", exit 0."""
     endless = json.dumps({**SMALL, "max_steps": gt.MAX_STEPS, "tick_seconds": 0.05})
     proc = subprocess.Popen([sys.executable, str(PROGRAM)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     assert proc.stdin is not None and proc.stdout is not None
@@ -127,7 +117,7 @@ def bad_configs() -> None:
         ({**SMALL, "p": 21}, "p = 21 is not a prime"),
         ({**SMALL, "p": 263}, "p = 263 is outside"),
         ({**SMALL, "train_fraction": 1}, "train_fraction = 1.0 is outside"),
-        ({**SMALL, "step": 3}, "is not on this kernel"),  # a fresh process has no runs
+        ({**SMALL, "step": 3}, "is not on this kernel"),
     ]
     for bad, expected in cases:
         proc = subprocess.run([sys.executable, str(PROGRAM)], input=json.dumps(bad), capture_output=True, text=True, check=False)
