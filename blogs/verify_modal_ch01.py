@@ -36,12 +36,11 @@ from playwright.sync_api import Page, sync_playwright
 import verify_workspace as vw
 
 OUT = vw.HERE / ".evidence" / "modal-ch01"
-CONNECT_TIMEOUT_MS = 15 * 60_000  # a cold image build (torch + CUDA wheels) is minutes
-vw.CHECK_TIMEOUT_MS = 10 * 60_000  # first checks: warm process start, HF download into the Volume, fp64 truth on T4
+CONNECT_TIMEOUT_MS = 15 * 60_000
+vw.CHECK_TIMEOUT_MS = 10 * 60_000
 
 
 def token(profile: str) -> tuple[str, str]:
-    """The reader's Modal token, from ~/.modal.toml. Never printed."""
     cfg = tomllib.loads((Path.home() / ".modal.toml").read_text())[profile]
     return cfg["token_id"], cfg["token_secret"]
 
@@ -80,7 +79,7 @@ class Story:
         page.locator(".connect-go").click()
         page.wait_for_selector("connect-pill[data-phase=connected]", timeout=CONNECT_TIMEOUT_MS)
         took = time.perf_counter() - t0
-        page.wait_for_function(LOADED, timeout=120_000)  # data-loaded alone may be left from the last session
+        page.wait_for_function(LOADED, timeout=120_000)
         self.timings[f"connect_{label}_s"] = round(took, 1)
         return took
 
@@ -109,12 +108,10 @@ def passes(rows: list[dict[str, str]], cell: str) -> tuple[list[dict[str, str]],
 
 def drive(s: Story) -> None:
     page = s.page
-    # 1 before Connect
     vw.put_region(page, "linear", "linear", vw.SOL1)
     page.locator("ws-cell[name=linear] .run").click()
     s.shot("1-edited-queued")
     s.say("1 linear region typed before Connect; Run queued")
-    # 2 Connect (cold: builds the image the first time) -> the queued run
     took = s.connect("first")
     s.say(f"2 Connect -> connected in {took:.1f}s (T4)")
     t0 = time.perf_counter()
@@ -134,7 +131,6 @@ def drive(s: Story) -> None:
     s.say(f"2 queued linear -> '{status}': {len(ran)} rows PASS on cuda sm_75 (dtypes {sorted({r['dtype'] for r in ran})}, "
           f"worst {max(vw.metric_value(r, 'err/tol') for r in ran if r['metric'].startswith('err/tol')):.3g}x tolerance); "
           f"bf16 SKIP: {skips[0]['notes'][:80]}…")
-    # 3 gelu: planted exact GELU, then fixed
     vw.put_region(page, "gelu", "gelu", vw.SOL1)
     vw.replace_in_view(page, "gelu", vw.GELU_TANH, vw.GELU_ERF)
     status, rows, took = s.check("gelu", "gelu, exact-GELU bug")
@@ -148,7 +144,6 @@ def drive(s: Story) -> None:
     ran, skips = passes(rows, "gelu")
     s.shot("3-gelu-pass", "gelu")
     s.say(f"3 tanh restored -> '{status}' in {took:.1f}s ({len(ran)} rows PASS, {len(skips)} SKIP)")
-    # 4 the rest of the solution
     for cell in ("layer_norm", "attention", "block", "forward"):
         vw.put_region(page, cell, cell, vw.SOL1)
         status, rows, took = s.check(cell, f"{cell}, solution")
@@ -161,7 +156,6 @@ def drive(s: Story) -> None:
         s.shot(f"4-{cell}-pass", cell)
         s.say(f"4 {cell} -> '{status}' in {took:.1f}s: {len(ran)} rows PASS ({label} at most {worst:.3g}); "
               f"skips: {[r['dtype'] for r in skips]}")
-    # 5 reload: reattach
     t0 = time.perf_counter()
     page.reload()
     page.wait_for_selector("connect-pill[data-phase=connected]", timeout=120_000)
@@ -170,7 +164,6 @@ def drive(s: Story) -> None:
     states = {c: page.locator(f"ws-cell[name={c}] .cell-status").inner_text() for c in ("linear", "gelu", "forward")}
     assert all(v.startswith("passed") for v in states.values()), states
     s.say(f"5 reload -> reattached in {s.timings['reload_reattach_s']}s; {states}")
-    # 6 a new sandbox restores from the Volume
     s.disconnect()
     took = s.connect("warm")
     states = {c: page.locator(f"ws-cell[name={c}] .cell-status").inner_text() for c in ("linear", "gelu", "layer_norm", "attention", "block", "forward")}

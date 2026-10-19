@@ -29,15 +29,13 @@ from remote_e2e import GPU_DEVICE, STATS, free_port, nn, slider, stopped  # noqa
 from verify_connect import CHROME, open_menu, run_cell, serve_dist  # noqa: E402
 
 OUT = HERE / ".evidence" / "demo-tour"
-CONNECT_SECONDS = 600  # a workspace's first connect builds the image
-GROK_SECONDS = 180  # a T4 groks in ~20-30 s; the time budget below ends the run at 60 s regardless
-GROK_TIME_BUDGET = "6"  # slider stop 6 = 60 s (as in remote_e2e.py)
+CONNECT_SECONDS = 600
+GROK_SECONDS = 180
+GROK_TIME_BUDGET = "6"
 BUDGET_OFF = "7"
 SPEEDUP = 2.5
 CONTACT_FRAMES = 8
 
-# A caption bar, bottom left, above everything; set by caption(). The token ID field is masked for the recording
-# (the page masks only the secret; the ID is not a secret, but it need not be in a video either).
 OVERLAY = """
 (text) => {
   let el = document.getElementById('demo-caption');
@@ -171,7 +169,6 @@ def session_status(gateway: str, session_id: str, token: tuple[str, str]) -> str
 
 
 def end_left_session(page: Page, gateway: str, token: tuple[str, str]) -> None:
-    """The tour failed: end its session rather than leave a T4 up until the idle timeout."""
     stored = page.evaluate("localStorage.getItem('connect.session')")
     if stored is None:
         return
@@ -231,7 +228,7 @@ def main() -> None:
                 raise
             finally:
                 video = page.video
-                context.close()  # finishes the video file
+                context.close()
                 browser.close()
             assert video is not None
             webm = OUT / "tour.webm"
