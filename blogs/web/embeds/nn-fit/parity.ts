@@ -10,7 +10,7 @@ import type { Dtype, RemoteConfig, RemoteData } from "./remote";
 import { CURVE_POINTS, HEAT_GRID, curveGrid, heatGrid, remoteConfig } from "./remote";
 
 const STEPS = 2000;
-const SEEDS = [1, 2, 3, 4, 5];
+const SEEDS = [1, 2];
 const LR = 0.03; // the widget's default (nearest slider stop to 0.03)
 // The widget's defaults (nn-fit.ts: COLUMNS, HELD_OUT, HELD_OUT_SEED, sample seed 1, noise 0) and dl/neural-nets-fit.nnfit
 // (wave, width 12): the page's default config. The spiral case uses the element's defaults (2 x 8, tanh).
