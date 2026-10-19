@@ -36,7 +36,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import workspace
 
@@ -84,13 +84,18 @@ def lineage(chapter: str, root: Path = REF) -> list[str]:
     return [ch for ch in order[: order.index(chapter) + 1] if not (root / ch / "STANDALONE").exists()]
 
 
-def region_span(text: str, region: str) -> tuple[int, int] | None:
+class Region(NamedTuple):
+    first_line: int
+    last_line: int
+
+
+def region_span(text: str, region: str) -> Region | None:
     lines = text.split("\n")
     starts = [i for i, line in enumerate(lines) if line.strip() == f"# region: {region}"]
     if len(starts) != 1:
         return None
     ends = [i for i in range(starts[0] + 1, len(lines)) if lines[i].strip() == "# endregion"]
-    return (starts[0] + 1, ends[0] + 1) if ends else None
+    return Region(starts[0] + 1, ends[0] + 1) if ends else None
 
 
 def read_layer(folder: Path) -> Tree:

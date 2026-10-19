@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from assay.ch01 import ops
-from assay.ch01.ops import SHORT, Op, sweep, tolerance_ratio
+from assay.ch01.ops import SHORT, Op, load_frontier, sweep, tolerance_ratio
 from assay.ch01.run import Candidate, Ctx, detect_env, execute, where
 from assay.core import Check, Entry, Grader, Result, failed, grade, passed, verdict
 
@@ -59,10 +59,10 @@ def deterministic(run: Entry, cfg: Mapping[str, Any]) -> Result:
 def allclose(run: Entry, cfg: Mapping[str, Any]) -> Result:
     facts = _facts(run)
     atol, rtol = cfg["tol"][_dtype(run)]
-    ratio, at, err = tolerance_ratio(facts["frontier"], atol, rtol)
+    ratio, at, err = tolerance_ratio(load_frontier(facts["frontier"]), atol, rtol)
     ref = facts.get("ref_frontier")
     metrics = {"ratio": ratio, "err": float(facts["err"]), "atol": atol, "rtol": rtol,
-               "ref_ratio": tolerance_ratio(ref, atol, rtol)[0] if ref is not None else None}
+               "ref_ratio": tolerance_ratio(load_frontier(ref), atol, rtol)[0] if ref is not None else None}
     if not (math.isfinite(ratio) and ratio <= 1.0):
         return failed(f"|out - fp64 truth| up to {ratio:.3g}x the tolerance (atol {atol:g} + rtol {rtol:g} |T|; worst "
                       f"element: error {err:.3g} where |T| = {at:.3g})", metrics=metrics)

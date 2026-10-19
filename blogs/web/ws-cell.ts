@@ -48,16 +48,16 @@ function regionHighlight(name: string): Extension {
 type Verdict = readonly [text: string, cls: string];
 
 function verdictOf(result: JobResult, out: CheckOutput, seconds: string): Verdict {
+  if (result.status === "killed") return [`stopped (${seconds})`, "fail"];
   if (result.status === "exited") {
-    if (result.exit === 0) return [`passed (${seconds})`, "pass"];
-    if (result.exit === 1) {
+    if (result.code === 0) return [`passed (${seconds})`, "pass"];
+    if (result.code === 1) {
       const where = out.firstWhere();
       const at = where === undefined ? "" : `: ${where.file}:${String(where.line)}${where.region === undefined ? "" : ` (${where.region})`}`;
       return [out.summary?.outcome === "blocked" ? `blocked (${seconds})${at}` : `failed (${seconds})${at}`, "fail"];
     }
-    if (result.exit === 2) return [`not run (infrastructure): ${out.refusal ?? "see the output"}`, "fail"];
-    if (result.exit < 0) return [`stopped (${seconds})`, "fail"];
-    return [`check exited ${String(result.exit)}: see the output`, "fail"];
+    if (result.code === 2) return [`not run (infrastructure): ${out.refusal ?? "see the output"}`, "fail"];
+    return [`check exited ${String(result.code)}: see the output`, "fail"];
   }
   return result.status === "error" ? [`couldn't start the check: ${result.ename}: ${result.evalue}`, "fail"] : [result.reason, "fail"];
 }
@@ -253,7 +253,7 @@ class WorkspaceCell extends HTMLElement {
     this.runningJobId = undefined;
     this.removeAttribute("data-job");
     this.verdict = verdictOf(result, output, `${((performance.now() - started) / 1000).toFixed(2)}s`);
-    out.dataset["outcome"] = result.status === "exited" ? output.summary?.outcome ?? (result.exit === 2 ? "infra" : String(result.exit)) : result.status;
+    out.dataset["outcome"] = result.status === "exited" ? output.summary?.outcome ?? (result.code === 2 ? "infra" : String(result.code)) : result.status;
     out.classList.add(this.verdict[1] === "pass" ? "pass" : "fail");
     this.gate();
     await refreshStatus(this.chapter).catch((cause: unknown) => { this.verdict = [`status failed: ${String(cause)}`, "fail"]; });

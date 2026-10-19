@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import metadata
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import torch
 
@@ -34,6 +34,16 @@ from assay.core import (
     key_of,
     sha256,
 )
+
+ChildReply = Literal["boot", "import_error", "bind_error", "ready", "returned", "raised", "coverage"]
+
+
+def reply_kind(header: dict[str, Any], *expected: ChildReply) -> ChildReply:
+    for kind in expected:
+        if header.get("kind") == kind:
+            return kind
+    raise ProtocolError(f"unexpected reply kind {header.get('kind')!r}; want {' | '.join(expected)}")
+
 
 DTYPES = {"float64": torch.float64, "float32": torch.float32, "float16": torch.float16, "bfloat16": torch.bfloat16,
           "int64": torch.int64, "int32": torch.int32, "bool": torch.bool}
@@ -406,9 +416,9 @@ def execute(ctx: Ctx, op: Op, cand: Candidate, cases: list[Case], *, grade_only:
 def _load(ctx: Ctx, child: Child, cand: Candidate, coverage: bool) -> dict[str, Any] | None:
     try:
         boot, _ = child.recv(ctx.startup_timeout)
+        reply_kind(boot, "boot")
     except (ChildTimeout, ChildDied, ProtocolError) as exc:
         raise InfraError(f"the check child did not boot ({type(exc).__name__}: {exc})\n{child.log_tail()}") from exc
-    assert boot["kind"] == "boot", boot
     child.send({"kind": "load", "file": str(cand.file), "attr": cand.attr, "adapter": cand.adapter,
                 "device": ctx.device, "coverage": coverage}, {}, ctx.call_timeout)
     try:
@@ -418,13 +428,15 @@ def _load(ctx: Ctx, child: Child, cand: Candidate, coverage: bool) -> dict[str, 
                 "where": where(cand.file, None)}
     except (ChildDied, ProtocolError) as exc:
         return {"notes": f"importing {cand.file.name} killed the check child: {exc}", "where": where(cand.file, None)}
-    if header["kind"] == "import_error":
+    try:
+        kind = reply_kind(header, "ready", "import_error", "bind_error")
+    except ProtocolError as exc:
+        return {"notes": f"{exc} (to load)", "where": where(cand.file, None)}
+    if kind == "import_error":
         return {"notes": f"{cand.file.name} does not import: {header.get('error')}",
                 "where": where(cand.file, header.get("line")), "traceback": header.get("traceback", "")}
-    if header["kind"] == "bind_error":
+    if kind == "bind_error":
         return {"notes": str(header.get("error")), "where": where(cand.file, None)}
-    if header["kind"] != "ready":
-        return {"notes": f"unexpected reply {header['kind']!r} to load", "where": where(cand.file, None)}
     return None
 
 
@@ -436,11 +448,9 @@ def _call(ctx: Ctx, child: Child, case: Case, inputs: tuple, exp: Entry) -> tupl
     try:
         child.send({"kind": "call", "args": header_args, "dtype": case.dtype_name}, blobs, ctx.call_timeout)
         reply, got = child.recv(ctx.call_timeout)
-        if reply["kind"] == "raised":
+        if reply_kind(reply, "returned", "raised") == "raised":
             line = reply.get("line") if isinstance(reply.get("line"), int) else None
             return {**base, "status": "raised", "notes": f"raised: {reply.get('error')}", "line": line}, {}
-        if reply["kind"] != "returned":
-            raise ProtocolError(f"unexpected reply kind {reply['kind']!r}")
         out = decode(reply.get("out"), got.get("out", b""))
         after = reply.get("args_after")
         if not (isinstance(after, list) and len(after) == 2):
@@ -475,10 +485,11 @@ def _coverage(ctx: Ctx, child: Child, cand: Candidate) -> dict[str, Any]:
     try:
         child.send({"kind": "finish"}, {}, ctx.call_timeout)
         report, _ = child.recv(ctx.call_timeout)
+        reply_kind(report, "coverage")
     except (ChildTimeout, ChildDied, ProtocolError) as exc:
         return {"status": "died", "notes": f"no coverage report: {exc}"}
     lines = function_lines(cand.file, cand.attr)
-    if report.get("kind") != "coverage" or not isinstance(report.get("missing_lines"), list):
+    if not isinstance(report.get("missing_lines"), list):
         return {"status": "died", "notes": f"bad coverage report: {str(report)[:200]}"}
     if lines is None:
         return {"status": "returned", "executed": False, "missing_lines": [], "missing_branches": [], "range": None}

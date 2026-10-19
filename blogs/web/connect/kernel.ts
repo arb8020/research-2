@@ -12,7 +12,11 @@ export type RunResult =
   | { status: "error"; ename: string; evalue: string; traceback: string }
   | { status: "aborted"; reason: string };
 
-export type JobResult = { status: "exited"; exit: number } | Exclude<RunResult, { status: "ok" }>;
+export type JobResult =
+  | { status: "exited"; code: number }
+  | { status: "killed"; signal: number }
+  | { status: "lost"; reason: string }
+  | Exclude<RunResult, { status: "ok" }>;
 
 const JOB_MIME = "application/vnd.blogs.job+json";
 
@@ -234,13 +238,14 @@ class Kernel {
         resolve(result);
       };
       this.pending.set(msgId, (msg) => {
-        if ("gone" in msg) { finish({ status: "aborted", reason: msg.gone }); return; }
+        if ("gone" in msg) { finish({ status: "lost", reason: `${msg.gone} (the job may still be running)` }); return; }
         const c = msg.content;
         if (msg.type === "stream") onOutput(text(c, "text"));
         else if (msg.type === "display_data" && isJsonObject(c["data"]) && isJsonObject(c["data"][JOB_MIME])) {
           const marker = c["data"][JOB_MIME];
           if (typeof marker["exit"] !== "number") throw new Error(`kernel: job marker without an exit code: ${JSON.stringify(marker)}`);
-          finish({ status: "exited", exit: marker["exit"] });
+          const rc = marker["exit"];
+          finish(rc < 0 ? { status: "killed", signal: -rc } : { status: "exited", code: rc });
         } else if (msg.type === "execute_reply") {
           const reply = parseReply(c);
           if (reply.status !== "ok") finish(reply);

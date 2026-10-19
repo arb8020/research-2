@@ -29,6 +29,7 @@ import os
 import subprocess
 import time
 import tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
@@ -40,9 +41,17 @@ CONNECT_TIMEOUT_MS = 15 * 60_000
 vw.CHECK_TIMEOUT_MS = 10 * 60_000
 
 
-def token(profile: str) -> tuple[str, str]:
+@dataclass(frozen=True)
+class Secret:
+    value: str = field(repr=False)
+
+    def __str__(self) -> str:
+        return "[secret]"
+
+
+def token(profile: str) -> tuple[str, Secret]:
     cfg = tomllib.loads((Path.home() / ".modal.toml").read_text())[profile]
-    return cfg["token_id"], cfg["token_secret"]
+    return cfg["token_id"], Secret(cfg["token_secret"])
 
 
 LOADED = (f"document.querySelectorAll('ws-cell[data-loaded]').length === {vw.CELLS1} && [...document.querySelectorAll("
@@ -50,7 +59,7 @@ LOADED = (f"document.querySelectorAll('ws-cell[data-loaded]').length === {vw.CEL
 
 
 class Story:
-    def __init__(self, page: Page, tok: tuple[str, str]) -> None:
+    def __init__(self, page: Page, tok: tuple[str, Secret]) -> None:
         self.page, self.tok = page, tok
         self.log: list[str] = []
         self.timings: dict[str, object] = {}
@@ -73,7 +82,7 @@ class Story:
             page.locator(".connect-pill").click()
         if page.locator("input[name=token-id]").is_visible():
             page.fill("input[name=token-id]", self.tok[0])
-            page.fill("input[name=token-secret]", self.tok[1])
+            page.fill("input[name=token-secret]", self.tok[1].value)
         page.select_option("select[name=gpu]", "T4")
         t0 = time.perf_counter()
         page.locator(".connect-go").click()

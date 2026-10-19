@@ -549,7 +549,7 @@ def ch01_before_connect(run: Run, gateway: Gateway) -> None:
     put_region(page, "linear", "linear", SOL1)
     want = region_text(SOL1, "linear")
     assert want in doc(page, "gelu"), "the gelu cell's view of gpt2.py doesn't show the edit made in the linear cell"
-    stored = page.evaluate("JSON.parse(localStorage.getItem('blogs.ws.ch01.gpt2.py')).text")
+    stored = page.evaluate("JSON.parse(localStorage.getItem('blogs.ws.v1.ch01.gpt2.py')).text")
     assert want in stored, "the edit isn't in the browser's draft"
     run.shot("1-edited-before-connect")
     page.locator("ws-cell[name=linear] .run").click()
@@ -797,7 +797,7 @@ def ch01_timings(run: Run, box: Box) -> None:
 def ch01_conflict(run: Run, old: Gateway) -> Gateway:
     page = run.page
     run.say(old.stop())
-    page.evaluate("(t) => localStorage.setItem('blogs.ws.ch01.gpt2.py', JSON.stringify({text: t, acked: true, base: '0000000'}))", SOL1)
+    page.evaluate("(t) => localStorage.setItem('blogs.ws.v1.ch01.gpt2.py', JSON.stringify({text: t, acked: true, base: '0000000'}))", SOL1)
     box = run.new_box("sandbox2")
     gateway = Gateway(run.gateway_port, box, run.out)
     page.reload()

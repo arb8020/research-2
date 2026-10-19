@@ -10,6 +10,7 @@ import { onWorkspace, readFile, writeFile } from "./workspace";
 import type { Boot } from "./workspace";
 
 const SAVE_DEBOUNCE_MS = 300;
+const DRAFT_FORMAT = "v1";
 const MirroredFromPrimary = Annotation.define<boolean>();
 
 export interface Draft { text: string; acked: boolean; base: string | undefined }
@@ -104,7 +105,7 @@ export class WorkspaceFile {
     onKernelState((state) => { if (state === "off" || state === "lost") { this.loaded = false; this.changed(); } });
   }
 
-  private get draftKey(): string { return `blogs.ws.${this.chapter}.${this.file}`; }
+  private get draftKey(): string { return `blogs.ws.${DRAFT_FORMAT}.${this.chapter}.${this.file}`; }
   private get conflictKey(): string { return `${this.draftKey}.conflict`; }
   get text(): string { return this.primary.doc.toString(); }
 

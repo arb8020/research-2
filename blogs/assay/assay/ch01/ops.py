@@ -320,23 +320,30 @@ def reference_stats(truth: torch.Tensor, reference: torch.Tensor) -> dict[str, A
     return stats
 
 
-def frontier(out: torch.Tensor, truth: torch.Tensor) -> list[list[float]]:
+Frontier = list[tuple[float, float]]
+
+
+def frontier(out: torch.Tensor, truth: torch.Tensor) -> Frontier:
     err = (out.double() - truth).abs().reshape(-1)
     size = truth.abs().reshape(-1)
     if err.numel() == 0:
         return []
     if not bool(torch.isfinite(err).all()):
-        return [[0.0, math.inf]]
+        return [(0.0, math.inf)]
     order = torch.argsort(size, stable=True)
     size, err = size[order], err[order]
     best = torch.cummax(err, dim=0).values
     keep = torch.ones_like(err, dtype=torch.bool)
     keep[1:] = best[1:] > best[:-1]
-    return [[float(t), float(e)] for t, e in zip(size[keep].tolist(), err[keep].tolist(), strict=True)]
+    return [(float(t), float(e)) for t, e in zip(size[keep].tolist(), err[keep].tolist(), strict=True)]
 
 
-def tolerance_ratio(points: list[list[float]], atol: float, rtol: float) -> tuple[float, float, float]:
-    rows = [(float(e) / (atol + rtol * float(t)), float(t), float(e)) for t, e in points]
+def load_frontier(stored: list[list[float | str]]) -> Frontier:
+    return [(float(t), float(e)) for t, e in stored]
+
+
+def tolerance_ratio(points: Frontier, atol: float, rtol: float) -> tuple[float, float, float]:
+    rows = [(e / (atol + rtol * t), t, e) for t, e in points]
     return max(rows, default=(0.0, 0.0, 0.0))
 
 

@@ -58,7 +58,7 @@ def test_frontier_gives_the_exact_allclose_ratio_for_any_tolerance() -> None:
         assert ops.tolerance_ratio(points, atol, rtol)[0] == pytest.approx(brute, rel=1e-12), (atol, rtol)
     out[3, 4] = float("nan")
     assert ops.tolerance_ratio(ops.frontier(out, truth), 1.0, 1.0)[0] == math.inf
-    assert ops.tolerance_ratio([[0.0, "inf"]], 1.0, 1.0)[0] == math.inf, "the store writes inf as a string"
+    assert ops.tolerance_ratio(ops.load_frontier([[0.0, "inf"]]), 1.0, 1.0)[0] == math.inf, "the store writes inf as a string"
 
 
 def test_op_inputs_include_offset_cases() -> None:

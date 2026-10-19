@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, TypedDict
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -68,7 +68,7 @@ def workspace_file(ws: Workspace | None, b: Block, body: str) -> str:
 def region_text(tree: ref.Tree, file: str, region: str) -> str | None:
     text = tree[file].data.decode()
     span = ref.region_span(text, region)
-    return None if span is None else "\n".join(text.split("\n")[span[0] : span[1] - 1])
+    return None if span is None else "\n".join(text.split("\n")[span.first_line : span.last_line - 1])
 
 
 def solution_region(ws: Workspace, c: ref.Cell) -> str:
@@ -115,6 +115,11 @@ def render_excerpt(chapter: Path, path: str, lang: str, body: str, line: int) ->
             f'<span class="excerpt-src">{html.escape(where)} · read-only</span></div>'
             f'<code-view data-lang="{lang}" data-first-line="{first}" data-label="{html.escape(where)} (read-only)">'
             f'<pre>{html.escape(body.rstrip(chr(10)))}</pre></code-view></figure>\n')
+
+
+class RenderEnv(TypedDict):
+    line0: int
+    used: set[str]
 
 
 class Site(NamedTuple):
@@ -215,7 +220,7 @@ def markdown(chapter: Path, kinds: dict[str, embeds.Embed], preview: bool) -> Ma
 
 def render(site: Site, chapter: Path, text: str, line0: int, preview: bool) -> tuple[str, set[str]]:
     md = markdown(chapter, site.kinds, preview)
-    env: EnvType = {"line0": line0, "used": set()}
+    env: RenderEnv = {"line0": line0, "used": set()}
     tokens = md.parse(text, env)
     for token, line in links.wikilinks(tokens, line0):
         target = links.resolve(token.content, line, site.pages, md, site.sources)

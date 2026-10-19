@@ -83,8 +83,9 @@ async function runOnSession(name: string, source: string, onOut: (text: string) 
     for await (const text of lines(res.body)) {
       if (text === "") continue;
       const line = parseRunLine(JSON.parse(text));
-      if (line.kind === "result") result = line.result;
-      else onOut(line.text);
+      if (line.kind === "out") onOut(line.text);
+      else if (result === undefined) result = line.result;
+      else throw new Error("session /run: a second result line");
     }
     return result ?? { passed: false, message: "the session stopped before giving a result" };
   } catch (cause) {
