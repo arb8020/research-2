@@ -1,21 +1,8 @@
-/* Palette and type tokens. This file is their only writer; components use var(--x) and never a hex value.
- * Later (deferred, 2026-10-08): this palette and the theme switch are candidates for a shared personal
- * design-tokens file plus a component registry used across projects. Don't abstract until a second user.
- *
- * Two axes, set on <html> by settings.js:
- *   data-scheme  light | dark | absent (absent = follow the OS; Lea Verou's two-state toggle)
- *   data-theme   classic | paper   (surfaces only; syntax colours depend on the scheme alone)
- */
-
-/* Scheme tokens, shared by every theme. All token colours are >= 4.5:1 on both themes' code backgrounds. */
-/* TODO(page): light-dark(): each dark block below is written twice (OS media query + [data-scheme="dark"]);
- * color-scheme + light-dark(light, dark) values would say each colour once. */
 :root {
   color-scheme: light;
   --pass: #2f7d4a; --fail: #b3261e; --select: #d8e2f0;
   --tok-keyword: #7a2e8c; --tok-string: #8a3a10; --tok-comment: #5d655b; --tok-number: #1f5c99;
   --tok-type: #0b6a4a; --tok-meta: #7a4f12; --tok-def: #1d4f91; --tok-prop: #3b3b37;
-  /* classic surfaces (the default theme) */
   --bg: #fdfcf8; --fg: #1d1d1b; --muted: #6b6a64; --rule: #dedbd0; --code-bg: #f4f2ea;
   --gutter: #63625c; --active: #eae7dc; --caret: #1d1d1b;
 }
@@ -38,7 +25,6 @@
   --gutter: #9a988f; --active: #2c2c2f; --caret: #e8e6df;
 }
 
-/* paper: loom's skin via observe/dashboard/src/theme.css. Warm canvas, white surfaces, hairlines. */
 :root[data-theme="paper"] {
   --bg: #f5f5f1; --fg: #252825; --muted: #63675f; --rule: #dedfd9; --code-bg: #fff;
   --gutter: #63675f; --active: #f2f2ee; --caret: #252825; --pass: #24774f; --fail: #b8443f;
@@ -54,7 +40,6 @@
   --gutter: #9a9e96; --active: #2b2e2a; --caret: #e8eae5; --pass: #6dba8a; --fail: #e07670;
 }
 
-/* Typography. settings.js writes these on <html>; typeset.css reads its --typeset-* from them. */
 :root {
   --font-body: Charter, "Iowan Old Style", Georgia, serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
@@ -64,7 +49,6 @@
   --typeset-font-body: var(--font-body); --typeset-font-heading: var(--font-body); --typeset-font-mono: var(--font-mono);
   --typeset-size: var(--size); --typeset-leading: var(--leading); --typeset-flow: var(--flow);
   --color-foreground: var(--fg); --color-muted-foreground: var(--muted); --color-border: var(--rule); --color-muted: var(--code-bg);
-  /* typeset.css sets 1.125x --size below 48rem (20.25px at 18px). Phones get --size as set, like wider screens. */
   font-size: var(--typeset-size);
 }
 
@@ -75,7 +59,6 @@ article { max-width: calc(var(--measure) + 32px); margin: 0 auto; padding: 48px 
 
 .todo { margin: 1.4em 0; padding: 4px 10px; font-size: 12px; color: var(--muted); border: 1px dashed var(--rule); border-radius: 4px; }
 .todo::before { content: "todo: "; opacity: 0.7; }
-/* <!-- wip: ... -->: for readers, unlike .todo (a note to the author). Solid, full-strength text, a warm accent. */
 .wip { margin: 1.6em 0; padding: 8px 12px; font-family: var(--font-mono); font-size: 13px; color: var(--fg);
        background: var(--code-bg); border: 1px solid var(--rule); border-left: 4px solid var(--tok-meta); border-radius: 4px; }
 
@@ -108,16 +91,12 @@ code-cell, scratch-cell, ws-cell { display: block; margin: 1.6em -16px; border: 
 .cell-out { margin: 0; padding: 10px 12px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.45; max-height: 320px; overflow: auto;
             white-space: pre-wrap; border-top: 1px solid var(--rule); border-left: 3px solid var(--muted); background: none; }
 .cell-out.pass { border-left-color: var(--pass); } .cell-out.fail { border-left-color: var(--fail); }
-/* scratch cells (```python scratch): tables like nvidia-smi's keep their columns and scroll sideways. */
 .scratch-out { white-space: pre; overflow-x: auto; }
 .connect-to-run { font: inherit; padding: 3px 10px; border: 1px solid var(--muted); border-radius: 4px; background: none; color: var(--fg); cursor: pointer; }
 .connect-to-run:hover { background: var(--active); }
 .connect-to-run[hidden] { display: none; }
-/* workspace cells (```cpp cell=X file=F): output links jump to a file's editor. */
 .cell-out a.out-link { color: var(--fg); text-decoration: underline; text-decoration-color: var(--muted); }
 .cell-out a.out-link:hover { text-decoration-color: var(--fg); }
-/* workspace cells over regions: one shared doc per file; the cell shows its region (highlighted) in a bounded
- * height (--cell-h, set by ws-cell.ts), or the whole file when expanded. */
 .cell-editor.bounded .cm-editor { height: var(--cell-h, 360px); max-height: none; }
 .cell-editor.expanded .cm-editor { max-height: none; }
 .cm-editor .cm-region { background: var(--active); }
@@ -125,7 +104,6 @@ code-cell, scratch-cell, ws-cell { display: block; margin: 1.6em -16px; border: 
 .expand { font: inherit; padding: 3px 8px; border: 1px solid var(--rule); border-radius: 4px; background: none; color: var(--muted); cursor: pointer; }
 .expand[aria-pressed="true"] { color: var(--fg); background: var(--active); border-color: var(--muted); }
 .expand[hidden] { display: none; }
-/* a region cell's "reference" toggle: the solution's region, read-only, stacked under the reader's editor */
 .show-reference { font: inherit; padding: 3px 8px; border: 1px solid var(--rule); border-radius: 4px; background: none; color: var(--muted); cursor: pointer; }
 .show-reference[aria-pressed="true"] { color: var(--fg); background: var(--active); border-color: var(--muted); }
 .show-reference[hidden], .cell-reference[hidden] { display: none; }
@@ -137,7 +115,6 @@ code-cell, scratch-cell, ws-cell { display: block; margin: 1.6em -16px; border: 
 .cell-conflict[hidden] { display: none; }
 .cell-conflict button { font: inherit; padding: 2px 8px; border: 1px solid var(--rule); border-radius: 4px; background: var(--bg); color: var(--fg); cursor: pointer; }
 ws-cell[data-queued] .run { border-style: dashed; }
-/* a check's JSON lines (check-output.ts): verdict rows, a summary, then the log */
 div.cell-out { white-space: normal; }
 .cell-out .check-log { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .cell-out .check-log:empty { display: none; }
@@ -162,9 +139,6 @@ env-play { display: block; margin: 1.6em 0; }
 env-play iframe { display: block; width: 480px; max-width: 100%; height: 240px; border: 0; border-radius: 4px; }
 .play-caption { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
-/* The page corner (page.html <header class="corner">): Connect on opted-in pages (connect/ui.ts), then the light/dark
- * toggle and the Aa reading-settings panel (settings.js). It floats top right where the margin can hold it; narrower
- * than that, it is a bar across the top (sticky, so the Connect status stays in view) and can't cover a cell's Run. */
 .corner { position: fixed; top: 12px; right: 12px; z-index: 10; display: flex; gap: 6px; align-items: flex-start;
           font-family: var(--font-mono); font-size: 12px; }
 @media (max-width: 1279px) {
@@ -187,7 +161,6 @@ page-settings { position: relative; display: flex; gap: 6px; align-items: flex-s
 .settings-actions button { font: inherit; padding: 5px; border: 1px solid var(--rule); border-radius: 4px; background: var(--code-bg); color: var(--fg); cursor: pointer; }
 .settings-actions button:hover { background: var(--active); }
 
-/* Connect (connect/ui.ts): the pill, its panel (the form, or the session menu) and the Details drawer. */
 connect-pill { position: relative; display: block; }
 .connect-pill { display: inline-flex; align-items: center; gap: 7px; height: 32px; max-width: min(34ch, calc(100vw - 120px)); padding: 0 12px;
                 border: 1px solid var(--rule); border-radius: 16px; background: var(--bg); color: var(--fg); font: inherit; cursor: pointer; }
@@ -255,9 +228,6 @@ connect-pill[data-failed] .connect-dot, connect-pill[data-ending] .connect-dot {
   connect-pill[data-phase="connecting"] .connect-dot { animation: none; }
 }
 
-/* [[page#Heading]] links (page-link.ts) and their preview cards. A card is a clone of the link's <template>, placed
- * with position: fixed by page-link.ts. Its first 200ms ignore the pointer (the grace), so a pointer passing over
- * it on the way elsewhere doesn't hold it open. Prose in a card is typeset like the page, a size down. */
 .link-card { position: fixed; z-index: 20; width: min(420px, calc(100vw - 16px)); max-height: 460px; overflow: hidden;
              padding: 4px 16px 12px; font-size: 15px; line-height: 1.6; background: var(--bg); color: var(--fg);
              border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);

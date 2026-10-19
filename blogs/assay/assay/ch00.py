@@ -1,15 +1,3 @@
-"""Chapter 0 (the toy) as a check suite, stdlib only: C++ ring + scheduler loop, Python prefill budget.
-
-    run_checks ch00 [--op ring|loop|budget]...       cwd = the tree (its run_checks shim calls this)
-      run    the cell's steps as the child user (make, then the check binary / script), output streamed as log lines
-             -> Run: each step's exit code + output; loop's replay also CREATES got.trace (the batches it computed)
-      grade  build (exit 0) > run (exit 0) > trace (got.trace == sched.trace, creates trace.diff; loop only)
-
-A cell's Run is keyed by the bytes of the files it builds from + the toolchain + this file, so re-checking an unchanged
-cell is a cache hit. The build goes to a per-tree dir outside the tree (owned by the child user when the parent is
-root: it cannot write the tree).
-"""
-
 from __future__ import annotations
 
 import difflib
@@ -50,9 +38,9 @@ KEEP_OUTPUT_CHARS = 20000
 @dataclass(frozen=True)
 class Cell:
     file: str
-    inputs: tuple[str, ...]  # what the run depends on (the cache key)
-    steps: tuple[tuple[str, ...], ...]  # {python} {out} {scratch} are filled in
-    creates: tuple[str, ...] = ()  # files a step promises to write into {scratch}
+    inputs: tuple[str, ...]
+    steps: tuple[tuple[str, ...], ...]
+    creates: tuple[str, ...] = ()
 
 
 CELLS = {
@@ -80,11 +68,9 @@ def toolchain() -> dict[str, str]:
 
 
 def build_dir(tree: Path, iso: Isolation) -> str:
-    """Objects live outside the tree, one dir per tree path (incremental builds between checks of the same tree).
-    Never in the tree: a copied tree would carry objects newer than its sources, make would skip the build, and the
-    stale binary's verdict would be cached under the new sources' key."""
     tag = hashlib.sha256(f"{tree.resolve()}|{iso.uid}".encode()).hexdigest()[:12]
     path = Path(tempfile.gettempdir()) / f"assay-ch00-build-{tag}"
+    assert not path.resolve().is_relative_to(tree.resolve()), f"{path}: build objects must live outside the tree, or a copied tree carries stale objects"
     path.mkdir(exist_ok=True)
     if iso.mode == "unprivileged":
         os.chown(path, iso.uid, iso.gid)
@@ -127,17 +113,14 @@ def execute(store: Store, cell_name: str, tree: Path, iso: Isolation, env: dict[
                 files[name] = (scratch / name).read_bytes()
         if "sched.trace" in cell.inputs:
             files["expected.trace"] = (tree / "sched.trace").read_bytes()
-        complete = all(s["rc"] is not None for s in steps)  # a timeout may be the machine: don't cache it
+        no_step_timed_out = all(s["rc"] is not None for s in steps)
         meta = {"parts": parts, "facts": {"steps": steps, "cell": cell_name, "file": cell.file},
                 "summary": f"ch00 {cell_name}: rc {[s['rc'] for s in steps]}"}
-        if complete:
+        if no_step_timed_out:
             return store.put("run", key_of(parts), meta, files)
         return Entry("run", key_of(parts), None, {**meta, "files": {}})
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
-
-
-# ---- grading ---------------------------------------------------------------------------------------------------
 
 
 def _step(run: Entry, index: int) -> dict[str, Any] | None:
@@ -169,7 +152,6 @@ def ran(run: Entry, cfg: Mapping[str, Any]) -> Result:
 
 
 def trace(run: Entry, cfg: Mapping[str, Any]) -> Result:
-    """The replay's batches vs the expected trace, as text: the first differing line, and the whole diff kept."""
     if "got.trace" not in run.meta["files"]:
         return failed("the replay did not create got.trace")
     want = run.read("expected.trace").decode().splitlines()
@@ -185,16 +167,11 @@ def trace(run: Entry, cfg: Mapping[str, Any]) -> Result:
 
 
 def grader(cell_name: str) -> Grader:
-    """build > run > trace: run is not required when a trace follows, so a mismatch still gets its diff (the run's
-    own message, e.g. an ASSERT, stays the verdict's note: it is the first failure)."""
     has_trace = "got.trace" in CELLS[cell_name].creates
     checks = [Check("build", build), Check("run", ran, required=not has_trace)]
     if has_trace:
         checks.append(Check("trace", trace, creates=("diff",)))
     return Grader(f"ch00-{cell_name}", tuple(checks))
-
-
-# ---- suite -------------------------------------------------------------------------------------------------------
 
 
 def checks(args: Any, store: Store, iso: Isolation, log: Callable[[str], None], warm: Any) -> Iterator[dict]:
@@ -213,7 +190,6 @@ def checks(args: Any, store: Store, iso: Isolation, log: Callable[[str], None], 
 
 
 def _where(graded: Entry, cell_file: str) -> dict[str, Any] | None:
-    """The first file:line a failing check's notes mention, preferring the cell's own file."""
     bad = next((row for row in graded.meta["checks"] if row["outcome"] == "fail"), None)
     if bad is None:
         return None

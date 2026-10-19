@@ -61,9 +61,15 @@ def plan(browser: Browser, a: argparse.Namespace) -> None:
     page.screenshot(path=a.out / "plan-page.png", full_page=True)
 
 
+YOUTUBE = re.compile(r"^https://(www\.)?youtube(-nocookie)?\.com/")
+
+
 def embeds(browser: Browser, a: argparse.Namespace) -> None:
     errors: list[str] = []
     page = new_page(browser, errors)
+    youtube: list[str] = []
+    page.on("request", lambda r: youtube.append(r.url) if YOUTUBE.match(r.url) else None)
+    page.route(YOUTUBE, lambda route: route.fulfill(body=""))
     page.goto(f"{a.base}/01-flappy/")
     car = page.locator("embed-carousel")
     car.scroll_into_view_if_needed()
@@ -76,9 +82,16 @@ def embeds(browser: Browser, a: argparse.Namespace) -> None:
     car.get_by_role("button", name="Previous slide").click()
     expect(count).to_have_text(f"1 / {total}")
     check(True, "carousel: Next -> 2, Previous -> 1")
+    first = car.locator(".slide").first
+    check(not youtube and first.locator("a.facade").count() == 1, f"carousel: nothing loads from YouTube before a click {youtube}")
+    first.locator("a.facade").click()
+    expect(first.locator("iframe")).to_have_count(1)
+    car.get_by_role("button", name="Next slide").click()
+    expect(first.locator("iframe")).to_have_count(0)
+    check(len(youtube) == 1 and first.locator("a.facade").count() == 1, f"carousel: a click loads the player {youtube}; leaving its slide unloads it")
+    car.get_by_role("button", name="Previous slide").click()
     car.screenshot(path=a.out / "carousel.png")
 
-    # Which env plays depends on the session: the reference until the reader's flappy passes (cells.md), then theirs.
     session = page.locator('meta[name="session-url"]').get_attribute("content") or ""
     reader_wasm = page.request.get(f"{session}/state").json()["wasm"].get("flappy")
     play = page.locator('env-play[cell="flappy"]')
@@ -115,8 +128,6 @@ def links(browser: Browser, a: argparse.Namespace) -> None:
     link = page.locator("page-link > a")
     check(link.count() == 1 and link.get_attribute("href") == "../neural-nets/#fitting-a-curve", f"one page-link -> {link.get_attribute('href')}")
     check(page.evaluate("customElements.get('nn-fit')") is None, "nn-fit not loaded before the card opens")
-    # The flappy play iframe takes keyboard focus on load (seen 2026-10-09, headless Chromium), so a key press goes to
-    # the game, not the page. A reader clicks the prose first; so do we, and report where focus was.
     page.wait_for_timeout(1500)
     print(f"info focus after load: <{page.evaluate('document.activeElement.tagName').lower()}>", flush=True)
     page.locator("h1").click()

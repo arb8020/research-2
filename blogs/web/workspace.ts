@@ -1,21 +1,9 @@
-// The reader's workspace in the connected sandbox (workspace.py there; blogs/workspace.py here). Files go through the
-// Contents API (connect/contents.ts); workspace.py runs on the kernel: status and boot as short cells, checks as
-// background jobs.
-//
-//   boot    on every kernel attach: upload the page's _blogs/ (workspace.py + the trusted check code, listed in
-//           _blogs/MANIFEST.sha256) and this chapter's ref bundle, then `workspace.py boot`: the repo as it is,
-//           restored from the persisted bundle, or seeded from the chapter's start
-//   status  pass tags -> which cells passed (and whether their file changed since), which files have drafts
-//   check   `workspace.py check <chapter> <cell> --trusted <sha256>` as a job: it verifies _blogs/ and runs the
-//           cell's cmd from checks/<chapter>.json; its output (JSON lines) streams to the cell that started it
 import { makeDir, readText, writeBytes, writeText } from "./connect/contents";
 import { killJob, onKernelState, runCode, runJob } from "./connect/kernel";
 import type { JobResult } from "./connect/kernel";
 import { isJsonObject } from "./json";
 
-const DIR = "workspace"; // workspace.py's REPO, relative to Jupyter's root (the kernel's cwd)
-// Not a dot-dir: the Contents API refuses hidden paths (ContentsManager.allow_hidden is off), and its error replies
-// carry no CORS headers, so the page would only see "Failed to fetch".
+const DIR = "workspace";
 const STATE = "_blogs";
 const TOOL = `${STATE}/workspace.py`;
 const TRUST_MANIFEST = "MANIFEST.sha256";
@@ -26,20 +14,18 @@ export interface CellStatus {
   file: string;
   region: string | null;
   ops: string[];
-  passed: boolean; // a pass/<chapter>/<cell> tag exists
-  stale: boolean; // passed, but a later pass committed a different version of its file
-  draft: boolean; // the workspace file differs from the latest passing version
+  passed: boolean;
+  stale: boolean;
+  draft: boolean;
 }
 
 export interface WorkspaceStatus {
   chapter: string;
   head: string;
   cells: CellStatus[];
-  persist: { dir: string; bundleBytes: number } | null; // null: nothing outlives this sandbox
+  persist: { dir: string; bundleBytes: number } | null;
 }
 
-// seeded: a new workspace from the chapter's start. restored(-previous): from the persisted bundle (the sandbox is
-// new, so drafts only this browser has may be newer than the workspace's). existing: this sandbox had it already.
 export type Created = "seeded" | "restored" | "restored-previous" | "existing";
 export interface Boot { created: Created; ms: number; status: WorkspaceStatus }
 
@@ -77,7 +63,6 @@ function parseBoot(raw: unknown): Boot {
   return { created, ms: raw["ms"], status: parseStatus(raw["status"]) };
 }
 
-// `workspace.py <args>` as a short cell; its last stdout line is JSON. A failure raises in the kernel with its stderr.
 async function wsJson(args: string[]): Promise<unknown> {
   const code = `import subprocess as _s, sys as _y
 _r = _s.run([_y.executable, ${JSON.stringify(TOOL)}, *${JSON.stringify(args)}], capture_output=True, text=True)
@@ -91,7 +76,7 @@ print(_r.stdout.strip().splitlines()[-1])`;
   return JSON.parse(out);
 }
 
-let booting: Promise<Boot> | undefined; // one boot per kernel attach
+let booting: Promise<Boot> | undefined;
 let current: WorkspaceStatus | undefined;
 const listeners = new Set<(s: WorkspaceStatus) => void>();
 
@@ -112,9 +97,6 @@ async function fetchOk(path: string): Promise<Response> {
 
 const hex = (buf: ArrayBuffer): string => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 
-// The page's _blogs/ into the sandbox's: every file MANIFEST.sha256 lists (as served next to the page, checked
-// against its line here too), then the manifest itself. `trusted` is the manifest's sha256 the build stamped on the
-// cells: a page whose files don't match it (a stale cache) refuses to upload.
 async function uploadTrusted(trusted: string): Promise<void> {
   const manifest = new Uint8Array(await (await fetchOk(`./${STATE}/${TRUST_MANIFEST}`)).arrayBuffer());
   const got = hex(await crypto.subtle.digest("SHA-256", manifest));
@@ -129,13 +111,14 @@ async function uploadTrusted(trusted: string): Promise<void> {
     const parts = path.split("/").slice(0, -1);
     for (let i = 1; i <= parts.length; i++) dirs.add(`${STATE}/${parts.slice(0, i).join("/")}`);
   }
-  for (const dir of [...dirs].sort((a, b) => a.length - b.length)) await makeDir(dir); // parents first
+  const parentsFirst = [...dirs].sort((a, b) => a.length - b.length);
+  for (const dir of parentsFirst) await makeDir(dir);
   await Promise.all(entries.map(async ({ sha, path }) => {
     const bytes = new Uint8Array(await (await fetchOk(`./${STATE}/${path}`)).arrayBuffer());
     if (hex(await crypto.subtle.digest("SHA-256", bytes)) !== sha) throw new Error(`the page's ${STATE}/${path} doesn't match ${TRUST_MANIFEST}; reload`);
     await writeBytes(`${STATE}/${path}`, bytes);
   }));
-  await writeBytes(`${STATE}/${TRUST_MANIFEST}`, manifest); // last: a half-done upload fails verification
+  await writeBytes(`${STATE}/${TRUST_MANIFEST}`, manifest);
 }
 
 async function doBoot(chapter: string, trusted: string): Promise<Boot> {
@@ -143,15 +126,14 @@ async function doBoot(chapter: string, trusted: string): Promise<Boot> {
   await writeBytes(REF, new Uint8Array(await (await fetchOk("./ref.bundle")).arrayBuffer()));
   const boot = parseBoot(await wsJson(["boot", chapter, "--ref", REF]));
   if (boot.status.chapter !== chapter) throw new Error(`workspace.py booted ${boot.status.chapter}, not ${chapter}`);
-  document.documentElement.dataset["workspaceBoot"] = `${boot.created} ${String(boot.ms)}ms`; // for debugging and verify_workspace.py
+  document.documentElement.dataset["workspaceBoot"] = `${boot.created} ${String(boot.ms)}ms`;
   publish(boot.status);
   return boot;
 }
 
-// The workspace for this attach (booted once; every cell on the page awaits the same promise).
 export function bootWorkspace(chapter: string, trusted: string): Promise<Boot> {
   booting ??= doBoot(chapter, trusted);
-  booting.catch(() => { booting = undefined; }); // a failed boot can be retried by the next caller
+  booting.catch(() => { booting = undefined; });
   return booting;
 }
 onKernelState((state) => { if (state === "off" || state === "lost") { booting = undefined; current = undefined; } });
@@ -165,7 +147,6 @@ export async function refreshStatus(chapter: string): Promise<WorkspaceStatus> {
 export const readFile = (file: string): Promise<string | undefined> => readText(`${DIR}/${file}`);
 export const writeFile = (file: string, text: string): Promise<void> => writeText(`${DIR}/${file}`, text);
 
-// Check one cell as a background job `id`: workspace.py runs the cell's cmd from the manifest (the page never names it).
 export function checkCell(id: string, chapter: string, cell: string, trusted: string, onOutput: (text: string) => void): Promise<JobResult> {
   return runJob(id, ["@python", TOOL, "check", chapter, cell, "--trusted", trusted], ".", onOutput);
 }

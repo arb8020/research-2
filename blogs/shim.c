@@ -1,15 +1,3 @@
-// Generic ctypes-facing vectorizer over one PufferLib 5.0 CPU env.
-// Compiled once per env: clang -DENV_HEADER=\"breakout/breakout.h\" ... -shared.
-//
-// Buffers are caller-owned (Python passes torch data_ptrs). Env i, agent 0 owns
-// obs[i*OBS_SIZE..], actions[i*NUM_ATNS..], rewards[i], terminals[i].
-// Contract mirrors pufferl.cu (env_setup / vec_log / worker loop):
-//   - env->rng is set before puf_init (pufferl uses rng = env index; we mix in a seed).
-//   - rewards/terminals are zeroed before every puf_step (envs may only write them
-//     on events, e.g. breakout's destroy_brick does `rewards += points`).
-//   - envs auto-reset inside puf_step; obs is post-reset on terminal steps.
-//   - Log is a flat struct of floats; vec_log sums over envs, clears, divides by n.
-
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -17,6 +5,8 @@
 #include <string.h>
 
 #include ENV_HEADER
+
+#define VEC_LOG_CAP_TOO_SMALL (-1)
 
 _Static_assert(sizeof(obs_t) == sizeof(float), "shim expects float32 obs (PRECISION_FLOAT)");
 _Static_assert(sizeof(Log) % sizeof(float) == 0, "Log must be a flat struct of floats");
@@ -36,7 +26,6 @@ int vec_obs_size(void) { return OBS_SIZE; }
 int vec_num_atns(void) { return NUM_ATNS; }
 int vec_num_actions(void) { return act_sizes[0]; }
 
-// splitmix64 finalizer: distinct, decorrelated rand_r states per (seed, env).
 static unsigned int env_rng(unsigned int seed, int i) {
     uint64_t z = ((uint64_t)seed << 32 | (uint32_t)i) + 0x9E3779B97F4A7C15ull;
     z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
@@ -44,8 +33,6 @@ static unsigned int env_rng(unsigned int seed, int i) {
     return (unsigned int)(z ^ (z >> 31));
 }
 
-// kwargs: "key=value;key=value". Values use upstream's ini parser (numbers,
-// 1_000 separators, lists, strings).
 static void parse_kwargs(Dict* out, const char* kwargs) {
     char* buf = dict_strdup(kwargs);
     for (char* tok = strtok(buf, ";"); tok; tok = strtok(NULL, ";")) {
@@ -70,7 +57,6 @@ void* vec_create(int num_envs, const char* kwargs, unsigned int seed,
     vec->action_mask = (unsigned char*)malloc((size_t)num_envs * act_sizes[0]);
     memset(vec->action_mask, 1, (size_t)num_envs * act_sizes[0]);
 
-    // OpenMP would go here and in vec_reset/vec_step: `#pragma omp parallel for`.
     for (int i = 0; i < num_envs; i++) {
         Env* env = &vec->envs[i];
         env->rng = env_rng(seed, i);
@@ -110,9 +96,6 @@ void vec_step(void* handle) {
     }
 }
 
-// Writes "key=value\n" lines (episode means over all finished episodes since the
-// last call, plus n = episode count) into out, then clears env logs. Returns bytes
-// written, or -1 (logs kept) if cap is too small.
 int vec_log(void* handle, char* out, int cap) {
     Vec* vec = (Vec*)handle;
     const int nf = sizeof(Log) / sizeof(float);
@@ -139,7 +122,7 @@ int vec_log(void* handle, char* out, int cap) {
             dict.items[i].key, dict.items[i].value);
         if (w < 0 || w >= cap - len) {
             dict_clear(&dict);
-            return -1;
+            return VEC_LOG_CAP_TOO_SMALL;
         }
         len += w;
     }

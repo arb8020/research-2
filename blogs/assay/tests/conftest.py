@@ -51,7 +51,6 @@ def store_dir(tmp_path: Path, reference_store: Path, monkeypatch: pytest.MonkeyP
 
 def run_checks(args: list[str], cwd: Path, store: Path, *, spawn: bool = False,
                shim: Path | None = None) -> tuple[int, list[dict]]:
-    """run_checks as a reader runs it; returns (exit code, the JSON lines)."""
     env = {**os.environ, "ASSAY_STORE": str(store), "BLOGS_ASSAY": str(ASSAY)}
     argv = ([sys.executable, str(shim)] if shim else [sys.executable, "-m", "assay.cli"]) + args
     if spawn and not shim:

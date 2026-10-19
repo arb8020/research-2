@@ -1,37 +1,3 @@
-"""Build a chapter's reader page: rl/01-flappy.md -> dist/01-flappy/index.html (+ page.js, page.css, play widget).
-
-page.js and settings.js are esbuild bundles of web/page.ts and web/settings.ts (`npm run build` in web/;
-run `npm ci` there once).
-
-    uv run build_page.py rl/01-flappy.md [dl/neural-nets.md ...] [--session-url http://localhost:8787]
-                         [--gateway-url http://localhost:8790]
-    uv run build_page.py --all                 # every chapter under blogs/ (links.chapters())
-    python3 -m http.server 8010 -d dist        # then open http://localhost:8010/01-flappy/
-
-cell=X     -> <code-cell> editor prefilled with the stub, Run button, output pane
-given      -> collapsed, read-only code (the reader calls into it, so they can read it)
-```K cell=X file=F, on a <!-- page: workspace=chNN --> page -> <ws-cell>: an editor over the reader's workspace
-                      file F (workspace.py in their sandbox), scrolled to the cell's region (checks/chNN.json); cells
-                      over one file share one document. The fence body is optional and, if there, must equal F at
-                      chNN/start (ref.py). Run runs the cell's cmd from checks/chNN.json (no check= fence)
-```K given file=F (workspace page) -> read-only view of F at chNN/start; output lines naming F link to it
-```python scratch -> <scratch-cell>: editable, Run executes on the Connect session's kernel; no checks, no gating
-<!-- page: connect --> on its own line -> this page has the header Connect control (gateway: --gateway-url);
-                      a page with scratch cells or workspace cells must have it
-<!-- page: workspace=chNN --> -> the page's file= cells are chapter chNN of the reference (engine/ref/chNN); the page
-                      ships _blogs/ (workspace.py + the trusted check code + MANIFEST.sha256, ref.stage_trusted) and
-                      the chapter's start bundle (ref.bundle) for the sandbox
-solution=X, check=X, budget=X -> not in the page; the session runs them
-workspace solutions (ref/chNN/files) -> only each region cell's own region, in a <template class="reference"> inside
-                      that <ws-cell> (the cell's "reference" toggle shows it read-only); never the whole file
-<!-- ... --> on its own line -> a muted "todo" note
-<!-- wip: ... --> on its own line -> a visible "under construction" banner (🚧 + the text), for readers
-<X-play></X-play>, X a C cell -> <env-play cell=X>, the wasm play widget (reference env until X passes)
-```K fence, web/embeds/K/ exists -> embed K (embeds.py: one folder per kind, e.g. carousel)
-[[page]], [[page#Heading]] -> <page-link>: a link to ../page/#heading-slug plus its hover preview card (links.py)
-# Heading -> <h1 id="heading">, GitHub-style slug ids (the targets of [[page#Heading]])
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -43,7 +9,7 @@ import subprocess
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, TypedDict
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -61,8 +27,6 @@ PAGE_FLAGS = ("connect", "workspace")
 
 
 class Workspace(NamedTuple):
-    """A workspace chapter's reference: its start and solution trees and its cells (checks/chNN.json)."""
-
     chapter: str
     start: ref.Tree
     solution: ref.Tree
@@ -71,7 +35,6 @@ class Workspace(NamedTuple):
 
 @functools.cache
 def workspace_of(chapter: Path) -> Workspace | None:
-    """The chapter's <!-- page: workspace=chNN --> reference, or None for an ordinary page."""
     text = chapter.read_text()
     flags = [f for f in PAGE_FLAG.findall(text) if f.startswith("workspace=")]
     if not flags:
@@ -86,13 +49,11 @@ def workspace_of(chapter: Path) -> Workspace | None:
 
 @functools.cache
 def trusted_sha() -> str:
-    """The sha256 of the MANIFEST.sha256 the page ships (what workspace.py check --trusted compares against)."""
     with tempfile.TemporaryDirectory() as tmp:
         return ref.stage_trusted(Path(tmp) / "_blogs")
 
 
 def workspace_file(ws: Workspace | None, b: Block, body: str) -> str:
-    """F's text at chNN/start; a non-empty fence body must equal it (the author sees the code; the build keeps it true)."""
     assert ws is not None, f"line {b.line}: file={b.file} needs <!-- page: workspace=chNN -->"
     assert b.file in ws.start, f"line {b.line}: {b.file} is not in {ws.chapter}/start (files: {sorted(ws.start)})"
     text = ws.start[b.file].data.decode()
@@ -105,14 +66,12 @@ def workspace_file(ws: Workspace | None, b: Block, body: str) -> str:
 
 
 def region_text(tree: ref.Tree, file: str, region: str) -> str | None:
-    """The lines strictly between `# region: <region>` and its `# endregion` in file, or None if a marker is missing."""
     text = tree[file].data.decode()
     span = ref.region_span(text, region)
-    return None if span is None else "\n".join(text.split("\n")[span[0] : span[1] - 1])
+    return None if span is None else "\n".join(text.split("\n")[span.first_line : span.last_line - 1])
 
 
 def solution_region(ws: Workspace, c: ref.Cell) -> str:
-    """Cell c's region of the solution: what its "reference" toggle shows."""
     assert c.region is not None, f"cell {c.name} has no region"
     assert c.file in ws.solution, f"cell {c.name}: {c.file} is not in {ws.chapter}/solution"
     found = region_text(ws.solution, c.file, c.region)
@@ -122,22 +81,19 @@ def solution_region(ws: Workspace, c: ref.Cell) -> str:
 
 
 def render_workspace_fence(chapter: Path, b: Block, preview: bool) -> str:
-    """```K cell=X file=F -> <ws-cell>; ```K given file=F -> a read-only view of F. Both show F at chNN/start."""
     assert b.role in ("cell", "given"), f"line {b.line}: file= goes on cell=X or given fences, not {b.role or 'a plain one'}"
     ws = workspace_of(chapter)
     text = html.escape(workspace_file(ws, b, b.source))
-    assert ws is not None  # workspace_file asserted it
+    assert ws is not None
     file = html.escape(b.file)
     if b.role == "cell" and not preview:
         c = next(c for c in ws.cells if c.name == b.name)
         region = f' data-region="{html.escape(c.region)}"' if c.region else ""
-        # The cell's "reference" toggle: its region of the solution, in a <template> (inert, not shown until asked).
         reference = f'<template class="reference">{html.escape(solution_region(ws, c))}</template>' if c.region else ""
         return (f'<ws-cell name="{b.name}" data-file="{file}" data-lang="{b.lang}" data-chapter="{ws.chapter}"{region} '
                 f'data-ops="{html.escape(" ".join(c.ops))}" data-trusted="{trusted_sha()}" data-not-typeset>'
                 f'<pre>{text}</pre>{reference}</ws-cell>\n')
     what = f"{b.name} cell · read-only here" if b.role == "cell" else "given · read-only"
-    # A link card (preview) must not claim the file: output links would jump into the card instead of the page.
     claim = "" if preview else f' data-file="{file}"'
     return (f'<figure class="excerpt" data-not-typeset><div class="cell-head"><span>{file} · {b.lang}</span>'
             f'<span class="excerpt-src">{what}</span></div>'
@@ -145,17 +101,13 @@ def render_workspace_fence(chapter: Path, b: Block, preview: bool) -> str:
 
 
 def render_excerpt(chapter: Path, path: str, lang: str, body: str, line: int) -> str:
-    """```c excerpt=../vendor/x.h fence -> a read-only, cell-styled view of those lines of a real file.
-
-    The fence body is the code itself (so the author sees it in the chapter); the build fails unless it
-    appears verbatim, as whole consecutive lines, in the named file. Split a snippet by splitting the fence.
-    """
     source = chapter.parent / path
     assert source.is_file(), f"line {line}: excerpt={path} not found next to the chapter"
     want = body.rstrip("\n").split("\n")
     have = source.read_text().split("\n")
     starts = [i for i in range(len(have) - len(want) + 1) if have[i : i + len(want)] == want]
-    assert starts, f"line {line}: this excerpt is not in {path} verbatim (lines changed upstream, or edited here?)"
+    assert starts, (f"line {line}: this excerpt is not in {path} verbatim, as whole consecutive lines (lines changed upstream, "
+                    "or edited here?); to show two parts, use two excerpt fences")
     first = starts[0] + 1
     shown = source.resolve().relative_to(HERE.resolve())
     where = f"{shown}:{first}" if len(want) == 1 else f"{shown}:{first}–{first + len(want) - 1}"
@@ -165,22 +117,19 @@ def render_excerpt(chapter: Path, path: str, lang: str, body: str, line: int) ->
             f'<pre>{html.escape(body.rstrip(chr(10)))}</pre></code-view></figure>\n')
 
 
-class Site(NamedTuple):
-    """What every render needs: the chapters ([[page]] -> path), the embed kinds, and the heading index cache."""
+class RenderEnv(TypedDict):
+    line0: int
+    used: set[str]
 
+
+class Site(NamedTuple):
     pages: dict[str, Path]
     kinds: dict[str, embeds.Embed]
     sources: dict[str, links.Source]
 
 
 def markdown(chapter: Path, kinds: dict[str, embeds.Embed], preview: bool) -> MarkdownIt:
-    """The renderer for one chapter's Markdown: a page, or (preview=True) a link card showing part of it.
-
-    The render env carries `line0` (the rendered text's first line - 1, so errors name chapter lines) and
-    `used` (embed kinds rendered). A card differs from a page in three ways: cells render read-only (like
-    `given`), headings render as styled paragraphs (no ids, outside the page outline), and [[links]] are plain.
-    """
-    md = MarkdownIt("commonmark", {"html": True}).enable("table")  # GFM pipe tables (typeset.css styles them)
+    md = MarkdownIt("commonmark", {"html": True}).enable("table")
     links.use(md)
     rules = md.renderer.rules
     plain_fence = rules["fence"]
@@ -270,9 +219,8 @@ def markdown(chapter: Path, kinds: dict[str, embeds.Embed], preview: bool) -> Ma
 
 
 def render(site: Site, chapter: Path, text: str, line0: int, preview: bool) -> tuple[str, set[str]]:
-    """Markdown -> (HTML, embed kinds used). Every [[link]] is resolved from source before anything renders."""
     md = markdown(chapter, site.kinds, preview)
-    env: EnvType = {"line0": line0, "used": set()}
+    env: RenderEnv = {"line0": line0, "used": set()}
     tokens = md.parse(text, env)
     for token, line in links.wikilinks(tokens, line0):
         target = links.resolve(token.content, line, site.pages, md, site.sources)
@@ -283,14 +231,12 @@ def render(site: Site, chapter: Path, text: str, line0: int, preview: bool) -> t
 
 
 def card(site: Site, target: links.Target, where: str) -> tuple[str, set[str]]:
-    """A link's preview card: the target page's title, then its section (or the page below its title), rendered."""
     first, text = links.section(target.source, target.heading)
     path = target.source.path
     try:
         body, used = render(site, path, text, first, preview=True)
     except AssertionError as e:
         raise AssertionError(f"{where}: its preview of {path.relative_to(HERE)} failed: {e}") from e
-    # Play widgets need the target's wasm next to the page, so a card leaves them out.
     envs = {b.name for b in parse(path.read_text()) if b.lang == "c" and b.role == "cell"}
     for name in envs:
         body = re.sub(rf"(<p>)?<{name}-play>\s*</{name}-play>(</p>)?", "", body)
@@ -305,7 +251,7 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
     envs = [b for b in blocks if b.lang == "c" and b.role == "cell"]
     env_names = {b.name for b in envs}
 
-    links.index(chapter, markdown(chapter, site.kinds, preview=False))  # duplicate heading ids fail here
+    links.index(chapter, markdown(chapter, site.kinds, preview=False))
     body, used = render(site, chapter, text, 0, preview=False)
     lazy = set().union(*(set(m.group(1).split()) for m in re.finditer(r'<page-link data-embeds="([^"]*)"', body))) - used
     for name in env_names:
@@ -318,7 +264,6 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
     ws_cells = re.findall(r'<ws-cell name="(\w+)"', body)
     if ws is not None:
         assert ws_cells == [c.name for c in ws.cells], f"{chapter}: the page's workspace cells {ws_cells} differ from checks/{ws.chapter}.json {[c.name for c in ws.cells]}"
-        # The solution is never in the page, except each cell's own region of it inside that cell's reference payload.
         payloads = re.findall(r'<ws-cell name="(\w+)"[^>]*>(?:(?!</ws-cell>).)*?<template class="reference">(.*?)</template>', body, re.DOTALL)
         outside = re.sub(r'<template class="reference">.*?</template>', "", body, flags=re.DOTALL)
         for c in ws.cells:
@@ -327,7 +272,8 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
                 continue
             want = html.escape(solution_region(ws, c))
             assert payloads.count((c.name, want)) == 1, f"cell {c.name}: its reference payload is not its solution region"
-            if want != html.escape(region_text(ws.start, c.file, c.region) or ""):  # a region the reader starts with solved is no secret
+            starts_solved = want == html.escape(region_text(ws.start, c.file, c.region) or "")
+            if not starts_solved:
                 assert want not in outside, f"cell {c.name}: its solution region leaked into the page outside its reference"
                 assert sum(want in p for _, p in payloads) == 1, f"cell {c.name}: its solution region is in another cell's reference"
     for b in blocks:
@@ -352,7 +298,6 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
     for f in ("build/page.js", "build/settings.js", "page.css", "typeset.css", "play.html"):
         shutil.copy(HERE / "web" / f, out / Path(f).name)
     if ws is not None:
-        # The page uploads _blogs/ and ref.bundle into the sandbox (web/workspace.ts); cells carry the manifest's sha256.
         shutil.rmtree(out / "_blogs", ignore_errors=True)
         assert ref.stage_trusted(out / "_blogs") == trusted_sha(), "the trusted code changed during the build"
         ref.reader_bundle(ws.chapter, out / "ref.bundle")
@@ -368,7 +313,13 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="Build chapter reader pages: rl/01-flappy.md -> dist/01-flappy/index.html (+ page.js, page.css, play widget).",
+        epilog="examples:\n"
+               "  uv run build_page.py rl/01-flappy.md dl/neural-nets.md\n"
+               "  uv run build_page.py --all\n"
+               "  python3 -m http.server 8010 -d dist     then open http://localhost:8010/01-flappy/",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("chapters", type=Path, nargs="*")
     ap.add_argument("--all", action="store_true", help="build every chapter under blogs/")
     ap.add_argument("--session-url", default="http://localhost:8787")

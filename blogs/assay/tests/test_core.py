@@ -1,9 +1,8 @@
-"""The core at its boundaries: store (immutability, interrupted writes, integrity), cache keys, the frame parser (the
-trust boundary), grading (order, required halts, skips recorded, creates, unknown keys folded), regrade semantics."""
-
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -25,8 +24,8 @@ from assay.core import (
 
 def test_same_parts_same_key_and_any_change_changes_it() -> None:
     parts = {"op": "layer_norm", "case": {"rows": 3, "dtype": "fp32"}, "env": {"chip": "cpu", "torch": "2.14"}}
-    assert key_of(parts) == key_of(json.loads(json.dumps(parts)))  # stable across a JSON round trip
-    assert key_of(parts) == key_of(dict(reversed(list(parts.items()))))  # key order does not matter
+    assert key_of(parts) == key_of(json.loads(json.dumps(parts)))
+    assert key_of(parts) == key_of(dict(reversed(list(parts.items()))))
     for path, value in (("case.rows", 4), ("case.dtype", "bf16"), ("env.chip", "sm_75"), ("env.torch", "2.15")):
         outer, inner = path.split(".")
         changed = {**parts, outer: {**parts[outer], inner: value}}
@@ -55,7 +54,7 @@ def test_interrupted_write_reads_as_missing(tmp_path: Path) -> None:
     store = Store(tmp_path / "s")
     half = tmp_path / "s" / "run" / "cd" / ("cd" * 32)
     half.mkdir(parents=True)
-    (half / "out.bin").write_bytes(b"partial")  # no meta.json: the writer died
+    (half / "out.bin").write_bytes(b"partial")
     assert store.get("run", "cd" * 32) is None
     assert store.put("run", "cd" * 32, {}, {"out.bin": b"whole"}).read("out.bin") == b"whole"
 
@@ -73,7 +72,31 @@ def test_derive_builds_once(tmp_path: Path) -> None:
     assert a.key == b.key and len(calls) == 1
 
 
-# ---- frames ------------------------------------------------------------------------------------------------------
+def test_concurrent_put_first_writer_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ours, theirs = Store(tmp_path / "s"), Store(tmp_path / "s")
+    rename = Path.rename
+
+    def theirs_lands_first(self: Path, target: Path) -> Path:
+        monkeypatch.setattr(Path, "rename", rename)
+        theirs.put("run", "abcdef0123", {"who": "theirs"}, {})
+        return rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", theirs_lands_first)
+    entry = ours.put("run", "abcdef0123", {"who": "ours"}, {})
+    assert entry.meta["who"] == "theirs"
+    assert not list((tmp_path / "s" / "tmp").iterdir()), "ours is dropped"
+
+
+def test_client_path_imports_no_third_party() -> None:
+    refuse = ("import sys\n"
+              "class Refuse:\n"
+              "    def find_spec(self, name, path=None, target=None):\n"
+              "        if name.partition('.')[0] not in (*sys.stdlib_module_names, 'assay'):\n"
+              "            raise ImportError(f'third-party import on the client path: {name}')\n"
+              "sys.meta_path.insert(0, Refuse())\n"
+              "import assay.cli, assay.core, assay.ch00\n")
+    proc = subprocess.run([sys.executable, "-c", refuse], cwd=Path(core.__file__).parents[1], capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stderr
 
 
 def test_frame_parser_rejects_lies() -> None:
@@ -102,9 +125,6 @@ def _frame(header: dict, blobs: dict[str, bytes]) -> tuple[bytes, bytes]:
     return data[core.PREFIX.size:core.PREFIX.size + head_n], data[core.PREFIX.size + head_n:]
 
 
-# ---- grading -------------------------------------------------------------------------------------------------------
-
-
 def _run(store: Store, facts: dict) -> core.Entry:
     return store.put("run", key_of(facts), {"facts": facts}, {})
 
@@ -119,7 +139,7 @@ def threshold(run: core.Entry, cfg: dict) -> core.Result:
 
 
 def loose(run: core.Entry, cfg: dict) -> core.Result:
-    return result(outcome="pass", surprise=42)  # unknown keys fold into details
+    return result(outcome="pass", surprise=42)
 
 
 def no_artifact(run: core.Entry, cfg: dict) -> core.Result:

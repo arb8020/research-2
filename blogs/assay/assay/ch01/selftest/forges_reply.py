@@ -1,8 +1,3 @@
-"""ADVERSARIAL: rewrites the child's reply code at import time (pygpubench's pipe_interpose /
-function_detour family) and answers every call with a pickle that would run code in the parent
-if the parent ever unpickled it. The parent only parses JSON + raw bytes, so this is a garbled
-reply, not code execution."""
-
 import os
 import pickle
 

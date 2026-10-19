@@ -1,6 +1,3 @@
-"""Chapter 1 through the core: case generator, cache-key stability, regrade without re-run, blocked imports, and the
-self-tests (planted bugs + cheats must FAIL for their stated reason) in both the spawn and the warm-process modes."""
-
 from __future__ import annotations
 
 import itertools
@@ -17,11 +14,8 @@ from assay.ch01 import ops
 from assay.ch01 import run as ch01_run
 from assay.ch01.run import Candidate, Ctx, detect_env, execute
 
-REF = BLOGS / "engine" / "ref" / "ch01" / "files"  # the chapter's solution tree (gpt2.py + checks/)
+REF = BLOGS / "engine" / "ref" / "ch01" / "files"
 HONEST = ASSAY / "assay" / "ch01" / "selftest" / "candidates.py"
-
-
-# ---- case generator ----------------------------------------------------------------------------------------------
 
 
 def check_pairwise(axes: list[tuple]) -> None:
@@ -53,7 +47,7 @@ def test_sweep_is_reproducible_and_covers_edges() -> None:
 def test_frontier_gives_the_exact_allclose_ratio_for_any_tolerance() -> None:
     gen = torch.Generator().manual_seed(0)
     truth = torch.randn(64, 33, generator=gen, dtype=torch.float64) * 10
-    truth[0, :5] = 2.5  # ties in |T|
+    truth[0, :5] = 2.5
     out = (truth + torch.randn(64, 33, generator=gen, dtype=torch.float64) * 1e-3).float()
     points = ops.frontier(out, truth)
     assert len(points) < truth.numel() // 10, "the frontier is a small summary"
@@ -63,7 +57,12 @@ def test_frontier_gives_the_exact_allclose_ratio_for_any_tolerance() -> None:
         assert ops.tolerance_ratio(points, atol, rtol)[0] == pytest.approx(brute, rel=1e-12), (atol, rtol)
     out[3, 4] = float("nan")
     assert ops.tolerance_ratio(ops.frontier(out, truth), 1.0, 1.0)[0] == math.inf
-    assert ops.tolerance_ratio([[0.0, "inf"]], 1.0, 1.0)[0] == math.inf, "the store writes inf as a string"
+    assert ops.tolerance_ratio(ops.load_frontier([[0.0, "inf"]]), 1.0, 1.0)[0] == math.inf, "the store writes inf as a string"
+
+
+def test_linear_output_is_not_logits() -> None:
+    assert not ops.is_logits(torch.zeros(3, ops.GPT2_QKV)), "linear's [T, 2304] is not logits"
+    assert ops.is_logits(torch.zeros(3, ops.VOCAB))
 
 
 def test_op_inputs_include_offset_cases() -> None:
@@ -73,9 +72,6 @@ def test_op_inputs_include_offset_cases() -> None:
         assert offset and len(offset) < len(cases), name
         x = ops.make_inputs(ops.REGISTRY[name], offset[0])[0].double()
         assert 2.0 < float(x.mean()) < 4.0 or x.numel() < 4, (name, float(x.mean()))
-
-
-# ---- cache keys + regrade (in process, spawned children) ----------------------------------------------------------
 
 
 @pytest.fixture
@@ -98,12 +94,22 @@ def test_run_keys_are_stable_and_move_with_code_case_and_env(ctx: Ctx, monkeypat
 
     monkeypatch.setattr(ch01_run, "reference_fp", lambda op: "edited-reference-code")
     with pytest.raises(ch01_run.InfraError, match="missing from the store"):
-        execute(ctx, op, cand, cases, grade_only=True)  # new reference code -> new expected -> new run keys
+        execute(ctx, op, cand, cases, grade_only=True)
     monkeypatch.undo()
 
     moved = Ctx(ctx.store, {**ctx.env, "torch": "9.9.9"}, ctx.iso, ctx.log)
     with pytest.raises(ch01_run.InfraError, match="missing from the store"):
-        execute(moved, op, cand, cases, grade_only=True)  # another env (versions, chip) is another key
+        execute(moved, op, cand, cases, grade_only=True)
+
+
+def test_a_died_call_is_not_cached(ctx: Ctx) -> None:
+    cases = ops.sweep(ops.layer_norm)[:1]
+    cand = Candidate(ASSAY / "assay" / "ch01" / "selftest" / "adversarial.py", "exits", "plain")
+    first = execute(ctx, ops.layer_norm, cand, cases)
+    ((_, died),) = first.runs
+    assert died is not None and died.meta["facts"]["status"] == "died" and died.path is None, died
+    again = execute(ctx, ops.layer_norm, cand, cases)
+    assert again.executed, "a died call is recorded but not cached, so the next check runs it again"
 
 
 def test_regrade_without_rerun(store_dir: Path) -> None:
@@ -111,7 +117,6 @@ def test_regrade_without_rerun(store_dir: Path) -> None:
     code, lines = run_checks(["ch01", "--op", "layer_norm"], REF, store)
     assert code == 0, [line for line in lines if line["kind"] != "verdict"]
     before = {(v["case"], v["dtype"]): v for v in lines if v["kind"] == "verdict" and v["outcome"] != "skip"}
-    # a different grader config (non-blocking) regrades the stored runs; --grade-only proves nothing re-ran
     code, lines = run_checks(["ch01", "--op", "layer_norm", "--warn", "layer_norm", "--grade-only"], REF, store)
     assert code == 0, lines
     after = {(v["case"], v["dtype"]): v for v in lines if v["kind"] == "verdict" and v["outcome"] != "skip"}
@@ -119,9 +124,6 @@ def test_regrade_without_rerun(store_dir: Path) -> None:
     assert all(after[k]["run"] == before[k]["run"] for k in before), "same runs"
     assert all(after[k]["grade"] != before[k]["grade"] for k in before), "new grades"
     assert not any("isolated child" in line.get("text", "") for line in lines), "nothing executed"
-
-
-# ---- blocked ---------------------------------------------------------------------------------------------------------
 
 
 def test_import_failure_is_blocked_with_file_line_region(tmp_path: Path, store_dir: Path) -> None:
@@ -146,9 +148,6 @@ def test_missing_function_is_blocked(tmp_path: Path, store_dir: Path) -> None:
     code, lines = run_checks(["ch01", "--op", "gelu"], tree, store_dir)
     blocked = next(v for v in lines if v["kind"] == "verdict" and v["outcome"] == "blocked")
     assert code == 1 and "defines no `gelu`" in blocked["notes"]
-
-
-# ---- self-tests, both isolation paths --------------------------------------------------------------------------------
 
 
 def selftest_ok(lines: list[dict]) -> None:
@@ -182,7 +181,6 @@ def test_full_selftest_including_model_level(store_dir: Path) -> None:
 
 
 def test_a_stub_that_raises_points_at_its_line(tmp_path: Path) -> None:
-    """The starter's forward calls the starter's block, a stub: the verdict says so and points at the stub's raise."""
     tree = tmp_path / "tree"
     shutil.copytree(REF, tree)
     start = (REF.parent / "start" / "gpt2.py").read_text()

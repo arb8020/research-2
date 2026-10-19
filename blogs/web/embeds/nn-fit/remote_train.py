@@ -1,38 +1,3 @@
-"""<nn-fit>'s remote backend: the widget's training (mlp.ts) in torch, on cuda if there is one.
-
-The page bundles this file as text (esbuild's text loader), and on Train with backend "remote" sends it to the
-connected kernel with the config inlined (remote.ts: remoteCode). It runs standalone too:
-
-    uv run python web/embeds/nn-fit/remote_train.py config.json      # or the config on stdin
-
-Config (JSON, built by remote.ts: remoteConfig): the network and optimizer state to start from, the data and
-an eval grid, all sampled by the browser, so both backends train on the same points from the same weights.
-
-    task         "regression" (MSE on y-hat) | "binary" (BCE on a logit)
-    activation   "linear" | "relu" | "tanh" | "sigmoid" (hidden layers; the output unit is linear)
-    sizes        [inputs, ...hidden widths, 1]
-    state        {"layers": [{"w", "b"}], "adam": {"m": [{"w", "b"}], "v": [{"w", "b"}], "t"}}; w is row-major
-                 (nOut, nIn), as in mlp.ts and torch.nn.Linear
-    lr, dtype    Adam learning rate; "float32" | "float64"
-    train, test  {"x": flat inputs (n * inputs), "y": targets}; test is the true curve (regression) or a
-                 held-out sample (binary)
-    grid         flat inputs to predict at, for the plot
-    step, seconds          where the run starts (the widget's counters)
-    max_steps, max_seconds when it stops: absolute, like the widget's budgets
-    tick_seconds           at least this long between ticks
-
-Output: one JSON object per line on stdout, flushed as it goes:
-
-    {"kind": "start", "device": "cuda", "device_name": "Tesla T4", "torch": "2.4.1", "dtype": "float32"}
-    {"kind": "tick", "step", "seconds", "loss", "accuracy", "test_loss", "test_accuracy", "pred": [...]}
-    {"kind": "end", "reason": "steps" | "time" | "interrupted", "step", "seconds", "state": {...}}
-
-A tick's metrics are for the weights after `step` steps (accuracy, test_accuracy: binary only, else null);
-`pred` is y-hat (regression) or P(label 1) (binary) at each grid point. Non-finite numbers (a diverged run)
-print as null. The last tick comes right before "end", and "end" carries the state to continue from. An
-interrupt (Ctrl-C, a kernel interrupt: SIGINT) stops between steps and still prints the last tick and "end".
-"""
-
 import json
 import math
 import signal
@@ -55,34 +20,30 @@ StopReason = Literal["steps", "time", "interrupted"]
 TASKS = ("regression", "binary")
 ACTIVATIONS = ("linear", "relu", "tanh", "sigmoid")
 DTYPES = {"float32": torch.float32, "float64": torch.float64}
-BETA1 = 0.9  # Adam, as in mlp.ts
+BETA1 = 0.9
 BETA2 = 0.999
 EPS = 1e-8
 
-# Limits: the widget's are lower (4 hidden layers of 16, 512 samples, a 128 x 128 heatmap); these leave room
-# for bigger remote runs while still bounding a config that would never finish or never fit.
 MAX_LAYERS = 8
 MAX_WIDTH = 4096
 MAX_INPUTS = 4096
-MAX_POINTS = 1_000_000  # train, test or grid points
+MAX_POINTS = 1_000_000
 MAX_STEPS = 10**9
 MAX_SECONDS = 3600.0
-MIN_TICK_SECONDS = 0.05  # at most 20 ticks a second
-PRED_DECIMALS = 4  # pred values print rounded: a plot needs ~3 digits, and the grid is the bulk of a tick
+MIN_TICK_SECONDS = 0.05
+PRED_DECIMALS = 4
 
 
 @dataclass(frozen=True)
 class Params:
-    """Weights, or anything shaped like them (Adam's m and v): one (w, b) per layer."""
-
     w: list[torch.Tensor]
     b: list[torch.Tensor]
 
 
 @dataclass(frozen=True)
 class Batch:
-    x: torch.Tensor  # (n, inputs)
-    y: torch.Tensor  # (n,)
+    x: torch.Tensor
+    y: torch.Tensor
 
 
 @dataclass(frozen=True)
@@ -90,7 +51,7 @@ class Start:
     net: Params
     m: Params
     v: Params
-    t: int  # Adam's step count (bias correction)
+    adam_steps: int
     step: int
     seconds: float
 
@@ -108,13 +69,10 @@ class Config:
     lr: float
     train: Batch
     test: Batch
-    grid: torch.Tensor  # (points, inputs)
+    grid: torch.Tensor
     start: Start
     stop: Stop
     tick_seconds: float
-
-
-# --- parsing (the boundary: the config crossed a network) ---
 
 
 def field(raw: dict, key: str, kind: type | tuple[type, ...]) -> object:
@@ -199,7 +157,7 @@ def parse_start(raw: dict, sizes: list[int], dtype: torch.dtype, device: torch.d
         net=parse_params(state.get("layers"), "state.layers", sizes, dtype, device),
         m=parse_params(adam.get("m"), "state.adam.m", sizes, dtype, device),
         v=parse_params(adam.get("v"), "state.adam.v", sizes, dtype, device),
-        t=integer(adam, "t", 0, MAX_STEPS),
+        adam_steps=integer(adam, "t", 0, MAX_STEPS),
         step=integer(raw, "step", 0, MAX_STEPS),
         seconds=number(raw, "seconds", 0, MAX_SECONDS),
     )
@@ -226,9 +184,6 @@ def parse_config(raw: object, device: torch.device) -> Config:
     )
 
 
-# --- the model: mlp.ts's network, loss and Adam ---
-
-
 def activate(kind: Activation, z: torch.Tensor) -> torch.Tensor:
     match kind:
         case "linear":
@@ -242,7 +197,6 @@ def activate(kind: Activation, z: torch.Tensor) -> torch.Tensor:
 
 
 def forward(net: Params, activation: Activation, x: torch.Tensor) -> torch.Tensor:
-    """The raw output unit, (n,): y-hat for regression, the logit for binary."""
     h = x
     last = len(net.w) - 1
     for i, (w, b) in enumerate(zip(net.w, net.b, strict=True)):
@@ -256,11 +210,10 @@ def mean_loss(task: Task, out: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         case "regression":
             return ((out - y) ** 2).mean()
         case "binary":
-            return F.binary_cross_entropy_with_logits(out, y)  # softplus(z) - y z, as mlp.ts
+            return F.binary_cross_entropy_with_logits(out, y)
 
 
 def adam_step(net: Params, m: Params, v: Params, t: int, lr: float) -> None:
-    """One Adam update in place, with bias correction (mlp.ts adamStep); t counts this step."""
     c1 = 1 - BETA1**t
     c2 = 1 - BETA2**t
     with torch.no_grad():
@@ -274,14 +227,10 @@ def adam_step(net: Params, m: Params, v: Params, t: int, lr: float) -> None:
 
 
 def scores(task: Task, out: torch.Tensor, y: torch.Tensor) -> tuple[float, float | None]:
-    """(mean loss, accuracy): accuracy for binary only, as mlp.ts evaluate (logit > 0 means label 1)."""
     loss = mean_loss(task, out, y).item()
     if task == "regression":
         return loss, None
     return loss, ((out > 0).to(y.dtype) == y).to(torch.float64).mean().item()
-
-
-# --- output ---
 
 
 def finite(v: float) -> float | None:
@@ -313,13 +262,8 @@ def state(net: Params, m: Params, v: Params, t: int) -> dict:
     return {"layers": layers(net), "adam": {"m": layers(m), "v": layers(v), "t": t}}
 
 
-# --- the loop ---
-
-
 @contextmanager
 def interrupt_flag() -> Iterator[Callable[[], bool]]:
-    """SIGINT (Ctrl-C, a Jupyter kernel interrupt) sets a flag instead of raising, so training stops between
-    steps rather than inside an in-place Adam update. Off the main thread Python can't catch signals: no flag."""
     if threading.current_thread() is not threading.main_thread():
         yield lambda: False
         return
@@ -332,12 +276,11 @@ def interrupt_flag() -> Iterator[Callable[[], bool]]:
 
 
 def train(config: Config, emit: Callable[[dict], None], clock: Callable[[], float]) -> StopReason:
-    """Full-batch Adam from config.start until a budget runs out or an interrupt; emits ticks, then "end"."""
     start = config.start
     net = Params([w.clone().requires_grad_() for w in start.net.w], [b.clone().requires_grad_() for b in start.net.b])
     m = Params([w.clone() for w in start.m.w], [b.clone() for b in start.m.b])
     v = Params([w.clone() for w in start.v.w], [b.clone() for b in start.v.b])
-    t, step = start.t, start.step
+    t, step = start.adam_steps, start.step
     began = clock()
     last_tick = began
     emit(tick(config, net, step, start.seconds))
@@ -381,7 +324,6 @@ def print_line(obj: dict) -> None:
 
 
 def run(config_json: str) -> StopReason:
-    """The kernel entry point: parse, say where it runs, train, printing JSON lines."""
     raw = json.loads(config_json)
     device = pick_device()
     config = parse_config(raw, device)

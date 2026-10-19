@@ -5,6 +5,7 @@
   "scripts": {
     "build": "esbuild settings.ts --bundle --format=iife --minify --outfile=build/settings.js && esbuild page.ts embeds/*/element.ts --bundle --format=esm --minify --loader:.py=text --outdir=build --outbase=.",
     "lint": "tsc --noEmit && oxlint -f default && cd .. && uv run ruff check",
+    "test:out-links": "esbuild out-links.test.ts --bundle --platform=node --format=esm --log-level=warning --outfile=build/out-links.test.mjs && node build/out-links.test.mjs",
     "test:nn-fit": "esbuild embeds/nn-fit/mlp.test.ts --bundle --platform=node --format=esm --log-level=warning --outfile=build/nn-fit.test.mjs && node build/nn-fit.test.mjs",
     "test:nn-fit-remote": "esbuild embeds/nn-fit/parity.ts --bundle --platform=node --format=esm --loader:.py=text --log-level=warning --outfile=build/nn-fit-parity.mjs && cd .. && uv run python web/embeds/nn-fit/remote_train_test.py web/build/nn-fit-parity.mjs",
     "test:nn-fit-grok": "cd .. && uv run python web/embeds/nn-fit/grok_train_test.py"

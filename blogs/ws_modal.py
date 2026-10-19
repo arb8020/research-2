@@ -1,44 +1,32 @@
-"""A workspace sandbox on Modal for verify_workspace.py --modal: the Connect kernel image + the toolchain line
-(notes/kernel-toolchain.patch), Jupyter started with the relay's flags, the persist dir on a Modal Volume.
-
-CPU only, Modal profile arb8020 (never herdora). Every sandbox is tagged blogs=verify-workspace under the app APP;
-`uv run --with modal ws_modal.py [--kill]` lists (and ends) leftovers, and verify_workspace.py checks there are none
-when it finishes.
-"""
-
 from __future__ import annotations
 
+import argparse
 import os
 import secrets
 import shlex
-import sys
 import time
 import urllib.request
 import warnings
 
 os.environ.setdefault("MODAL_PROFILE", "arb8020")
 assert os.environ["MODAL_PROFILE"] != "herdora", "verify_workspace never runs on the herdora workspace"
-import modal  # noqa: E402 (after the profile is pinned)
+import modal  # noqa: E402
 
-# playwright's sync API runs an event loop on this thread, so Modal's blocking calls warn that they are "in an async
-# context". They are only ever called from this one thread, between playwright calls: the warning is noise here.
 warnings.filterwarnings("ignore", category=modal.exception.AsyncUsageWarning)
 
 APP = "blogs-verify-workspace"
 TAG = {"blogs": "verify-workspace"}
 PORT = 8888
-ROOT = "/work"  # Jupyter's root_dir and the kernel's cwd (the relay's $BOX_JOB_DIR)
-PERSIST = "/vol/ws"  # $BLOGS_WS_PERSIST: on the Volume, so it outlives the sandbox
-SANDBOX_TIMEOUT_S = 20 * 60  # a hard stop even if this script dies without terminating it
+ROOT = "/work"
+PERSIST = "/vol/ws"
+SANDBOX_TIMEOUT_S = 20 * 60
 JUPYTER_UP_S = 180
-# box/gateway/kernel.Dockerfile (box/reader-path) as an inline image, plus the toolchain line the patch adds.
 IMAGE = (modal.Image.from_registry("pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime")
          .pip_install("jupyter_server~=2.17", "ipykernel~=7.1")
          .apt_install("git", "clang", "make", "ccache", "g++", "libc6-dev"))  # fmt: skip
 
 
 def jupyter_cmd(origin: str) -> str:
-    """box/gateway/relay.py jupyter_cmd's flags (box/reader-path), with allow_origin = the page's origin."""
     settings = {"websocket_ping_interval": 20}
     return " ".join(["exec", "python3", "-m", "jupyter_server", "--no-browser", "--allow-root", "--ip=0.0.0.0", f"--port={PORT}",
                      f"--ServerApp.root_dir={ROOT}", f"--ServerApp.allow_origin={shlex.quote(origin)}", "--ServerApp.allow_remote_access=True",
@@ -50,8 +38,6 @@ def app() -> modal.App:
 
 
 class ModalBox:
-    """One sandbox: Jupyter up and reachable through its tunnel; sh() runs commands in its Jupyter root."""
-
     persist = PERSIST
 
     def __init__(self, name: str, volume: modal.Volume, origin: str) -> None:
@@ -97,7 +83,6 @@ def wait_up(url: str, token: str) -> None:
 
 
 def leftovers(kill: bool = False) -> int:
-    """Sandboxes this script's app still runs (tagged TAG). Looks the app up without creating it."""
     try:
         app_id = modal.App.lookup(APP).app_id
     except modal.exception.NotFoundError:
@@ -111,4 +96,8 @@ def leftovers(kill: bool = False) -> int:
 
 
 if __name__ == "__main__":
-    print(f"{leftovers(kill='--kill' in sys.argv)} sandbox(es) tagged {TAG} under app {APP}")
+    ap = argparse.ArgumentParser(
+        description=f"List the workspace sandboxes verify_workspace.py --modal left on Modal (tagged {TAG} under app {APP}).",
+        epilog="uv run --with modal ws_modal.py [--kill]")
+    ap.add_argument("--kill", action="store_true", help="also terminate them")
+    print(f"{leftovers(kill=ap.parse_args().kill)} sandbox(es) tagged {TAG} under app {APP}")

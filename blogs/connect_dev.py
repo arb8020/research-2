@@ -42,6 +42,7 @@ POST /dev/sessions/{id}/expire ends the lease now (so a check can see a lease ru
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import math
 import os
@@ -61,11 +62,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-GPUS = (None, "T4", "L4", "A10G")  # what the page offers (web/connect/panel.ts GPUS)
-MAX_EVENTS = 5000  # per session; a longer boot log is a bug in this fake
+GPUS = (None, "T4", "L4", "A10G")
+MAX_EVENTS = 5000
 MAX_SESSIONS = 32
-LEASE_MIN_S, LEASE_MAX_S, LEASE_DEFAULT_S = 60, 12 * 3600, 90 * 60  # contract: lease_s range and default
-CEILING_S = 12 * 3600  # an extend can't push the lease past started_at + this
+LEASE_MIN_S, LEASE_MAX_S, LEASE_DEFAULT_S = 60, 12 * 3600, 90 * 60
+CEILING_S = 12 * 3600
 JUPYTER_READY_S = 60
 SSE_PING_S = 15
 
@@ -92,7 +93,7 @@ EOF
 @dataclass
 class Session:
     id: str
-    token: str  # "id:secret", compared on every call
+    token: str
     gpu: str | None
     started_at: float
     lease_until: float
@@ -101,8 +102,8 @@ class Session:
     kernel: dict[str, str] | None = None
     events: list[dict[str, Any]] = field(default_factory=list)
     proc: subprocess.Popen[bytes] | None = None
-    root: Path | None = None  # Jupyter's root_dir
-    owns_root: bool = False  # a temp root this session made (removed at the end); a --root dir is kept
+    root: Path | None = None
+    owns_root: bool = False
     changed: threading.Condition = field(default_factory=threading.Condition)
 
     def status(self) -> dict[str, Any]:
@@ -121,11 +122,10 @@ class Session:
         return self.started_at + CEILING_S
 
     def extend(self, until: float) -> None:
-        """Push the lease to `until`, clamped to the ceiling, never shorter. Caller holds `changed` and checked it runs."""
         assert self.state == "running", f"extend on {self.state} session {self.id}"
         lease_until = min(max(until, self.lease_until), self.ceiling)
         if lease_until == self.lease_until:
-            return  # a shorter (or equal) re-ask never cuts the lease; at the ceiling, nothing moves it
+            return
         self.lease_until = lease_until
         self.step("gateway", f"lease extended to {time.strftime('%H:%M:%S', time.localtime(self.lease_until))}"
                   f"{' (the 12 h ceiling)' if self.lease_until == self.ceiling else ''}")  # fmt: skip
@@ -146,7 +146,7 @@ class Session:
                 return
             self.state, self.reason, self.kernel = "ended", reason, None
         if self.proc is not None and self.proc.poll() is None:
-            self.proc.terminate()  # SIGINT would ask "Shutdown this Jupyter server?"
+            self.proc.terminate()
             try:
                 self.proc.wait(5)
             except subprocess.TimeoutExpired:
@@ -169,17 +169,14 @@ def free_port() -> int:
 
 @dataclass(frozen=True)
 class Machine:
-    """What every fake sandbox gets: the nvidia-smi shim, the boot pacing, and the workspace dirs (None: temp, none)."""
-
     shim_dir: Path
     delay: float
     root: Path | None
     persist: Path | None
-    attach: dict[str, str] | None  # {url, token} of a Jupyter running elsewhere: report it, start nothing
+    attach: dict[str, str] | None
 
 
 def boot(session: Session, machine: Machine) -> None:
-    """The fake machine's life: steps, a real Jupyter Server, then running until ended or past its lease."""
     delay = machine.delay
     session.step("gateway", "checking your Modal token")
     time.sleep(delay)
@@ -204,7 +201,7 @@ def boot(session: Session, machine: Machine) -> None:
     session.proc = subprocess.Popen(
         [sys.executable, "-m", "jupyter_server", "--no-browser", f"--port={port}", "--ip=127.0.0.1",
          f"--ServerApp.root_dir={root}", "--ServerApp.allow_origin=*", "--ServerApp.disable_check_xsrf=True"],
-        env=env, cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,  # cwd: kernels start in the server's cwd
+        env=env, cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
     )  # fmt: skip
     threading.Thread(target=pipe_logs, args=(session,), daemon=True).start()
     url = f"http://127.0.0.1:{port}"
@@ -214,7 +211,7 @@ def boot(session: Session, machine: Machine) -> None:
         return
     with session.changed:
         if session.state == "ended":
-            return  # stopped while booting
+            return
         session.state, session.kernel = "running", {"url": url, "token": jtoken}
     session.step("gateway", f"tunnel open: {url}")
     session.step("machine", "Jupyter Server ready")
@@ -228,7 +225,6 @@ def boot(session: Session, machine: Machine) -> None:
 
 
 def attach_running(session: Session, kernel: dict[str, str]) -> None:
-    """A session whose machine is someone else's Jupyter: wait for it to answer, report it, keep the lease."""
     session.step("machine", f"attaching to the Jupyter at {kernel['url']}")
     if not wait_for_jupyter(kernel["url"], kernel["token"], session):
         session.step("machine", "that Jupyter never answered")
@@ -255,7 +251,7 @@ def wait_for_jupyter(url: str, token: str, session: Session) -> bool:
                 if r.status == 200:
                     return True
         except OSError:
-            pass  # not listening yet
+            pass
         time.sleep(0.2)
     return False
 
@@ -267,7 +263,6 @@ def pipe_logs(session: Session) -> None:
 
 
 def next_batch(session: Session, sent: int) -> list[dict[str, Any]] | None:
-    """Events after the first `sent`, waiting up to SSE_PING_S for one ([] = time for a ping); None once ended and sent."""
     with session.changed:
         if sent >= len(session.events):
             if session.state == "ended":
@@ -307,7 +302,6 @@ class Handler(BaseHTTPRequestHandler):
         return [p for p in url.path.split("/") if p], parse_qs(url.query)
 
     def session(self, sid: str, query: dict[str, list[str]]) -> Session | None:
-        """The session if it exists and the caller holds its token; otherwise replies 404/401 and returns None."""
         session = SESSIONS.get(sid)
         if session is None:
             self.reply(404, {"error": f"no session {sid}"})
@@ -333,12 +327,11 @@ class Handler(BaseHTTPRequestHandler):
             if (session := self.session(parts[2], query)) is not None:
                 with session.changed:
                     session.lease_until = min(session.lease_until, time.time())
-                self.reply(200, {"status": session.status()})  # boot()'s loop ends it ("lease") within a second
+                self.reply(200, {"status": session.status()})
         else:
             self.reply(404, {"error": f"no route POST {self.path}"})
 
     def body(self) -> Any:
-        """The request's JSON body, or None after replying 400."""
         try:
             return json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
         except ValueError as e:
@@ -353,13 +346,13 @@ class Handler(BaseHTTPRequestHandler):
         if isinstance(until, bool) or not isinstance(until, (int, float)) or not math.isfinite(until):
             self.reply(400, {"error": f"expected {{until: unix seconds}}, got {body!r}"})
             return
-        with session.changed:  # an RLock: the checks and the extend see one state (boot() may end it meanwhile)
+        with session.changed:
             if session.state == "booting":
                 self.reply(409, {"error": f"{session.id} is still booting: extend once it is running"})
                 return
             if session.state == "running":
                 session.extend(until)
-            self.reply(200, {"session_id": session.id, "status": session.status()})  # ended: a no-op, as the relay
+            self.reply(200, {"session_id": session.id, "status": session.status()})
 
     def create(self) -> None:
         body = self.body()
@@ -401,7 +394,6 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(404, {"error": f"no route GET {self.path}"})
 
     def events(self, session: Session) -> None:
-        """SSE: every event from Last-Event-ID on (ids are list indices), then live ones; closes after `ended`."""
         last = self.headers.get("Last-Event-ID")
         sent = int(last) + 1 if last is not None and last.isdigit() else 0
         self.send_response(200)
@@ -418,7 +410,7 @@ class Handler(BaseHTTPRequestHandler):
                     sent += 1
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
-            return  # the tab went away
+            return
 
 
 def stop(signum: int, frame: object) -> None:
@@ -436,6 +428,9 @@ def main() -> None:
     args = ap.parse_args()
     if (args.attach_kernel is None) != (args.attach_token is None):
         ap.error("--attach-kernel and --attach-token go together")
+    if args.attach_kernel is None and importlib.util.find_spec("jupyter_server") is None:
+        ap.error(f"{sys.executable} has no jupyter_server; from blogs/: uv run --project assay python connect_dev.py "
+                 "(or uv run connect_dev.py, without the check core's deps)")
     for d in (args.root, args.persist):
         if d is not None:
             d.mkdir(parents=True, exist_ok=True)
@@ -450,7 +445,7 @@ def main() -> None:
     Handler.machine = Machine(shim_dir, args.boot_delay, root, persist, attach)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.daemon_threads = True
-    signal.signal(signal.SIGTERM, stop)  # `kill` and uv (which forwards TERM, not a non-tty INT) end sessions too
+    signal.signal(signal.SIGTERM, stop)
     print(f"fake gateway on http://localhost:{args.port} (connect_dev.py; Ctrl-C ends every session)", flush=True)
     try:
         server.serve_forever()

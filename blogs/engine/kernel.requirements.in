@@ -1,6 +1,5 @@
-# Inputs to kernel.requirements.txt (the lock kernel.Dockerfile installs). Regenerate with the command at the
-# top of kernel.Dockerfile. Versions match blogs/engine/ref/ch01/{,harness/}uv.lock where those pin them.
-torch==2.14.1+cu126          # cu126: CUDA 12.6 build, still compiled for sm_75 (T4); asserted at build time
+# Regenerate kernel.requirements.txt with engine/lock-kernel.sh
+torch==2.14.1+cu126
 transformers==5.18.0
 tokenizers==0.23.2
 huggingface-hub==1.33.0
@@ -8,6 +7,6 @@ safetensors==0.8.0
 numpy==2.5.3
 jaxtyping==0.3.11
 coverage==7.16.2
-einops==0.8.2                # ch01's gpt2.py: einsum / rearrange / reduce in shape letters
-jupyter_server~=2.17         # what box's relay runs (jupyter_cmd: python3 -m jupyter_server)
+einops==0.8.2
+jupyter_server~=2.17
 ipykernel~=7.1

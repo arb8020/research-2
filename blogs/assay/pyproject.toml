@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "The check core (run -> immutable Run, grade -> Grade, report) and its chapter instantiations"
 requires-python = ">=3.12"
 dependencies = [
-    # assay core + ch00 are stdlib only; these are ch01 (numerics)
     "torch>=2.5,<3",
     "coverage>=7.6",
     "jaxtyping>=0.3",
@@ -26,8 +25,6 @@ packages = ["assay"]
 
 [dependency-groups]
 dev = ["pytest>=8"]
-# The local stand-in for the sandbox image's Jupyter (blogs/connect_dev.py runs under this env, so the kernel and the
-# checks it runs have assay's deps): `uv run --project assay python connect_dev.py ...` from blogs/.
 kernel = [
     "ipykernel~=7.1",
     "jupyter-server~=2.17",

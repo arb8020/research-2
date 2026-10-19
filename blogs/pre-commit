@@ -1,16 +1,15 @@
 #!/bin/sh
-# Git pre-commit hook for blogs/: runs `npm run lint` (tsc, oxlint, ruff) when the commit touches blogs/.
-# research-2's worktrees share one .git, so this hook sees every commit in the repo; it exits 0 when
-# nothing under blogs/ is staged. It lints the working tree of the worktree you commit from, not the
-# staged snapshot. Install once per clone (not core.hooksPath, which would replace every hook repo-wide):
-#
-#   ln -s "$PWD/blogs/pre-commit" "$(git rev-parse --git-common-dir)/hooks/pre-commit"   # from a checkout root
-#
-# Skip once with `git commit --no-verify`.
+if [ "${1:-}" = --install ]; then
+  hook="$(git rev-parse --path-format=absolute --git-common-dir)/hooks/pre-commit"
+  ln -s "$(cd "$(dirname "$0")" && pwd)/pre-commit" "$hook" || exit 1
+  echo "installed $hook -> blogs/pre-commit (skip once: git commit --no-verify)"
+  exit 0
+fi
 git diff --cached --name-only --diff-filter=ACMRD | grep -q '^blogs/' || exit 0
 web="$(git rev-parse --show-toplevel)/blogs/web"
 if [ ! -d "$web/node_modules" ]; then
   echo "blogs pre-commit: run \`npm ci\` in $web first (needed for tsc and oxlint)" >&2
   exit 1
 fi
+git diff --quiet -- "$web/.." || echo "blogs pre-commit: linting the working tree, not the staged snapshot (blogs/ has unstaged changes)" >&2
 cd "$web" && npm run --silent lint

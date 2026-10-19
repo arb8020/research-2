@@ -1,18 +1,9 @@
-// Reader settings: light/dark toggle, theme, typography. Bundled as an IIFE and loaded as a classic
-// (non-module) script in <head>, so the saved settings land on <html> before first paint. The controls
-// mount once the body exists.
-//
-// Light/dark follows Lea Verou's two-state toggle (docs/raw/frontend/raw/lea_verou_dark_mode_toggles.md):
-// the model has three states (light, dark, follow the OS), the button shows two. Clicking goes to the opposite
-// of what you see; if that equals the OS preference, the override is cleared instead of stored.
-// The OS is only consulted at click time, never watched to clean up an override.
 import { must } from "./dom";
 
 const SCHEME_KEY = "blogs.scheme";
 const SETTINGS_KEY = "blogs.settings";
 const root = document.documentElement;
 
-// [name, CSS font stack, Google Fonts family spec or null for a system font]. The first is the fallback.
 type Font = readonly [name: string, stack: string, spec: string | null];
 type Fonts = readonly [Font, ...Font[]];
 const FONTS: Readonly<Record<"body" | "mono", Fonts>> = {
@@ -41,7 +32,6 @@ type SettingKey = keyof typeof DEFAULTS;
 type Settings = Record<SettingKey, string>;
 const isSettingKey = (key: string): key is SettingKey => Object.hasOwn(DEFAULTS, key);
 
-// [setting, label, options as [label, value]]. Fixed lists, as shadcn's typeset does.
 type Option = readonly [label: string, value: string];
 const CONTROLS: readonly (readonly [SettingKey, string, readonly Option[]])[] = [
   ["theme", "Theme", [["Classic", "classic"], ["Paper", "paper"]]],
@@ -58,14 +48,12 @@ const write = (key: string, value: string | null): void => {
   try {
     if (value === null) localStorage.removeItem(key);
     else localStorage.setItem(key, value);
-  } catch { /* storage blocked: the setting lasts for this page only */ }
+  } catch { return; }
 };
 
 const isOption = (key: SettingKey, value: string): boolean =>
   CONTROLS.some(([k, , options]) => k === key && options.some(([, v]) => v === value));
 
-// Saved settings over the defaults. Unknown keys, and values no longer offered (e.g. a saved 90ch or leading 1.9
-// from before the 2026-10-09 typeset change), are dropped so the panel always shows what is applied.
 function load(): Settings {
   const loaded = { ...DEFAULTS };
   let saved: unknown;
@@ -90,7 +78,6 @@ function loadFont(spec: string | null): void {
 }
 const font = (kind: "body" | "mono", name: string): Font => FONTS[kind].find(([n]) => n === name) ?? FONTS[kind][0];
 
-// The only writer of <html> attributes and typography variables.
 function apply(): void {
   const [, bodyStack, bodySpec] = font("body", settings.body);
   const [, monoStack, monoSpec] = font("mono", settings.mono);
@@ -113,7 +100,6 @@ function toggleScheme(): void {
   apply();
 }
 
-// Only what differs from the defaults is stored, so a later change of default reaches readers who never chose.
 function save(): void {
   const changed = Object.fromEntries(Object.entries(settings).filter(([key, value]) => isSettingKey(key) && DEFAULTS[key] !== value));
   write(SETTINGS_KEY, JSON.stringify(changed));
@@ -161,7 +147,7 @@ class PageSettings extends HTMLElement {
     };
 
     scheme.onclick = () => { toggleScheme(); render(); };
-    aa.onclick = () => { open(panel.hidden !== false); };  // hidden is boolean | "until-found"
+    aa.onclick = () => { open(panel.hidden !== false); };
     for (const [key, select] of selects) {
       select.onchange = () => { settings[key] = select.value; save(); };
     }
@@ -177,13 +163,12 @@ class PageSettings extends HTMLElement {
     must(this, ".reset", HTMLButtonElement).onclick = () => { settings = { ...DEFAULTS }; save(); render(); };
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden) { open(false); aa.focus(); } });
     document.addEventListener("pointerdown", (e) => { if (!panel.hidden && !(e.target instanceof Node && this.contains(e.target))) open(false); });
-    addEventListener("blur", () => { open(false); });  // clicks inside the play iframe never reach this document
+    addEventListener("blur", () => { open(false); });
     render();
   }
 }
 
 customElements.define("page-settings", PageSettings);
-// Into the page corner (page.html), after any other corner control build_page.py put there (Connect).
 const mount = (): void => { must(document, ".corner", HTMLElement).append(document.createElement("page-settings")); };
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
 else mount();

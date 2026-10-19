@@ -1,17 +1,3 @@
-// <nn-fit>: watch a small MLP fit a hidden function from a few noisy samples, or classify a spiral.
-// TensorFlow-Playground style. Self-contained: shadow DOM with its own styles, colours from page.css
-// tokens (custom properties inherit into the shadow root), no ML dependencies.
-//
-// Initial config comes from attributes, all optional (values snap to the nearest slider stop):
-//   dataset="draw|wave|spiral|grok" activation="linear|relu|tanh|sigmoid" layers="0..4" width="1..16"
-//   widths="8,4,..." lr="0.03" samples="4..512" noise="0..0.5" wiggles="1..20" roughness="0.5..3"
-//   stages="1..4" seed="1" step-budget="2000" time-budget="5" train-fraction="0.3|0.4|0.5" (grok)
-// Read-only `stats` exposes the live numbers (tests and any host page can read them).
-//
-// Backends: training runs in this browser (mlp.ts), or, while the page is connected (Connect, connect/kernel.ts),
-// on the session's kernel: remote_train.py in torch, from the same weights on the same data, streaming ticks into
-// the same plot. The grokking dataset (a + b mod p, a 1-layer transformer: grok.ts, grok_train.py) is remote only:
-// it shows train and test accuracy against step instead of the plot, and its weights stay on the kernel.
 import { interrupt, kernelState, onKernelState, runCode } from "../../connect/kernel";
 import type { RunResult } from "../../connect/kernel";
 import { must } from "../../dom";
@@ -35,44 +21,42 @@ import {
 export type Dataset = "draw" | "wave" | "spiral" | "grok";
 const DATASETS: readonly Dataset[] = ["draw", "wave", "spiral", "grok"];
 export type Backend = "browser" | "remote";
-const BROWSER = "this browser"; // what `device` says after a browser run
+const BROWSER_DEVICE = "this browser";
 const connected = (): boolean => kernelState() === "idle" || kernelState() === "busy";
 
 export interface NnFitStats {
   readonly dataset: Dataset;
-  readonly sizes: readonly number[]; // the MLP's; grok: [] (its model is GrokStats.model)
-  readonly params: number | null; // null (and samples, flops): grok before a "start" line says them
-  readonly samples: number | null; // training points (spiral: total over both classes; grok: training pairs)
-  readonly loss: number | null; // training loss on the samples; null with no data
-  readonly trueError: number | null; // draw/wave: MSE of the net against the whole clean curve
-  readonly accuracy: number | null; // spiral, grok: on the training points
-  readonly heldOutAccuracy: number | null; // spiral: on a fresh sample from the same spiral; grok: the other pairs
+  readonly sizes: readonly number[];
+  readonly params: number | null;
+  readonly samples: number | null;
+  readonly loss: number | null;
+  readonly trueError: number | null;
+  readonly accuracy: number | null;
+  readonly heldOutAccuracy: number | null;
   readonly steps: number;
-  readonly seconds: number; // training wall-clock time used
-  readonly flops: number | null; // estimated: 6 * params * samples per step
-  readonly stepBudget: number; // Infinity = off
-  readonly timeBudget: number; // seconds, Infinity = off
-  readonly training: boolean; // the reader pressed Train (it may still be paused offscreen); remote: a run is in flight
-  readonly ready: boolean; // Train is enabled: something is drawn (or spiral) and budget remains
+  readonly seconds: number;
+  readonly flops: number | null;
+  readonly stepBudget: number;
+  readonly timeBudget: number;
+  readonly training: boolean;
+  readonly ready: boolean;
   readonly backend: Backend;
-  readonly device: string; // what trained (or is training) the current weights: "this browser", "cuda · Tesla T4"
-  readonly grok: GrokStats | null; // grok only
+  readonly device: string;
+  readonly grok: GrokStats | null;
 }
 
 export interface GrokStats {
   readonly p: number;
   readonly trainFraction: number;
   readonly testLoss: number | null;
-  readonly points: number; // plotted ticks
-  readonly grokked: { readonly step: number; readonly seconds: number } | null; // first tick past 95% test accuracy
-  readonly run: string; // the kernel's key for its weights
-  readonly model: string | null; // from the "start" line
+  readonly points: number;
+  readonly grokked: { readonly step: number; readonly seconds: number } | null;
+  readonly run: string;
+  readonly model: string | null;
 }
 
 type MlpStats = NnFitStats & { readonly params: number; readonly samples: number; readonly flops: number };
 
-// The grokking run: its weights live on the kernel (under `id`), the page keeps the curve and the counters.
-// A new id (Reset weights, New samples, a new train fraction) starts from fresh weights.
 interface GrokRun {
   readonly id: string;
   readonly fractionK: number;
@@ -81,11 +65,10 @@ interface GrokRun {
   points: GrokPoint[];
   steps: number;
   ms: number;
-  start: Extract<GrokLine, { kind: "start" }> | null; // the last run's "start" line
-  lost: boolean; // a run failed: the kernel's weights may not match the curve, so the next Train starts a new run
+  start: Extract<GrokLine, { kind: "start" }> | null;
+  kernelOutOfSync: boolean;
 }
 
-// A grokking run in flight on the kernel (one Train press, until it ends).
 interface GrokFlight {
   readonly run: GrokRun;
   stopping: boolean;
@@ -99,43 +82,39 @@ const grokkedAt = (points: readonly GrokPoint[]): GrokStats["grokked"] => {
 };
 
 const newGrokRun = (fractionK: number, splitSeed: number, initSeed: number): GrokRun =>
-  ({ id: `grok-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`, fractionK, splitSeed, initSeed, points: [], steps: 0, ms: 0, start: null, lost: false });
+  ({ id: `grok-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`, fractionK, splitSeed, initSeed, points: [], steps: 0, ms: 0, start: null, kernelOutOfSync: false });
 
-// A remote run in flight: its latest tick is what the plot and readout show until it ends.
 interface RemoteRun {
-  // The widget's counters when it started: ticks count on from them, and a failed run puts them back.
   readonly fromStep: number;
   readonly fromMs: number;
   readonly fromFlops: number;
-  device: string | null; // from its "start" line
+  device: string | null;
   tick: RemoteTick | null;
   end: Extract<RemoteLine, { kind: "end" }> | null;
-  stopping: boolean; // the reader pressed Stop; the interrupt is sent
-  failure: string | null; // a line that didn't parse, or the state that didn't load
+  stopping: boolean;
+  failure: string | null;
 }
 
-// Judgement calls (see the report). Training: full-batch Adam, up to STEPS_PER_FRAME steps per animation
-// frame (fewer if a frame's steps take FRAME_MS, or a step budget is about to run out).
-const STEPS_PER_FRAME = 8;
-const FRAME_MS = 12;
-const COLUMNS = 640; // resolution of the true curve; 160 undersampled composed waves (see the report)
+const MAX_STEPS_PER_FRAME = 8;
+const MAX_TRAIN_MS_PER_FRAME = 12;
+const COLUMNS = 640;
 const MAX_LAYERS = 4;
 const MAX_WIDTH = 16;
 const HEAT_PX = 4;
 const HEATMAP_MAX = 128;
-const LRS = Array.from({ length: 17 }, (_, k) => 10 ** (-4 + k / 4)); // 1e-4 .. 1, log scale
-const NOISES = Array.from({ length: 11 }, (_, k) => k * 0.05); // sigma 0 .. 0.5 in y units (curve spans [-1, 1])
-const ROUGHNESSES = Array.from({ length: 11 }, (_, k) => 3 - k * 0.25); // alpha: 3 (smooth) .. 0.5 (rough)
+const LRS = Array.from({ length: 17 }, (_, k) => 10 ** (-4 + k / 4));
+const NOISE_SIGMAS = Array.from({ length: 11 }, (_, k) => k * 0.05);
+const ROUGHNESSES = Array.from({ length: 11 }, (_, k) => 3 - k * 0.25);
 const STEP_BUDGETS = [500, 1000, 2000, 5000, 10000, 20000, 50000, Infinity];
 const TIME_BUDGETS = [1, 2, 5, 10, 20, 30, 60, Infinity];
-const SPIRAL_JITTER = 2; // spiral jitter (playground units, arms reach radius 5) per unit of sigma
+const SPIRAL_JITTER_PER_SIGMA = 2;
 const HELD_OUT = 500;
 const HELD_OUT_SEED = 1000;
-const Y_RANGE = 1.2; // the curve view shows y in [-Y_RANGE, Y_RANGE]; drawn values are clamped to [-1, 1]
-const REDUCED_MOTION_MS = 250; // with prefers-reduced-motion, redraw at 4 Hz while training
+const Y_RANGE = 1.2;
+const REDUCED_MOTION_PAINT_INTERVAL_MS = 250;
 const ARIA_MS = 1000;
-const MAX_FRAME_GAP_MS = 100; // wall-clock counted per frame is capped, so a stalled tab doesn't eat the budget
-const REMOTE_DTYPE = "float32"; // what a GPU runs fast; parity with mlp.ts's float64: remote_train_test.py
+const MAX_COUNTED_FRAME_MS = 100;
+const REMOTE_DTYPE = "float32";
 const CURVE_X = curveGrid(CURVE_POINTS);
 const HEAT_XY = heatGrid(HEAT_GRID);
 
@@ -251,7 +230,7 @@ const TEMPLATE = `
       <select class="dataset"><option value="draw">Draw a function</option><option value="wave">Random wave</option><option value="spiral">Spiral</option><option value="grok">Modular arithmetic (grokking)</option></select></label>
     <div class="not-grok" style="display: contents">
       ${range("samples", "Samples", SAMPLE_COUNTS.length - 1)}
-      ${range("noise", "Noise σ", NOISES.length - 1)}
+      ${range("noise", "Noise σ", NOISE_SIGMAS.length - 1)}
     </div>
     <div class="grok-only" style="display: contents">
       ${range("fraction", "Train fraction", TRAIN_FRACTIONS.length - 1)}
@@ -286,7 +265,6 @@ const TEMPLATE = `
 <p class="sr-only" role="status"></p>
 `;
 
-// A canvas colour as numbers, for the heatmap's per-pixel mixing.
 type Rgb = readonly [number, number, number];
 
 interface Palette {
@@ -321,8 +299,7 @@ const EMPTY: Batch = { n: 0, x: new Float64Array(0), y: new Float64Array(0) };
 
 const stopText = (reason: StopReason): string =>
   reason === "steps" ? "step budget used up" : reason === "time" ? "time budget used up" : "stopped";
-// A Python traceback's last line says what went wrong; the rest is in the browser console.
-const lastLine = (error: string): string => error.trim().split("\n").at(-1) ?? error;
+const tracebackSummary = (error: string): string => error.trim().split("\n").at(-1) ?? error;
 
 function runFailure(result: RunResult): string | null {
   switch (result.status) {
@@ -336,21 +313,19 @@ export class NnFit extends HTMLElement {
   #root = this.attachShadow({ mode: "open" });
   #ctx: CanvasRenderingContext2D | null = null;
 
-  // Settings (slider stops are indices into the lists above).
   #dataset: Dataset = "draw";
   #activation: Activation = "tanh";
   #layers = 2;
-  #widths: number[] = Array.from({ length: MAX_LAYERS }, () => 8); // kept for layers that are removed and re-added
+  #widths: number[] = Array.from({ length: MAX_LAYERS }, () => 8);
   #lrK = nearest(LRS, 0.03);
   #samplesK = SAMPLE_COUNTS.indexOf(128);
   #noiseK = 0;
   #wave = { wiggles: 4, roughnessK: nearest(ROUGHNESSES, 1.5), stages: 1, seed: 1 };
   #stepBudgetK = STEP_BUDGETS.length - 1;
   #timeBudgetK = TIME_BUDGETS.length - 1;
-  #seed = 1; // weights
+  #weightSeed = 1;
   #sampleSeed = 1;
 
-  // Model and usage.
   #net: Mlp = initMlp([1, 8, 8, 1], "tanh", seeded(1));
   #opt: Adam = makeAdam(this.#net);
   #steps = 0;
@@ -358,21 +333,19 @@ export class NnFit extends HTMLElement {
   #flops = 0;
   #backend: Backend = "browser";
   #remote: RemoteRun | null = null;
-  #device = BROWSER;
-  #remoteNote = ""; // why the last remote run failed; shown under the plot until the next run
+  #device = BROWSER_DEVICE;
+  #remoteFailureNote = "";
   #grok: GrokRun = newGrokRun(TRAIN_FRACTIONS.indexOf(0.3), 1, 1);
   #grokFlight: GrokFlight | null = null;
 
-  // Data: the true curve (drawn or generated), the training sample drawn from it, the spiral's held-out set.
   #truth: DrawBuffer = makeDrawBuffer(COLUMNS);
   #truthBatch: Batch = EMPTY;
-  #curve: DrawBuffer | null = null; // the drawing with gaps filled (completeCurve); null when empty
+  #curve: DrawBuffer | null = null;
   #train: Batch = EMPTY;
   #heldOut: Batch = EMPTY;
   #waveStages: WaveStage[] = [];
   #stroke: { pointer: number; last: Point } | null = null;
 
-  // Loop: runs only while the reader wants training AND the widget is on screen AND the tab is visible.
   #training = false;
   #onScreen = false;
   #frame = 0;
@@ -391,7 +364,7 @@ export class NnFit extends HTMLElement {
   }
 
   #mlpStats(): MlpStats {
-    const metrics = this.#remote?.tick ? this.#tickMetrics(this.#remote.tick) : this.#metrics();
+    const metrics = this.#remote?.tick ? this.#tickMetrics(this.#remote.tick) : this.#browserMetrics();
     return {
       dataset: this.#dataset,
       sizes: this.#net.sizes,
@@ -427,8 +400,7 @@ export class NnFit extends HTMLElement {
     };
   }
 
-  // The four metrics, from the browser's net (the plot's net between runs and during browser runs).
-  #metrics(): Pick<NnFitStats, "loss" | "trueError" | "accuracy" | "heldOutAccuracy"> {
+  #browserMetrics(): Pick<NnFitStats, "loss" | "trueError" | "accuracy" | "heldOutAccuracy"> {
     const task = this.#task();
     const train = this.#train.n > 0 ? evaluate(this.#net, task, this.#train) : null;
     const curve = this.#isCurve() && this.#truthBatch.n > 0 ? evaluate(this.#net, task, this.#truthBatch) : null;
@@ -436,13 +408,11 @@ export class NnFit extends HTMLElement {
     return { loss: train?.loss ?? null, trueError: curve?.loss ?? null, accuracy: train?.accuracy ?? null, heldOutAccuracy: held?.accuracy ?? null };
   }
 
-  // The same four, from a remote tick: its test set is the true curve (draw/wave) or the held-out sample (spiral).
   #tickMetrics(tick: RemoteTick): Pick<NnFitStats, "loss" | "trueError" | "accuracy" | "heldOutAccuracy"> {
     const curve = this.#isCurve();
     return { loss: tick.loss, trueError: curve ? tick.testLoss : null, accuracy: tick.accuracy, heldOutAccuracy: curve ? null : tick.testAccuracy };
   }
 
-  // The curve the net is trained and scored against (the drawing with gaps filled), or null when empty.
   get curve(): Float64Array | null {
     return this.#curve === null ? null : Float64Array.from(this.#curve);
   }
@@ -457,7 +427,7 @@ export class NnFit extends HTMLElement {
     for (const undo of this.#cleanup) undo();
     this.#cleanup = [];
     this.#stopLoop();
-    this.#stopRemote(); // a remote run doesn't outlive the widget that started it (e.g. a closed link card)
+    this.#stopRemote();
   }
 
   #el<T extends Element>(selector: string, type: new () => T): T {
@@ -495,7 +465,7 @@ export class NnFit extends HTMLElement {
     };
     this.#lrK = pick("lr", LRS, this.#lrK);
     this.#samplesK = pick("samples", SAMPLE_COUNTS, this.#samplesK);
-    this.#noiseK = pick("noise", NOISES, this.#noiseK);
+    this.#noiseK = pick("noise", NOISE_SIGMAS, this.#noiseK);
     this.#stepBudgetK = pick("step-budget", STEP_BUDGETS, this.#stepBudgetK);
     this.#timeBudgetK = pick("time-budget", TIME_BUDGETS, this.#timeBudgetK);
     this.#grok = newGrokRun(pick("train-fraction", TRAIN_FRACTIONS, this.#grok.fractionK), 1, 1);
@@ -533,7 +503,7 @@ export class NnFit extends HTMLElement {
         this.#newGrokRun({ initSeed: this.#grok.initSeed + 1 }, "Weights reset to new random values; the curve starts over.");
         return;
       }
-      this.#seed++;
+      this.#weightSeed++;
       this.#rebuildNet();
       this.#announce("Weights reset to new random values; step and time counters back to zero.");
     });
@@ -554,7 +524,7 @@ export class NnFit extends HTMLElement {
     button("clear", () => {
       this.#truth = makeDrawBuffer(COLUMNS);
       this.#announce("Drawing cleared.");
-      this.#dataChanged(); // announces the pause if training was running
+      this.#dataChanged();
     });
 
     const select = this.#el("select.dataset", HTMLSelectElement);
@@ -566,11 +536,7 @@ export class NnFit extends HTMLElement {
           : select.value === "wave" ? "Random wave generated. You can draw over it to edit it."
             : select.value === "spiral" ? "Spiral dataset: two classes."
               : "Modular arithmetic: a plus b mod 113, trained remotely. The plot shows train and test accuracy against step.");
-      // A browser run pauses when its data goes away, or for grokking (remote only).
       if (this.#training && (this.#dataset === "grok" || !this.#ready())) this.#setTraining(false);
-      // draw <-> wave keeps the weights, and so does a visit to grok (its model is separate). Otherwise the net's
-      // input count changes: build it without painting, since painting it on the old dataset's points reads
-      // past their end; the new data paints both.
       if (this.#dataset !== "grok" && this.#net.sizes[0] !== this.#inputs()) this.#makeNet();
       if (select.value === "wave") this.#regenWave();
       else this.#dataChanged();
@@ -585,13 +551,12 @@ export class NnFit extends HTMLElement {
     const backend = this.#el("select.backend", HTMLSelectElement);
     on(backend, "change", () => {
       if (backend.value !== "browser" && backend.value !== "remote") return;
-      if (this.#training) this.#setTraining(false); // a browser run pauses; the select is disabled during a remote run
+      if (this.#training) this.#setTraining(false);
       this.#backend = backend.value;
       this.#announce(backend.value === "remote" ? "Train runs remotely, on the connected session." : "Train runs in this browser.");
       this.#syncControls();
       this.#paint();
     });
-    // The page's session comes and goes (Connect / disconnect): remote is offered only while there is one.
     this.#cleanup.push(onKernelState(() => {
       if (!connected() && this.#backend === "remote" && this.#remote === null) {
         this.#backend = "browser";
@@ -610,18 +575,17 @@ export class NnFit extends HTMLElement {
       });
     };
     const nothing = (): void => undefined;
-    slider("lr", (v) => { this.#lrK = v; }, nothing); // keeps the weights: change the step size mid-run
+    slider("lr", (v) => { this.#lrK = v; }, nothing);
     slider("layers", (v) => { this.#layers = v; }, () => { this.#rebuildNet(); });
-    slider("samples", (v) => { this.#samplesK = v; }, () => { this.#resample(); }); // keeps the weights
+    slider("samples", (v) => { this.#samplesK = v; }, () => { this.#resample(); });
     slider("noise", (v) => { this.#noiseK = v; }, () => { this.#resample(); });
     slider("wiggles", (v) => { this.#wave = { ...this.#wave, wiggles: v + 1 }; }, () => { this.#regenWave(); });
     slider("roughness", (v) => { this.#wave = { ...this.#wave, roughnessK: v }; }, () => { this.#regenWave(); });
     slider("stages", (v) => { this.#wave = { ...this.#wave, stages: v + 1 }; }, () => { this.#regenWave(); });
-    slider("fraction", (v) => { this.#grok = newGrokRun(v, this.#grok.splitSeed, this.#grok.initSeed); }, nothing); // new pairs: a new run
+    slider("fraction", (v) => { this.#grok = newGrokRun(v, this.#grok.splitSeed, this.#grok.initSeed); }, nothing);
     slider("step-budget", (v) => { this.#stepBudgetK = v; }, nothing);
     slider("time-budget", (v) => { this.#timeBudgetK = v; }, nothing);
 
-    // Per-layer widths: a number input per layer (the keyboard/AT control) flanked by -/+ buttons for pointers.
     const widths = this.#el(".widths", HTMLDivElement);
     const setWidth = (layer: number, w: number): void => {
       const v = Math.min(MAX_WIDTH, Math.max(1, Math.round(w)));
@@ -641,9 +605,8 @@ export class NnFit extends HTMLElement {
       if (t instanceof HTMLInputElement) setWidth(Number(t.dataset["layer"]), t.valueAsNumber);
     });
 
-    // Drawing (draw and wave): one stroke per pointer, captured so it continues outside the canvas.
     on(canvas, "pointerdown", (e) => {
-      if (!this.#isCurve() || this.#stroke || this.#remote) return; // the data is fixed while a remote run trains on it
+      if (!this.#isCurve() || this.#stroke || this.#remote) return;
       canvas.setPointerCapture(e.pointerId);
       const p = this.#toPlot(e);
       paintStroke(this.#truth, null, p);
@@ -672,7 +635,6 @@ export class NnFit extends HTMLElement {
     visible.observe(this);
     const tab = (): void => { this.#updateLoop(); };
     document.addEventListener("visibilitychange", tab);
-    // Theme changes: the page flips data-scheme/data-theme on <html>, or the OS scheme changes.
     const retheme = (): void => { this.#palette = null; this.#paint(); };
     const themes = new MutationObserver(retheme);
     themes.observe(document.documentElement, { attributes: true, attributeFilter: ["data-scheme", "data-theme", "style", "class"] });
@@ -686,13 +648,10 @@ export class NnFit extends HTMLElement {
     });
   }
 
-  // --- model and data ---
-
   #isCurve(): boolean {
     return this.#dataset === "draw" || this.#dataset === "wave";
   }
 
-  // Where Train runs: grok always remotely.
   #runsRemote(): boolean {
     return this.#dataset === "grok" || this.#backend === "remote";
   }
@@ -705,7 +664,6 @@ export class NnFit extends HTMLElement {
     return this.#dataset === "spiral" ? 2 : 1;
   }
 
-  // Budgets in force: a remote run always stops, so there "off" means the remote cap.
   #stepBudget(): number {
     const budget = at(STEP_BUDGETS, this.#stepBudgetK);
     return this.#runsRemote() ? Math.min(budget, REMOTE_MAX_STEPS) : budget;
@@ -730,7 +688,6 @@ export class NnFit extends HTMLElement {
     return steps < this.#stepBudget() && ms < this.#timeBudget() * 1000;
   }
 
-  // Train is enabled when the data is usable (grok: there is a session to train on) and budget remains.
   #dataReady(): boolean {
     if (this.#dataset === "grok") return connected();
     return !this.#isCurve() || this.#curve !== null;
@@ -750,18 +707,16 @@ export class NnFit extends HTMLElement {
     this.#paint();
   }
 
-  // Fresh weights for the current settings, counters back to zero; no repaint.
   #makeNet(): void {
     const sizes = [this.#inputs(), ...this.#widths.slice(0, this.#layers), 1];
-    this.#net = initMlp(sizes, this.#activation, seeded(this.#seed));
+    this.#net = initMlp(sizes, this.#activation, seeded(this.#weightSeed));
     this.#opt = makeAdam(this.#net);
     this.#steps = 0;
     this.#trainMs = 0;
     this.#flops = 0;
-    this.#device = BROWSER;
+    this.#device = BROWSER_DEVICE;
   }
 
-  // Regenerate the wave from its parameters (same seed: the slider changes reshape the same curve).
   #regenWave(): void {
     if (this.#dataset !== "wave") return;
     const params = this.#waveParams();
@@ -772,7 +727,6 @@ export class NnFit extends HTMLElement {
     this.#dataChanged();
   }
 
-  // The true curve changed (drawn, cleared, generated) or the dataset switched.
   #dataChanged(): void {
     const had = this.#curve !== null;
     this.#curve = completeCurve(this.#truth);
@@ -785,16 +739,15 @@ export class NnFit extends HTMLElement {
     this.#resample();
   }
 
-  // Training data from the current source, sample count, noise and sample seed. Keeps the weights.
   #resample(): void {
     const n = at(SAMPLE_COUNTS, this.#samplesK);
-    const sigma = at(NOISES, this.#noiseK);
+    const sigma = at(NOISE_SIGMAS, this.#noiseK);
     if (this.#isCurve()) {
       this.#train = this.#curve === null ? EMPTY : curveSamples(this.#curve, n, sigma, seeded(this.#sampleSeed));
       this.#heldOut = EMPTY;
     } else {
-      this.#train = spiral(n, sigma * SPIRAL_JITTER, seeded(this.#sampleSeed));
-      this.#heldOut = spiral(HELD_OUT, sigma * SPIRAL_JITTER, seeded(HELD_OUT_SEED));
+      this.#train = spiral(n, sigma * SPIRAL_JITTER_PER_SIGMA, seeded(this.#sampleSeed));
+      this.#heldOut = spiral(HELD_OUT, sigma * SPIRAL_JITTER_PER_SIGMA, seeded(HELD_OUT_SEED));
     }
     this.#syncControls();
     this.#paint();
@@ -834,14 +787,13 @@ export class NnFit extends HTMLElement {
     };
     const n = at(SAMPLE_COUNTS, this.#samplesK);
     set("samples", this.#samplesK, String(n));
-    set("noise", this.#noiseK, at(NOISES, this.#noiseK).toFixed(2));
+    set("noise", this.#noiseK, at(NOISE_SIGMAS, this.#noiseK).toFixed(2));
     set("lr", this.#lrK, formatLr(at(LRS, this.#lrK)));
     set("layers", this.#layers, String(this.#layers));
     set("wiggles", this.#wave.wiggles - 1, String(this.#wave.wiggles));
     set("roughness", this.#wave.roughnessK, at(ROUGHNESSES, this.#wave.roughnessK).toFixed(2));
     set("stages", this.#wave.stages - 1, String(this.#wave.stages));
     set("fraction", this.#grok.fractionK, formatPct(at(TRAIN_FRACTIONS, this.#grok.fractionK)).replace(".0%", "%"));
-    // The sliders show the reader's setting; the readout shows what's in force (remote caps "off").
     set("step-budget", this.#stepBudgetK, formatBudget(at(STEP_BUDGETS, this.#stepBudgetK), ""));
     set("time-budget", this.#timeBudgetK, formatBudget(at(TIME_BUDGETS, this.#timeBudgetK), " s"));
     this.#renderWidths();
@@ -852,23 +804,17 @@ export class NnFit extends HTMLElement {
     option.textContent = connected() ? "remote (the connected session)" : "remote (Connect first)";
     const backend = this.#el("select.backend", HTMLSelectElement);
     backend.value = grok ? "remote" : this.#backend;
-    backend.disabled = grok; // grokking is remote only
-    // Grokking needs the session: offered (as a choice) only while connected; a page that starts on it shows the hint.
+    backend.disabled = grok;
     const grokOption = this.#el("select.dataset option[value=grok]", HTMLOptionElement);
     grokOption.disabled = !connected() && !grok;
     grokOption.textContent = connected() ? "Modular arithmetic (grokking)" : "Modular arithmetic (grokking): Connect first";
-    // While a remote run trains, everything it was sent stays as it was: data, network, budgets, backend.
     for (const cls of ["data", "network", "compute"]) this.#el(`fieldset.${cls}`, HTMLFieldSetElement).disabled = remote !== null;
     for (const cls of ["reset", "resample", "new-wave", "clear"]) this.#el(`button.${cls}`, HTMLButtonElement).disabled = remote !== null;
 
     const train = this.#el("button.train", HTMLButtonElement);
     train.textContent = remote ? (remote.stopping ? "Stopping…" : "Stop") : this.#training ? "Pause" : "Train";
-    // aria-disabled rather than disabled: the button stays focusable, so a screen reader still reaches
-    // it and reads its description (the centred hint, then the note line) saying why it can't train.
     const ready = remote ? !remote.stopping : this.#ready() || this.#training;
     train.setAttribute("aria-disabled", String(!ready));
-    // Hidden elements referenced by aria-describedby still count toward the description, so a hidden
-    // message is also emptied.
     const empty = this.#isCurve() && this.#curve === null;
     const offline = grok && !connected();
     const hint = this.#el(".hint", HTMLParagraphElement);
@@ -877,8 +823,8 @@ export class NnFit extends HTMLElement {
       : !empty ? "" : this.#dataset === "wave" ? "draw a curve, or press New random curve" : "draw a curve, or pick Random wave";
     const filled = this.#isCurve() && this.#curve !== null ? gaps(this.#truth) : [];
     const note = [
-      this.#remoteNote,
-      grok && this.#grok.lost && remote === null ? "Train starts a new run." : "",
+      this.#remoteFailureNote,
+      grok && this.#grok.kernelOutOfSync && remote === null ? "Train starts a new run." : "",
       this.#budgetLeft() ? "" : "Budget used up. Raise a budget or reset the weights to train again.",
       filled.length > 0 ? `Dashed parts were filled in: ${describeGaps(this.#truth)}.` : "",
     ].filter((m) => m !== "").join(" ");
@@ -896,11 +842,6 @@ export class NnFit extends HTMLElement {
     this.#updateLoop();
   }
 
-  // --- remote runs ---
-
-  // Send the current weights, optimizer state and data to the connected session and stream its ticks in.
-  // Everything a run depends on is fixed while it runs (the controls are disabled), so its end state lands
-  // on the same net it started from.
   #startRemote(): void {
     if (!connected() || !this.#ready()) return;
     const isCurve = this.#isCurve();
@@ -910,7 +851,7 @@ export class NnFit extends HTMLElement {
     const run: RemoteRun = { fromStep: this.#steps, fromMs: this.#trainMs, fromFlops: this.#flops, device: null, tick: null, end: null, stopping: false, failure: null };
     this.#remote = run;
     this.#training = true;
-    this.#remoteNote = "";
+    this.#remoteFailureNote = "";
     this.#announce("Training remotely, on the connected session.");
     this.#syncControls();
     let pending = "";
@@ -919,15 +860,13 @@ export class NnFit extends HTMLElement {
       pending = split.pending;
       for (const line of split.lines) this.#onRemoteLine(run, line);
     };
-    // stderr (library warnings) goes to the console, not the line parser: only the program's stdout is protocol.
     const onStderr = (text: string): void => { console.warn(`<nn-fit> remote stderr: ${text}`); };
     runCode(remoteCode(config), onStdout, onStderr).then(
       (result) => { this.#remoteDone(run, result); },
-      (cause: unknown) => { this.#remoteDone(run, { status: "aborted", reason: String(cause) }); }, // runCode resolves its failures; this is a bug
+      (cause: unknown) => { this.#remoteDone(run, { status: "aborted", reason: String(cause) }); },
     );
   }
 
-  // Take a finished run's weights and counters; returns why not, if its state doesn't fit this net.
   #adoptRemote(run: RemoteRun, end: Extract<RemoteLine, { kind: "end" }> | null): string | null {
     if (end === null) return "the remote run ended without its final state";
     try {
@@ -941,7 +880,6 @@ export class NnFit extends HTMLElement {
     return null;
   }
 
-  // Stop whichever remote run is in flight (an MLP run or a grokking run): a kernel interrupt.
   #stopRemote(): void {
     const run = this.#remote ?? this.#grokFlight;
     if (run === null || run.stopping) return;
@@ -950,13 +888,12 @@ export class NnFit extends HTMLElement {
     this.#syncControls();
     interrupt().catch((cause: unknown) => {
       if (this.#remote !== run && this.#grokFlight !== run) return;
-      run.stopping = false; // still running: Stop can be pressed again
+      run.stopping = false;
       this.#announce(`Couldn't stop the remote run: ${String(cause)}`);
       this.#syncControls();
     });
   }
 
-  // One line of the program's stdout. A line that doesn't parse stops the run: its output can't be trusted.
   #onRemoteLine(run: RemoteRun, text: string): void {
     if (this.#remote !== run || run.failure !== null) return;
     let line: RemoteLine;
@@ -984,12 +921,11 @@ export class NnFit extends HTMLElement {
     this.#paint();
   }
 
-  // The run's code finished (or never ran, or the session went away). Keep its final weights if it said them.
   #remoteDone(run: RemoteRun, result: RunResult): void {
     if (this.#remote !== run) return;
     const end = run.end;
     const failure = run.failure ?? runFailure(result) ?? this.#adoptRemote(run, end);
-    if (failure !== null) { // the weights are still the ones it started from: so are the counters
+    if (failure !== null) {
       this.#steps = run.fromStep;
       this.#trainMs = run.fromMs;
       this.#flops = run.fromFlops;
@@ -997,18 +933,16 @@ export class NnFit extends HTMLElement {
     this.#remote = null;
     this.#training = false;
     if (failure !== null) console.error(`<nn-fit> remote run failed:\n${failure}`);
-    this.#remoteNote = failure === null ? "" : `Remote run failed: ${lastLine(failure)}`;
-    this.#announce(failure === null && end !== null ? `Remote run stopped: ${stopText(end.reason)}.` : this.#remoteNote);
+    this.#remoteFailureNote = failure === null ? "" : `Remote run failed: ${tracebackSummary(failure)}`;
+    this.#announce(failure === null && end !== null ? `Remote run stopped: ${stopText(end.reason)}.` : this.#remoteFailureNote);
     this.#syncControls();
     this.#paint();
   }
 
-  // --- grokking runs (remote only; the weights stay on the kernel, the page keeps the curve) ---
-
   #newGrokRun(change: { splitSeed?: number; initSeed?: number }, message: string): void {
     const g = this.#grok;
     this.#grok = newGrokRun(g.fractionK, change.splitSeed ?? g.splitSeed, change.initSeed ?? g.initSeed);
-    this.#remoteNote = "";
+    this.#remoteFailureNote = "";
     this.#announce(message);
     this.#syncControls();
     this.#paint();
@@ -1016,7 +950,7 @@ export class NnFit extends HTMLElement {
 
   #startGrok(): void {
     if (!connected() || !this.#ready()) return;
-    if (this.#grok.lost) this.#grok = newGrokRun(this.#grok.fractionK, this.#grok.splitSeed, this.#grok.initSeed);
+    if (this.#grok.kernelOutOfSync) this.#grok = newGrokRun(this.#grok.fractionK, this.#grok.splitSeed, this.#grok.initSeed);
     const run = this.#grok;
     const code = grokCode({
       run: run.id, p: GROK_P, train_fraction: at(TRAIN_FRACTIONS, run.fractionK), split_seed: run.splitSeed, init_seed: run.initSeed,
@@ -1025,7 +959,7 @@ export class NnFit extends HTMLElement {
     const flight: GrokFlight = { run, stopping: false, end: null, failure: null };
     this.#grokFlight = flight;
     this.#training = true;
-    this.#remoteNote = "";
+    this.#remoteFailureNote = "";
     this.#announce("Training remotely, on the connected session.");
     this.#syncControls();
     let pending = "";
@@ -1037,11 +971,10 @@ export class NnFit extends HTMLElement {
     const onStderr = (text: string): void => { console.warn(`<nn-fit> remote stderr: ${text}`); };
     runCode(code, onStdout, onStderr).then(
       (result) => { this.#grokDone(flight, result); },
-      (cause: unknown) => { this.#grokDone(flight, { status: "aborted", reason: String(cause) }); }, // runCode resolves its failures; this is a bug
+      (cause: unknown) => { this.#grokDone(flight, { status: "aborted", reason: String(cause) }); },
     );
   }
 
-  // One line of the program's stdout. A line that doesn't parse stops the run: its output can't be trusted.
   #onGrokLine(flight: GrokFlight, text: string): void {
     if (this.#grokFlight !== flight || flight.failure !== null) return;
     const run = flight.run;
@@ -1068,28 +1001,24 @@ export class NnFit extends HTMLElement {
     this.#paint();
   }
 
-  // The run's code finished (or never ran, or the session went away). The curve stays; after a failure the
-  // kernel's weights may not match it (or are gone with the session), so the next Train starts a new run.
   #grokDone(flight: GrokFlight, result: RunResult): void {
     if (this.#grokFlight !== flight) return;
     const end = flight.end;
     const failure = flight.failure ?? runFailure(result) ?? (end === null ? "the remote run ended without saying why" : null);
-    flight.run.lost = failure !== null;
+    flight.run.kernelOutOfSync = failure !== null;
     this.#grokFlight = null;
     this.#training = false;
     if (failure !== null) console.error(`<nn-fit> remote run failed:\n${failure}`);
-    this.#remoteNote = failure === null ? "" : `Remote run failed: ${lastLine(failure)}`;
-    this.#announce(failure === null && end !== null ? `Remote run stopped: ${stopText(end.reason)}.` : this.#remoteNote);
+    this.#remoteFailureNote = failure === null ? "" : `Remote run failed: ${tracebackSummary(failure)}`;
+    this.#announce(failure === null && end !== null ? `Remote run stopped: ${stopText(end.reason)}.` : this.#remoteFailureNote);
     this.#syncControls();
     this.#paint();
   }
 
   #announce(message: string): void {
     this.#el("[role=status]", HTMLParagraphElement).textContent = message;
-    this.#lastAria = 0; // describe the new state right away
+    this.#lastAria = 0;
   }
-
-  // --- loop ---
 
   #updateLoop(): void {
     const run = this.#training && this.#remote === null && this.#grokFlight === null && this.#onScreen && !document.hidden;
@@ -1100,11 +1029,11 @@ export class NnFit extends HTMLElement {
   #stopLoop(): void {
     if (this.#frame !== 0) cancelAnimationFrame(this.#frame);
     this.#frame = 0;
-    this.#lastTick = null; // time offscreen or paused doesn't count against the time budget
+    this.#lastTick = null;
   }
 
   #tick(now: number): void {
-    if (this.#lastTick !== null) this.#trainMs += Math.min(MAX_FRAME_GAP_MS, now - this.#lastTick);
+    if (this.#lastTick !== null) this.#trainMs += Math.min(MAX_COUNTED_FRAME_MS, now - this.#lastTick);
     this.#lastTick = now;
     const batch = this.#train;
     if (batch.n > 0 && this.#dataReady()) {
@@ -1112,11 +1041,11 @@ export class NnFit extends HTMLElement {
       const lr = at(LRS, this.#lrK);
       const flopsPerStep = 6 * paramCount(this.#net) * batch.n;
       const start = performance.now();
-      for (let i = 0; i < STEPS_PER_FRAME && this.#steps < this.#stepBudget() && performance.now() - start < FRAME_MS; i++) {
+      for (let i = 0; i < MAX_STEPS_PER_FRAME && this.#steps < this.#stepBudget() && performance.now() - start < MAX_TRAIN_MS_PER_FRAME; i++) {
         trainStep(this.#net, task, batch, this.#opt, lr);
         this.#steps++;
         this.#flops += flopsPerStep;
-        this.#device = BROWSER;
+        this.#device = BROWSER_DEVICE;
       }
     }
     if (!this.#budgetLeft()) {
@@ -1127,11 +1056,9 @@ export class NnFit extends HTMLElement {
       this.#paint(now);
       return;
     }
-    if (!this.#reducedMotion.matches || now - this.#lastPaint >= REDUCED_MOTION_MS) this.#paint(now);
+    if (!this.#reducedMotion.matches || now - this.#lastPaint >= REDUCED_MOTION_PAINT_INTERVAL_MS) this.#paint(now);
     this.#frame = requestAnimationFrame((t) => { this.#tick(t); });
   }
-
-  // --- rendering ---
 
   #resize(): void {
     const canvas = this.#el("canvas", HTMLCanvasElement);
@@ -1141,7 +1068,6 @@ export class NnFit extends HTMLElement {
     this.#paint();
   }
 
-  // Pointer position -> plot coordinates (x, y in [-1, 1] for drawing; y is clamped by paintStroke).
   #toPlot(e: PointerEvent): Point {
     const rect = this.#el("canvas", HTMLCanvasElement).getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -1210,7 +1136,6 @@ export class NnFit extends HTMLElement {
     ctx.moveTo(px(0), 0); ctx.lineTo(px(0), h);
     ctx.stroke();
 
-    // The true curve, faint: one polyline per run of known columns.
     ctx.save();
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
@@ -1230,7 +1155,6 @@ export class NnFit extends HTMLElement {
     ctx.stroke();
     ctx.restore();
 
-    // Filled-in parts of the curve (completeCurve): dashed and muted, joined to the drawn ends.
     const curve = this.#curve;
     if (curve !== null) {
       ctx.save();
@@ -1249,8 +1173,6 @@ export class NnFit extends HTMLElement {
       ctx.restore();
     }
 
-    // The network's curve: the browser's net sampled every 2 CSS px across the whole width, or during a
-    // remote run, its latest predictions (on CURVE_X).
     ctx.strokeStyle = c.net;
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -1260,7 +1182,6 @@ export class NnFit extends HTMLElement {
     });
     ctx.stroke();
 
-    // Training samples on top.
     const r = this.#train.n > 128 ? 2.25 : 3.25;
     ctx.fillStyle = c.fg;
     ctx.strokeStyle = c.codeBg;
@@ -1273,7 +1194,6 @@ export class NnFit extends HTMLElement {
     }
   }
 
-  // (plot x, y-hat) points along the network's curve.
   #netCurve(w: number): [number, number][] {
     const tick = this.#remote?.tick;
     if (tick) return Array.from(tick.pred, (y, i) => [get(CURVE_X, i) / INPUT_SCALE, y]);
@@ -1288,8 +1208,6 @@ export class NnFit extends HTMLElement {
     return points;
   }
 
-  // P(class A) on a grid x grid raster (row-major, top row first): the browser's net at about one cell per
-  // HEAT_PX, or during a remote run, its latest predictions (on HEAT_XY).
   #heatValues(w: number): { grid: number; p: Float64Array } {
     const tick = this.#remote?.tick;
     if (tick) return { grid: HEAT_GRID, p: tick.pred };
@@ -1309,8 +1227,6 @@ export class NnFit extends HTMLElement {
 
   #paintSpiral(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     const c = this.#colors();
-    // Heatmap: P(class A) mixed from the background toward the winning class's colour by confidence, then
-    // scaled up with smoothing.
     const { grid, p: heat } = this.#heatValues(w);
     this.#heat.width = grid;
     this.#heat.height = grid;
@@ -1331,7 +1247,6 @@ export class NnFit extends HTMLElement {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(this.#heat, 0, 0, w, h);
 
-    // Training points: class A circles, class B squares (shape as well as colour).
     const px = (x: number): number => ((x / INPUT_SCALE + 1) / 2) * w;
     const py = (y: number): number => (1 - (y / INPUT_SCALE + 1) / 2) * h;
     const r = Math.max(2.5, w / 120);

@@ -1,9 +1,6 @@
-# Code readers see (engine/ref/chNN): 80 columns (blogs/notes/ch01-design-2026-10-09.md, "reader code width").
-# blogs/ruff.toml's rules otherwise, minus its E501 ignore.
 extend = "../../ruff.toml"
 line-length = 80
 
 [lint]
-# ANN: reader functions are unannotated; their tensors' shape suffixes (x_TD, w_qkv_D3NH) say more than `Tensor`.
 extend-select = ["E501"]
 ignore = ["ANN"]

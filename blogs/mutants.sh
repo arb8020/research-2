@@ -1,9 +1,9 @@
 #!/bin/bash
-# Run from worktrees/blogs-build-split/blogs. Mutant chapters go to a temp dir; nothing in the repo changes.
 set -u
 M=$(mktemp -d)
-mutate() {  # mutate NAME OLD NEW: copy of rl/01-flappy.md with OLD -> NEW in solution=flappy only
-  uv run python - "$M/$1.md" "$2" "$3" <<'PY'
+mutate() {
+  local name=$1 old=$2 new=$3
+  uv run python - "$M/$name.md" "$old" "$new" <<'PY'
 import sys; from pathlib import Path
 out, old, new = sys.argv[1:]
 text = Path("rl/01-flappy.md").read_text()
@@ -13,6 +13,7 @@ Path(out).write_text(text[:start] + sol.replace(old, new) + text[end:])
 PY
 }
 run() { echo; echo "\$ check.py $*"; uv run check.py "$@" 2>&1 | grep -v -E '^    #([3-9]|[1-9][0-9]) ' | awk 'NR<=8 || /FAIL|PASS|steps\/s/'; }
+status=0
 
 echo "===== 1. out-of-bounds write: obs[2] = 0 in spawn_pipe"
 mutate oob 'obs[BOTTOM] = env->flappy_env.pipe_row == BOTTOM;' 'obs[BOTTOM] = env->flappy_env.pipe_row == BOTTOM;
@@ -40,9 +41,10 @@ mutate wextra '    // increment env by a tick' '    if (flappy_env->tick < sizeo
 run $M/wextra.md flappy
 run $M/wextra.md flappy --build prod
 
-echo; echo "===== 3b. an assert that changes state: assert(action = truncf(action))"
+echo; echo "===== 3b. assert_with_assignment_fails_the_check_build: assert(action = truncf(action)) (macOS's assert parens hide it from -Wparentheses; include/assert.h)"
 mutate assign 'assert(action == truncf(action));' 'assert(action = truncf(action));'
-run $M/assign.md flappy
+out=$(run $M/assign.md flappy); echo "$out"
+if ! grep -q "does not compile" <<<"$out"; then echo "FAIL assert_with_assignment_fails_the_check_build: the check build compiled it"; status=1; fi
 
 echo; echo "===== 3c. vendor headers: the unchanged solution compiles silently under the check flags"
 run rl/01-flappy.md flappy
@@ -61,3 +63,4 @@ PY
 echo "(first line: check build + sanitizer runtime; second: prod build, clean process)"
 run $M/speed.md flappy
 rm -rf "$M"
+exit $status

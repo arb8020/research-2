@@ -1,22 +1,3 @@
-"""```carousel fence -> <embed-carousel>: one slide per paragraph of `key: value` lines.
-
-    title: AlphaGo, move 37            shown above the caption
-    youtube: WXuK6gekU1Y               a YouTube id (click-to-load facade, youtube-nocookie.com iframe)
-    start: 2902                        optional, seconds into the video
-    image: https://...png              or a picture instead of a video
-    alt: what the picture shows        required with image
-    caption: one line
-    source: AlphaGo - The Movie        the citation: title, org, year, link
-    org: Google DeepMind
-    year: 2020
-    link: https://...
-    license: who owns the media and how it's used here (shown in small print)
-
-Slides are separated by a blank line. A missing or unknown key fails the build with the slide's line.
-Everything is rendered here so the page works without JS (slides scroll sideways); element.ts adds
-the prev/next buttons, arrow keys and the facades' click-to-load.
-"""
-
 from __future__ import annotations
 
 import re
@@ -40,7 +21,6 @@ def render(src: str, line: int) -> str:
 
 
 def paragraphs(src: str) -> list[tuple[int, str]]:
-    """(lines before it in the fence, text) per blank-line-separated chunk."""
     return [(src.count("\n", 0, m.start()), m[0]) for m in re.finditer(r"(?:^[^\n]*\S[^\n]*(?:\n|$))+", src, re.MULTILINE)]
 
 
@@ -50,7 +30,7 @@ def parse_slide(chunk: str, line: int) -> dict[str, str]:
         key, sep, value = raw.partition(":")
         key, value = key.strip(), value.strip()
         where = f"line {line + i}"
-        assert sep and value, f"{where}: expected `key: value`, got {raw!r}"
+        assert sep and value, f"{where}: expected `key: value` (slides are separated by a blank line), got {raw!r}"
         assert key in REQUIRED + OPTIONAL, f"{where}: unknown key {key!r} (known: {', '.join(REQUIRED + OPTIONAL)})"
         assert key not in slide, f"{where}: {key} given twice"
         slide[key] = value
@@ -80,7 +60,6 @@ def media_html(s: dict[str, str]) -> str:
         return f'<img src="{escape(s["image"])}" alt="{escape(s["alt"])}" loading="lazy" decoding="async">'
     vid, start = quote(s["youtube"], safe=""), s.get("start", "")
     watch = f"https://www.youtube.com/watch?v={vid}" + (f"&t={start}s" if start else "")
-    # The facade is a link, so without JS it opens YouTube; element.ts swaps it for the iframe on click.
     return (
         f'<a class="facade" href="{escape(watch)}" data-youtube="{vid}" data-start="{start}" data-title="{escape(s["title"])}" '
         f'aria-label="Play video: {escape(s["title"])} (loads YouTube)">'

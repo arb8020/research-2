@@ -10,8 +10,6 @@ import "./connect/ui";
 import "./page-link";
 import "./ws-cell";
 
-// GET {SESSION}/state (session.py): the reader's latest passing source per cell, and per C cell the
-// session path of a play widget built from it.
 interface SessionState {
   passed: Record<string, string>;
   wasm: Record<string, string>;
@@ -31,8 +29,6 @@ function parseState(raw: unknown): SessionState {
   return { passed, wasm };
 }
 
-// POST {SESSION}/run (session.py) streams one JSON object per line: {"out"} as output arrives, then
-// exactly one {"result"}. The verdict comes only from "result"; reader code can only print into "out".
 interface RunResult {
   passed: boolean;
   message: string;
@@ -52,7 +48,6 @@ function parseRunLine(raw: unknown): RunLine {
   throw new Error(`session /run: expected {out} or {result: {passed, message}}, got ${JSON.stringify(raw)}`);
 }
 
-// Yields each complete line of a text stream (the last one even without a trailing newline).
 async function* lines(body: ReadableStream<Uint8Array<ArrayBuffer>>): AsyncGenerator<string> {
   const reader = body.pipeThrough(new TextDecoderStream()).getReader();
   let buf = "";
@@ -65,11 +60,6 @@ async function* lines(body: ReadableStream<Uint8Array<ArrayBuffer>>): AsyncGener
   if (buf !== "") yield buf;
 }
 
-// TODO(page): "copy for your agent" (agent panel deferred, notes/research/infra/agent-panel.md): on a text selection,
-// a small button copies a prompt (the highlight, its section, the chapter URL, a slot for the question) to paste into the
-// reader's own coding agent.
-// TODO(page): ports and the session URL in one place (now: build_page.py --session-url default, session.py --port,
-// dev.sh, verify_page.py/a11y.py default URLs).
 function sessionUrl(): string {
   const fromQuery = new URLSearchParams(location.search).get("session");
   return fromQuery !== null && fromQuery !== "" ? fromQuery : must(document, 'meta[name="session-url"]', HTMLMetaElement).content;
@@ -85,10 +75,6 @@ async function refresh(): Promise<void> {
   document.dispatchEvent(new Event("session-state"));
 }
 
-
-// ---- Where each cell kind runs: the one place to change when a kind moves (e.g. checked cells to the GPU). ----
-
-// POST {SESSION}/run on the local session (session.py): the cell's code plus its hidden checks -> a verdict.
 async function runOnSession(name: string, source: string, onOut: (text: string) => void): Promise<RunResult> {
   try {
     const res = await fetch(`${SESSION}/run`, { method: "POST", body: JSON.stringify({ cell: name, source }) });
@@ -97,19 +83,19 @@ async function runOnSession(name: string, source: string, onOut: (text: string) 
     for await (const text of lines(res.body)) {
       if (text === "") continue;
       const line = parseRunLine(JSON.parse(text));
-      if (line.kind === "result") result = line.result;
-      else onOut(line.text);
+      if (line.kind === "out") onOut(line.text);
+      else if (result === undefined) result = line.result;
+      else throw new Error("session /run: a second result line");
     }
     return result ?? { passed: false, message: "the session stopped before giving a result" };
   } catch (cause) {
-    // fetch and a dropped stream throw TypeError; a malformed line throws from JSON.parse / parseRunLine.
-    const message = cause instanceof TypeError ? "session unreachable" : "the session sent a reply the page can't read";
+    const unreachable = cause instanceof TypeError;
+    const message = unreachable ? "session unreachable" : "the session sent a reply the page can't read";
     onOut(`\n[${message}: ${String(cause)}]\n`);
     return { passed: false, message };
   }
 }
 
-// The Connect session's Jupyter kernel (connect/kernel.ts): plain code, no checks; stdout and stderr interleave.
 const runOnKernel = (source: string, onOut: (text: string) => void): Promise<KernelResult> => runCode(source, onOut, onOut);
 
 const BACKENDS = { checked: runOnSession, scratch: runOnKernel } as const;
@@ -119,14 +105,13 @@ class CodeView extends HTMLElement {
     const doc = must(this, "pre", HTMLPreElement).textContent;
     this.innerHTML = "";
     const lang = attr(this, "data-lang");
-    // An excerpt (data-first-line) numbers its lines as in the source file; `given` code numbers from 1.
+    const isExcerpt = this.hasAttribute("data-first-line");
     const first = Number(this.getAttribute("data-first-line") ?? "1");
-    const setup = this.hasAttribute("data-first-line")
+    const setup = isExcerpt
       ? [minimalSetup, lineNumbers({ formatNumber: (n) => String(n + first - 1) })]
       : [basicSetup];
     const view = new EditorView({ parent: this, state: EditorState.create({ doc, extensions: [...setup, syntax(lang), look(this.getAttribute("data-label") ?? `given code (${lang})`), EditorState.readOnly.of(true)] }) });
     view.scrollDOM.tabIndex = 0;
-    // A workspace file shown read-only (```lang given file=X): output lines naming X link here.
     const file = this.getAttribute("data-file");
     if (file !== null) registerFile(file, view, this);
   }
@@ -136,7 +121,6 @@ customElements.define("code-view", CodeView);
 type Verdict = readonly [text: string, cls: string];
 
 class CodeCell extends HTMLElement {
-  // Created detached; connectedCallback gives it the stub and mounts it. verify_page.py drives it as `.view`.
   readonly view = new EditorView();
   private restored = false;
   private verdict: Verdict | undefined;
@@ -149,8 +133,6 @@ class CodeCell extends HTMLElement {
     const name = this.cellName;
     const lang = attr(this, "data-lang");
     const stub = must(this, "pre", HTMLPreElement).textContent;
-    // TODO(page): show-solution button here: fetched from the session on click (the page stays solution-free),
-    // shown read-only with copy blocked.
     this.innerHTML = `
       <div class="cell-head"><span>${name} · ${lang}</span>
         <span class="cell-status"></span><button class="vim-toggle" aria-pressed="${String(vimEnabled())}">vim</button><button class="run">Run</button></div>
@@ -169,8 +151,6 @@ class CodeCell extends HTMLElement {
     this.gate();
   }
 
-  // TODO(page): drafts survive reload: keep unpassed edits in localStorage, show "draft" in the status, add
-  // "revert to last passing". Fold in: cell order is decided twice (check.py cell_order on the server, DOM order here).
   gate(): void {
     const name = this.cellName;
     const cells = [...document.querySelectorAll("code-cell")];
@@ -218,10 +198,8 @@ class CodeCell extends HTMLElement {
 }
 customElements.define("code-cell", CodeCell);
 
-// ```python scratch: an editable cell that runs on the Connect session's kernel. No checks, no gating: it is
-// disabled only while nothing is connected ("Connect to run" opens the Connect panel).
 class ScratchCell extends HTMLElement {
-  readonly view = new EditorView(); // verify_connect.py drives it as `.view`, like code-cell
+  readonly view = new EditorView();
   private running = false;
 
   connectedCallback(): void {
@@ -308,7 +286,7 @@ class EnvPlay extends HTMLElement {
 }
 customElements.define("env-play", EnvPlay);
 
-// Only pages with cells or play widgets talk to the session (a prose-only page like neural-nets has nothing to ask).
-if (document.querySelector("code-cell, env-play") !== null) {
+const talksToSession = document.querySelector("code-cell, env-play") !== null;
+if (talksToSession) {
   refresh().catch((cause: unknown) => { console.warn("session unreachable", cause); });
 }
