@@ -33,19 +33,17 @@ import urllib.request
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parent
-BLOGS = SKILL.parents[2]  # blogs/.claude/skills/verify-blogs -> blogs
+BLOGS = SKILL.parents[2]
 RUN_FILE = BLOGS / ".session" / "verify-blogs" / "run.json"
 EVIDENCE_ROOT = BLOGS / ".evidence" / "verify-blogs"
-SCAFFOLD = BLOGS / "verify-blogs-scaffold"  # VERIFICATION SCAFFOLDING: fixture chapters live here only during `drive build`
-READER_STATE = BLOGS / ".session" / "01-flappy"  # session.py's state for rl/01-flappy.md (fixed path, no flag)
-USER_PORTS = {8010, 8012, 8060, 8787, 8790}  # the author's long-running tmux servers: never bind, never kill
+SCAFFOLD = BLOGS / "verify-blogs-scaffold"
+READER_STATE = BLOGS / ".session" / "01-flappy"
+USER_PORTS = {8010, 8012, 8060, 8787, 8790}
 CHROME_GLOB = "~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
-FAKE_TOKEN = ("ak-verify-blogs", "as-verify-blogs-secret")  # connect_dev.py boots any token id starting "ak-"
+FAKE_TOKEN = ("ak-verify-blogs", "as-verify-blogs-secret")
 FEATURES = ("build", "plan", "cells", "embeds", "links", "connect", "nn-fit-remote")
-ALL = ("build", "plan", "embeds", "links", "cells", "connect")  # `drive all`; nn-fit-remote is slow, run it by name
+ALL = ("build", "plan", "embeds", "links", "cells", "connect")
 
-
-# ---------------------------------------------------------------- small utilities
 
 def say(msg: str, log: Path | None = None) -> None:
     print(msg, flush=True)
@@ -93,11 +91,10 @@ def group_alive(pgid: int) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        return True  # exists but not ours: never signal it
+        return True
 
 
 def ours(proc: dict) -> bool:
-    """The recorded leader still runs the command we started (guards against PID reuse)."""
     return proc["match"] in command_of(proc["pid"])
 
 
@@ -114,7 +111,6 @@ def pgid_of(pid: int) -> int | None:
 
 
 def kill_group(pgid: int, log: Path | None = None, label: str = "") -> None:
-    """TERM the process group we started, wait, then KILL survivors. Never by name."""
     if not group_alive(pgid):
         return
     os.killpg(pgid, signal.SIGTERM)
@@ -132,8 +128,6 @@ def chrome() -> str | None:
     return found[-1] if found else None
 
 
-# ---------------------------------------------------------------- setup
-
 def cmd_setup(_: argparse.Namespace) -> int:
     web = BLOGS / "web"
     if not (web / "node_modules" / ".bin" / "esbuild").exists():
@@ -148,12 +142,10 @@ def cmd_setup(_: argparse.Namespace) -> int:
     return 0
 
 
-# ---------------------------------------------------------------- launch
-
 def spawn(name: str, argv: list[str], log: Path, match: str, env: dict | None = None) -> dict:
     out = log.open("ab")
     proc = subprocess.Popen(argv, cwd=BLOGS, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                            start_new_session=True, env=env)  # own process group: cleanup kills exactly this
+                            start_new_session=True, env=env)
     return {"name": name, "pid": proc.pid, "pgid": proc.pid, "argv": argv, "match": match, "log": str(log)}
 
 
@@ -224,7 +216,7 @@ def cmd_launch(args: argparse.Namespace) -> int:
         ("static", [sys.executable, "-m", "http.server", str(ports["static"]), "-d", "dist", "--bind", "127.0.0.1"],
          f"http.server {ports['static']}", f"{run['urls']['static']}/01-flappy/", (200,), 30),
         ("gateway", ["uv", "run", "connect_dev.py", "--port", str(ports["gateway"]), "--boot-delay", "0.6"],
-         f"--port {ports['gateway']}", f"{run['urls']['gateway']}/sessions/none", (404,), 240),  # first run installs jupyter
+         f"--port {ports['gateway']}", f"{run['urls']['gateway']}/sessions/none", (404,), 240),
     ]
     for name, argv, match, probe, ok, seconds in specs:
         proc = spawn(name, argv, evidence / "logs" / f"{name}.log", match)
@@ -262,10 +254,7 @@ def cmd_status(_: argparse.Namespace) -> int:
     return 0
 
 
-# ---------------------------------------------------------------- doctor (read-only)
-
 def doctor(log: Path | None = None, quiet: bool = False) -> bool:
-    """quiet: PASS/INFO lines go only to the log (drive transcripts keep the full doctor)."""
     fails: list[str] = []
 
     def check(ok: bool, what: str, fix: str = "", warn: bool = False) -> None:
@@ -334,7 +323,6 @@ def doctor(log: Path | None = None, quiet: bool = False) -> bool:
         check(False, f"connect_dev.py answers ({e})")
     built = BLOGS / "dist" / "01-flappy" / "page.js"
     sources = [BLOGS / "web" / "page.ts", *BLOGS.glob("web/connect/*.ts"), *BLOGS.glob("*/*.md")]
-    # relative parts: this checkout itself may live under .claude/worktrees/
     newest = max(p.stat().st_mtime for p in sources if p.exists() and not {".claude", "notes"} & set(p.relative_to(BLOGS).parts))
     check(built.exists() and built.stat().st_mtime >= newest, "dist/ is newer than web/*.ts and the chapters",
           "sources changed since the build: vb drive build", warn=True)
@@ -345,8 +333,6 @@ def doctor(log: Path | None = None, quiet: bool = False) -> bool:
 def cmd_doctor(_: argparse.Namespace) -> int:
     return 0 if doctor() else 1
 
-
-# ---------------------------------------------------------------- drive
 
 class Drive:
     def __init__(self, run: dict, feature: str) -> None:
@@ -366,7 +352,6 @@ class Drive:
             self.failures.append(what)
 
     def sh(self, argv: list[str], env: dict | None = None) -> tuple[int, str]:
-        """Run a harness in its own process group, tee its output into the transcript, then kill any stragglers."""
         self.say("$ " + " ".join(argv))
         proc = subprocess.Popen(argv, cwd=BLOGS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                 start_new_session=True, env={**{k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}, **(env or {})})
@@ -387,7 +372,6 @@ class Drive:
         return rc
 
     def collect(self, src: Path, since: float) -> None:
-        """Copy a harness's artifacts written during this drive (harness dirs are shared and overwritten)."""
         n = 0
         for f in sorted(src.rglob("*")) if src.exists() else []:
             if f.is_file() and f.stat().st_mtime >= since:
@@ -402,7 +386,6 @@ def read(path: Path) -> str:
     return path.read_text() if path.exists() else ""
 
 
-# fixture -> (should build?, substring the build output must contain)
 FIXTURES = {
     "vf-page-ok.md": (True, "wrote"),
     "vf-excerpt-bad.md": (False, "is not in ../vendor/pufferlib/pufferenv.h verbatim"),
@@ -434,7 +417,6 @@ def drive_build(d: Drive) -> None:
     for name in ("01-flappy", "neural-nets", "00-plan"):
         shutil.copy2(dist / name / "index.html", d.dir / "built" / f"{name}.html")
 
-    # Fixture chapters: VERIFICATION SCAFFOLDING, one at a time in blogs/verify-blogs-scaffold/, removed below.
     try:
         for name, (should_build, needle) in FIXTURES.items():
             shutil.rmtree(SCAFFOLD, ignore_errors=True)
@@ -536,7 +518,7 @@ def cmd_drive(args: argparse.Namespace) -> int:
             return 1
         try:
             DRIVES[feature](d)
-        except Exception as e:  # noqa: BLE001 - a broken drive still reports and lets cleanup run
+        except Exception as e:  # noqa: BLE001
             d.expect(False, f"drive crashed: {type(e).__name__}: {e}")
         verdict = "PASS" if not d.failures else f"FAIL ({len(d.failures)}: {d.failures})"
         d.say(f"== {feature}: {verdict}; evidence {d.dir}")
@@ -545,8 +527,6 @@ def cmd_drive(args: argparse.Namespace) -> int:
     print(f"drive: {'all passed' if not failed else f'FAILED {failed}'}; evidence {run['evidence']}")
     return 1 if failed else 0
 
-
-# ---------------------------------------------------------------- cleanup
 
 def cmd_cleanup(_: argparse.Namespace) -> int:
     run = load_run()

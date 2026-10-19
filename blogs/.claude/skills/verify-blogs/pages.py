@@ -78,7 +78,6 @@ def embeds(browser: Browser, a: argparse.Namespace) -> None:
     check(True, "carousel: Next -> 2, Previous -> 1")
     car.screenshot(path=a.out / "carousel.png")
 
-    # Which env plays depends on the session: the reference until the reader's flappy passes (cells.md), then theirs.
     session = page.locator('meta[name="session-url"]').get_attribute("content") or ""
     reader_wasm = page.request.get(f"{session}/state").json()["wasm"].get("flappy")
     play = page.locator('env-play[cell="flappy"]')
@@ -115,8 +114,6 @@ def links(browser: Browser, a: argparse.Namespace) -> None:
     link = page.locator("page-link > a")
     check(link.count() == 1 and link.get_attribute("href") == "../neural-nets/#fitting-a-curve", f"one page-link -> {link.get_attribute('href')}")
     check(page.evaluate("customElements.get('nn-fit')") is None, "nn-fit not loaded before the card opens")
-    # The flappy play iframe takes keyboard focus on load (seen 2026-10-09, headless Chromium), so a key press goes to
-    # the game, not the page. A reader clicks the prose first; so do we, and report where focus was.
     page.wait_for_timeout(1500)
     print(f"info focus after load: <{page.evaluate('document.activeElement.tagName').lower()}>", flush=True)
     page.locator("h1").click()
