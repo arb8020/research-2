@@ -30,10 +30,15 @@ def build_wasm(env: Block, store: Path) -> tuple[str, float]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="Local stand-in for a reader's session: runs a chapter's cells for its page (check.run_cell).",
+        epilog="POST /run {cell, source}  NDJSON: {\"out\"} lines as output arrives, then exactly one {\"result\": {passed, message}}\n"
+               "GET  /state                {\"passed\": {cell: source}, \"wasm\": {cell: url}}\n"
+               "GET  /wasm/<hash>/<file>   the play widget built from a reader's passing C cell",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("chapter", type=Path)
     ap.add_argument("--port", type=int, default=8787)
-    ap.add_argument("--timeout", type=float, default=30)
+    ap.add_argument("--timeout", type=float, default=30, help="seconds a cell may run before it is killed")
     args = ap.parse_args()
     store = HERE / ".session" / args.chapter.with_suffix("").name
     state_path = store / "state.json"

@@ -569,7 +569,8 @@ def runtime_dir() -> Path:
     path.mkdir(mode=0o700, exist_ok=True)
     st = path.lstat()
     if st.st_uid != os.getuid() or st.st_mode & 0o077 or not path.is_dir() or path.is_symlink():
-        raise RuntimeError(f"{path} is not a private dir owned by uid {os.getuid()}; refusing to use it")
+        raise RuntimeError(f"{path} is not a private dir owned by uid {os.getuid()}; refusing to use it "
+                           "(someone else made it, so a socket there is not trustworthy)")
     return path
 
 

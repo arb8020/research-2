@@ -42,6 +42,7 @@ POST /dev/sessions/{id}/expire ends the lease now (so a check can see a lease ru
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import math
 import os
@@ -427,6 +428,9 @@ def main() -> None:
     args = ap.parse_args()
     if (args.attach_kernel is None) != (args.attach_token is None):
         ap.error("--attach-kernel and --attach-token go together")
+    if args.attach_kernel is None and importlib.util.find_spec("jupyter_server") is None:
+        ap.error(f"{sys.executable} has no jupyter_server; from blogs/: uv run --project assay python connect_dev.py "
+                 "(or uv run connect_dev.py, without the check core's deps)")
     for d in (args.root, args.persist):
         if d is not None:
             d.mkdir(parents=True, exist_ok=True)

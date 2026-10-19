@@ -19,6 +19,8 @@ class _BlogsJobs:
     def start(self, job_id: str, argv: list[str], cwd: str) -> None:
         assert job_id not in self.procs, f"job {job_id} is already running"
         kernel = get_ipython().kernel  # noqa: F821 (IPython global)
+        if not hasattr(kernel, "get_parent"):
+            raise RuntimeError("jobs.py needs ipykernel >= 7 (Kernel.get_parent)")
         parent = kernel.get_parent()
         argv = [_sys.executable if a == "@python" else a for a in argv]
         proc = _subprocess.Popen(argv, cwd=cwd, stdout=_subprocess.PIPE, stderr=_subprocess.STDOUT, bufsize=0, start_new_session=True)

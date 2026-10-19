@@ -106,7 +106,8 @@ def render_excerpt(chapter: Path, path: str, lang: str, body: str, line: int) ->
     want = body.rstrip("\n").split("\n")
     have = source.read_text().split("\n")
     starts = [i for i in range(len(have) - len(want) + 1) if have[i : i + len(want)] == want]
-    assert starts, f"line {line}: this excerpt is not in {path} verbatim (lines changed upstream, or edited here?)"
+    assert starts, (f"line {line}: this excerpt is not in {path} verbatim, as whole consecutive lines (lines changed upstream, "
+                    "or edited here?); to show two parts, use two excerpt fences")
     first = starts[0] + 1
     shown = source.resolve().relative_to(HERE.resolve())
     where = f"{shown}:{first}" if len(want) == 1 else f"{shown}:{first}–{first + len(want) - 1}"
@@ -307,7 +308,13 @@ def build(site: Site, chapter: Path, session_url: str, gateway_url: str) -> None
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="Build chapter reader pages: rl/01-flappy.md -> dist/01-flappy/index.html (+ page.js, page.css, play widget).",
+        epilog="examples:\n"
+               "  uv run build_page.py rl/01-flappy.md dl/neural-nets.md\n"
+               "  uv run build_page.py --all\n"
+               "  python3 -m http.server 8010 -d dist     then open http://localhost:8010/01-flappy/",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("chapters", type=Path, nargs="*")
     ap.add_argument("--all", action="store_true", help="build every chapter under blogs/")
     ap.add_argument("--session-url", default="http://localhost:8787")

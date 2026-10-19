@@ -153,9 +153,13 @@ def diff(env: Block, so_path: str, tmp: Path, seed: int = 7, n: int = 1024, step
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="Build a chapter's browser pieces: each C solution=X -> dist/<chapter>/X.js + X.wasm + X.html "
+                    "(prod build, -DNDEBUG). Serve with: python3 -m http.server -d dist")
     ap.add_argument("chapter", type=Path)
-    ap.add_argument("--diff", action="store_true")
+    ap.add_argument("--diff", action="store_true",
+                    help="also check native and wasm envs behave the same (behavioural, not bit-exact: rand_r differs "
+                         "between macOS, glibc and musl)")
     args = ap.parse_args()
 
     blocks = parse(args.chapter.read_text())

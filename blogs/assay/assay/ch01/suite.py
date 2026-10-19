@@ -225,6 +225,8 @@ def checks(args: Any, store: Any, iso: Any, log: Callable[[str], None], warm: Pa
     if not args.selftest:
         yield from check(ctx, req)
         return
+    if not REF_GPT2.exists():
+        log(f"model mutants skipped: no reference {REF_GPT2.name} (sandbox)")
     scratch = Path(tempfile.gettempdir()) / "assay-mutants"
     scratch.mkdir(exist_ok=True)
     scratch.chmod(0o755)

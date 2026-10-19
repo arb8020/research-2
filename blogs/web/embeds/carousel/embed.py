@@ -30,7 +30,7 @@ def parse_slide(chunk: str, line: int) -> dict[str, str]:
         key, sep, value = raw.partition(":")
         key, value = key.strip(), value.strip()
         where = f"line {line + i}"
-        assert sep and value, f"{where}: expected `key: value`, got {raw!r}"
+        assert sep and value, f"{where}: expected `key: value` (slides are separated by a blank line), got {raw!r}"
         assert key in REQUIRED + OPTIONAL, f"{where}: unknown key {key!r} (known: {', '.join(REQUIRED + OPTIONAL)})"
         assert key not in slide, f"{where}: {key} given twice"
         slide[key] = value

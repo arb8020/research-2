@@ -21,6 +21,8 @@ from pathlib import Path
 
 FENCE = re.compile(r"^```(\w+)[ \t]+([^\n]*)\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
 ROLES = ("given", "cell", "solution", "check", "budget")
+FENCE_KEYS = (*ROLES, "file", "excerpt", "scratch")
+FENCE_HELP = "given cell=X solution=X check=X budget=X file=F excerpt=F scratch (e.g. ```python cell=sample)"
 HIDDEN = ("solution", "check", "budget")
 HERE = Path(__file__).resolve().parent
 PUFFER = HERE / "vendor" / "pufferlib"
@@ -76,6 +78,7 @@ def parse(text: str) -> list[Block]:
         role, name, file = "", "", ""
         for item in info:
             key, _, value = item.partition("=")
+            assert key in FENCE_KEYS, f"line {line}: unknown fence key {key!r} in ```{lang} {m.group(2)}; keys: {FENCE_HELP}"
             if key in ROLES:
                 assert not role, f"line {line}: block has two roles: {info}"
                 role, name = key, value
@@ -262,7 +265,16 @@ def worker(job_path: str) -> None:
 def main() -> None:
     if sys.argv[1:2] == ["--worker"]:
         worker(sys.argv[2])
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="Run a chapter's checks against its hidden solutions (or the reader stubs). Each cell runs in a fresh "
+                    "subprocess: given blocks, the solutions of every earlier cell, then the cell, then check=X; "
+                    "budget=X runs again in a clean subprocess against prod builds.",
+        epilog=f"fence keys: {FENCE_HELP}\n\nexamples:\n"
+               "  uv run check.py rl/01-flappy.md                      every cell, in file order\n"
+               "  uv run check.py rl/01-flappy.md sample               one cell\n"
+               "  uv run check.py rl/01-flappy.md sample --stub\n"
+               "  uv run check.py rl/01-flappy.md flappy --build prod  check=flappy without asserts/sanitizers",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("chapter", type=Path)
     ap.add_argument("cell", nargs="?")
     ap.add_argument("--stub", action="store_true", help="run checks against the reader stubs instead of solutions")

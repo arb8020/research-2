@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import argparse
 import os
 import secrets
 import shlex
-import sys
 import time
 import urllib.request
 import warnings
@@ -96,4 +96,8 @@ def leftovers(kill: bool = False) -> int:
 
 
 if __name__ == "__main__":
-    print(f"{leftovers(kill='--kill' in sys.argv)} sandbox(es) tagged {TAG} under app {APP}")
+    ap = argparse.ArgumentParser(
+        description=f"List the workspace sandboxes verify_workspace.py --modal left on Modal (tagged {TAG} under app {APP}).",
+        epilog="uv run --with modal ws_modal.py [--kill]")
+    ap.add_argument("--kill", action="store_true", help="also terminate them")
+    print(f"{leftovers(kill=ap.parse_args().kill)} sandbox(es) tagged {TAG} under app {APP}")

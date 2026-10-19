@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import argparse
 import glob
 import os
 import re
 import sys
 import time
 from pathlib import Path
+from urllib.error import URLError
 from urllib.parse import urljoin
 from urllib.request import urlopen
 
@@ -15,7 +17,15 @@ from check import parse
 
 HERE = Path(__file__).parent
 SHOTS = HERE / ".evidence" / "verify_page"
-PAGE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8010/01-flappy/"
+_ap = argparse.ArgumentParser(
+    description="Drive the built flappy page in headless Chromium against a running session; screenshots go to "
+                ".evidence/verify_page/. Pastes the hidden C solution into the editor programmatically (testing only).",
+    epilog="needs, in other panes:\n"
+           "  uv run session.py rl/01-flappy.md --timeout 20   (the session URL the page was built with)\n"
+           "  python3 -m http.server 8010 -d dist              (with ../neural-nets/ built: uv run build_page.py --all)",
+    formatter_class=argparse.RawDescriptionHelpFormatter)
+_ap.add_argument("url", nargs="?", default="http://localhost:8010/01-flappy/")
+PAGE = _ap.parse_args().url
 NEURAL_NETS = urljoin(PAGE, "../neural-nets/")
 CHROME = sorted(glob.glob(os.path.expanduser(
     "~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")))[-1]  # fmt: skip
@@ -36,7 +46,12 @@ def policy_probs(params: dict[str, torch.Tensor], obs: torch.Tensor) -> torch.Te
     return torch.softmax(torch.tanh(obs @ params["w1"] + params["b1"]) @ params["w2"] + params["b2"], -1)
 """
 
-html = urlopen(PAGE).read().decode()
+try:
+    html = urlopen(PAGE).read().decode()
+    urlopen(NEURAL_NETS)
+except URLError as e:
+    sys.exit(f"{e.filename or PAGE}: {e.reason}; build every chapter (uv run build_page.py --all) and serve dist/ "
+             "(python3 -m http.server 8010 -d dist): the nn-fit and link cases need ../neural-nets/")
 assert "solution=" not in html and "flappy->tick += 1" not in html and "check=" not in html, "solution or check leaked"
 SESSION = re.search(r'<meta name="session-url" content="([^"]+)">', html)[1]
 assert not (HERE / ".session" / "01-flappy" / "state.json").exists(), "rm -rf .session first: verify expects a fresh reader"
