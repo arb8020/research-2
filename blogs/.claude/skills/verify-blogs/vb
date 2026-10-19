@@ -5,7 +5,7 @@
     vb launch [--fresh]           build every page, start session.py + static server + box's relay (local) on free ports
     vb doctor                     read-only: is the launched instance worth driving? exit 1 on any FAIL
     vb drive <feature> [...]      run a feature's recipe; transcript + artifacts into the run's evidence dir
-                                    features: build plan cells embeds links connect nn-fit-remote all
+                                    features: build plan cells embeds links connect slow all
     vb status                     print the run's URLs, ports, PIDs and evidence dir
     vb cleanup                    kill what launch/drive started (by recorded process group), remove scratch state;
                                     evidence stays in blogs/.evidence/verify-blogs/<run id>/
@@ -30,6 +30,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parent
@@ -45,7 +46,7 @@ USER_PORTS = {8010, 8012, 8060, 8787, 8790}
 CHROME_GLOB = "~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
 FAKE_TOKEN = ("ak-verify-blogs", "as-verify-blogs-secret")
 JUPYTER_FIRST_START_S = 240
-FEATURES = ("build", "plan", "cells", "embeds", "links", "connect", "nn-fit-remote")
+FEATURES = ("build", "plan", "cells", "embeds", "links", "connect", "slow")
 ALL = ("build", "plan", "embeds", "links", "cells", "connect")
 
 
@@ -220,7 +221,7 @@ def cmd_launch(args: argparse.Namespace) -> int:
          f"--port {ports['session']}", f"{run['urls']['session']}/state", (200,), 180),
         ("static", [sys.executable, "-m", "http.server", str(ports["static"]), "-d", "dist", "--bind", "127.0.0.1"],
          f"http.server {ports['static']}", f"{run['urls']['static']}/01-flappy/", (200,), 30),
-        ("gateway", local_relay.local(ports["gateway"], Path(run["machines"]), "--lease-min-s", "2"),
+        ("gateway", local_relay.relay(ports["gateway"], "--provider", "local", "--machines-dir", run["machines"]),
          f"--port {ports['gateway']}", f"{run['urls']['gateway']}/limits", (200,), JUPYTER_FIRST_START_S),
     ]
     for name, argv, match, probe, ok, seconds in specs:
@@ -479,29 +480,19 @@ def restore_neural_nets(d: Drive) -> None:
     d.expect(rc == 0, "dist/neural-nets rebuilt with our gateway (the harness rebuilt it with the default :8790)")
 
 
-def drive_connect(d: Drive) -> None:
-    since = time.time()
-    rc, out = d.sh(["uv", "run", "--with", "playwright", "verify_connect.py", "--gateway", d.run["urls"]["gateway"],
-                    "--page-port", str(free_port())], env={"MODAL_TOKEN_ID": FAKE_TOKEN[0], "MODAL_TOKEN_SECRET": FAKE_TOKEN[1]})
-    d.collect(BLOGS / ".evidence" / "verify_connect", since)
-    d.expect(rc == 0, "verify_connect.py passes against our local relay")
-    d.expect("bad token: " in out, "a token the gateway rejects shows the failure in the panel")
-    d.expect("lease ran out" in out, "a session whose lease runs out says so")
-    d.expect("stop: 'KeyboardInterrupt (" in out, "Stop interrupts a running scratch cell")
-    d.expect("same kernel" in out, "reload reattaches to the same session + kernel")
-    restore_neural_nets(d)
+def drive_tier(tier: str) -> Callable[[Drive], None]:
+    def drive(d: Drive) -> None:
+        since = time.time()
+        rc, out = d.sh(["uv", "run", "--with", "playwright", "replay.py", tier])
+        d.collect(BLOGS / ".evidence" / "replay", since)
+        d.expect(rc == 0 and f"ok: {tier} tier" in out, f"replay.py {tier}: Connect, workspace cells and nn-fit's remote runs")
+        restore_neural_nets(d)
 
-
-def drive_nn_fit_remote(d: Drive) -> None:
-    since = time.time()
-    rc, _ = d.sh(["uv", "run", "--with", "playwright", "python", "web/embeds/nn-fit/remote_e2e.py"])
-    d.collect(BLOGS / ".evidence" / "nn-fit-remote", since)
-    d.expect(rc == 0, "remote_e2e.py passes (nn-fit trains on a local relay's kernel)")
-    restore_neural_nets(d)
+    return drive
 
 
 DRIVES = {"build": drive_build, "plan": drive_plan, "cells": drive_cells, "embeds": drive_embeds, "links": drive_links,
-          "connect": drive_connect, "nn-fit-remote": drive_nn_fit_remote}
+          "connect": drive_tier("fast"), "slow": drive_tier("slow")}
 
 
 def cmd_drive(args: argparse.Namespace) -> int:
@@ -543,7 +534,7 @@ def cmd_cleanup(_: argparse.Namespace) -> int:
         say(f"cleanup run {run['id']}", log)
         machines = Path(run["machines"])
         try:
-            say(f"  ended sessions {local_relay.end(run['urls']['gateway'], local_relay.sessions(machines), FAKE_TOKEN)}", log)
+            say(f"  ended sessions {local_relay.end_all(run['urls']['gateway'], machines, FAKE_TOKEN)}", log)
         except OSError as e:
             say(f"  could not end the relay's sessions: {e}", log)
         for p in reversed(run["procs"]):

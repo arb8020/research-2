@@ -13,7 +13,7 @@ This directory is the maintained source for verifying what readers and the autho
 ## Driving conventions
 
 - Drive through `vb drive <feature>`; it runs doctor first, tees every command into `<evidence>/<feature>/transcript.txt`, and kills anything the harness left running.
-- Prefer the repo's own harnesses (`verify_page.py`, `verify_connect.py`, `web/embeds/nn-fit/remote_e2e.py`); `pages.py` holds only the cases they don't cover.
+- Prefer the repo's own harnesses (`verify_page.py`, `replay.py`); `pages.py` holds only the cases they don't cover.
 - Selectors are the page's own handles: custom elements (`code-cell[name=X]`, `scratch-cell`, `env-play[cell=X]`, `connect-pill[data-phase]`, `page-link`, `nn-fit`, `embed-carousel`), their classes (`.run`, `.cell-out.pass|.fail`, `.cell-status`, `.connect-go`), form names (`input[name=token-id]`), roles and ARIA names (`note "under construction"`, `button "Next slide"`).
 - Always open Connect pages with `?gateway=<our gateway>`.
 - Every C or Python cell runs through the page's Run button against the session; never POST `/run` directly as proof.
@@ -35,14 +35,14 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 3. `Driving it with vb` starts with `Preconditions:` and uses labeled bullets that pair each user action with an exact command and observable result.
 4. `Gotchas` lists traps that can waste or invalidate a verification run.
 
-Keep implementation details out of the map. Name only user paths, stable handles, required state, commands, and observable proof. The file name is the `vb drive` feature name (`nn-fit-remote` lives in embeds.md).
+Keep implementation details out of the map. Name only user paths, stable handles, required state, commands, and observable proof. The file name is the `vb drive` feature name (`slow` lives in connect.md).
 
 ## Features
 
 - [Build pages](./build.md) covers `build_page.py` one chapter and `--all`, wip banners, todo placeholders, `[[links]]`, excerpts, the hidden-block leak check, and build failures (fixtures).
 - [Engine plan page](./plan.md) covers `engine/00-plan.md`: builds, banner, heading ids, no session traffic.
 - [Checked cells](./cells.md) covers flappy's cells against session.py: run, pass/fail, crash/hang, gating, propagation, reload restore, the play widget rebuilt from the reader's env.
-- [Embeds and widgets](./embeds.md) covers the carousel, the flappy play widget (reference env), nn-fit in the browser and on a Connect kernel (`nn-fit-remote`).
+- [Embeds and widgets](./embeds.md) covers the carousel, the flappy play widget (reference env), nn-fit in the browser and on a Connect kernel (replayed in `connect`, real in `slow`).
 - [Page links](./links.md) covers the `[[page#heading]]` hover card, Escape, click navigation.
 - [Connect](./connect.md) covers the Connect pill against the local relay (bad token, boot drawer, scratch cell, Stop, reload reattach, disconnect, sign out) and how the real Modal path is reached.
 

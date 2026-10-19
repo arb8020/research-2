@@ -38,6 +38,6 @@ Preconditions:
 - A fresh worktree without `web/node_modules` fails with only `esbuild: command not found` (exit 127 from `npm run build`). `vb setup`.
 - The first build of a chapter with a play widget downloads raylib's wasm build into `vendor/raylib-*` (network).
 - Chapters are `.md` files in a non-hidden subdirectory of `blogs/` (not notes/, vendor/, dist/, web/, include/); stems must be unique. That is why fixtures are copied into `verify-blogs-scaffold/` (scaffolding, removed in a `finally` and by `vb cleanup`), and why `--all` would pick them up while they exist.
-- A build that names no `--session-url`/`--gateway-url` bakes in the author's `:8787`/`:8790`. Repo harnesses (`verify_connect.py`, `remote_e2e.py`, `demo_tour.py`) rebuild `dist/neural-nets` that way; `vb drive connect`/`nn-fit-remote` rebuild it with ours afterwards, and doctor WARNs if it is stale.
+- A build that names no `--session-url`/`--gateway-url` bakes in the author's `:8787`/`:8790`. Repo harnesses (`replay.py`, `demo_tour.py`) rebuild `dist/neural-nets` that way; `vb drive connect`/`slow` rebuild it with ours afterwards, and doctor WARNs if it is stale.
 - `build_page.py` re-runs `npm run build` on every call (~0.1 s), so building fixtures one at a time is cheap.
 - No chapter on `blogs/engine` uses `excerpt=` yet; only the fixture exercises it.

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import marshal
+import os
 import shutil
 import subprocess
 import sys
@@ -67,3 +69,27 @@ def test_a_symlinked_pycache_is_unlinked_not_followed(state: Path, tmp_path: Pat
     (state / "assay" / "__pycache__").symlink_to(elsewhere, target_is_directory=True)
     assert workspace.drop_bytecode(state) == ["assay/__pycache__"]
     assert (elsewhere / "keep.txt").exists() and not (state / "assay" / "__pycache__").exists()
+
+
+def test_a_new_sandbox_restores_the_persisted_workspace(tmp_path: Path) -> None:
+    import ref
+
+    bundle = ref.reader_bundle("ch00", tmp_path / "ref.bundle")
+    env = {**os.environ, "BLOGS_WS_PERSIST": str(tmp_path / "persist")}
+
+    def boot(name: str) -> dict:
+        root = tmp_path / name
+        root.mkdir()
+        out = subprocess.run([sys.executable, str(BLOGS / "workspace.py"), "boot", "ch00", "--ref", str(bundle)], cwd=root, env=env, capture_output=True, text=True, check=True)
+        return json.loads(out.stdout.strip().splitlines()[-1])
+
+    first = boot("sandbox1")
+    repo = tmp_path / "sandbox1" / "workspace"
+    (repo / "ring.cpp").write_text("// edited\n")
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "edit"], cwd=repo, check=True)
+    subprocess.run([sys.executable, str(BLOGS / "workspace.py"), "save"], cwd=tmp_path / "sandbox1", env=env, check=True, capture_output=True)
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True, check=True).stdout.strip()
+    second = boot("sandbox2")
+    assert (first["created"], second["created"]) == ("seeded", "restored")
+    assert second["status"]["head"] == head[: len(second["status"]["head"])]
+    assert (tmp_path / "sandbox2" / "workspace" / "ring.cpp").read_text() == "// edited\n"

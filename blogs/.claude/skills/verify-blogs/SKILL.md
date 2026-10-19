@@ -64,11 +64,11 @@ refuses to drive on a FAIL.
 | `cells` | flappy checked cells through the page (`verify_page.py`: stub fails, solution passes, gating, crash, hang, reload) |
 | `embeds` | carousel, flappy play widget, nn-fit in the browser (`pages.py embeds`) |
 | `links` | `[[page#heading]]` hover card, Escape, click (`pages.py links`) |
-| `connect` | `verify_connect.py --gateway <ours>`: bad token, connect (CPU), Stop, reload reattach, disconnect, sign out, lease (extend, run out), phone/dark, axe |
-| `nn-fit-remote` | `web/embeds/nn-fit/remote_e2e.py` (starts its own local relay on assay's python, with torch; ~3 min; not in `all`) |
+| `connect` | `replay.py fast` (~15 s): Connect, workspace cells and nn-fit's remote runs on recorded streams (`fixtures/replay/`) replayed into the built pages |
+| `slow` | `replay.py slow` (~40 s, not in `all`): one local relay, one CPU session, the real path in order; fails on fixture drift (re-record with `--record`) |
 
 Each drive prints `ok`/`FAIL` lines and ends with `== <feature>: PASS|FAIL`; exit 1 if any feature failed. Real
-handles, recipes and gotchas per feature: `features/<feature>.md` (`nn-fit-remote` is in `embeds.md`). To drive by hand, open the launched URLs in a
+handles, recipes and gotchas per feature: `features/<feature>.md` (`slow` is in `connect.md`). To drive by hand, open the launched URLs in a
 browser, or write a new case in `pages.py` (Playwright; selectors from the feature files).
 
 Other proofs that are not page drives (run when you touch their area): `uv run check.py rl/01-flappy.md [cell]
@@ -83,7 +83,7 @@ the box relay from another branch. Prefer the local gateway.
 Everything lands in `blogs/.evidence/verify-blogs/<run id>/` (gitignored; `vb` never deletes it):
 `launch.txt`, `run.json`, `logs/` (build, session, static, gateway), and one dir per feature with
 `transcript.txt` (doctor + every command + its output + exit code + verdicts) and the screenshots/video. The repo
-harnesses write to shared dirs (`.evidence/verify_page/`, `.evidence/verify_connect/`, `.evidence/nn-fit-remote/`)
+harnesses write to shared dirs (`.evidence/verify_page/`, `.evidence/replay/`)
 that the next run overwrites; `vb` copies what a drive wrote there into the feature dir.
 
 Proof standards: drive the reader's path in the page (click Run, the pill, the card), not session or gateway

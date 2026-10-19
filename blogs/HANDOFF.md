@@ -5,7 +5,7 @@
   `<!-- page: connect -->`, a ```` ```python scratch ```` `!nvidia-smi` cell, and nn-fit "Run on: remote" incl. a
   remote-only grokking dataset (a + b mod 113; T4 21.5 s vs CPU 123 s). Prose todos: two `<!-- write: -->`.
 - Run: tmux `reader-path` (relay :8790 + page :8012), or see box/NOTES-sessions.md "Overnight result".
-  Proofs: `verify_connect.py`, `web/embeds/nn-fit/remote_e2e.py [--gateway URL] [--case grok]`, `demo_tour.py`.
+  Proofs: `replay.py fast` (replayed, seconds), `replay.py slow [--record | --gateway URL]` (one real session), `demo_tour.py`.
   No cloud: box's relay with `--provider local` (box/examples/notebook-gateway/relay.py; local Jupyter, CPU).
 - Page changes to review before merging into blogs/flappy: corner controls become a sticky bar < 1280px
   (fixes the overlap TODO); kernel keepalive on the control channel; nn-fit curve->spiral crash fixed (still on flappy).

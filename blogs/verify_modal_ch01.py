@@ -26,7 +26,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import time
 import tomllib
 from dataclasses import dataclass, field
@@ -34,11 +33,35 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
+import replay
 import verify_workspace as vw
 
 OUT = vw.HERE / ".evidence" / "modal-ch01"
 CONNECT_TIMEOUT_MS = 15 * 60_000
-vw.CHECK_TIMEOUT_MS = 10 * 60_000
+CHECK_TIMEOUT_MS = 10 * 60_000
+CELLS1 = 7
+TOL_FAIL = "allclose: |out - fp64 truth| up to "
+GELU_TANH = "(1 + torch.tanh(inner_TF))"
+GELU_ERF = "(1 + torch.erf(x_TF / math.sqrt(2)))"
+
+
+def put_region(page: Page, cell: str, name: str, text: str) -> None:
+    vw.replace_in_view(page, cell, vw.region(vw.doc(page, cell), name), vw.region(text, name))
+
+
+def check_log(page: Page, cell: str) -> str:
+    return page.locator(f"ws-cell[name={cell}] .check-log").inner_text()
+
+
+def rows(page: Page, cell: str) -> list[dict[str, str]]:
+    return page.evaluate("""(n) => [...document.querySelectorAll(`ws-cell[name=${n}] tr.verdict`)].map((tr) => {
+        const td = tr.querySelectorAll('td'); return {outcome: tr.dataset.outcome, case: td[0].textContent,
+        dtype: td[1].textContent, metric: td[4].textContent, notes: td[5].textContent}; })""", cell)  # fmt: skip
+
+
+def metric_value(row: dict[str, str], label: str) -> float:
+    assert row["metric"].startswith(label + " "), row
+    return float(row["metric"].removeprefix(label + " "))
 
 
 @dataclass(frozen=True)
@@ -54,7 +77,7 @@ def token(profile: str) -> tuple[str, Secret]:
     return cfg["token_id"], Secret(cfg["token_secret"])
 
 
-LOADED = (f"document.querySelectorAll('ws-cell[data-loaded]').length === {vw.CELLS1} && [...document.querySelectorAll("
+LOADED = (f"document.querySelectorAll('ws-cell[data-loaded]').length === {CELLS1} && [...document.querySelectorAll("
           "'ws-cell .cell-status')].every((e) => !e.textContent.startsWith('loading'))")
 
 
@@ -73,7 +96,7 @@ class Story:
         target.screenshot(path=OUT / f"{name}.png")
 
     def keep_log(self, name: str, cell: str) -> None:
-        (OUT / f"{name}.log").write_text(vw.check_log(self.page, cell) + "\n---- output ----\n"
+        (OUT / f"{name}.log").write_text(check_log(self.page, cell) + "\n---- output ----\n"
                                          + self.page.locator(f"ws-cell[name={cell}] .cell-out").inner_text())
 
     def connect(self, label: str) -> float:
@@ -102,10 +125,12 @@ class Story:
         page.wait_for_selector("connect-pill[data-phase=disconnected]", timeout=120_000)
 
     def check(self, cell: str, label: str) -> tuple[str, list[dict[str, str]], float]:
-        status, _, took = vw.run_cell(self.page, cell)
+        t0 = time.perf_counter()
+        status, _ = vw.run_cell(self.page, cell)
+        took = time.perf_counter() - t0
         self.timings.setdefault("checks", []).append({"check": label, "click_to_verdict_s": round(took, 2)})
         self.keep_log(f"{len(self.timings['checks']):02d}-{cell}", cell)
-        return status, vw.rows(self.page, cell), took
+        return status, rows(self.page, cell), took
 
 
 def passes(rows: list[dict[str, str]], cell: str) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
@@ -117,20 +142,20 @@ def passes(rows: list[dict[str, str]], cell: str) -> tuple[list[dict[str, str]],
 
 def drive(s: Story) -> None:
     page = s.page
-    vw.put_region(page, "linear", "linear", vw.SOL1)
+    put_region(page, "linear", "linear", vw.SOL1)
     page.locator("ws-cell[name=linear] .run").click()
     s.shot("1-edited-queued")
     s.say("1 linear region typed before Connect; Run queued")
     took = s.connect("first")
     s.say(f"2 Connect -> connected in {took:.1f}s (T4)")
     t0 = time.perf_counter()
-    page.wait_for_function(vw.DONE, arg="linear", timeout=vw.CHECK_TIMEOUT_MS)
+    page.wait_for_function(vw.DONE, arg="linear", timeout=CHECK_TIMEOUT_MS)
     s.timings.setdefault("checks", []).append({"check": "linear (queued at Connect; warm process cold)",
                                               "after_connected_s": round(time.perf_counter() - t0, 2)})
     s.keep_log("01-linear", "linear")
     status = page.locator("ws-cell[name=linear] .cell-status").inner_text()
-    rows = vw.rows(page, "linear")
-    log = vw.check_log(page, "linear")
+    rows = rows(page, "linear")
+    log = check_log(page, "linear")
     assert status.startswith("passed"), f"{status}\n{log[-3000:]}"
     ran, skips = passes(rows, "linear")
     assert "'device': 'cuda'" in log and "'chip': 'sm_75'" in log, log[-2000:]
@@ -138,28 +163,28 @@ def drive(s: Story) -> None:
     assert [r["dtype"] for r in skips] == ["bf16"] and "sm_75 has no bf16 hardware" in skips[0]["notes"], skips
     s.shot("2-linear-pass", "linear")
     s.say(f"2 queued linear -> '{status}': {len(ran)} rows PASS on cuda sm_75 (dtypes {sorted({r['dtype'] for r in ran})}, "
-          f"worst {max(vw.metric_value(r, 'err/tol') for r in ran if r['metric'].startswith('err/tol')):.3g}x tolerance); "
+          f"worst {max(metric_value(r, 'err/tol') for r in ran if r['metric'].startswith('err/tol')):.3g}x tolerance); "
           f"bf16 SKIP: {skips[0]['notes'][:80]}…")
-    vw.put_region(page, "gelu", "gelu", vw.SOL1)
-    vw.replace_in_view(page, "gelu", vw.GELU_TANH, vw.GELU_ERF)
+    put_region(page, "gelu", "gelu", vw.SOL1)
+    vw.replace_in_view(page, "gelu", GELU_TANH, GELU_ERF)
     status, rows, took = s.check("gelu", "gelu, exact-GELU bug")
     bad = [r for r in rows if r["outcome"] == "fail"]
-    assert status.startswith("failed") and bad and bad[0]["notes"].startswith(vw.TOL_FAIL), (status, rows[:3])
+    assert status.startswith("failed") and bad and bad[0]["notes"].startswith(TOL_FAIL), (status, rows[:3])
     assert {r["dtype"] for r in bad} == {"fp32"}, bad
     s.shot("3-gelu-planted-bug", "gelu")
     s.say(f"3 exact GELU -> '{status}' in {took:.1f}s: {len(bad)} fp32 rows FAIL, e.g. '{bad[0]['case']}: {bad[0]['notes'][:160]}'")
-    vw.replace_in_view(page, "gelu", vw.GELU_ERF, vw.GELU_TANH)
+    vw.replace_in_view(page, "gelu", GELU_ERF, GELU_TANH)
     status, rows, took = s.check("gelu", "gelu, fixed")
     ran, skips = passes(rows, "gelu")
     s.shot("3-gelu-pass", "gelu")
     s.say(f"3 tanh restored -> '{status}' in {took:.1f}s ({len(ran)} rows PASS, {len(skips)} SKIP)")
     for cell in ("layer_norm", "attention", "block", "forward"):
-        vw.put_region(page, cell, cell, vw.SOL1)
+        put_region(page, cell, cell, vw.SOL1)
         status, rows, took = s.check(cell, f"{cell}, solution")
-        assert status.startswith("passed"), (cell, status, rows[:3], vw.check_log(page, cell)[-2000:])
+        assert status.startswith("passed"), (cell, status, rows[:3], check_log(page, cell)[-2000:])
         ran, skips = passes(rows, cell)
         label = "KL max" if cell == "forward" else "err/tol"
-        worst = max(vw.metric_value(r, label) for r in ran if r["metric"].startswith(label))
+        worst = max(metric_value(r, label) for r in ran if r["metric"].startswith(label))
         if cell == "forward":
             assert worst < 1e-7, worst
         s.shot(f"4-{cell}-pass", cell)
@@ -177,7 +202,7 @@ def drive(s: Story) -> None:
     took = s.connect("warm")
     states = {c: page.locator(f"ws-cell[name={c}] .cell-status").inner_text() for c in ("linear", "gelu", "layer_norm", "attention", "block", "forward")}
     assert all(v.startswith("passed") for v in states.values()), states
-    assert vw.region_text(vw.doc(page, "gelu"), "gelu") == vw.region_text(vw.SOL1, "gelu")
+    assert vw.region(vw.doc(page, "gelu"), "gelu") == vw.region(vw.SOL1, "gelu")
     s.shot("6-restored")
     s.say(f"6 Disconnect + Connect (new sandbox, warm image) in {took:.1f}s: workspace restored from the Volume; {states}")
     status, rows, took = s.check("linear", "linear, new sandbox (warm process cold, store on the Volume)")
@@ -191,17 +216,15 @@ def main() -> None:
     ap.add_argument("--profile", default="arb8020", help="~/.modal.toml profile whose token the page is given")
     args = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
-    port = vw.free_port()
-    subprocess.run(["uv", "run", "build_page.py", str(vw.CHAPTER1.relative_to(vw.HERE))], cwd=vw.HERE, check=True,
-                   stdout=subprocess.DEVNULL)
+    replay.build("ch01")
     errors: list[str] = []
-    with vw.static_server(port), sync_playwright() as p:
-        browser = p.chromium.launch(executable_path=vw.CHROME)
+    with replay.serve_dist() as base, sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=replay.CHROME)
         page = browser.new_context(viewport={"width": 1100, "height": 900}).new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
         s = Story(page, token(args.profile))
         t0 = time.perf_counter()
-        page.goto(f"http://localhost:{port}/{vw.PAGE1}/?gateway={args.relay}")
+        page.goto(replay.page_url(base, "ch01", args.relay))
         try:
             drive(s)
         except Exception:

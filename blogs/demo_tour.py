@@ -25,8 +25,9 @@ from playwright.sync_api import Page, expect, sync_playwright
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE / "web" / "embeds" / "nn-fit"))
-from remote_e2e import GPU_DEVICE, STATS, free_port, nn, slider, stopped  # noqa: E402  # isort: skip
-from verify_connect import CHROME, open_menu, run_cell, serve_dist  # noqa: E402
+from remote_e2e import GPU_DEVICE, STATS, nn, slider, stopped  # noqa: E402  # isort: skip
+from replay import CHROME, serve_dist  # noqa: E402
+from verify_connect import open_menu, run_cell  # noqa: E402
 
 OUT = HERE / ".evidence" / "demo-tour"
 CONNECT_SECONDS = 600
@@ -118,15 +119,15 @@ def wave(page: Page) -> None:
     page.locator("nn-fit").scroll_into_view_if_needed()
     page.wait_for_timeout(1200)
     slider(page, "step-budget", BUDGET_OFF)
-    page.select_option(nn(page, "select.backend"), "remote")
-    page.click(nn(page, "button.train"))
+    page.select_option(nn("select.backend"), "remote")
+    page.click(nn("button.train"))
     page.wait_for_function(f"{STATS}.steps > 0 && {STATS}.device === {GPU_DEVICE!r}", timeout=60_000)
     page.wait_for_timeout(4000)
-    usage = page.locator(nn(page, ".usage")).text_content() or ""
+    usage = page.locator(nn(".usage")).text_content() or ""
     assert f"on {GPU_DEVICE}" in usage, usage
     caption(page, "4. Stop: the weights come back to the page")
     if stats(page)["training"]:
-        page.click(nn(page, "button.train"))
+        page.click(nn("button.train"))
     end = stopped(page)
     print(f"    wave: {end['steps']} steps, loss {end['loss']:.3g} on {end['device']}")
     page.wait_for_timeout(2500)
@@ -134,19 +135,19 @@ def wave(page: Page) -> None:
 
 def grok(page: Page) -> None:
     caption(page, "5. Grokking: a + b mod 113, a 1-layer transformer, trained until test accuracy passes 95%")
-    page.select_option(nn(page, "select.dataset"), "grok")
+    page.select_option(nn("select.dataset"), "grok")
     slider(page, "step-budget", BUDGET_OFF)
     slider(page, "time-budget", TIME_BUDGET_60S_STOP)
     page.locator("nn-fit").scroll_into_view_if_needed()
     page.wait_for_timeout(1500)
-    page.click(nn(page, "button.train"))
+    page.click(nn("button.train"))
     page.wait_for_function(f"{STATS}.grok.grokked !== null", timeout=GROK_SECONDS * 1000)
     g = stats(page)
     print(f"    grok: test past 95% at step {g['grok']['grokked']['step']} ({g['grok']['grokked']['seconds']:.1f} s) on {g['device']}")
     caption(page, f"5. Grokked: test accuracy past 95% at step {g['grok']['grokked']['step']} ({g['grok']['grokked']['seconds']:.0f} s on the T4)")
     page.wait_for_timeout(4000)
     if stats(page)["training"]:
-        page.click(nn(page, "button.train"))
+        page.click(nn("button.train"))
     stopped(page)
     page.wait_for_timeout(2000)
 
@@ -210,17 +211,15 @@ def main() -> None:
     shutil.rmtree(OUT, ignore_errors=True)
     (OUT / "video").mkdir(parents=True)
     subprocess.run(["uv", "run", "build_page.py", "dl/neural-nets.md"], cwd=HERE, check=True, stdout=subprocess.DEVNULL)
-    port = free_port()
-    server = serve_dist(port)
     try:
-        with sync_playwright() as p:
+        with serve_dist() as base, sync_playwright() as p:
             browser = p.chromium.launch(executable_path=CHROME, slow_mo=args.slow_mo)
             context = browser.new_context(viewport={"width": 1280, "height": 800}, record_video_dir=OUT / "video",
                                           record_video_size={"width": 1280, "height": 800})  # fmt: skip
             page = context.new_page()
             errors: list[str] = []
             page.on("pageerror", lambda e: errors.append(str(e)))
-            page.goto(f"http://localhost:{port}/neural-nets/?gateway={gateway}")
+            page.goto(f"{base}/neural-nets/?gateway={gateway}")
             try:
                 session_id = tour(page, token)
             except BaseException:
@@ -235,7 +234,6 @@ def main() -> None:
             Path(video.path()).rename(webm)
             assert not errors, errors
     finally:
-        server.shutdown()
         shutil.rmtree(OUT / "video", ignore_errors=True)
     print(f"  session {session_id}: {session_status(gateway, session_id, token)}")
     encode(webm)

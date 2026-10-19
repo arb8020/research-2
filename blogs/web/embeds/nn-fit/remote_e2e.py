@@ -1,300 +1,128 @@
-"""<nn-fit> remote backend, end to end: the built page in headless Chromium, Connect to box's relay on the local
-provider (its kernel a local Jupyter on assay's python, with torch, CPU), then train <nn-fit> remotely on it.
+from __future__ import annotations
 
-    uv run --with playwright python web/embeds/nn-fit/remote_e2e.py
-    uv run --with playwright python web/embeds/nn-fit/remote_e2e.py --gateway http://localhost:8790   # a running
-        gateway instead (the real relay, box/examples/notebook-gateway/relay.py); token from MODAL_TOKEN_ID / MODAL_TOKEN_SECRET; T4
-
-Cases: a curve run with Stop, a spiral run to its step budget, the grokking dataset (Stop, then continue: on a
-real GPU until test accuracy passes 95%, on the local relay's CPU for 1000 steps), a disconnect mid-run.
---case grok runs only the grokking case.
-
-Builds dl/neural-nets.md, starts the local relay (--python assay's, so the kernel can import torch) and a
-static server for dist/, then drives the page through the real Connect UI and kernel client (web/connect/).
-Writes screenshots and a video to .evidence/nn-fit-remote/ (gitignored). Exits 1 on the first failed check.
-"""
-
-import argparse
-import os
-import shutil
-import socket
-import subprocess
 import sys
-import tempfile
-import time
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
 
-from playwright.sync_api import Locator, Page, sync_playwright
+from playwright.sync_api import Browser, Locator, Page
 
-BLOGS = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(BLOGS))
-import local_relay  # noqa: E402
-import ref  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from replay import OUT, Replay, check  # noqa: E402
+from verify_connect import connected, replayed  # noqa: E402
 
-EVIDENCE = BLOGS / ".evidence" / "nn-fit-remote"
-SERVER_START_SECONDS = 120
-CONNECT_SECONDS = 120
-RUN_SECONDS = 2.0
-FAKE_TOKEN = ("ak-nn-fit-remote-e2e", "as-nn-fit-remote-e2e")
 STATS = "document.querySelector('nn-fit').stats"
-FAKE_DEVICE = "cpu (remote)"
+CPU = "cpu (remote)"
 GPU_DEVICE = "cuda · Tesla T4"
-GATEWAY_CONNECT_SECONDS = 600
-GROK_FIRST_STEPS = 300
-GROK_FAKE_STEPS = 1000
-TIME_BUDGET_60S_STOP = "6"
-STEP_BUDGET_1000_STOP = "1"
-BUDGET_OFF_STOP = "7"
+RUN_MS = 1000
+GROK_FIRST_STEPS = 50
+TIME_BUDGET_5S, TIME_BUDGET_60S, STEP_BUDGET_1000, BUDGET_OFF = "2", "6", "1", "7"
 
 
-class Run:
-    token: tuple[str, str] = FAKE_TOKEN
-    gpu: str | None = None
-    connect_seconds: float = CONNECT_SECONDS
-    device: str = FAKE_DEVICE
-
-
-def check(ok: bool, message: str) -> None:
-    if not ok:
-        raise SystemExit(f"FAIL {message}")
-    print(f"ok   {message}")
-
-
-def free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
-def wait_for_http(url: str, proc: subprocess.Popen, seconds: float) -> None:
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        if proc.poll() is not None:
-            raise SystemExit(f"FAIL server for {url} exited with {proc.returncode}")
-        try:
-            with urlopen(url, timeout=2):
-                return
-        except HTTPError:
-            return
-        except (URLError, ConnectionError):
-            time.sleep(0.2)
-    raise SystemExit(f"FAIL {url} not up after {seconds} s")
-
-
-def connect(page: Page) -> None:
-    page.locator(".connect-pill").click()
-    page.fill("input[name=token-id]", Run.token[0])
-    page.fill("input[name=token-secret]", Run.token[1])
-    if Run.gpu is not None:
-        page.select_option("select[name=gpu]", Run.gpu)
-    page.locator(".connect-go").click()
-    page.wait_for_selector("connect-pill[data-phase=connected]", timeout=Run.connect_seconds * 1000)
-    page.keyboard.press("Escape")
+def nn(part: str) -> str:
+    return f"nn-fit >> {part}"
 
 
 def is_disabled(locator: Locator) -> bool:
     return locator.evaluate("(el) => el.disabled")
 
 
-def nn(page: Page, part: str) -> str:
-    return f"nn-fit >> {part}"
+def slider(page: Page, cls: str, stop: str) -> None:
+    page.locator(nn(f"input.{cls}")).evaluate(f"(el) => {{ el.value = '{stop}'; el.dispatchEvent(new Event('input')); }}")
 
 
 def stopped(page: Page) -> dict:
-    page.wait_for_function(f"!{STATS}.training", timeout=30_000)
+    page.wait_for_function(f"!{STATS}.training", timeout=180_000)
     return page.evaluate(STATS)
 
 
-def curve_run(page: Page) -> None:
+def status(page: Page) -> str:
+    return page.locator("nn-fit [role=status]").text_content() or ""
+
+
+def curve_stop(page: Page, device: str) -> None:
     before = page.evaluate(STATS)
-    page.select_option(nn(page, "select.backend"), "remote")
-    page.click(nn(page, "button.train"))
-    page.wait_for_function(f"{STATS}.steps > 0 && {STATS}.device === {Run.device!r}", timeout=60_000)
-    check(is_disabled(page.locator(nn(page, "fieldset.network"))), "remote run: the network controls are disabled while it trains")
-    page.wait_for_timeout(RUN_SECONDS * 1000)
-    mid = page.evaluate(STATS)
-    page.locator("nn-fit").screenshot(path=EVIDENCE / "wave-remote-running.png")
-    page.click(nn(page, "button.train"))
+    page.select_option(nn("select.backend"), "remote")
+    page.click(nn("button.train"))
+    page.wait_for_function(f"{STATS}.steps > 0 && {STATS}.device === {device!r}", timeout=60_000)
+    check(is_disabled(page.locator(nn("fieldset.network"))), f"remote run on {device}: the network controls are disabled while it trains")
+    page.wait_for_timeout(RUN_MS)
+    page.click(nn("button.train"))
     after = stopped(page)
-    print(f"  wave: loss {before['loss']:.3g} -> {mid['loss']:.3g} (step {mid['steps']}) -> {after['loss']:.3g} at step {after['steps']} on {after['device']}")
-    check(mid["device"] == Run.device, f"remote run: reports where it ran ({mid['device']!r})")
-    check(after["loss"] < before["loss"] / 10, "remote run: the loss fell by 10x or more")
-    check(after["steps"] >= mid["steps"] and after["device"] == mid["device"], "stop: the final state is from the remote run")
-    status = page.locator("nn-fit [role=status]").text_content() or ""
-    check("Remote run stopped: stopped" in status, f"stop: announced ({status!r})")
-    text = page.locator(nn(page, ".usage")).text_content() or ""
-    check(f"on {Run.device}" in text, f"readout names the backend ({text!r})")
-    page.locator("nn-fit").screenshot(path=EVIDENCE / "wave-remote-stopped.png")
-    page.select_option(nn(page, "select.backend"), "browser")
-    page.click(nn(page, "button.train"))
+    check(after["loss"] < before["loss"] / 10 and "Remote run stopped: stopped" in status(page), f"Stop: the remote loss fell 10x ({before['loss']:.3g} -> {after['loss']:.3g}), announced")
+    check(f"on {device}" in (page.locator(nn(".usage")).text_content() or ""), "the readout names the backend")
+    page.select_option(nn("select.backend"), "browser")
+    page.click(nn("button.train"))
     page.wait_for_function(f"{STATS}.steps >= {after['steps'] + 200}", timeout=30_000)
-    page.click(nn(page, "button.train"))
+    page.click(nn("button.train"))
     cont = page.evaluate(STATS)
-    check(cont["device"] == "this browser" and cont["loss"] < before["loss"] / 10,
-          f"browser continues from the remote weights: step {cont['steps']}, loss {cont['loss']:.3g}")
+    check(cont["device"] == "this browser" and cont["loss"] < before["loss"] / 10, f"the browser continues from the remote weights (loss {cont['loss']:.3g})")
 
 
-def spiral_run(page: Page) -> None:
-    page.select_option(nn(page, "select.dataset"), "spiral")
-    page.click(nn(page, "button.reset"))
-    slider(page, "step-budget", STEP_BUDGET_1000_STOP)
-    page.select_option(nn(page, "select.backend"), "remote")
-    page.click(nn(page, "button.train"))
-    page.wait_for_function(f"{STATS}.steps > 0", timeout=60_000)
-    page.locator("nn-fit").screenshot(path=EVIDENCE / "spiral-remote-running.png")
+def spiral(page: Page) -> None:
+    page.select_option(nn("select.dataset"), "spiral")
+    page.click(nn("button.reset"))
+    slider(page, "step-budget", STEP_BUDGET_1000)
+    page.select_option(nn("select.backend"), "remote")
+    page.click(nn("button.train"))
     end = stopped(page)
-    print(f"  spiral: {end['steps']} steps, loss {end['loss']:.3g}, train {end['accuracy']:.1%}, held-out {end['heldOutAccuracy']:.1%} on {end['device']}")
-    check(end["steps"] == 1000, "spiral: the step budget stopped the remote run at 1000 steps")
-    check(end["accuracy"] > 0.9, "spiral: train accuracy above 90% (browser evaluation of the remote's final weights)")
-    status = page.locator("nn-fit [role=status]").text_content() or ""
-    check("step budget used up" in status, f"spiral: announced ({status!r})")
-    page.locator("nn-fit").screenshot(path=EVIDENCE / "spiral-remote-done.png")
+    check(end["steps"] == 1000 and end["accuracy"] > 0.9 and "step budget used up" in status(page), f"spiral: the step budget stops it at 1000, train accuracy {end['accuracy']:.1%}")
+    slider(page, "step-budget", BUDGET_OFF)
 
 
-def slider(page: Page, cls: str, stop: str) -> None:
-    page.locator(nn(page, f"input.{cls}")).evaluate(f"(el) => {{ el.value = '{stop}'; el.dispatchEvent(new Event('input')); }}")
-
-
-def grok_run(page: Page, gpu: bool) -> None:
-    page.select_option(nn(page, "select.dataset"), "grok")
-    slider(page, "step-budget", BUDGET_OFF_STOP)
-    slider(page, "time-budget", BUDGET_OFF_STOP)
-    check(page.locator(nn(page, "fieldset.network")).is_hidden(), "grok: the MLP's network controls are hidden")
-    check(is_disabled(page.locator(nn(page, "select.backend"))) and page.locator(nn(page, "select.backend")).input_value() == "remote",
-          "grok: runs remotely, and only there")  # fmt: skip
-    page.click(nn(page, "button.train"))
-    page.wait_for_function(f"{STATS}.steps >= {GROK_FIRST_STEPS} && {STATS}.device === {Run.device!r}", timeout=120_000)
-    page.click(nn(page, "button.train"))
+def grok(page: Page, device: str, gpu: bool) -> None:
+    page.select_option(nn("select.dataset"), "grok")
+    check(page.locator(nn("fieldset.network")).is_hidden() and is_disabled(page.locator(nn("select.backend"))), "grok: remote only, no network controls")
+    page.click(nn("button.train"))
+    page.wait_for_function(f"{STATS}.steps >= {GROK_FIRST_STEPS} && {STATS}.device === {device!r}", timeout=120_000)
+    page.click(nn("button.train"))
     first = stopped(page)
-    print(f"  grok: stopped at step {first['steps']}: train {first['accuracy']:.1%}, test {first['heldOutAccuracy']:.1%} on {first['device']}")
-    status = page.locator("nn-fit [role=status]").text_content() or ""
-    check("Remote run stopped: stopped" in status, f"grok stop: announced ({status!r})")
-    check(first["grok"]["points"] > 10 and first["steps"] >= GROK_FIRST_STEPS, f"grok: {first['grok']['points']} points plotted")
-    page.locator("nn-fit").screenshot(path=EVIDENCE / "grok-stopped.png")
+    check("Remote run stopped: stopped" in status(page) and first["grok"]["points"] > 10, f"grok: Stop at step {first['steps']}, {first['grok']['points']} points plotted")
+    slider(page, "time-budget", TIME_BUDGET_60S if gpu else TIME_BUDGET_5S)
+    page.click(nn("button.train"))
+    end = page.wait_for_function(f"!{STATS}.training && {STATS}.steps > {first['steps']} && {STATS}", timeout=180_000).json_value()
+    check("time budget used up" in status(page) and end["grok"]["run"] == first["grok"]["run"], f"grok: Train continued the same run to {end['steps']} steps; the time budget ended it")
+    if gpu:
+        check(end["grok"]["grokked"] is not None, f"grok: test accuracy passed 95% ({end['grok']['grokked']})")
+    slider(page, "time-budget", BUDGET_OFF)
+    page.select_option(nn("select.dataset"), "spiral")
+    page.locator("nn-fit").screenshot(path=OUT / "grok.png")
 
-    if gpu:
-        slider(page, "time-budget", TIME_BUDGET_60S_STOP)
-    else:
-        slider(page, "step-budget", STEP_BUDGET_1000_STOP)
-    page.click(nn(page, "button.train"))
-    page.wait_for_function(f"{STATS}.training && {STATS}.steps > {first['steps']}", timeout=60_000)
-    end = page.wait_for_function(f"!{STATS}.training && {STATS}", timeout=180_000).json_value()
-    g = end["grok"]
-    print(f"  grok: {end['steps']} steps in {end['seconds']:.1f} s ({end['steps'] / end['seconds']:.0f} steps/s): train {end['accuracy']:.1%}, "
-          f"test {end['heldOutAccuracy']:.1%}; test past 95% at {g['grokked']}")  # fmt: skip
-    status = page.locator("nn-fit [role=status]").text_content() or ""
-    budget = "time budget used up" if gpu else "step budget used up"
-    check(f"Remote run stopped: {budget}" in status,
-          f"grok: the budget ended it, not a failure, so a 60 s run outlives 2 keepalives (pinged on control, not shell) ({status!r})")
-    check(g["run"] == first["grok"]["run"] and end["steps"] > first["steps"], "grok: Train continued the stopped run (same run, more steps)")
-    check(end["accuracy"] == 1.0, "grok: fits every training pair")
-    if gpu:
-        check(g["grokked"] is not None, f"grok: test accuracy passed 95% (at step {g['grokked'] and g['grokked']['step']})")
-    else:
-        check(end["steps"] == GROK_FAKE_STEPS, f"grok: the step budget stopped it at {GROK_FAKE_STEPS}")
-    text = page.locator(nn(page, ".usage")).text_content() or ""
-    check(f"on {Run.device}" in text, f"grok readout names the backend ({text!r})")
-    page.locator("nn-fit").screenshot(path=EVIDENCE / "grok-done.png")
-    slider(page, "time-budget", BUDGET_OFF_STOP)
-    slider(page, "step-budget", BUDGET_OFF_STOP)
-    page.select_option(nn(page, "select.dataset"), "spiral")
+
+def runs(page: Page, gpu: str | None) -> None:
+    device = GPU_DEVICE if gpu == "T4" else CPU
+    page.locator("nn-fit").scroll_into_view_if_needed()
+    curve_stop(page, device)
+    spiral(page)
+    grok(page, device, gpu is not None)
 
 
 def disconnect_mid_run(page: Page) -> None:
-    page.click(nn(page, "button.reset"))
-    slider(page, "step-budget", BUDGET_OFF_STOP)
-    page.click(nn(page, "button.train"))
+    page.select_option(nn("select.dataset"), "wave")
+    page.click(nn("button.reset"))
+    page.click(nn("button.train"))
     page.wait_for_function(f"{STATS}.steps > 0", timeout=60_000)
     page.locator(".connect-pill").click()
     page.locator(".connect-end").click()
     end = stopped(page)
-    need = page.locator(nn(page, "p.need")).text_content() or ""
-    check(need.startswith("Remote run failed: ") and len(need) > len("Remote run failed: "), f"disconnect mid-run: the run fails and says why ({need!r})")
-    check(end["steps"] == 0 and end["device"] == "this browser", "disconnect mid-run: the weights are left as they were")
-    option = page.locator(nn(page, "select.backend option[value=remote]"))
-    check(is_disabled(option) and (option.text_content() or "") == "remote (Connect first)", "disconnected: remote is offered only when connected")
-    page.wait_for_function(f"{STATS}.backend === 'browser'", timeout=30_000)
-    check(page.evaluate(STATS)["backend"] == "browser", "disconnected: the widget falls back to the browser")
-    page.locator("nn-fit").screenshot(path=EVIDENCE / "disconnected-mid-run.png")
+    need = page.locator(nn("p.need")).text_content() or ""
+    check(need.startswith("Remote run failed: ") and end["steps"] == 0 and end["device"] == "this browser", f"disconnect mid-run: the run fails, says why ({need!r}), weights untouched")
+    option = page.locator(nn("select.backend option[value=remote]"))
+    check(is_disabled(option) and option.text_content() == "remote (Connect first)", "disconnected: remote offered only when connected")
 
 
-def drive(page_url: str, case: str) -> None:
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        context = browser.new_context(viewport={"width": 900, "height": 1100}, record_video_dir=str(EVIDENCE / "video"),
-                                      record_video_size={"width": 900, "height": 1100})  # fmt: skip
-        page = context.new_page()
-        errors: list[str] = []
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        page.goto(page_url)
-        option = page.locator(nn(page, "select.backend option[value=remote]"))
-        grok_option = page.locator(nn(page, "select.dataset option[value=grok]"))
-        check(is_disabled(option), "not connected: remote is disabled")
-        check(is_disabled(grok_option) and "Connect first" in (grok_option.text_content() or ""), "not connected: grokking is disabled, with a hint")
-        connect(page)
-        page.locator("nn-fit").scroll_into_view_if_needed()
-        check(not is_disabled(option) and not is_disabled(grok_option), "connected: remote and grokking are offered")
-        if case == "all":
-            curve_run(page)
-            spiral_run(page)
-        grok_run(page, Run.device == GPU_DEVICE)
-        if case == "all":
-            disconnect_mid_run(page)
-        else:
-            page.locator(".connect-pill").click()
-            page.locator(".connect-end").click()
-        check(errors == [], f"no page errors ({errors})")
-        video = page.video
-        assert video is not None
-        context.close()
-        recorded = Path(video.path())
-        browser.close()
-    webm = EVIDENCE / "nn-fit-remote.webm"
-    recorded.rename(webm)
-    recorded.parent.rmdir()
-    if shutil.which("ffmpeg"):
-        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", webm, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                        EVIDENCE / "nn-fit-remote.mp4"], check=True)  # fmt: skip
-    print(f"ok: {EVIDENCE}/ ({', '.join(sorted(p.name for p in EVIDENCE.iterdir()))})")
+def nn_fit(page: Page, stub: Replay) -> None:
+    option, grok_option = page.locator(nn("select.backend option[value=remote]")), page.locator(nn("select.dataset option[value=grok]"))
+    check(is_disabled(option) and is_disabled(grok_option) and "Connect first" in (grok_option.text_content() or ""), "not connected: remote and grokking disabled, with a hint")
+    connected(page)
+    check(not is_disabled(option) and not is_disabled(grok_option), "connected: remote and grokking offered")
+    runs(page, None)
+    disconnect_mid_run(page)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--gateway", help="a running gateway's URL (default: start box's relay on the local provider)")
-    ap.add_argument("--case", choices=("all", "grok"), default="all", help="grok: only the grokking case")
-    args = ap.parse_args()
-    shutil.rmtree(EVIDENCE, ignore_errors=True)
-    EVIDENCE.mkdir(parents=True)
-    subprocess.run(["uv", "run", "build_page.py", "dl/neural-nets.md"], cwd=BLOGS, check=True, stdout=subprocess.DEVNULL)
-    sport = free_port()
-    procs = []
-    machines = Path(tempfile.mkdtemp(prefix="nn-fit-remote-"))
-    if args.gateway:
-        Run.token, Run.gpu, Run.connect_seconds, Run.device = (os.environ["MODAL_TOKEN_ID"], os.environ["MODAL_TOKEN_SECRET"]), "T4", GATEWAY_CONNECT_SECONDS, GPU_DEVICE
-        gateway_url = args.gateway.rstrip("/")
-    else:
-        gport = free_port()
-        log = (EVIDENCE / "relay.log").open("wb")
-        procs.append(subprocess.Popen(local_relay.local(gport, machines, "--python", ref.assay_python()), cwd=BLOGS, stdout=log, stderr=log))
-        gateway_url = f"http://127.0.0.1:{gport}"
-    static = subprocess.Popen([sys.executable, "-m", "http.server", str(sport), "-d", str(BLOGS / "dist")],
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # fmt: skip
-    procs.append(static)
-    try:
-        if not args.gateway:
-            local_relay.limits(gateway_url, procs[0], SERVER_START_SECONDS)
-        wait_for_http(f"http://127.0.0.1:{sport}/neural-nets/", static, SERVER_START_SECONDS)
-        drive(f"http://127.0.0.1:{sport}/neural-nets/?gateway={gateway_url}", args.case)
-    finally:
-        if not args.gateway:
-            print(f"ended {local_relay.end(gateway_url, local_relay.sessions(machines), Run.token)}")
-        for proc in procs:
-            proc.terminate()
-            proc.wait(timeout=20)
-        shutil.rmtree(machines, ignore_errors=True)
+def fast(browser: Browser, base: str) -> None:
+    replayed(browser, base, nn_fit, kernel=("nn-fit",))
 
 
 if __name__ == "__main__":
-    main()
+    import replay
+
+    replay.alone(fast, "connect")
