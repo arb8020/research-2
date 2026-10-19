@@ -29,8 +29,7 @@ import {
 } from "./remote";
 import type { GrokLine, GrokPoint } from "./grok";
 import {
-  GROK_MODEL, GROK_P, GROK_TICK_SECONDS, TRAIN_FRACTIONS, addPoint, grokCode, grokParams, grokked, grokTrainPairs, paintGrok,
-  parseGrokLine,
+  GROK_P, GROK_TICK_SECONDS, TRAIN_FRACTIONS, addPoint, grokCode, grokked, paintGrok, parseGrokLine,
 } from "./grok";
 
 export type Dataset = "draw" | "wave" | "spiral" | "grok";
@@ -41,16 +40,16 @@ const connected = (): boolean => kernelState() === "idle" || kernelState() === "
 
 export interface NnFitStats {
   readonly dataset: Dataset;
-  readonly sizes: readonly number[]; // the MLP's; grok: [] (its model is GROK_MODEL)
-  readonly params: number;
-  readonly samples: number; // training points (spiral: total over both classes; grok: training pairs)
+  readonly sizes: readonly number[]; // the MLP's; grok: [] (its model is GrokStats.model)
+  readonly params: number | null; // null (and samples, flops): grok before a "start" line says them
+  readonly samples: number | null; // training points (spiral: total over both classes; grok: training pairs)
   readonly loss: number | null; // training loss on the samples; null with no data
   readonly trueError: number | null; // draw/wave: MSE of the net against the whole clean curve
   readonly accuracy: number | null; // spiral, grok: on the training points
   readonly heldOutAccuracy: number | null; // spiral: on a fresh sample from the same spiral; grok: the other pairs
   readonly steps: number;
   readonly seconds: number; // training wall-clock time used
-  readonly flops: number; // estimated: 6 * params * samples per step
+  readonly flops: number | null; // estimated: 6 * params * samples per step
   readonly stepBudget: number; // Infinity = off
   readonly timeBudget: number; // seconds, Infinity = off
   readonly training: boolean; // the reader pressed Train (it may still be paused offscreen); remote: a run is in flight
@@ -67,7 +66,10 @@ export interface GrokStats {
   readonly points: number; // plotted ticks
   readonly grokked: { readonly step: number; readonly seconds: number } | null; // first tick past 95% test accuracy
   readonly run: string; // the kernel's key for its weights
+  readonly model: string | null; // from the "start" line
 }
+
+type MlpStats = NnFitStats & { readonly params: number; readonly samples: number; readonly flops: number };
 
 // The grokking run: its weights live on the kernel (under `id`), the page keeps the curve and the counters.
 // A new id (Reset weights, New samples, a new train fraction) starts from fresh weights.
@@ -79,7 +81,7 @@ interface GrokRun {
   points: GrokPoint[];
   steps: number;
   ms: number;
-  device: string | null; // from the last run's "start" line
+  start: Extract<GrokLine, { kind: "start" }> | null; // the last run's "start" line
   lost: boolean; // a run failed: the kernel's weights may not match the curve, so the next Train starts a new run
 }
 
@@ -97,7 +99,7 @@ const grokkedAt = (points: readonly GrokPoint[]): GrokStats["grokked"] => {
 };
 
 const newGrokRun = (fractionK: number, splitSeed: number, initSeed: number): GrokRun =>
-  ({ id: `grok-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`, fractionK, splitSeed, initSeed, points: [], steps: 0, ms: 0, device: null, lost: false });
+  ({ id: `grok-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`, fractionK, splitSeed, initSeed, points: [], steps: 0, ms: 0, start: null, lost: false });
 
 // A remote run in flight: its latest tick is what the plot and readout show until it ends.
 interface RemoteRun {
@@ -385,7 +387,10 @@ export class NnFit extends HTMLElement {
   #built = false;
 
   get stats(): NnFitStats {
-    if (this.#dataset === "grok") return this.#grokStats();
+    return this.#dataset === "grok" ? this.#grokStats() : this.#mlpStats();
+  }
+
+  #mlpStats(): MlpStats {
     const metrics = this.#remote?.tick ? this.#tickMetrics(this.#remote.tick) : this.#metrics();
     return {
       dataset: this.#dataset,
@@ -410,15 +415,15 @@ export class NnFit extends HTMLElement {
     const g = this.#grok;
     const last = g.points.at(-1);
     const fraction = at(TRAIN_FRACTIONS, g.fractionK);
-    const params = grokParams(GROK_P);
-    const pairs = grokTrainPairs(GROK_P, fraction);
+    const start = g.start;
+    const device = start === null ? null : start.device === "cpu" ? "cpu (remote)" : `${start.device} · ${start.deviceName}`;
     return {
-      dataset: "grok", sizes: [], params, samples: pairs,
+      dataset: "grok", sizes: [], params: start?.params ?? null, samples: start?.train ?? null,
       loss: last?.loss ?? null, trueError: null, accuracy: last?.accuracy ?? null, heldOutAccuracy: last?.testAccuracy ?? null,
-      steps: g.steps, seconds: g.ms / 1000, flops: 6 * params * pairs * g.steps,
+      steps: g.steps, seconds: g.ms / 1000, flops: start === null ? null : 6 * start.params * start.train * g.steps,
       stepBudget: this.#stepBudget(), timeBudget: this.#timeBudget(), training: this.#training, ready: this.#ready(),
-      backend: "remote", device: g.device ?? (this.#grokFlight ? "remote (starting)" : "not trained yet"),
-      grok: { p: GROK_P, trainFraction: fraction, testLoss: last?.testLoss ?? null, points: g.points.length, run: g.id, grokked: grokkedAt(g.points) },
+      backend: "remote", device: device ?? (this.#grokFlight ? "remote (starting)" : "not trained yet"),
+      grok: { p: GROK_P, trainFraction: fraction, testLoss: last?.testLoss ?? null, points: g.points.length, run: g.id, grokked: grokkedAt(g.points), model: start?.model ?? null },
     };
   }
 
@@ -1027,23 +1032,16 @@ export class NnFit extends HTMLElement {
     );
   }
 
-  // One line of the program's stdout. A line that doesn't parse, or a model or split other than the page's,
-  // stops the run: its output can't be trusted.
+  // One line of the program's stdout. A line that doesn't parse stops the run: its output can't be trusted.
   #onGrokLine(flight: GrokFlight, text: string): void {
     if (this.#grokFlight !== flight || flight.failure !== null) return;
     const run = flight.run;
     try {
       const line = parseGrokLine(text);
       switch (line.kind) {
-        case "start": {
-          const params = grokParams(GROK_P);
-          const pairs = grokTrainPairs(GROK_P, at(TRAIN_FRACTIONS, run.fractionK));
-          if (line.params !== params || line.train !== pairs) {
-            throw new Error(`the remote model has ${String(line.params)} parameters and ${String(line.train)} training pairs; the page expects ${String(params)} and ${String(pairs)}`);
-          }
-          run.device = line.device === "cpu" ? "cpu (remote)" : `${line.device} · ${line.deviceName}`;
+        case "start":
+          run.start = line;
           break;
-        }
         case "tick":
           run.points = addPoint(run.points, { step: line.step, seconds: line.seconds, loss: line.loss, accuracy: line.accuracy, testLoss: line.testLoss, testAccuracy: line.testAccuracy });
           run.steps = line.step;
@@ -1349,7 +1347,7 @@ export class NnFit extends HTMLElement {
 
   #paintReadout(now: number): void {
     if (this.#dataset === "grok") { this.#paintGrokReadout(now); return; }
-    const s = this.stats;
+    const s = this.#mlpStats();
     const arch = `${s.sizes.join(" → ")} (${formatInt(s.params)} params)`;
     const b = (v: string): string => `<b>${v}</b>`;
     const metrics = this.#isCurve()
@@ -1387,12 +1385,13 @@ export class NnFit extends HTMLElement {
     const pct = (a: number | null): string => (a === null ? "—" : b(formatPct(a)));
     const loss = (l: number | null): string => (l === null ? "—" : b(formatLoss(l)));
     const of = (budget: number, unit: string): string => ` / ${formatInt(budget)}${unit}`;
-    const pairs = `a + b mod ${String(g.p)}: trains on ${formatInt(s.samples)} of ${formatInt(g.p * g.p)} pairs`;
+    const pairs = `a + b mod ${String(g.p)}: trains on ${s.samples === null ? "—" : formatInt(s.samples)} of ${formatInt(g.p * g.p)} pairs`;
     this.#el(".metrics", HTMLSpanElement).innerHTML = [`train accuracy ${pct(s.accuracy)}`, `test accuracy ${pct(s.heldOutAccuracy)}`,
       `train loss ${loss(s.loss)}`, `test loss ${loss(g.testLoss)}`,
       ...(g.grokked === null ? [] : [`test past 95% at step ${b(formatInt(g.grokked.step))} (${g.grokked.seconds.toFixed(1)} s)`])].join(" · ");
     this.#el(".usage", HTMLSpanElement).innerHTML = [`step ${formatInt(s.steps)}${of(s.stepBudget, "")}`, `${s.seconds.toFixed(1)} s${of(s.timeBudget, " s")}`,
-      `~${formatFlops(s.flops)}`, pairs, `${GROK_MODEL} (${formatInt(s.params)} params)`, `on ${s.device}`].join(" · ");
+      s.flops === null ? "—" : `~${formatFlops(s.flops)}`, pairs, g.model === null || s.params === null ? "—" : `${g.model} (${formatInt(s.params)} params)`,
+      `on ${s.device}`].join(" · ");
 
     if (now - this.#lastAria < ARIA_MS && this.#grokFlight !== null) return;
     this.#lastAria = now;

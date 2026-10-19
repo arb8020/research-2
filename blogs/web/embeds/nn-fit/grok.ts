@@ -11,21 +11,6 @@ export const GROK_P = 113; // Nanda et al. 2023's modulus
 export const TRAIN_FRACTIONS: readonly number[] = [0.3, 0.4, 0.5]; // 0.3 is Nanda's; more pairs grok in fewer steps
 export const GROK_TICK_SECONDS = 0.1; // at most this long between ticks (more come at log-spaced steps early on)
 export const MAX_GROK_POINTS = 20_000; // plotted ticks kept; past it every other one is dropped
-// The model's size (grok_train.py: D_MODEL, D_MLP), for the readout before the remote says it (and to check it).
-const D_MODEL = 128;
-const D_MLP = 512;
-
-// Parameters of grok_train.py's model for modulus p: embed (p + 1 tokens), positions, qkv, out, MLP in/out
-// with biases, unembed.
-export function grokParams(p: number): number {
-  return (p + 1) * D_MODEL + 3 * D_MODEL + 3 * D_MODEL * D_MODEL + D_MODEL * D_MODEL
-    + D_MODEL * D_MLP + D_MLP + D_MLP * D_MODEL + D_MODEL + D_MODEL * p;
-}
-
-// Training pairs out of p^2 (grok_train.py: make_data rounds the same way).
-export const grokTrainPairs = (p: number, fraction: number): number => Math.round(fraction * p * p);
-
-export const GROK_MODEL = `1-layer transformer (d ${String(D_MODEL)}, 4 heads, MLP ${String(D_MLP)}) · AdamW lr 1e-3, weight decay 1`;
 
 // The JSON grok_train.py parses (field names are its).
 export interface GrokConfig {
@@ -68,7 +53,7 @@ export interface GrokPoint {
 export type GrokLine =
   | {
     readonly kind: "start"; readonly device: string; readonly deviceName: string; readonly torch: string;
-    readonly params: number; readonly train: number; readonly test: number;
+    readonly params: number; readonly train: number; readonly test: number; readonly model: string;
   }
   | ({ readonly kind: "tick" } & GrokPoint)
   | { readonly kind: "end"; readonly reason: StopReason; readonly step: number; readonly seconds: number };
@@ -93,7 +78,7 @@ export function parseGrokLine(text: string): GrokLine {
     case "start":
       return {
         kind: "start", device: str(obj, "device", where), deviceName: str(obj, "device_name", where), torch: str(obj, "torch", where),
-        params: int(obj, "params", where), train: int(obj, "train", where), test: int(obj, "test", where),
+        params: int(obj, "params", where), train: int(obj, "train", where), test: int(obj, "test", where), model: str(obj, "model", where),
       };
     case "tick":
       return {

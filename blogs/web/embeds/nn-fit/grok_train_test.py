@@ -24,7 +24,7 @@ gt = importlib.util.module_from_spec(spec)
 sys.modules["grok_train"] = gt  # dataclasses look their module up by name
 spec.loader.exec_module(gt)
 
-PARAMS_113 = 226_688  # grok.ts: grokParams(113); the page checks the "start" line against it too
+PARAMS_113 = 226_688
 SMALL = {"run": "r", "p": 23, "train_fraction": 0.5, "split_seed": 1, "init_seed": 1, "step": 0, "seconds": 0,
          "max_steps": 300, "max_seconds": 60, "tick_seconds": 60}  # fmt: skip
 
@@ -49,7 +49,7 @@ def train(config: dict, runs: dict) -> list[dict]:
 def model() -> None:
     run = gt.new_run(gt.parse_config({**SMALL, "p": 113, "train_fraction": 0.3}), gt.torch.device("cpu"))
     start = gt.describe(gt.torch.device("cpu"), run)
-    check(start["params"] == PARAMS_113, f"p 113: {start['params']} parameters, as grok.ts counts")
+    check(start["params"] == PARAMS_113, f"p 113: {start['params']} parameters")
     check((start["train"], start["test"]) == (3831, 12769 - 3831), "p 113 at 30%: 3831 training pairs (round(0.3 p^2)), the rest test")
     pairs = run.data.tokens
     check(bool(((pairs[:, 0] + pairs[:, 1]) % 113 == run.data.labels).all()), "labels are (a + b) mod p")
