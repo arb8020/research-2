@@ -197,8 +197,9 @@ HTTPServer(("0.0.0.0", int(sys.argv[1])), H).serve_forever()
 def serve_sse(s: sdk.Session, port: int, gap_s: float) -> sdk.Job:
     """SSE_SERVER as a service (not work for idleness), once it listens."""
     s.machine.write(f"{s.machine.root}/sse.py", SSE_SERVER.encode())
-    job = s.serve(f"exec python3 {s.machine.root}/sse.py {port} {gap_s}")
-    eventually(lambda: s.machine.exec(f"python3 -c 'import socket; socket.create_connection((\"127.0.0.1\", {port}), 1)'")[0] == 0, timeout_s=60)
+    with s.using():
+        job = s.serve(f"exec python3 {s.machine.root}/sse.py {port} {gap_s}")
+        eventually(lambda: s.machine.exec(f"python3 -c 'import socket; socket.create_connection((\"127.0.0.1\", {port}), 1)'")[0] == 0, timeout_s=60)
     return job
 
 
