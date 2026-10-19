@@ -16,7 +16,8 @@ materialize(chN, "solution") stacks the series' files/ up to chN (a later chapte
 out). materialize(chN, "start") is the solution of the chapter before with chN's files/ and then chN's start/ on top.
 The cells are listed in the tree itself, in checks/chNN.json ({name, file, region, ops, cmd}), so workspace.py in the
 sandbox, the page and the check command read the same list. A cell's region names a `# region: <name>` ...
-`# endregion` block in its file (display only: the page scrolls to and highlights it); the build checks it exists.
+`# endregion` block in its file (the page scrolls to and highlights it; `verify` swaps in just that block's stub); the
+build checks it exists.
 
 The check command (cmd[0], e.g. run_checks) is trusted code, not part of the tree: TRUSTED_SRC below is the one place
 that says which package the page ships as _blogs/assay/ and `verify` runs from. `verify` runs it with assay's own uv
@@ -233,6 +234,16 @@ def run_cell(cell: Cell, tree: Path, trusted: Path, python: str) -> tuple[int, s
     return proc.returncode, why
 
 
+def stub_only(cell: Cell, solution: File, start: File) -> File:
+    if cell.region is None:
+        return start
+    ours, theirs = solution.data.decode(), start.data.decode()
+    mine, stub = region_span(ours, cell.region), region_span(theirs, cell.region)
+    assert mine is not None and stub is not None, f"cell {cell.name}: region {cell.region!r} is missing from {cell.file}"
+    lines = ours.split("\n")[: mine[0] - 1] + theirs.split("\n")[stub[0] - 1 : stub[1]] + ours.split("\n")[mine[1] :]
+    return File("\n".join(lines).encode(), solution.executable)
+
+
 def verify(chapter: str, root: Path = REF) -> bool:
     ok = True
     python = assay_python()
@@ -248,7 +259,7 @@ def verify(chapter: str, root: Path = REF) -> bool:
             print(f"{chapter} solution: {' '.join(cell.cmd)} -> exit {rc} (want 0) {why}", flush=True)
             ok &= rc == 0
             one = Path(tmp) / f"start-{cell.name}"
-            write_tree({**solution_tree, cell.file: start_tree[cell.file]}, one)
+            write_tree({**solution_tree, cell.file: stub_only(cell, solution_tree[cell.file], start_tree[cell.file])}, one)
             rc, why = run_cell(cell, one, trusted, python)
             print(f"{chapter} start {cell.file}: {' '.join(cell.cmd)} -> exit {rc} (want 1) {why}", flush=True)
             ok &= rc == 1

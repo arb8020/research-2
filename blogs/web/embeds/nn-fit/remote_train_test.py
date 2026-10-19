@@ -24,7 +24,7 @@ CONVERGED = 1e-3
 STEPS_REL = 0.1
 TAIL = 200
 TAIL_FACTOR = 1.5
-ACCURACY_POINTS = 25
+ACCURACY_POINTS = 3
 
 
 def check(ok: bool, message: str) -> None:

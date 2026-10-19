@@ -10,7 +10,7 @@ from markdown_it.rules_inline import StateInline
 from markdown_it.token import Token
 
 HERE = Path(__file__).parent
-NOT_CHAPTERS = frozenset({"notes", "vendor", "dist", "web", "include", "node_modules"})
+NOT_CHAPTERS = frozenset({"notes", "vendor", "dist", "web", "include", "node_modules", "assay"})
 WIKILINK = re.compile(r"\[\[([^\[\]\n]+)\]\]")
 
 

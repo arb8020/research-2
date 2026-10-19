@@ -339,7 +339,8 @@ def _hits(verdict_: dict[str, Any], caught_by: str) -> bool:
 
 def run_selftest(ctx: Ctx, test: Expect, req: Request) -> dict[str, Any]:
     op, adapter = OPS[test.op]
-    sub = Ctx(ctx.store, ctx.env, ctx.iso, ctx.log, ctx.startup_timeout, test.call_timeout, ctx.warm)
+    sub = Ctx(ctx.store, ctx.env, ctx.iso, ctx.log, ctx.startup_timeout, min(test.call_timeout, req.call_timeout),
+              ctx.warm)
     verdicts = list(check_op(sub, op, Candidate(test.file, test.attr, adapter), req, blocking=True))
     ran = [v for v in verdicts if v["outcome"] != "skip"]
     dtypes = sorted({v["dtype"] for v in ran} - {"*"})

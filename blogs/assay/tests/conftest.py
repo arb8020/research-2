@@ -2,24 +2,54 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
+from assay import core
 
 ASSAY = Path(__file__).resolve().parents[1]
 BLOGS = ASSAY.parent
 
 
+@pytest.fixture(scope="session", autouse=True)
+def warm() -> Iterator[None]:
+    running = core.warm_alive(core.warm_socket())
+    yield
+    if not running:
+        core.stop_warm()
+
+
+@pytest.fixture(scope="session")
+def reference_store(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    from assay.ch01 import ops
+    from assay.ch01.run import Ctx, detect_env, expected
+
+    root = tmp_path_factory.mktemp("reference")
+    ctx = Ctx(core.Store(root), detect_env(), core.isolation(), lambda text: None)
+    for op in (op for op in ops.REGISTRY.values() if op.kind == "op"):
+        for case in ops.sweep(op):
+            expected(ctx, op, case, ops.make_inputs(op, case))
+    for path in root.rglob("*"):
+        if path.is_file():
+            path.chmod(0o444)
+    return root
+
+
 @pytest.fixture
-def store_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def store_dir(tmp_path: Path, reference_store: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "store"
+    for kind in ("truth", "expected"):
+        shutil.copytree(reference_store / kind, path / kind, copy_function=os.link)
     monkeypatch.setenv("ASSAY_STORE", str(path))
     return path
 
 
-def run_checks(args: list[str], cwd: Path, store: Path, *, spawn: bool = True,
+def run_checks(args: list[str], cwd: Path, store: Path, *, spawn: bool = False,
                shim: Path | None = None) -> tuple[int, list[dict]]:
     env = {**os.environ, "ASSAY_STORE": str(store), "BLOGS_ASSAY": str(ASSAY)}
     argv = ([sys.executable, str(shim)] if shim else [sys.executable, "-m", "assay.cli"]) + args

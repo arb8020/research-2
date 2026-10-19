@@ -633,9 +633,7 @@ def ensure_warm(log: Any = None) -> Path:
         if warm_alive(path):
             return path
         for stale in path.parent.glob("warm-*.sock"):
-            if stale != path:
-                with contextlib.suppress(OSError, RuntimeError, ValueError):
-                    warm_request(stale, {"kind": "stop"}, [])
+            if stale != path and not warm_alive(stale):
                 stale.unlink(missing_ok=True)
         if log is not None:
             log("starting the warm check process (imports torch + transformers once; later checks fork from it)")
