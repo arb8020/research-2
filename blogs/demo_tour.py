@@ -2,7 +2,7 @@
 
     MODAL_TOKEN_ID=... MODAL_TOKEN_SECRET=... uv run --with playwright demo_tour.py --gateway http://localhost:8796
 
-Needs a running gateway (the relay, box/gateway/relay.py). Builds dl/neural-nets.md, serves dist/ on a free port, and
+Needs a running gateway (the relay, box/examples/notebook-gateway/relay.py). Builds dl/neural-nets.md, serves dist/ on a free port, and
 records one 1280x800 video with a caption naming each step: Connect a T4 (Details drawer open while it boots), run the
 nvidia-smi scratch cell, train <nn-fit>'s default wave on the GPU and Stop, train the grokking dataset until test
 accuracy passes 95%, Disconnect. Writes to .evidence/demo-tour/ (gitignored): tour.webm, tour.mp4, tour-fast.mp4

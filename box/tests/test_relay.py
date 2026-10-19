@@ -1,6 +1,6 @@
-"""The relay (box/gateway/relay.py), end to end over HTTP, on the local provider: a real supervisor, a
+"""The relay (box/examples/notebook-gateway/relay.py), end to end over HTTP, on the local provider: a real supervisor, a
 real Jupyter Server as the session's service, a real kernel. What the page sees, in seconds, no cloud.
-`box/gateway/prove_modal.py` is the same story on a Modal T4."""
+`box/examples/notebook-gateway/prove_modal.py` is the same story on a Modal T4."""
 
 from __future__ import annotations
 
@@ -16,10 +16,11 @@ import urllib.request
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
+import kernel_client
 import pytest
+import relay
 
 from box import sdk
-from box.gateway import kernel_client, relay
 from box.providers.local import Local
 from box.store import DirStore
 

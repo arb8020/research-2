@@ -32,7 +32,7 @@ assay's env (its `kernel` dependency group has jupyter_server + ipykernel, same 
 relay's flags by verify_workspace.py --modal) instead of starting one here; ending the session leaves it running.
 
 Lease: POST /sessions takes lease_s (60..43200, default 5400); the session ends with reason "lease" at
-lease_until. POST /sessions/{id}/extend {until}, as the real relay (box/gateway/relay.py, Relay.extend):
+lease_until. POST /sessions/{id}/extend {until}, as the real relay (box/examples/notebook-gateway/relay.py, Relay.extend):
 409 while booting; running: lease_until = min(until, ceiling) (start + 12 h), never shorter (an until at or
 before lease_until is a no-op, 200 with the status as it is); ended: a no-op, 200 with the ended status.
 Fake only, not in the contract:

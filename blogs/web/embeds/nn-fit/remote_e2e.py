@@ -3,7 +3,7 @@
 
     uv run --with playwright python web/embeds/nn-fit/remote_e2e.py
     uv run --with playwright python web/embeds/nn-fit/remote_e2e.py --gateway http://localhost:8790   # a running
-        gateway instead (the real relay, box/gateway/relay.py); token from MODAL_TOKEN_ID / MODAL_TOKEN_SECRET; T4
+        gateway instead (the real relay, box/examples/notebook-gateway/relay.py); token from MODAL_TOKEN_ID / MODAL_TOKEN_SECRET; T4
 
 Cases: a curve run with Stop, a spiral run to its step budget, the grokking dataset (Stop, then continue: on a
 real GPU until test accuracy passes 95%, on the fake gateway's CPU for 1000 steps), a disconnect mid-run.

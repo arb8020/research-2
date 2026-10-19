@@ -855,7 +855,7 @@ def main() -> None:
     ap.add_argument("--idle-timeout-s", type=float, default=IDLE_TIMEOUT_S, help="no connection to Jupyter for this long ends a session")
     ap.add_argument("--label", type=label, action="append", default=[("box.purpose", "reader-path-dev")],
                     help="key=value stamped on every session (default box.purpose=reader-path-dev, for sweeps)")  # fmt: skip
-    ap.add_argument("--image", default=KERNEL_IMAGE, help="kernel image: a path ending in Dockerfile, or a registry ref (default: gateway/kernel.Dockerfile)")
+    ap.add_argument("--image", default=KERNEL_IMAGE, help="kernel image: a path ending in Dockerfile, or a registry ref (default: kernel.Dockerfile next to relay.py)")
     ap.add_argument("--volume", type=volume, action="append", default=[],
                     help="/mount/path=volume-name, a Modal Volume in the reader's workspace (created if missing) on every session; repeatable")  # fmt: skip
     a = ap.parse_args()
