@@ -13,12 +13,14 @@ export interface Token {
 export const ENDED_REASONS = ["stopped", "lease", "idle", "boot_failed", "machine_lost"] as const;
 export type EndedReason = (typeof ENDED_REASONS)[number];
 
-// Session length (POST /sessions lease_s): the gateway accepts 60..43200 s and caps extends at start + 12 h.
-export const LEASE_MIN_S = 60;
-export const LEASE_MAX_S = 12 * 3600;
+export interface Limits {
+  lease: { minS: number; maxS: number; defaultS: number };
+  ceilingS: number;
+  gpus: (string | null)[];
+}
 
 // leaseUntil: when the session ends unless extended (unix s). ceiling: the latest an extend can push it to
-// (start + 12 h). Both required: a status without them is from a gateway older than the lease, and an error.
+// (creation + the gateway's ceiling_s). Both required: a status without them is from a gateway older than the lease, and an error.
 // startedAt: when the machine's supervisor started; null only on an ended session whose machine never started.
 interface Times {
   gpu: string | null;
@@ -87,9 +89,18 @@ async function call(url: string, init: RequestInit): Promise<unknown> {
   return body;
 }
 
+export async function getLimits(gateway: string): Promise<Limits> {
+  const raw = await call(`${gateway}/limits`, {});
+  if (!isJsonObject(raw) || !isJsonObject(raw["lease"])) return fail("limits {lease, ceiling_s, gpus}", raw);
+  const { min_s: minS, max_s: maxS, default_s: defaultS } = raw["lease"];
+  const { ceiling_s: ceilingS, gpus } = raw;
+  if (typeof minS !== "number" || typeof maxS !== "number" || typeof defaultS !== "number" || typeof ceilingS !== "number") return fail("limits {lease: {min_s, max_s, default_s}, ceiling_s} in seconds", raw);
+  if (!Array.isArray(gpus) || !gpus.every((g): g is string | null => g === null || typeof g === "string")) return fail("limits {gpus: (string | null)[]}", raw);
+  return { lease: { minS, maxS, defaultS }, ceilingS, gpus };
+}
+
 export async function createSession(gateway: string, token: Token, gpu: string | null, leaseS: number): Promise<{ id: string; status: Status }> {
   if (!Number.isInteger(leaseS)) throw new Error(`createSession: lease_s must be whole seconds, got ${String(leaseS)}`);
-  if (leaseS < LEASE_MIN_S || leaseS > LEASE_MAX_S) throw new Error(`createSession: lease_s ${String(leaseS)} outside ${String(LEASE_MIN_S)}..${String(LEASE_MAX_S)}`);
   const body = await call(`${gateway}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

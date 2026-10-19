@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import socket
 import sys
 import threading
 import time
@@ -23,29 +22,21 @@ import relay
 from box import sdk
 from box.providers.local import Local
 from box.store import DirStore
+from box.supervisor import next_lease
 
 TOKEN = {"id": "ak-relay-test", "secret": "as-relay-test-secret"}
 AUTH = f"{TOKEN['id']}:{TOKEN['secret']}"
 ORIGIN = "http://localhost:8012"
 
 
-def free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
 @pytest.fixture
 def make_relay(tmp_path: Path) -> Iterator[Callable[..., str]]:
     servers = []
 
-    def make(idle_timeout_s: float = 300) -> str:
-        cfg = relay.Config(
-            access=lambda token: relay.Access(Local(tmp_path / "machines"), DirStore(tmp_path / "records")), image=None, gpus=(None,), labels={"box.purpose": "relay-test"},
-            origins=re.compile(relay.LOCAL_ORIGIN), python=sys.executable, ip="127.0.0.1", port=free_port,
-            idle_timeout_s=idle_timeout_s,
-        )  # fmt: skip
-        server = relay.serve(cfg, free_port())
+    def make(idle_timeout_s: float = 300, lease_min_s: int = 60) -> str:
+        a = argparse.Namespace(machines_dir=tmp_path / "machines", records_dir=None, label=[("box.purpose", "relay-test")], python=sys.executable,
+                               idle_timeout_s=idle_timeout_s)  # fmt: skip
+        server = relay.serve(relay.local_config(a, (None,), relay.Limits(min_s=lease_min_s)), relay.free_port())
         threading.Thread(target=server.serve_forever, daemon=True).start()
         servers.append(server)
         return f"http://127.0.0.1:{server.server_address[1]}"
@@ -160,6 +151,7 @@ def test_reconnecting_with_last_event_id_resumes_without_repeats(make_relay: Cal
 
 def test_unknown_session_wrong_token_and_bad_requests(make_relay: Callable[..., str]) -> None:
     gw = make_relay()
+    assert call(f"{gw}/limits")[:2] == (200, {"lease": {"min_s": 60, "max_s": 43200, "default_s": 5400}, "ceiling_s": 43200, "gpus": [None]})
     assert status(gw, "s-000000000000")[0] == 404
     code, body, _ = call(f"{gw}/sessions/s-000000000000", headers={"X-Box-Token": "no-colon"})
     assert code == 400 and "id:secret" in body["error"]
@@ -222,9 +214,9 @@ def test_resuming_a_replay_from_the_record_sends_only_what_came_after(make_relay
 def relay_on(tmp_path: Path, access: Callable[[object], relay.Access]) -> relay.Server:
     cfg = relay.Config(
         access=access, image=None, gpus=(None,), labels={"box.purpose": "relay-test"}, origins=re.compile(relay.LOCAL_ORIGIN),
-        python=sys.executable, ip="127.0.0.1", port=free_port,
+        python=sys.executable, ip="127.0.0.1", port=relay.free_port,
     )  # fmt: skip
-    server = relay.serve(cfg, free_port())
+    server = relay.serve(cfg, relay.free_port())
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
@@ -394,9 +386,9 @@ def test_lease_s_is_an_integer_minute_to_twelve_hours(make_relay: Callable[..., 
     sid = create(gw, lease_s=60)
     events(gw, sid, "running")
     running = status(gw, sid)[1]
-    assert running["ceiling"] - running["lease_until"] == pytest.approx(relay.READER_CEILING_S - 60, abs=2)
+    assert running["ceiling"] - running["lease_until"] == pytest.approx(relay.Limits().ceiling_s - 60, abs=2)
     assert "deadline" not in running  # lease_until only: the old copy is gone
-    assert running["ceiling"] - running["started_at"] <= relay.READER_CEILING_S  # 12 h from creation, not from boot
+    assert running["ceiling"] - running["started_at"] <= relay.Limits().ceiling_s  # 12 h from creation, not from boot
 
 
 def test_extend_clamps_at_the_ceiling_and_never_shortens(make_relay: Callable[..., str]) -> None:
@@ -415,11 +407,29 @@ def test_extend_clamps_at_the_ceiling_and_never_shortens(make_relay: Callable[..
 
 
 def test_a_session_ends_when_its_lease_does(make_relay: Callable[..., str]) -> None:
-    gw = make_relay()
-    sid = create(gw, lease_s=relay.MIN_LEASE_S)
-    got = events(gw, sid, "ended", timeout_s=relay.MIN_LEASE_S + 60)  # the page keeps no kernel open: idle is 300 s here
+    gw = make_relay(lease_min_s=1)
+    sid = create(gw, lease_s=10)
+    got = events(gw, sid, "ended", timeout_s=60)  # the page keeps no kernel open: idle is 300 s here
+    assert [e["status"]["state"] for _, e in got if e["kind"] == "status"][-2:] == ["running", "ended"]
     assert got[-1][1]["status"]["reason"] == "lease"
     assert status(gw, sid) == (200, got[-1][1]["status"])
+
+
+LEASE = {"until": 100.0, "ceiling": 200.0, "released": False}
+
+
+@pytest.mark.parametrize(("lease", "op", "until", "now", "expected"), [
+    (LEASE, "extend", 150, 50, {**LEASE, "until": 150}),
+    (LEASE, "extend", 500, 50, {**LEASE, "until": 200}),  # clamped at the ceiling
+    (LEASE, "extend", 80, 50, LEASE),  # never shorter
+    (LEASE, "extend", 150, 101, LEASE),  # run out, even if the machine still runs: not extended
+    (LEASE, "extend", 150, 100, LEASE),
+    ({**LEASE, "released": True}, "extend", 150, 50, {**LEASE, "released": True}),
+    (LEASE, "release", 0, 50, {**LEASE, "until": 50, "released": True}),
+    (LEASE, "release", 0, 120, LEASE),
+])  # fmt: skip
+def test_lease_rules(lease: dict, op: str, until: float, now: float, expected: dict) -> None:
+    assert next_lease(lease, op, until, now) == expected
 
 
 def test_image_and_volume_flags_reach_the_modal_provider() -> None:
@@ -432,7 +442,7 @@ def test_image_and_volume_flags_reach_the_modal_provider() -> None:
             relay.volume(bad)
     a = argparse.Namespace(region="us", image="registry.example/kernel:1", volume=[("/ws", "blogs-ws"), ("/hf", "weights")],
                            label=[], idle_timeout_s=60.0)  # fmt: skip
-    cfg = relay.modal_config(a, (None, "T4"))
+    cfg = relay.modal_config(a, (None, "T4"), relay.Limits())
     assert cfg.image == "registry.example/kernel:1"
     access = cfg.access(ModalToken(id="ak-x", secret="as-x"))  # no network: Modal opens its client on first use
     try:
@@ -463,9 +473,9 @@ def test_a_machine_that_will_not_go_after_a_failed_boot_is_said_not_swallowed(tm
     provider = NeverGone(Local(tmp_path / "machines"), [])
     cfg = relay.Config(
         access=lambda token: relay.Access(provider, DirStore(tmp_path / "records")), image=None, gpus=(None,),
-        labels={"box.purpose": "relay-test"}, origins=re.compile(relay.LOCAL_ORIGIN), python="false", ip="127.0.0.1", port=free_port,
+        labels={"box.purpose": "relay-test"}, origins=re.compile(relay.LOCAL_ORIGIN), python="false", ip="127.0.0.1", port=relay.free_port,
     )  # fmt: skip
-    server = relay.serve(cfg, free_port())
+    server = relay.serve(cfg, relay.free_port())
     threading.Thread(target=server.serve_forever, daemon=True).start()
     gw = f"http://127.0.0.1:{server.server_address[1]}"
     try:

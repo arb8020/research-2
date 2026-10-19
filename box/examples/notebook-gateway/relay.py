@@ -8,6 +8,7 @@ import json
 import math
 import queue
 import re
+import socket
 import sys
 import threading
 import time
@@ -32,9 +33,7 @@ PORT = 8888
 LABEL_GPU = "relay.gpu"
 LABEL_PORT = "relay.port"
 LABEL_LEASE = "relay.lease_s"
-READER_CEILING_S = 12 * 3600
-LEASE_S = 90 * 60
-MIN_LEASE_S, MAX_LEASE_S = 60, READER_CEILING_S
+LABEL_CEILING_S = "relay.ceiling_s"
 IDLE_TIMEOUT_S = 5 * 60
 BOOT_TIMEOUT_S = 10 * 60
 JUPYTER_READY_S = 3 * 60
@@ -67,6 +66,22 @@ class Access:
     provider: sdk.Provider
     record: Store
     close: Callable[[], None] = lambda: None
+    check: Callable[[str], object] = lambda session_id: None
+
+
+@dataclass(frozen=True)
+class Limits:
+    min_s: int = 60
+    max_s: int = 12 * 3600
+    default_s: int = 90 * 60
+    ceiling_s: int = 12 * 3600
+
+    def __post_init__(self) -> None:
+        if not 0 < self.min_s <= self.default_s <= self.max_s <= self.ceiling_s <= sdk.MAX_CEILING_S:
+            raise ValueError(f"relay: {self}: 0 < min_s <= default_s <= max_s <= ceiling_s <= {sdk.MAX_CEILING_S} s")
+
+    def wire(self, gpus: tuple[str | None, ...]) -> dict[str, Any]:
+        return {"lease": {"min_s": self.min_s, "max_s": self.max_s, "default_s": self.default_s}, "ceiling_s": self.ceiling_s, "gpus": list(gpus)}
 
 
 @dataclass(frozen=True)
@@ -80,10 +95,11 @@ class Config:
     ip: str = "0.0.0.0"
     port: Callable[[], int] = lambda: PORT
     idle_timeout_s: float = IDLE_TIMEOUT_S
+    limits: Limits = Limits()
 
     def __post_init__(self) -> None:
-        if not sdk.MIN_IDLE_S <= self.idle_timeout_s <= READER_CEILING_S:
-            raise ValueError(f"relay: idle_timeout_s={self.idle_timeout_s}: {sdk.MIN_IDLE_S:g} to {READER_CEILING_S} s (a boot marks its session used every idle/4 s)")
+        if not sdk.MIN_IDLE_S <= self.idle_timeout_s <= self.limits.ceiling_s:
+            raise ValueError(f"relay: idle_timeout_s={self.idle_timeout_s}: {sdk.MIN_IDLE_S:g} to {self.limits.ceiling_s} s (a boot marks its session used every idle/4 s)")
 
 
 @dataclass(frozen=True)
@@ -156,7 +172,7 @@ def parse_token(raw: str) -> ModalToken:
     return ModalToken(token_id, secret)
 
 
-def parse_create(body: bytes, gpus: tuple[str | None, ...]) -> CreateRequest:
+def parse_create(body: bytes, gpus: tuple[str | None, ...], limits: Limits) -> CreateRequest:
     try:
         raw = json.loads(body)
     except ValueError as e:
@@ -176,9 +192,9 @@ def parse_create(body: bytes, gpus: tuple[str | None, ...]) -> CreateRequest:
         raise BadRequest(f"at most {MAX_LABELS} labels")
     if mine := [k for k in labels if k.startswith((*sdk.RESERVED, "relay."))]:
         raise BadRequest(f"labels {mine} are set by box or the relay")
-    lease_s = raw.get("lease_s", LEASE_S)
-    if type(lease_s) is not int or not MIN_LEASE_S <= lease_s <= MAX_LEASE_S:  # type(): bool is an int subclass, so isinstance would take a JSON true
-        raise BadRequest(f"lease_s must be an integer from {MIN_LEASE_S} to {MAX_LEASE_S}, got {lease_s!r}")
+    lease_s = raw.get("lease_s", limits.default_s)
+    if type(lease_s) is not int or not limits.min_s <= lease_s <= limits.max_s:  # type(): bool is an int subclass, so isinstance would take a JSON true
+        raise BadRequest(f"lease_s must be an integer from {limits.min_s} to {limits.max_s}, got {lease_s!r}")
     return CreateRequest(ModalToken(token["id"], token["secret"]), gpu, labels, lease_s)
 
 
@@ -224,7 +240,7 @@ def machine_status(cfg: Config, s: sdk.Session, token: ModalToken, *, ready: boo
 
 def first_lease(labels: dict[str, str]) -> sdk.Lease:
     ceiling = float(labels[sdk.LABEL_CEILING])
-    return sdk.Lease(until=ceiling - READER_CEILING_S + float(labels[LABEL_LEASE]), ceiling=ceiling)
+    return sdk.Lease(until=ceiling - float(labels[LABEL_CEILING_S]) + float(labels[LABEL_LEASE]), ceiling=ceiling)
 
 
 def ended_status(s: sdk.Session, reason: str) -> dict[str, Any]:
@@ -275,14 +291,14 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
     session: sdk.Session | None = None
     try:
         rec.step("gateway", "checking your Modal token")
-        access.provider.list({sdk.LABEL_SESSION: rec.session_id})  # MUST KILL: a provider.list call made only to validate the token; give Access an explicit credential check
+        access.check(rec.session_id)
         port = cfg.port()
         rec.step("gateway", f"creating sandbox: gpu {rec.gpu or 'none'} (a workspace's first connect builds the image: minutes)")
         created_at = time.monotonic()
         made = sdk.create(  # MUST KILL: re-implements sdk.launch (create, wait_up, terminate on failure) only to emit a step in between; give launch a hook
-            access.provider, session_id=rec.session_id, record=access.record, lease_s=req.lease_s, ceiling_s=READER_CEILING_S,
+            access.provider, session_id=rec.session_id, record=access.record, lease_s=req.lease_s, ceiling_s=cfg.limits.ceiling_s,
             gpu=rec.gpu, image=cfg.image, labels={**cfg.labels, **req.labels, LABEL_GPU: rec.gpu or "", LABEL_PORT: str(port),
-            LABEL_LEASE: str(req.lease_s)}, idle_timeout_s=cfg.idle_timeout_s, ports=(port,),
+            LABEL_LEASE: str(req.lease_s), LABEL_CEILING_S: str(cfg.limits.ceiling_s)}, idle_timeout_s=cfg.idle_timeout_s, ports=(port,),
         )  # fmt: skip
         rec.step("gateway", f"sandbox {made.machine.id} created in {time.monotonic() - created_at:.1f} s; waiting for it to start")
         try:
@@ -453,7 +469,7 @@ class Relay:
     def create(self, req: CreateRequest, origin: str) -> dict[str, Any]:
         now = time.time()
         sid = sdk.new_session_id()
-        rec = Boot(sid, digest(req.token), req.gpu, now, sdk.Lease(until=now + req.lease_s, ceiling=now + READER_CEILING_S))
+        rec = Boot(sid, digest(req.token), req.gpu, now, sdk.Lease(until=now + req.lease_s, ceiling=now + self.cfg.limits.ceiling_s))
         thread = threading.Thread(target=self._boot, args=(rec, req, origin), name=f"boot-{sid}", daemon=False)
         with self._changed:
             self._forget_old_boots()
@@ -723,7 +739,9 @@ class Handler(BaseHTTPRequestHandler):
         sid = parts[1] if len(parts) >= 2 and parts[0] == "sessions" else None
         relay = self.server.relay
         try:
-            if route == ("POST", 1, None) and parts == ["sessions"]:
+            if route == ("GET", 1, None) and parts == ["limits"]:
+                code, body = 200, relay.cfg.limits.wire(relay.cfg.gpus)
+            elif route == ("POST", 1, None) and parts == ["sessions"]:
                 code, body = 202, relay.create(*self.create_request())
             elif sid is not None and route == ("GET", 2, None):
                 code, body = 200, {"session_id": sid, "status": relay.get(sid, parse_token(self.headers.get("X-Box-Token", "")))}
@@ -752,7 +770,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.rfile.read(int(raw))
 
     def create_request(self) -> tuple[CreateRequest, str]:
-        req = parse_create(self.body(), self.server.relay.cfg.gpus)
+        req = parse_create(self.body(), self.server.relay.cfg.gpus, self.server.relay.cfg.limits)
         origin = self.headers.get("Origin", "")
         if origin and not self.server.relay.cfg.origins.fullmatch(origin):
             raise BadRequest(f"origin {origin!r} is not one this relay serves")
@@ -802,14 +820,39 @@ def modal_access(token: ModalToken, region: str, volumes: dict[str, str]) -> Acc
     from box.providers.modal import Modal, ModalVolumeStore
 
     provider = Modal(token=token, region=region, volumes=volumes)
-    return Access(provider, ModalVolumeStore(RECORD_VOLUME, provider=provider), close=provider.close)
+    return Access(provider, ModalVolumeStore(RECORD_VOLUME, provider=provider), close=provider.close,
+                  check=lambda session_id: provider.list({sdk.LABEL_SESSION: session_id}))  # fmt: skip
 
 
-def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...]) -> Config:
+def modal_config(a: argparse.Namespace, gpus: tuple[str | None, ...], limits: Limits) -> Config:
     return Config(
         access=lambda token: modal_access(token, a.region, dict(a.volume)), image=a.image, gpus=gpus, labels=dict(a.label),
-        origins=re.compile(LOCAL_ORIGIN), idle_timeout_s=a.idle_timeout_s,
+        origins=re.compile(LOCAL_ORIGIN), idle_timeout_s=a.idle_timeout_s, limits=limits,
     )  # fmt: skip
+
+
+def local_check(token: ModalToken) -> None:
+    if not token.id.startswith("ak-"):
+        raise PermissionError(f"local relay: a token id starts 'ak-', as Modal's do (got {token.id[:3]!r}...)")
+
+
+def local_config(a: argparse.Namespace, gpus: tuple[str | None, ...], limits: Limits) -> Config:
+    from box.providers.local import Local
+    from box.store import DirStore
+
+    machines = a.machines_dir.resolve()
+    records = (a.records_dir or machines / "records").resolve()
+    return Config(
+        access=lambda token: Access(Local(machines), DirStore(records), check=lambda session_id: local_check(token)), image=None,
+        gpus=gpus, labels=dict(a.label), origins=re.compile(LOCAL_ORIGIN), python=a.python, ip="127.0.0.1", port=free_port,
+        idle_timeout_s=a.idle_timeout_s, limits=limits,
+    )  # fmt: skip
+
+
+def free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
 
 
 class Server(ThreadingHTTPServer):
@@ -848,9 +891,17 @@ def volume(raw: str) -> tuple[str, str]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="The box relay: browser sessions on Modal (box/CONTRACT-gateway.md), over HTTP on localhost.", formatter_class=argparse.RawDescriptionHelpFormatter)
+    from box.providers.local import BASE
+
+    ap = argparse.ArgumentParser(description="The box relay: browser sessions on Modal or this machine (box/CONTRACT-gateway.md), over HTTP on localhost.", formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--provider", choices=("modal", "local"), default="modal")
     ap.add_argument("--port", type=int, default=8790)
-    ap.add_argument("--gpus", default="T4", help="comma-separated GPUs a reader may ask for (CPU, gpu null, always)")
+    ap.add_argument("--gpus", help="comma-separated GPUs a reader may ask for (CPU, gpu null, always; default: T4 on modal, none on local)")
+    defaults = Limits()
+    ap.add_argument("--lease-min-s", type=int, default=defaults.min_s)
+    ap.add_argument("--lease-max-s", type=int, default=defaults.max_s)
+    ap.add_argument("--lease-default-s", type=int, default=defaults.default_s)
+    ap.add_argument("--ceiling-s", type=int, default=defaults.ceiling_s, help="a session ends this long after it was created, however extended")
     ap.add_argument("--region", default="us", help="Modal region for every session")
     ap.add_argument("--idle-timeout-s", type=float, default=IDLE_TIMEOUT_S, help="no connection to Jupyter for this long ends a session")
     ap.add_argument("--label", type=label, action="append", default=[("box.purpose", "reader-path-dev")],
@@ -858,14 +909,22 @@ def main() -> None:
     ap.add_argument("--image", default=KERNEL_IMAGE, help="kernel image: a path ending in Dockerfile, or a registry ref (default: kernel.Dockerfile next to relay.py)")
     ap.add_argument("--volume", type=volume, action="append", default=[],
                     help="/mount/path=volume-name, a Modal Volume in the reader's workspace (created if missing) on every session; repeatable")  # fmt: skip
+    ap.add_argument("--machines-dir", type=Path, default=BASE, help="local: where sessions' machines live")
+    ap.add_argument("--records-dir", type=Path, help="local: where ended sessions' records live (default: <machines-dir>/records)")
+    ap.add_argument("--python", default=sys.executable, help="local: the interpreter that runs Jupyter and the kernel (default: this one)")
     a = ap.parse_args()
     if len({path for path, _ in a.volume}) != len(a.volume):
         ap.error("--volume: two volumes at one mount path")
-    gpus = (None, *[g for g in a.gpus.split(",") if g])
-    cfg = modal_config(a, gpus)
+    gpus = (None, *[g for g in (a.gpus if a.gpus is not None else "T4" if a.provider == "modal" else "").split(",") if g])
+    try:
+        limits = Limits(a.lease_min_s, a.lease_max_s, a.lease_default_s, a.ceiling_s)
+    except ValueError as e:
+        ap.error(str(e))
+    cfg = (modal_config if a.provider == "modal" else local_config)(a, gpus, limits)
     server = serve(cfg, a.port)
-    print(f"relay on http://localhost:{a.port} (modal, region {a.region}, image {a.image}, volumes {dict(a.volume)}, gpus {list(gpus)}, labels {dict(a.label)}, "
-          f"leases {MIN_LEASE_S}-{MAX_LEASE_S} s (default {LEASE_S}), ceiling {READER_CEILING_S} s, idle {a.idle_timeout_s} s)", flush=True)  # fmt: skip
+    where = f"region {a.region}, image {a.image}, volumes {dict(a.volume)}" if a.provider == "modal" else f"machines {a.machines_dir}, python {a.python}"
+    print(f"relay on http://localhost:{a.port} ({a.provider}, {where}, gpus {list(gpus)}, labels {dict(a.label)}, "
+          f"leases {limits.min_s}-{limits.max_s} s (default {limits.default_s}), ceiling {limits.ceiling_s} s, idle {a.idle_timeout_s} s)", flush=True)  # fmt: skip
     with contextlib.suppress(KeyboardInterrupt):
         server.serve_forever()
     server.server_close()
