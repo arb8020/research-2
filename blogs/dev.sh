@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Build every chapter's page, then run the session server and the static server side by side in tmux session "blogs".
-#   ./dev.sh [chapter]        the session's chapter, default rl/01-flappy.md; restarts the session if it's already running
-# TODO: session.py serves one chapter; a second chapter with cells needs its own session (or a session per chapter).
-#   tmux kill-session -t blogs   to stop
 set -euo pipefail
 cd "$(dirname "$0")"
 CHAPTER=${1:-rl/01-flappy.md}

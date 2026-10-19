@@ -1,9 +1,9 @@
 #!/bin/bash
-# Run from worktrees/blogs-build-split/blogs. Mutant chapters go to a temp dir; nothing in the repo changes.
 set -u
 M=$(mktemp -d)
-mutate() {  # mutate NAME OLD NEW: copy of rl/01-flappy.md with OLD -> NEW in solution=flappy only
-  uv run python - "$M/$1.md" "$2" "$3" <<'PY'
+mutate() {
+  local name=$1 old=$2 new=$3
+  uv run python - "$M/$name.md" "$old" "$new" <<'PY'
 import sys; from pathlib import Path
 out, old, new = sys.argv[1:]
 text = Path("rl/01-flappy.md").read_text()

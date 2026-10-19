@@ -1,15 +1,3 @@
-"""Links between chapters: [[page]] and [[page#Heading text]] in prose (optionally [[page#Heading|shown text]]).
-
-`page` is a chapter's file stem (01-flappy, neural-nets), unique across every chapter under blogs/.
-`#Heading text` names a heading of that chapter; it becomes the heading's GitHub-style slug, which is the
-id build_page.py gives that heading. Only double brackets are links: `[make an excalidraw to put here]` stays text.
-
-Everything resolves from Markdown source, without building the target: index(path) reads a chapter's headings,
-and section() cuts out the source a hover preview shows (from the heading to the next heading of the same or a
-higher level; the whole page below its title when there is no #heading). A missing page or heading, a duplicate
-stem, or two headings with one slug fails the build with the line.
-"""
-
 from __future__ import annotations
 
 import re
@@ -22,13 +10,11 @@ from markdown_it.rules_inline import StateInline
 from markdown_it.token import Token
 
 HERE = Path(__file__).parent
-# Directories under blogs/ that hold Markdown that isn't a chapter (as are hidden ones: .venv, .session, .evidence).
 NOT_CHAPTERS = frozenset({"notes", "vendor", "dist", "web", "include", "node_modules"})
 WIKILINK = re.compile(r"\[\[([^\[\]\n]+)\]\]")
 
 
 def chapters() -> dict[str, Path]:
-    """stem -> chapter path, for every .md in a subdirectory of blogs/ (top-level .md files are notes, e.g. HANDOFF.md)."""
     found: dict[str, Path] = {}
     for path in sorted(HERE.glob("*/**/*.md")):
         rel = path.relative_to(HERE)
@@ -40,12 +26,10 @@ def chapters() -> dict[str, Path]:
 
 
 def slug(text: str) -> str:
-    """GitHub's heading anchor: lowercase, drop punctuation other than - and _, spaces to hyphens."""
     return re.sub(r"[^\w\- ]", "", text.strip().lower()).replace(" ", "-")
 
 
 def heading_text(inline: Token) -> str:
-    """A heading's visible text (`code` keeps its text, a link keeps its label, markup characters go)."""
     assert inline.type == "inline" and inline.children is not None, f"expected an inline token, got {inline.type}"
     return "".join(c.content for c in inline.children if c.type in ("text", "code_inline"))
 
@@ -54,7 +38,7 @@ class Heading(NamedTuple):
     level: int
     text: str
     slug: str
-    line: int  # 1-based
+    line: int
 
 
 class Source(NamedTuple):
@@ -65,7 +49,6 @@ class Source(NamedTuple):
 
 
 def index(path: Path, md: MarkdownIt) -> Source:
-    """Read a chapter's headings from its source (markdown-it's own parse, so a # inside a fence is not a heading)."""
     text = path.read_text()
     shown = path.resolve().relative_to(HERE.resolve())
     tokens = md.parse(text, {})
@@ -86,7 +69,6 @@ def index(path: Path, md: MarkdownIt) -> Source:
 
 
 def section(src: Source, heading: Heading | None) -> tuple[int, str]:
-    """(0-based first line, source) of a heading's section, or of the whole page below its title."""
     if heading is None:
         title = src.headings[0] if src.headings and src.headings[0].level == 1 else None
         first = title.line if title is not None else 0
@@ -108,7 +90,6 @@ class Target(NamedTuple):
 
 
 def resolve(raw: str, line: int, pages: dict[str, Path], md: MarkdownIt, cache: dict[str, Source]) -> Target:
-    """`page#Heading|shown` (inside the brackets) -> the chapter and heading it names; `line` is for the error."""
     ref, _, shown = raw.partition("|")
     stem, hashed, wanted = ref.partition("#")
     stem, wanted = stem.strip(), wanted.strip()
@@ -127,7 +108,6 @@ def resolve(raw: str, line: int, pages: dict[str, Path], md: MarkdownIt, cache: 
 
 
 def wikilink_rule(state: StateInline, silent: bool) -> bool:
-    """Inline rule: [[...]] -> one `wikilink` token holding the raw inner text and its offset in the block."""
     m = WIKILINK.match(state.src, state.pos, state.posMax)
     if m is None:
         return False
@@ -140,12 +120,10 @@ def wikilink_rule(state: StateInline, silent: bool) -> bool:
 
 
 def use(md: MarkdownIt) -> None:
-    """Teach md the [[...]] syntax; the renderer needs a `wikilink` rule (build_page.py's renders the target)."""
     md.inline.ruler.before("link", "wikilink", wikilink_rule)
 
 
 def wikilinks(tokens: Sequence[Token], line0: int) -> list[tuple[Token, int]]:
-    """Every wikilink token in a parsed document with its 1-based line (line0 = the document's first line - 1)."""
     found = []
     for block in tokens:
         if block.type != "inline" or not block.children:

@@ -1,11 +1,3 @@
-"""Accessibility lint for a built chapter page: axe-core in headless Chromium, every theme x light/dark.
-
-    uv run --with playwright a11y.py [url]      # default http://localhost:8010/01-flappy/
-
-Needs the page served (python3 -m http.server 8010 -d dist). Exits 1 if any violation is found.
-A page with [[links]] is audited twice per theme x scheme: as loaded, and with the first link's preview card open.
-"""
-
 import sys
 
 from playwright.sync_api import Browser, sync_playwright

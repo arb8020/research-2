@@ -1,14 +1,3 @@
-"""Drive the built page in headless Chromium against a running session; write .evidence/verify_page/ (gitignored).
-
-    uv run session.py rl/01-flappy.md --timeout 20      # in one tmux pane
-    python3 -m http.server 8010 -d dist                # in another
-    uv run --with playwright verify_page.py [url]      # default http://localhost:8010/01-flappy/
-
-The session URL is the one the page was built with (its session-url meta tag). The nn-fit and link cases also
-need ../neural-nets/ built next to it (build_page.py --all).
-Pastes the hidden C solution into the editor programmatically (testing only).
-"""
-
 from __future__ import annotations
 
 import glob
@@ -27,13 +16,14 @@ from check import parse
 HERE = Path(__file__).parent
 SHOTS = HERE / ".evidence" / "verify_page"
 PAGE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8010/01-flappy/"
-NEURAL_NETS = urljoin(PAGE, "../neural-nets/")  # the [[neural-nets#fitting a curve]] target, home of <nn-fit>
+NEURAL_NETS = urljoin(PAGE, "../neural-nets/")
 CHROME = sorted(glob.glob(os.path.expanduser(
     "~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")))[-1]  # fmt: skip
 BLOCKS = parse((HERE / "rl" / "01-flappy.md").read_text())
 SOLUTION = next(b.source for b in BLOCKS if b.role == "solution" and b.name == "flappy")
 STUB = next(b.source for b in BLOCKS if b.role == "cell" and b.name == "flappy")
 INJECT = "// increment env by a tick"
+PAST_LINK_CARD_GRACE_MS = 300
 assert INJECT in STUB, "verify_page injects crash/hang code at a stub comment that is gone"
 POLICY = """def init_policy(obs_dim: int, n_actions: int, hidden: int, seed: int) -> dict[str, torch.Tensor]:
     g = torch.Generator().manual_seed(seed)
@@ -54,7 +44,6 @@ SHOTS.mkdir(parents=True, exist_ok=True)
 
 
 def nn_fit_and_wip(browser: Browser, scheme: str) -> None:
-    """On neural-nets: the wip banner shows its text; <nn-fit> renders from its .nnfit file and its loss falls after Train."""
     page = browser.new_page(viewport={"width": 900, "height": 1000}, device_scale_factor=2, color_scheme=scheme)
     page.on("pageerror", lambda e: print("  pageerror:", e))
     page.goto(NEURAL_NETS)
@@ -64,7 +53,7 @@ def nn_fit_and_wip(browser: Browser, scheme: str) -> None:
     nn = page.locator("nn-fit")
     nn.scroll_into_view_if_needed()
     before = page.evaluate("document.querySelector('nn-fit').stats")
-    assert before["dataset"] == "wave" and before["sizes"] == [1, 12, 12, 1], before  # dl/neural-nets-fit.nnfit
+    assert before["dataset"] == "wave" and before["sizes"] == [1, 12, 12, 1], before
     assert before["steps"] == 0 and before["loss"] is not None, before
     nn.locator("button.train").click()
     page.wait_for_function("document.querySelector('nn-fit').stats.steps >= 200", timeout=20_000)
@@ -81,8 +70,6 @@ def nn_fit_and_wip(browser: Browser, scheme: str) -> None:
 
 
 def link_preview(browser: Browser, scheme: str) -> None:
-    """[[neural-nets#fitting a curve]] on 01-flappy: hover shows the card (title, section heading, a live <nn-fit>),
-    the card ignores the pointer for its 200ms grace, Escape closes, keyboard focus opens, click lands on #fitting-a-curve."""
     page = browser.new_page(viewport={"width": 900, "height": 900}, device_scale_factor=2, color_scheme=scheme)
     errors: list[str] = []
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -92,7 +79,6 @@ def link_preview(browser: Browser, scheme: str) -> None:
     assert link.count() == 1 and link.get_attribute("href") == "../neural-nets/#fitting-a-curve", link.get_attribute("href")
     page.evaluate("scrollBy(0, document.querySelector('page-link').getBoundingClientRect().top - 120)")
 
-    # Grace: an open card is not hit-testable at first, then is (dispatched in-page so the timing is exact).
     grace = page.evaluate("""async () => {
         const host = document.querySelector('page-link');
         host.dispatchEvent(new PointerEvent('pointerenter', {pointerType: 'mouse'}));
@@ -115,7 +101,7 @@ def link_preview(browser: Browser, scheme: str) -> None:
     page.wait_for_function("document.querySelector('.link-card nn-fit')?.stats?.loss != null")
     stats = page.evaluate("document.querySelector('.link-card nn-fit').stats")
     assert stats["dataset"] == "wave" and stats["sizes"] == [1, 12, 12, 1], stats
-    page.wait_for_timeout(300)  # past the grace; the card as a reader first sees it
+    page.wait_for_timeout(PAST_LINK_CARD_GRACE_MS)
     page.screenshot(path=SHOTS / f"link-card-{scheme}.png")
     card.screenshot(path=SHOTS / f"link-card-only-{scheme}.png")
     box = card.bounding_box()
@@ -126,8 +112,7 @@ def link_preview(browser: Browser, scheme: str) -> None:
     assert overflow <= 0, f"the page scrolls sideways by {overflow}px with the card open"
     nn_box = card.locator("nn-fit").bounding_box()
     assert nn_box is not None and nn_box["x"] + nn_box["width"] <= box["x"] + box["width"], (nn_box, box)
-    # Live: the card's own Train button trains its own net.
-    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + 40)  # into the card (after the grace)
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + 40)
     card.locator("nn-fit button.train").click()
     page.wait_for_function("document.querySelector('.link-card nn-fit').stats.steps >= 50", timeout=20_000)
     card.locator("nn-fit button.train").click()
@@ -137,7 +122,6 @@ def link_preview(browser: Browser, scheme: str) -> None:
     page.keyboard.press("Escape")
     assert card.count() == 0, "Escape should close the card"
 
-    # Keyboard: focus opens it, Escape closes it and focus stays on the link (no reopening).
     page.mouse.move(5, 5)
     page.evaluate("document.activeElement.blur()")
     link.focus()
@@ -156,7 +140,6 @@ def link_preview(browser: Browser, scheme: str) -> None:
 
 
 def link_on_touch(browser: Browser) -> None:
-    """(pointer: coarse): a tap navigates; no card."""
     context = browser.new_context(viewport={"width": 390, "height": 800}, is_mobile=True, has_touch=True)
     page = context.new_page()
     page.goto(PAGE)
@@ -194,7 +177,6 @@ with sync_playwright() as p:
                       " v.dispatch({changes: {from: 0, to: v.state.doc.length, insert: s}}); }", [name, src])  # fmt: skip
 
     def run(name: str) -> bool:
-        """Click Run; the verdict is the page's (the .pass/.fail it put on the output from the result line)."""
         start = time.perf_counter()
         cell(name).locator(".run").click()
         page.wait_for_selector(f'code-cell[name="{name}"] .cell-out:is(.pass, .fail)', timeout=60_000)

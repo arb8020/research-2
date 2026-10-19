@@ -1,21 +1,3 @@
-"""Local stand-in for a reader's session (later: a Modal sandbox behind a Cloudflare Durable Object).
-
-    uv run session.py rl/01-flappy.md [--port 8787] [--timeout 30]
-
-    POST /run {cell, source}   streams NDJSON (application/x-ndjson), one object per line:
-                                 {"out": "..."}                                  repeated, as output arrives
-                                 {"result": {"passed": bool, "message": "..."}}  exactly once, last
-                               message is one short line: "passed", the FAIL reason, "locked: X has not passed yet"
-    GET  /state                {"passed": {cell: latest passing source}, "wasm": {cell: "/wasm/<hash>/<cell>.js"}}
-    GET  /wasm/<hash>/<file>   play widget built from a reader's passing C cell
-
-Running cell X: check.run_cell with the given blocks, the reader's latest passing source for every
-cell before X, the posted source as X, then X's check (and budget). run_cell runs each in a fresh
-subprocess, so a crash or a hang in reader code kills only that subprocess, and returns a check.Result
-whose message becomes the result line. Reader code can only print into "out", so it can't fake a pass.
-Only a pass updates .session/<chapter>/state.json.
-"""
-
 from __future__ import annotations
 
 import argparse
