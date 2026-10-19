@@ -1,14 +1,3 @@
-"""Chapter 1's ops: what a check runs and what the right answer is (everything here is part of the expected answer's
-cache key, so editing this file recomputes expected answers; graders live in suite.py so editing them does not).
-
-Sections: op registry (`@op`), op specs (the references: linear, gelu, layer_norm, attention), case generator,
-numerics (error frontier + reductions, no thresholds), prompts, the model-level ops (gpt2 block, forward and generate vs
-HuggingFace).
-
-Dims are the series' letters (blogs/notes/ch01-design-2026-10-09.md, "notation"): T query len, S kv len, D d_model,
-F mlp hidden, N heads, H head dim, V vocab. The reader's `gpt2.py` names its tensors with the same suffixes.
-"""
-
 from __future__ import annotations
 
 import functools
@@ -28,33 +17,8 @@ from torch import Tensor
 
 NAMES = {"fp64": torch.float64, "fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}
 SHORT = {v: k for k, v in NAMES.items()}
-# An op case's input distribution (an axis of every op's sweep; "case generator" below says why):
-INPUTS = {"centered": (0.0, 1.0), "offset": (3.0, 0.5)}  # name -> (mean, std) of every float input tensor
+INPUTS = {"centered": (0.0, 1.0), "offset": (3.0, 0.5)}
 
-
-# --------------------------------------------------------------------------------------------------------------------
-# op registry
-#
-# The op registry: `@op` declares an op whose body IS the reference, `@<op>.register(name)` attaches an implementation,
-# and `bind(kernels=...)` picks one impl per op, once per process.
-#
-#     @op(dims={"T": (1, 3, 64), "D": (1, 7, 768)}, dtypes=(torch.float32,))
-#     def layer_norm(x_TD: Float[Tensor, "T D"], ...) -> Float[Tensor, "T D"]:
-#         return ...                                # the reference, in plain torch math
-#
-#     @layer_norm.register("mine")                  # in a kernel file
-#     def my_layer_norm(x, ...): ...
-#
-#     bind(kernels={layer_norm: "mine"})            # once per process; then frozen
-#     layer_norm(x, ...)                            # -> my_layer_norm
-#
-# Chapter 1 keeps this a PLAIN Python registry (a dict lookup and a call); `bind(..., torch_ops=True)` is the chapter 8
-# seam (torch custom ops). The checks do NOT go through `bind`: they name a candidate by file + function and run it in
-# an isolated child, so a candidate is never imported by the process that holds the expected answers.
-#
-# `REGISTRY` and `_BOUND` are module globals, an accepted exception: which impl a process dispatches is a fact about the
-# process (as torch.library kernels are), and op declarations are import-time side effects by design.
-# --------------------------------------------------------------------------------------------------------------------
 
 REGISTRY: dict[str, Op] = {}
 _BOUND: list[Binding] = []
@@ -64,41 +28,34 @@ _BOUND: list[Binding] = []
 class Impl:
     name: str
     fn: Callable[..., Any]
-    source: str | None  # provenance: the upstream symbol it wraps
+    source: str | None
 
 
 @dataclass(frozen=True)
 class Sweep:
-    """What the case generator crosses: edge sizes per named dim, values per scalar argument, dtypes. A `tied` dim
-    takes another dim's size instead of its own sweep (attention's S = T: no KV cache in chapter 1)."""
-
     dims: dict[str, tuple[int, ...]]
     scalars: dict[str, tuple[float, ...]]
     dtypes: tuple[torch.dtype, ...]
     tied: dict[str, str] = field(default_factory=dict)
-    inputs: tuple[str, ...] = ()  # input distributions (INPUTS), crossed like a dim; model ops: none
+    inputs: tuple[str, ...] = ()
 
 
-@dataclass(eq=False)  # identity hash: ops key bind()'s kernels= dict
+@dataclass(eq=False)
 class Op:
-    """One op: its reference body, sweep and check policy. `kind="model"` is a model-level check (always blocks; cases
-    come from `cases_fn`, e.g. prompts, not from dims). Mutated only by its own decorators at import time."""
-
     name: str
     reference: Callable[..., Any]
     sweep: Sweep
     kind: str = "op"
     blocking: bool = True
     impls: dict[str, Impl] = field(default_factory=dict)
-    truth_fn: Callable[..., Any] | None = None  # fp64 truth when upcasting the inputs is not enough
-    inputs_fn: Callable[..., tuple] | None = None  # (case, generator) -> args, overriding randn per tensor
-    cases_fn: Callable[[], list[Any]] | None = None  # model ops: the explicit case list
+    truth_fn: Callable[..., Any] | None = None
+    inputs_fn: Callable[..., tuple] | None = None
+    cases_fn: Callable[[], list[Any]] | None = None
 
     def __repr__(self) -> str:
         return f"<op {self.name} impls={sorted(self.impls)}>"
 
     def __call__(self, *args: Any) -> Any:
-        """Dispatch to whatever `bind` chose. Unbound is an error, not a silent reference run."""
         if not _BOUND:
             raise RuntimeError(f"{self.name} called before bind(); call bind(kernels={{...}}) once at startup")
         return _BOUND[0].impls[self.name].fn(*args)
@@ -133,8 +90,6 @@ class Op:
 def op(*, dims: dict[str, tuple[int, ...]], dtypes: tuple[torch.dtype, ...],
        scalars: dict[str, tuple[float, ...]] | None = None, name: str | None = None,
        blocking: bool = True, kind: str = "op", tied: dict[str, str] | None = None) -> Callable[[Callable[..., Any]], Op]:
-    """Declare an op whose body is the reference. `dims` gives each named dim its edge sizes; `scalars` gives each
-    float argument its values; the case generator crosses them with `dtypes`."""
     assert kind in ("op", "model"), kind
     assert dtypes, "an op needs at least one dtype"
     assert not (kind == "model" and not blocking), "model-level checks always block"
@@ -160,12 +115,10 @@ class Binding:
     impls: dict[str, Impl]
 
     def line(self) -> str:
-        """`kernels: layer_norm=mine gelu=reference ...`, the line a script logs."""
         return "kernels: " + " ".join(f"{n}={i.name}" for n, i in sorted(self.impls.items()))
 
 
 def bind(kernels: dict[Op, str] | None = None, *, torch_ops: bool = False) -> Binding:
-    """Choose one impl per op, once per process; ops not named run their reference."""
     if torch_ops:
         raise NotImplementedError("torch custom-op wrapping lands with the kernel dispatch layer (chapter 8)")
     if _BOUND:
@@ -185,18 +138,9 @@ def bind(kernels: dict[Op, str] | None = None, *, torch_ops: bool = False) -> Bi
     return binding
 
 
-# --------------------------------------------------------------------------------------------------------------------
-# op specs
-#
-# Chapter 1's op specs: each body is the reference (plain torch math), each annotation names the dims the sweep sizes.
-# Signatures are the reader's: `gpt2.py` defines functions with these names and arguments (positional; a check binds
-# by name). Linear weights are [in, out] (GPT-2's checkpoint layout), applied as x @ w.
-# --------------------------------------------------------------------------------------------------------------------
-
 ALL = (torch.float32, torch.float16, torch.bfloat16)
 
 
-# 768 -> 2304 is gpt2's qkv projection; 1 and 7 are the odd edges.
 @op(dims={"T": (1, 3, 17, 64), "D": (1, 7, 768), "F": (1, 5, 2304)}, dtypes=ALL)
 def linear(x_TD: Float[Tensor, "T D"], w_DF: Float[Tensor, "D F"], b_F: Float[Tensor, "F"]) -> Float[Tensor, "T F"]:
     return x_TD @ w_DF + b_F
@@ -204,72 +148,40 @@ def linear(x_TD: Float[Tensor, "T D"], w_DF: Float[Tensor, "D F"], b_F: Float[Te
 
 @op(dims={"T": (1, 3, 64), "F": (1, 7, 768, 3072)}, dtypes=ALL)
 def gelu(x_TF: Float[Tensor, "T F"]) -> Float[Tensor, "T F"]:
-    """GPT-2's GELU, the tanh approximation: 0.5 x (1 + tanh(sqrt(2/pi) (x + 0.044715 x^3)))."""
     return 0.5 * x_TF * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (x_TF + 0.044715 * x_TF ** 3)))
 
 
-# T/D = 1 are the degenerate rows (variance exactly 0: only eps keeps it finite); 17 / 769 are tile+1 sizes;
-# eps=0.1 makes a missing eps visible.
 @op(dims={"T": (1, 2, 3, 17, 64), "D": (1, 3, 7, 64, 769)}, dtypes=ALL, scalars={"eps": (1e-5, 1e-1)})
 def layer_norm(x_TD: Float[Tensor, "T D"], w_D: Float[Tensor, "D"], b_D: Float[Tensor, "D"],
                eps: float) -> Float[Tensor, "T D"]:
-    """(x - mean) / sqrt(var + eps) * w + b over D; biased variance."""
     mean = x_TD.mean(dim=-1, keepdim=True)
     var = ((x_TD - mean) ** 2).mean(dim=-1, keepdim=True)
     return (x_TD - mean) / torch.sqrt(var + eps) * w_D + b_D
 
 
-# One sequence, all heads: q [T, N, H], k/v [S, N, H], S = T (no KV cache yet). T=1 is a lone query; 16/17 straddle a
-# tile; H=1 makes the scale a no-op, so the sweep must also cross H 8/64 with T > 1 (pairwise does).
 @op(dims={"T": (1, 2, 7, 16, 17, 64), "N": (1, 2, 12), "H": (1, 8, 64)}, tied={"S": "T"}, dtypes=ALL)
 def attention(q_TNH: Float[Tensor, "T N H"], k_SNH: Float[Tensor, "S N H"],
               v_SNH: Float[Tensor, "S N H"]) -> Float[Tensor, "T N H"]:
-    """softmax(q k^T / sqrt(H)) v per head, query t seeing keys s <= t."""
-    q, k, v = (t.transpose(0, 1) for t in (q_TNH, k_SNH, v_SNH))  # [N, T|S, H]
+    q, k, v = (t.transpose(0, 1) for t in (q_TNH, k_SNH, v_SNH))
     T, S = q.shape[-2], k.shape[-2]
     scores = q @ k.transpose(-1, -2) / math.sqrt(q.shape[-1])
-    allowed = torch.ones(T, S, dtype=torch.bool, device=q.device).tril()  # key s visible to query t iff s <= t
+    allowed = torch.ones(T, S, dtype=torch.bool, device=q.device).tril()
     return (torch.softmax(scores.masked_fill(~allowed, float("-inf")), dim=-1) @ v).transpose(0, 1)
 
 
-# --------------------------------------------------------------------------------------------------------------------
-# case generator
-#
-# The case generator: an op's named dims x its scalar values x its dtypes -> a list of `Case`s,
-# and a `Case` + a seeded `torch.Generator` -> concrete inputs. A model op lists its cases itself (`@op.cases`).
-#
-# Shapes come from the reference's own annotations (`x_TD: Float[Tensor, "T D"]`, popcorn
-# style, via jaxtyping); sizes come from the op's `dims=` -- explicit edge values per dim (1,
-# small primes, tile +- 1, the largest size that matters). Small sweeps are the full cross product;
-# past `FULL_PRODUCT_LIMIT` cases it is a pairwise covering array (every pair of values across
-# every two axes appears in some case) plus the all-smallest and all-largest corners.
-#
-# Every case owns its seed (crc32 of op name + case label), so a case is reproducible on its own:
-# `run_checks ch01 --op layer_norm` and a failing case re-run give the same tensors.
-#
-# Inputs come from one of INPUTS, an axis of the sweep like a dim: `centered` (randn) and `offset` (mean 3, spread
-# 0.5). Offset inputs keep "return zeros", a forgotten mean or a forgotten bias from passing by accident, and they are
-# ill-conditioned enough (mean / spread = 6) to show a low-precision mean or variance, without making correct fp32
-# code fail. The spread was picked against the tolerances (suite.py, TOL): at spread 1.0 naive bf16 attention got
-# worse, not better.
-# --------------------------------------------------------------------------------------------------------------------
-
-FULL_PRODUCT_LIMIT = 64  # past this many cases, cover pairs instead of the full product
+FULL_PRODUCT_LIMIT = 64
 
 
 @dataclass(frozen=True)
 class Case:
-    """One point of an op's sweep: a size per named dim, a value per scalar argument, a dtype."""
-
     sizes: tuple[tuple[str, int], ...]
     scalars: tuple[tuple[str, float], ...]
     dtype: torch.dtype
     seed: int
-    prompt: str = ""  # model cases: which prompt
-    inputs: str = ""  # op cases: which input distribution (INPUTS)
+    prompt: str = ""
+    inputs: str = ""
 
     def label(self) -> str:
-        """`T=3 D=7 eps=1e-05 x=offset` -- the shape part of a verdict's case (the dtype is its own field)."""
         parts = [f"prompt={self.prompt}"] if self.prompt else []
         parts += [f"{n}={v}" for n, v in self.sizes] + [f"{n}={v:g}" for n, v in self.scalars]
         parts += [f"x={self.inputs}"] if self.inputs else []
@@ -285,7 +197,6 @@ class Case:
 
 
 def sweep(declared: Op) -> list[Case]:
-    """Every case the op is checked on, in a fixed order."""
     if declared.cases_fn is not None:
         return declared.cases_fn()
     _assert_dims_match(declared)
@@ -311,7 +222,6 @@ def sweep(declared: Op) -> list[Case]:
 
 
 def make_inputs(declared: Op, case: Case) -> tuple:
-    """The case's concrete arguments, drawn from the case's own seeded generator."""
     generator = torch.Generator().manual_seed(case.seed)
     if declared.inputs_fn is not None:
         return declared.inputs_fn(case, generator)
@@ -344,8 +254,6 @@ def _is_tensor_annotation(annotation: Any) -> bool:
 
 
 def _assert_dims_match(declared: Op) -> None:
-    """Every dim an input annotation names has sizes in `dims=`, and every `dims=` entry is used.
-    (The return annotation is documentation: its dims may be fixed by the op, like `vocab`.)"""
     used = {dim for _, annotation in _params(declared) if _is_tensor_annotation(annotation)
             for dim in annotation.dim_str.split()}
     sized = set(declared.sweep.dims)
@@ -354,10 +262,6 @@ def _assert_dims_match(declared: Op) -> None:
 
 
 def _pairwise_with_corners(axes: list[tuple[Any, ...]]) -> list[tuple[int, ...]]:
-    """Greedy covering array over value INDICES: every (axis a value i, axis b value j) pair is
-    in some row. Each row starts from the smallest uncovered pair and fills the other axes with
-    whichever value covers the most still-uncovered pairs, so every row covers >= 1 new pair
-    and the loop ends. Then the all-first and all-last rows (the corners a pair list can miss)."""
     uncovered = {(a, i, b, j)
                  for a, b in itertools.combinations(range(len(axes)), 2)
                  for i in range(len(axes[a])) for j in range(len(axes[b]))}
@@ -386,47 +290,27 @@ def _gain(uncovered: set, row: dict[int, int], axis: int, value: int) -> int:
                for other, chosen in row.items())
 
 
-# --------------------------------------------------------------------------------------------------------------------
-# numerics
-#
-# Numbers, no thresholds: the reductions of an output vs fp64 truth that a Run stores (all a grader needs, so grades
-# never need the full output again), and the same for the reference at the case's dtype (context only).
-#
-# Chapter 1's op gate is allclose against the fp64 truth T (suite.py has the (atol, rtol) per dtype):
-#
-#     pass  iff  |C - T| <= atol + rtol |T|  for every element      shown as  max |C - T| / (atol + rtol |T|)
-#
-# A Run keeps the error frontier: the (|T|, |C - T|) pairs no other element beats on both (smaller |T|, bigger error).
-# The ratio above is largest on one of them for ANY (atol, rtol), so changing the tolerances regrades stored runs
-# exactly, without re-running. Later chapters replace this with the principled per-op tolerances
-# (blogs/engine/correctness.md).
-# --------------------------------------------------------------------------------------------------------------------
-
 TOPK = 5
 
 
 def max_abs(a: torch.Tensor, b: torch.Tensor) -> float:
-    """max |a - b| in fp64; inf if either side has a non-finite value where the other does not match it."""
     diff = (a.double() - b.double()).abs()
     return float(diff.max()) if diff.numel() and bool(torch.isfinite(diff).all()) else (
         0.0 if diff.numel() == 0 else math.inf)
 
 
 def is_logits(truth: torch.Tensor) -> bool:
-    """[T, V] over GPT-2's vocabulary (forward's output). Not "last dim > 1000": linear's [T, 2304] is not logits."""
     return truth.dim() == 2 and truth.shape[-1] == VOCAB
 
 
 def reference_stats(truth: torch.Tensor, reference: torch.Tensor) -> dict[str, Any]:
-    """The reference's own error at its dtype (its frontier: context for a verdict), and the truth's scale. Truth must
-    be finite or the case is broken."""
     assert truth.dtype == torch.float64, f"truth must be fp64, got {truth.dtype}"
     assert reference.shape == truth.shape, f"reference {tuple(reference.shape)} vs truth {tuple(truth.shape)}"
     assert bool(torch.isfinite(truth).all()), "truth has non-finite values: a broken case"
     assert bool(torch.isfinite(reference).all()), "the reference has non-finite values at its dtype"
     stats: dict[str, Any] = {"ref_err": max_abs(reference, truth),
                              "scale": float(truth.abs().max()) if truth.numel() else 0.0}
-    if is_logits(truth):  # logits: the reference's own KL, for context
+    if is_logits(truth):
         stats["ref_kl_max"] = float(kl_per_position(truth, reference).max())
     elif reference.is_floating_point():
         stats["ref_frontier"] = frontier(reference, truth)
@@ -434,9 +318,6 @@ def reference_stats(truth: torch.Tensor, reference: torch.Tensor) -> dict[str, A
 
 
 def frontier(out: torch.Tensor, truth: torch.Tensor) -> list[list[float]]:
-    """[[|T|, |C - T|], ...]: the elements no other element dominates (one with |T| <= and error >=). For every
-    atol, rtol >= 0, max_i |C-T|_i / (atol + rtol |T|_i) is attained on this list (the ratio grows with the error and
-    shrinks with |T|), so a grader can apply any tolerance to it. A non-finite output -> [[0, inf]]."""
     err = (out.double() - truth).abs().reshape(-1)
     size = truth.abs().reshape(-1)
     if err.numel() == 0:
@@ -445,8 +326,6 @@ def frontier(out: torch.Tensor, truth: torch.Tensor) -> list[list[float]]:
         return [[0.0, math.inf]]
     order = torch.argsort(size, stable=True)
     size, err = size[order], err[order]
-    # walking up |T|, keep each element whose error beats every error at a smaller-or-equal |T|; among equal |T|
-    # only the largest error matters, which this keeps too (a later equal-|T| element with more error is also kept)
     best = torch.cummax(err, dim=0).values
     keep = torch.ones_like(err, dtype=torch.bool)
     keep[1:] = best[1:] > best[:-1]
@@ -454,24 +333,19 @@ def frontier(out: torch.Tensor, truth: torch.Tensor) -> list[list[float]]:
 
 
 def tolerance_ratio(points: list[list[float]], atol: float, rtol: float) -> tuple[float, float, float]:
-    """(max |C - T| / (atol + rtol |T|), and that element's |T| and error) over a frontier: ratio <= 1 iff
-    allclose(C, T, atol, rtol) elementwise. Stored infinities come back as "inf" strings: float() takes both."""
     rows = [(float(e) / (atol + rtol * float(t)), float(t), float(e)) for t, e in points]
     return max(rows, default=(0.0, 0.0, 0.0))
 
 
 def kl_per_position(truth: torch.Tensor, ours: torch.Tensor) -> torch.Tensor:
-    """KL(softmax(truth) || softmax(ours)) for each row -> [T], nats, fp64."""
     lp_truth = torch.log_softmax(truth.double(), dim=-1)
     lp_ours = torch.log_softmax(ours.double(), dim=-1)
     return (lp_truth.exp() * (lp_truth - lp_ours)).sum(-1)
 
 
 def reduce_output(out: torch.Tensor, truth: torch.Tensor) -> dict[str, Any]:
-    """What a Run keeps about an output that matched truth's shape: its error, and for logits the per-position
-    stats + top-k logprobs (the reduced artifact: [T, vocab] logits are ~200 MB at 1024 tokens)."""
     facts: dict[str, Any] = {"err": max_abs(out, truth), "finite": bool(torch.isfinite(out).all())}
-    if not out.is_floating_point():  # token ids: where the first one differs
+    if not out.is_floating_point():
         bad = (out.double() != truth).nonzero()
         first = int(bad[0, 0]) if len(bad) else None
         facts["first_diff"] = None if first is None else {"at": first, "got": int(out[first]), "want": int(truth[first])}
@@ -498,12 +372,6 @@ def reduce_output(out: torch.Tensor, truth: torch.Tensor) -> dict[str, Any]:
     })
     return facts
 
-
-# --------------------------------------------------------------------------------------------------------------------
-# prompts
-#
-# Fixed text for the measurement prompts. Prose is public domain (Dickens, Lincoln, Melville, Austen).
-# --------------------------------------------------------------------------------------------------------------------
 
 TWO_CITIES = (
     "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of "
@@ -574,46 +442,21 @@ if __name__ == "__main__":
 
 UNICODE = "Café naïve façade — “smart quotes” 日本語のテキスト 🤖🚀 Ελληνικά, русский, عربي. ∑∫√ ≠ ≈"
 
-# Perplexity text: Moby-Dick's opening (~250 tokens). Not in any prompt other than near_limit.
 PERPLEXITY = MOBY_DICK
 
-# Long text for the near-limit prompts; tokenized and cut to an exact token count by the harness.
 LONG = TWO_CITIES + GETTYSBURG + PRIDE + CODE + "\n" + MOBY_DICK + UNICODE + "\n\n" + GETTYSBURG
 
 
-# --------------------------------------------------------------------------------------------------------------------
-# model-level ops: gpt2 block, forward, generate
-#
-# The model-level ops run the reader's `gpt2.py` with GPT-2's real weights against HuggingFace GPT2LMHeadModel (eager
-# attention); the truth is the same model in fp64 on the candidate's device. Cases are long, non-repetitive prompts:
-# 1-token and repetitive prompts hide the attention-scale and mask bugs (engine/ch01-forward RESULTS.md).
-#
-#     block     x_TD (HF's fp32 residual stream entering layer i) -> block i's output [T, D]
-#     forward   token ids [T] -> logits [T, V]
-#     generate  prompt ids [T], n -> the n greedy next tokens (HF's own greedy loop on the same model)
-#
-# The candidate side is the reader's `gpt2.py`: `load(dtype, device) -> (weights, config)` (given), then
-# `block(x_TD, weights.layers[i], config)`, `forward(weights, config, tokens_T)`, `generate(weights, config, ids, n)`;
-# the child's adapters (run.py) load once per dtype.
-# --------------------------------------------------------------------------------------------------------------------
-
 MODEL_ID = "openai-community/gpt2"
 VOCAB = 50257
-# name -> (text, token count). ~384 and ~192 tokens: long enough that every planted bug shows (KL >= 2e-5 on the
-# subtlest, exact GELU, at 69-111 tokens), short enough that the fp64 truth (T x 50257 x 8 bytes) stays ~230 MB.
 PROMPTS = {"prose": (LONG, 384), "code": (CODE + "\n" + UNICODE + "\n" + MOBY_DICK, 192)}
-# first, middle, and the last that fits fp32's one allclose tolerance (the stream's largest entries grow from ~90 into
-# block 0 to ~3000 by block 5). Block 11
-# is left to forward's KL gate: HF's own fp32 block 11 lands 4e-4 from fp64 on small entries (its MLP sums huge
-# terms), 1.5x fp32's atol (suite.py, TOL), while every other block stays under 0.25x.
 BLOCK_LAYERS = (0, 5, 10)
 BLOCK_TOKENS = 128
-GENERATE = {"moby": (MOBY_DICK, 64, 24)}  # name -> (text, prompt tokens, new tokens); margin 0.078 (vs fp32 err ~7e-3)
-GENERATE_MIN_MARGIN = 0.05  # every fp64 greedy step's top-1 beats its top-2 by this many logits (not a near tie)
+GENERATE = {"moby": (MOBY_DICK, 64, 24)}
+GENERATE_MIN_MARGIN = 0.05
 
 
 def _local_first(load: Any) -> Any:
-    """From the HF cache without touching the network (each check would pay a HEAD request per file), else download."""
     try:
         return load(local_files_only=True)
     except OSError:
@@ -649,9 +492,6 @@ def hf_model(dtype: torch.dtype, device: str) -> torch.nn.Module:
     return model.to(device).eval()
 
 
-# ---- forward ----
-
-
 @op(name="forward", kind="model", dims={}, dtypes=(torch.float32, torch.bfloat16))
 def forward(tokens_T: Int[Tensor, "T"]) -> Float[Tensor, "T V"]:
     with torch.no_grad():
@@ -671,7 +511,6 @@ def _forward_inputs(case: Case, generator: torch.Generator) -> tuple:
 
 @forward.truth
 def _forward_truth(case: Case, inputs: tuple, device: str) -> tuple[Tensor, Tensor]:
-    """(fp64 truth, the reference at the case's dtype), both HF, both on `device`."""
     tokens = inputs[0].to(device)[None]
     with torch.no_grad():
         truth = hf_model(torch.float64, device)(tokens, use_cache=False).logits[0]
@@ -679,11 +518,7 @@ def _forward_truth(case: Case, inputs: tuple, device: str) -> tuple[Tensor, Tens
     return truth, reference
 
 
-# ---- block ----
-
-
 def hf_block(dtype: torch.dtype, device: str, layer: int, x_TD: Tensor) -> Tensor:
-    """HF's block `layer` on one sequence, causal (called alone, a GPT2Block masks nothing: we pass the mask)."""
     T = x_TD.shape[0]
     mask = torch.full((T, T), float("-inf"), dtype=dtype, device=device).triu(1)[None, None]
     with torch.no_grad():
@@ -692,11 +527,10 @@ def hf_block(dtype: torch.dtype, device: str, layer: int, x_TD: Tensor) -> Tenso
 
 @functools.cache
 def _residual_stream(prompt: str, count: int) -> tuple[Tensor, ...]:
-    """HF fp32's residual stream entering each block (hidden_states[i] for block i), on CPU."""
     tokens = torch.tensor(text_ids(PROMPTS[prompt][0], count, prompt))[None]
     with torch.no_grad():
         out = hf_model(torch.float32, "cpu")(tokens, use_cache=False, output_hidden_states=True)
-    return tuple(h[0] for h in out.hidden_states[:-1])  # the last one has ln_f applied: not a block input
+    return tuple(h[0] for h in out.hidden_states[:-1])
 
 
 @op(name="block", kind="model", dims={}, dtypes=(torch.float32, torch.bfloat16))
@@ -712,7 +546,6 @@ def _block_cases() -> list[Case]:
 
 @block.inputs
 def _block_inputs(case: Case, generator: torch.Generator) -> tuple:
-    """fp32 whatever the case's dtype (the run casts): the inputs, so the truth, are shared across dtypes."""
     layer = dict(case.sizes)["layer"]
     return (_residual_stream(case.prompt, BLOCK_TOKENS)[layer].clone(), layer)
 
@@ -723,11 +556,7 @@ def _block_truth(case: Case, inputs: tuple, device: str) -> tuple[Tensor, Tensor
     return hf_block(torch.float64, device, layer, x_TD), hf_block(case.dtype, device, layer, x_TD)
 
 
-# ---- generate ----
-
-
 def hf_greedy(dtype: torch.dtype, device: str, ids: list[int], n: int) -> tuple[list[int], float]:
-    """HF's greedy continuation (recomputing the prefix, like the reader's) and its smallest top-1 - top-2 margin."""
     ids, margin = list(ids), math.inf
     model = hf_model(dtype, device)
     with torch.no_grad():
@@ -758,8 +587,6 @@ def _generate_inputs(case: Case, generator: torch.Generator) -> tuple:
 
 @generate.truth
 def _generate_truth(case: Case, inputs: tuple, device: str) -> tuple[Tensor, Tensor]:
-    """(fp64 greedy tokens as fp64, fp32 greedy tokens). A prompt whose greedy path has a near tie is a broken case:
-    a correct fp32 implementation could take the other branch, so the case asserts it has none."""
     prompt, n = inputs[0].tolist(), inputs[1]
     truth, margin = hf_greedy(torch.float64, device, prompt, n)
     reference, _ = hf_greedy(case.dtype, device, prompt, n)

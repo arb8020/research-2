@@ -1,7 +1,3 @@
-"""workspace.py's trusted-code check (blogs/workspace.py ships with assay as _blogs/): bytecode caches under _blogs/ are
-deleted before the manifest is verified, because Python runs a matching cached .pyc instead of the verified source,
-even with -B."""
-
 from __future__ import annotations
 
 import importlib.util
@@ -20,7 +16,6 @@ import workspace  # noqa: E402 -- blogs/workspace.py, stdlib only
 
 @pytest.fixture
 def state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A _blogs/ as the page ships it: workspace.py, the assay package (.py only), MANIFEST.sha256."""
     root = tmp_path / "_blogs"
     shutil.copytree(ASSAY / "assay", root / "assay", ignore=shutil.ignore_patterns("__pycache__", "*.md"))
     shutil.copy2(BLOGS / "workspace.py", root / "workspace.py")
@@ -30,7 +25,6 @@ def state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def forged_pyc(source: Path, body: str) -> bytes:
-    """A .pyc of `body` whose header claims `source`'s mtime and size: what the import system checks before using it."""
     stat = source.stat()
     code = compile(body, str(source), "exec")
     return (importlib.util.MAGIC_NUMBER + (0).to_bytes(4, "little") + int(stat.st_mtime).to_bytes(4, "little")
@@ -38,7 +32,6 @@ def forged_pyc(source: Path, body: str) -> bytes:
 
 
 def import_cli(root: Path) -> str:
-    """What `python -B -c 'import assay.cli'` prints with only _blogs/ on the path (how workspace.py runs checks)."""
     proc = subprocess.run([sys.executable, "-B", "-P", "-c", "import assay.cli as c; print(c.CHAPTERS['ch01'])"],
                           env={"PYTHONPATH": str(root)}, capture_output=True, text=True, check=True)
     return proc.stdout.strip()
@@ -51,7 +44,7 @@ def test_a_planted_pyc_runs_under_dash_b_until_dropped(state: Path) -> None:
     (cache / f"cli.{tag}.pyc").write_bytes(forged_pyc(state / "assay" / "cli.py", "CHAPTERS = {'ch01': 'planted'}"))
     assert import_cli(state) == "planted", "the premise: -B still imports a cached .pyc whose header matches"
 
-    (state / "__pycache__").mkdir()  # workspace.py's own cache, and one deeper in the package
+    (state / "__pycache__").mkdir()
     (state / "__pycache__" / f"workspace.{tag}.pyc").write_bytes(b"stale")
     (state / "assay" / "ch01" / "__pycache__").mkdir()
     fingerprint = workspace.verify_trusted(None)

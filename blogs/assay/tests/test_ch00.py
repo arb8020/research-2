@@ -1,6 +1,3 @@
-"""The ch00 toy goes through the core: its own run_checks shim, a Run per cell (cached), a trace-diff grader that
-creates its diff artifact, and a verdict that points at file:line."""
-
 from __future__ import annotations
 
 import shutil
@@ -37,7 +34,7 @@ def test_toy_passes_through_the_core_and_caches(tmp_path: Path) -> None:
 def test_wrong_scheduler_fails_with_the_trace_line(tmp_path: Path) -> None:
     tree, store = toy_tree(tmp_path), tmp_path / "store"
     loop = tree / "loop.cpp"
-    loop.write_text(loop.read_text().replace("r->prompt_len : 1;", "r->prompt_len : 2;"))  # decode costs 2
+    loop.write_text(loop.read_text().replace("r->prompt_len : 1;", "r->prompt_len : 2;"))
     code, lines = run_checks(["ch00", "--op", "loop"], tree, store, shim=tree / "run_checks")
     verdict = next(v for v in lines if v["kind"] == "verdict")
     assert code == 1

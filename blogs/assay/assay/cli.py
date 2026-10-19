@@ -76,7 +76,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def client(argv: list[str]) -> int:
-    """Hand the check to a fork of the warm process; copy its JSON lines to stdout; exit code from its summary."""
     def log(text: str) -> None:
         print(json.dumps({"kind": "log", "text": text}), flush=True)
 
@@ -93,7 +92,7 @@ def client(argv: list[str]) -> int:
     except (OSError, RuntimeError) as exc:
         log(f"warm process unavailable ({exc}); running without it")
         return worker(argv, out_fd=sys.stdout.fileno(), client_pid=None)
-    code = EXIT["error"]  # no summary line = the worker died: infrastructure, not evidence
+    code = EXIT["error"]
     with os.fdopen(read_end, "r") as stream:
         for line in stream:
             sys.stdout.write(line)
@@ -118,7 +117,7 @@ class Emitter:
         try:
             while data:
                 data = data[os.write(self.fd, data):]
-        except BrokenPipeError:  # whoever reads us is gone: stop, and take our children with us
+        except BrokenPipeError:
             _abandon()
 
     def log(self, text: str) -> None:
@@ -126,12 +125,11 @@ class Emitter:
 
 
 def worker(argv: list[str], *, out_fd: int, client_pid: int | None) -> int:
-    """Run the checks here (in the trusted fork, or in-process with --spawn); returns the exit code."""
     args = parse(argv)
     emit = Emitter(out_fd)
     if client_pid is not None:
         threading.Thread(target=_watchdog, args=(client_pid,), daemon=True).start()
-    else:  # in-process: a Stop (SIGTERM to our process group) must also end children that lead their own sessions
+    else:
         signal.signal(signal.SIGTERM, lambda signum, frame: _abandon())
     store = core.Store.from_env()
     iso = core.isolation()
@@ -178,7 +176,6 @@ def summarize(records: list[dict[str, Any]], selftest: bool) -> tuple[str, dict[
 
 
 def report(store: core.Store, session: str | None) -> str:
-    """One row per verdict of a stored session: what ran, what it was graded by, and why it failed."""
     if session is None:
         index = (store.root / "index.jsonl").read_text().splitlines()
         sessions = [json.loads(line) for line in index if json.loads(line)["kind"] == "session"]
@@ -209,7 +206,6 @@ def report(store: core.Store, session: str | None) -> str:
 
 
 def _watchdog(client_pid: int) -> None:
-    """The client (run_checks, killed by a Stop or a timeout) is gone: kill our children and exit."""
     while core.pid_alive(client_pid):
         time.sleep(0.25)
     _abandon()

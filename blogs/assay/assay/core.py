@@ -1,19 +1,3 @@
-"""The check core, domain-agnostic: a store of cached derivations, grading, isolation, and the warm process.
-
-    run      a chapter produces Runs: immutable store entries keyed by a fingerprint of everything they depend on
-             (candidate code, case, env: chip / dtype / toolchain / versions, the trusted run code)
-    grade    grade(store, run, grader) -> a Grade entry, keyed by (run, grader fingerprint): ordered Checks, smevals'
-             result shape, `required` halts, skipped checks recorded, `creates` promised files; a changed grader
-             regrades stored runs without re-running them
-    isolate  untrusted code (the reader's file, a compiled check) runs in a child: unprivileged when we are root,
-             same-uid (and recorded as such) otherwise; frames are JSON + raw bytes, never pickle; timeouts kill
-             the child's whole process group
-    warm     a fork server with torch + transformers imported once: a check forks a trusted worker from it, and the
-             worker's candidate children fork from it too (dropping privileges before importing the candidate)
-
-Sections: store, grading, isolation (commands, frames, Child), warm process.
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -44,35 +28,16 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
-# ====================================================================================================================
-# store
-#
-# The store: cached derivations as immutable entry dirs, keyed by a fingerprint of everything they depend on.
-#
-#     <root>/<kind>/<key[:2]>/<key>/      one entry: its files + meta.json (written LAST: the "complete" marker)
-#     <root>/index.jsonl                  one line per entry ever written (kind, key, created, summary)
-#     <root>/tmp/                         entries being written; renamed into place when done
-#
-# Kinds used: "truth" + "expected" (a trusted reference run), "run" (the candidate's outputs), "grade" (a grader applied to a run),
-# "session" (one run_checks invocation: which runs and grades it produced). An entry is never rewritten: a different
-# input is a different key. A dir without meta.json is an interrupted write and reads as missing.
-#
-# Location: $ASSAY_STORE, else $BLOGS_WS_PERSIST/cache/assay, else ~/.cache/blogs-assay. When the parent runs as root
-# the store is made root-only (0700), so an unprivileged child can neither read expected answers nor poison entries.
-# ====================================================================================================================
-
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
 def canonical(obj: Any) -> bytes:
-    """JSON with sorted keys and no whitespace: the bytes a key is the hash of."""
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
 def jsonable(obj: Any) -> Any:
-    """JSON has no NaN/inf: store them as strings, so a non-finite metric stays visible instead of crashing a write."""
     if isinstance(obj, float) and not math.isfinite(obj):
         return str(obj)
     if isinstance(obj, dict):
@@ -83,12 +48,10 @@ def jsonable(obj: Any) -> Any:
 
 
 def key_of(parts: Mapping[str, Any]) -> str:
-    """The cache key of a derivation: sha256 of its canonical inputs. Same parts -> same key, always."""
     return sha256(canonical(parts))
 
 
 def files_fp(paths: Iterable[Path], root: Path) -> str:
-    """Fingerprint of source files by content and path relative to `root` (renaming a file changes it)."""
     listing = {p.relative_to(root).as_posix(): sha256(p.read_bytes()) for p in sorted(paths)}
     assert listing, f"no files to fingerprint under {root}"
     return key_of(listing)
@@ -98,11 +61,10 @@ def files_fp(paths: Iterable[Path], root: Path) -> str:
 class Entry:
     kind: str
     key: str
-    path: Path | None  # None: an ephemeral entry (graded, never stored: e.g. a run that timed out)
+    path: Path | None
     meta: dict[str, Any]
 
     def read(self, name: str) -> bytes:
-        """A file of the entry, checked against the sha256 recorded when it was written."""
         want = self.meta["files"][name]
         assert self.path is not None, f"{self.kind}/{self.key} is ephemeral: it has no files"
         data = (self.path / name).read_bytes()
@@ -112,7 +74,7 @@ class Entry:
 
 
 class CorruptEntry(Exception):
-    """A stored file was changed after it was written."""
+    pass
 
 
 class Store:
@@ -136,7 +98,6 @@ class Store:
         return self.root / kind / key[:2] / key
 
     def get(self, kind: str, key: str) -> Entry | None:
-        """The complete entry, or None (absent, or a write that never finished)."""
         path = self._dir(kind, key)
         try:
             meta = json.loads((path / "meta.json").read_bytes())
@@ -145,8 +106,6 @@ class Store:
         return Entry(kind, key, path, meta)
 
     def put(self, kind: str, key: str, meta: Mapping[str, Any], files: Mapping[str, bytes]) -> Entry:
-        """Write an entry: files into a temp dir, meta.json last, then rename into place. If another writer got there
-        first, theirs wins (same key = same inputs) and ours is dropped."""
         existing = self.get(kind, key)
         if existing is not None:
             return existing
@@ -161,7 +120,7 @@ class Store:
         (tmp / "meta.json").write_bytes(json.dumps(jsonable(full), indent=1, allow_nan=False).encode())
         final = self._dir(kind, key)
         final.parent.mkdir(parents=True, exist_ok=True)
-        if final.exists():  # an interrupted write (no meta.json): replace it
+        if final.exists():
             shutil.rmtree(final)
         try:
             tmp.rename(final)
@@ -175,31 +134,12 @@ class Store:
         return entry
 
     def derive(self, kind: str, parts: Mapping[str, Any], build: Any) -> Entry:
-        """Cached derivation: the entry for `parts`, building it with `build() -> (meta, files)` if missing."""
         key = key_of(parts)
         found = self.get(kind, key)
         if found is not None:
             return found
         meta, files = build()
         return self.put(kind, key, {**meta, "parts": dict(parts)}, files)
-
-# ====================================================================================================================
-# grading
-#
-# Grading: a Grader is ordered Checks + config; grade(run, grader) -> a Grade entry, cached by (run, grader fingerprint).
-#
-#     Grader("op-fp32", checks=(Check("returned", ...), Check("budget", ...)), config={"mult": 2, ...})
-#     grade(store, run, grader)
-#       for check in checks:                          in order, all reading the same stored Run
-#         result = check.fn(run, config)              -> Result(outcome, score, metrics, tags, notes, details)
-#         a required check that fails halts: every later check is recorded as skipped
-#         a check that promised files (`creates`) and didn't make them fails
-#     -> Entry("grade", key(run.key, grader.fingerprint())) with the grader snapshot inside
-#
-# Regrading never re-runs anything: a changed grader (its code or its config) has a new fingerprint, so only the grade
-# step misses the cache. The grader fingerprint covers the source files its check functions live in, so editing a
-# checker makes old grades stale.
-# ====================================================================================================================
 
 
 OUTCOMES = ("pass", "fail", "skip")
@@ -208,8 +148,6 @@ KNOWN = ("outcome", "score", "metrics", "tags", "notes", "details", "artifacts")
 
 @dataclass(frozen=True)
 class Result:
-    """One check's result (smevals' shape). `artifacts` are files the check made, kept with the grade."""
-
     outcome: str
     score: float | None = None
     metrics: dict[str, Any] = field(default_factory=dict)
@@ -228,7 +166,6 @@ class Result:
 
 
 def result(**fields: Any) -> Result:
-    """A Result from loose keys (what a check returns): unknown keys fold into details instead of being lost."""
     known = {k: v for k, v in fields.items() if k in KNOWN}
     extra = {k: v for k, v in fields.items() if k not in KNOWN}
     return Result(**{**known, "details": {**known.get("details", {}), **extra}})
@@ -246,8 +183,8 @@ def failed(notes: str, **fields: Any) -> Result:
 class Check:
     name: str
     fn: Callable[[Entry, Mapping[str, Any]], Result]
-    required: bool = True  # a failure halts the grader; later checks are recorded as skipped
-    creates: tuple[str, ...] = ()  # artifact names this check promises to make
+    required: bool = True
+    creates: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -257,7 +194,6 @@ class Grader:
     config: Mapping[str, Any] = field(default_factory=dict)
 
     def snapshot(self) -> dict[str, Any]:
-        """What the grader was, stored with every grade it makes."""
         sources = sorted({inspect.getsourcefile(c.fn) or "?" for c in self.checks} | {__file__})
         return {"name": self.name, "config": dict(self.config),
                 "checks": [{"name": c.name, "required": c.required, "creates": list(c.creates),
@@ -269,7 +205,6 @@ class Grader:
 
 
 def grade(store: Store, run: Entry, grader: Grader) -> Entry:
-    """The grade of `run` under `grader`, from the store if this exact grader graded it before."""
     assert run.kind == "run", run.kind
     snapshot = grader.snapshot()
     parts = {"run": run.key, "grader": key_of(snapshot)}
@@ -280,14 +215,13 @@ def grade(store: Store, run: Entry, grader: Grader) -> Entry:
         return {"run": run.key, "grader": snapshot, "checks": rows, "outcome": outcome,
                 "summary": f"{grader.name} {outcome}"}, artifacts
 
-    if run.path is None:  # an ephemeral run gets an ephemeral grade
+    if run.path is None:
         meta, _ = build()
         return Entry("grade", key_of(parts), None, {**meta, "parts": parts, "files": {}})
     return store.derive("grade", parts, build)
 
 
 def apply(run: Entry, grader: Grader) -> tuple[list[dict[str, Any]], dict[str, bytes]]:
-    """Run the checks in order; a required failure skips the rest (recorded, not dropped)."""
     rows: list[dict[str, Any]] = []
     artifacts: dict[str, bytes] = {}
     halted_by: str | None = None
@@ -311,7 +245,6 @@ def first_failure(grade_entry: Entry) -> dict[str, Any] | None:
 
 
 def verdict(grade_entry: Entry, *, blocking: bool, **fields: Any) -> dict[str, Any]:
-    """A grade -> one verdict line of the run_checks contract (`fields`: op, case, dtype, chip, where?)."""
     rows = grade_entry.meta["checks"]
     bad = first_failure(grade_entry)
     metrics: dict[str, Any] = {}
@@ -325,28 +258,10 @@ def verdict(grade_entry: Entry, *, blocking: bool, **fields: Any) -> dict[str, A
         out["where"] = fields["where"]
     return out
 
-# ====================================================================================================================
-# isolation
-#
-# Isolation: the trusted parent runs untrusted code (the reader's file, a compiled check) in a child process.
-#
-#     parent (trusted: holds expected answers, writes the store)       child (untrusted once the reader's code runs)
-#     Isolation: root -> the child runs as an unprivileged user        HOME/TMPDIR = a fresh private scratch dir
-#                (default `nobody`); else same uid, recorded            env: a short allowlist (no store location)
-#     run_cmd(argv): one command, output streamed, timeout, killpg      a build, a test binary, a script
-#     Child(...): a python child + a framed duplex channel              frames: JSON header + raw byte blobs
-#       send(header, blobs, timeout) / recv(timeout)                    NEVER pickle child -> parent: unpickling
-#                                                                       runs code; frames are parsed strictly
-#
-# What the child reports about itself is only as honest as the child: the parent decides from bytes it parsed, and an
-# unprivileged child cannot reach the store (root-only) or the trusted code (root-owned, read-only). With same-uid
-# isolation (not root, e.g. a laptop) the child could read or write the store: runs say so (`isolation: same-uid`).
-# ====================================================================================================================
-
 
 MAX_HEADER_BYTES = 1 << 20
-MAX_BLOB_BYTES = 1 << 30  # gpt2 logits at 1024 tokens are ~206 MB fp32
-PREFIX = struct.Struct(">4sIQ")  # magic, header bytes, blob bytes
+MAX_BLOB_BYTES = 1 << 30
+PREFIX = struct.Struct(">4sIQ")
 MAGIC = b"ASY1"
 EXIT_GRACE_S = 5.0
 PASS_ENV = ("PATH", "LANG", "LC_ALL", "HF_HOME", "HF_HUB_CACHE", "CUDA_VISIBLE_DEVICES", "OMP_NUM_THREADS",
@@ -355,7 +270,7 @@ PASS_ENV = ("PATH", "LANG", "LC_ALL", "HF_HOME", "HF_HUB_CACHE", "CUDA_VISIBLE_D
 
 @dataclass(frozen=True)
 class Isolation:
-    mode: str  # "unprivileged" | "same-uid"
+    mode: str
     user: str
     uid: int
     gid: int
@@ -366,7 +281,6 @@ class Isolation:
         return {"user": self.uid, "group": self.gid, "extra_groups": [], "umask": 0o077}
 
     def scratch(self, prefix: str) -> Path:
-        """A fresh dir only the child (and root) can use: its HOME, TMPDIR and output dir."""
         path = Path(tempfile.mkdtemp(prefix=prefix))
         if self.mode == "unprivileged":
             os.chown(path, self.uid, self.gid)
@@ -386,20 +300,16 @@ def isolation() -> Isolation:
 
 
 def child_env(scratch: Path, extra: Mapping[str, str] | None = None) -> dict[str, str]:
-    """The child's whole environment: an allowlist, never the parent's (which names the store, tokens, ...)."""
     env = {k: os.environ[k] for k in PASS_ENV if k in os.environ}
     env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
     return {**env, "HOME": str(scratch), "TMPDIR": str(scratch), "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONUNBUFFERED": "1", **(extra or {})}
 
 
-# ---- one command (builds, compiled checks, scripts) -------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class CmdResult:
     argv: list[str]
-    rc: int | None  # None: timed out (killed)
+    rc: int | None
     output: str
     seconds: float
     truncated: bool
@@ -407,13 +317,11 @@ class CmdResult:
 
 def run_cmd(argv: list[str], *, cwd: Path, iso: Isolation, env: Mapping[str, str], timeout: float,
             on_line: Callable[[str], None], max_lines: int = 2000) -> CmdResult:
-    """Run one command in its own process group, stdout+stderr merged and streamed line by line to `on_line`.
-    Past `timeout` or `max_lines` the whole group is killed."""
     started = time.perf_counter()
     proc = subprocess.Popen(argv, cwd=cwd, env=dict(env), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, errors="replace", bufsize=1,
                             start_new_session=True, **iso.popen_kwargs())
-    LIVE.add(proc.pid)  # its own session: a Stop that kills our process group must kill it via LIVE (cli._abandon)
+    LIVE.add(proc.pid)
     lines: list[str] = []
     truncated = [False]
 
@@ -444,11 +352,8 @@ def _killpg(proc: subprocess.Popen[Any]) -> None:
     kill_group(proc.pid)
 
 
-# ---- frames --------------------------------------------------------------------------------------------------
-
-
 class ProtocolError(Exception):
-    """Bytes from the child that do not parse as a frame: the child is broken or lying."""
+    pass
 
 
 class ChildTimeout(Exception):
@@ -469,7 +374,6 @@ def encode(header: Mapping[str, Any], blobs: Mapping[str, bytes]) -> bytes:
 
 
 def parse(head: bytes, blob: bytes | bytearray) -> tuple[dict[str, Any], Blobs]:
-    """The trust boundary: a header (JSON object with a string 'kind') and named blobs whose sizes add up exactly."""
     try:
         header = json.loads(head)
     except ValueError as exc:
@@ -539,17 +443,11 @@ def write_frame(fd: int, header: Mapping[str, Any], blobs: Mapping[str, bytes], 
         data = data[sent:]
 
 
-# ---- a python child with a frame channel ----------------------------------------------------------------------
-
 BOOT = "import sys; from {module} import main; main(int(sys.argv[1]), int(sys.argv[2]))"
-LIVE: set[int] = set()  # pids of children this process started: a watchdog kills them if our client goes away
+LIVE: set[int] = set()
 
 
 class Child:
-    """A python child running `<module>.main(in_fd, out_fd)` as the isolated user, cwd = the tree under check. Forked
-    from the warm process when `warm` names its socket (torch already imported), else spawned fresh. Either way
-    it leads its own process group, which `close()` kills: a hung child never outlives the check."""
-
     def __init__(self, module: str, *, cwd: Path, iso: Isolation, pythonpath: Path,
                  extra_env: Mapping[str, str] | None = None, warm: Path | None = None) -> None:
         self.scratch = iso.scratch("assay-child-")
@@ -603,7 +501,6 @@ class Child:
             raise ChildDied(f"the child exited mid-call (exit code {code})") from None
 
     def _wait(self, timeout: float) -> int | str | None:
-        """Wait for exit; its code when we are its parent, "?" for a fork of the warm process, None if still alive."""
         deadline = time.monotonic() + timeout
         while True:
             if self.proc is not None:
@@ -625,7 +522,7 @@ class Child:
         for fd in (self.to_child, self.from_child):
             with contextlib.suppress(OSError):
                 os.close(fd)
-        if self.hung or self._wait(EXIT_GRACE_S) is None:  # closed pipes = EOF: a well-behaved child exits
+        if self.hung or self._wait(EXIT_GRACE_S) is None:
             kill_group(self.pid)
             self._wait(EXIT_GRACE_S)
         LIVE.discard(self.pid)
@@ -647,38 +544,12 @@ def kill_group(pid: int) -> None:
         os.killpg(pid, signal.SIGKILL)
 
 
-# ---- child side ------------------------------------------------------------------------------------------------
-
-
 def child_send(fd: int, header: Mapping[str, Any], blobs: Mapping[str, bytes]) -> None:
     write_frame(fd, header, blobs, None)
 
 
 def child_recv(fd: int) -> tuple[dict[str, Any], Blobs]:
     return read_frame(fd, None)
-
-# ====================================================================================================================
-# warm process (a fork server)
-#
-# The warm process (a fork server): torch + transformers imported once; every check forks from it.
-#
-#     run_checks ch01 ...  (stdlib-only client)
-#       ensure_warm()    connect to /tmp/assay-<uid>/warm-<fp>.sock, or start the server (detached) and wait for it
-#       warm_request()   (trusted) pass a pipe's write end (SCM_RIGHTS); the server forks a TRUSTED worker (stays root) that runs
-#                        the check and writes JSON lines to the pipe; the client copies them to stdout until EOF
-#     trusted worker (fork, root)
-#       Child -> warm_request(untrusted): the server forks again, from its pristine state; the fork drops to the
-#                        child user (setgroups/setgid/setuid) BEFORE importing the candidate, then serves the frame
-#                        protocol on the passed pipes
-#
-# Rules: the server never imports candidate code, never initialises CUDA (it does not survive fork; children init it
-# lazily), never runs a torch op (an OpenMP pool created before fork deadlocks the children), never starts threads.
-# A fresh fork per request: no state leaks between candidates. The socket lives in a dir only our uid can open (0700,
-# checked), so an unprivileged child can never ask for a root fork. The socket name carries a fingerprint of this file
-# (core.py, the only assay module the server imports: every other one is imported fresh in each fork), the interpreter
-# and the warmed packages' versions: changed code or an upgraded torch starts a new server; an idle server exits after
-# IDLE_EXIT_S.
-# ====================================================================================================================
 
 
 WARM_MODULES = ("torch", "transformers", "transformers.models.gpt2.modeling_gpt2", "jaxtyping", "coverage", "tokenizers",
@@ -689,7 +560,6 @@ MAX_REQUEST = 1 << 20
 
 
 def runtime_dir() -> Path:
-    """/tmp/assay-<uid>, 0700 and ours, or refuse (someone else made it: a socket there is not trustworthy)."""
     path = Path("/tmp") / f"assay-{os.getuid()}"
     path.mkdir(mode=0o700, exist_ok=True)
     st = path.lstat()
@@ -711,9 +581,6 @@ def warm_fingerprint() -> str:
 
 def warm_socket() -> Path:
     return runtime_dir() / f"warm-{warm_fingerprint()}.sock"
-
-
-# ---- client ----------------------------------------------------------------------------------------------------
 
 
 def warm_request(path: Path, header: dict[str, Any], fds: list[int]) -> dict[str, Any]:
@@ -744,7 +611,6 @@ def warm_alive(path: Path) -> bool:
 
 
 def stop_warm() -> bool:
-    """Ask the current warm process to exit (tests, or after an upgrade). False if none was running."""
     path = warm_socket()
     if not warm_alive(path):
         return False
@@ -753,7 +619,6 @@ def stop_warm() -> bool:
 
 
 def ensure_warm(log: Any = None) -> Path:
-    """The warm process's socket, starting the server if nothing answers there (one starter at a time)."""
     path = warm_socket()
     if warm_alive(path):
         return path
@@ -761,7 +626,7 @@ def ensure_warm(log: Any = None) -> Path:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if warm_alive(path):
             return path
-        for stale in path.parent.glob("warm-*.sock"):  # servers of older code / packages: stop them
+        for stale in path.parent.glob("warm-*.sock"):
             if stale != path:
                 with contextlib.suppress(OSError, RuntimeError, ValueError):
                     warm_request(stale, {"kind": "stop"}, [])
@@ -770,7 +635,7 @@ def ensure_warm(log: Any = None) -> Path:
             log("starting the warm check process (imports torch + transformers once; later checks fork from it)")
         server_log = (path.parent / f"{path.stem}.log").open("ab")
         env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
-        if sys.platform == "darwin":  # macOS: fork after the ObjC runtime loaded aborts without this
+        if sys.platform == "darwin":
             env["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
         subprocess.Popen([sys.executable, "-c", f"from assay.core import serve_warm; serve_warm({str(path)!r})"],
                          stdin=subprocess.DEVNULL, stdout=server_log, stderr=server_log, start_new_session=True,
@@ -783,14 +648,11 @@ def ensure_warm(log: Any = None) -> Path:
     return path
 
 
-# ---- server ----------------------------------------------------------------------------------------------------
-
-
 def serve_warm(path_str: str) -> None:
     path = Path(path_str)
     for name in WARM_MODULES:
         importlib.import_module(name)
-    signal.signal(signal.SIGCHLD, signal.SIG_IGN)  # forks are reaped by the kernel; clients watch their pipes
+    signal.signal(signal.SIGCHLD, signal.SIG_IGN)
     with contextlib.suppress(FileNotFoundError):
         path.unlink()
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -818,19 +680,19 @@ def _handle(listener: socket.socket, conn: socket.socket) -> None:
     fds: list[int] = []
     try:
         conn.settimeout(10)
-        if hasattr(socket, "SO_PEERCRED"):  # Linux: only our own uid may ask (the dir is 0700 too)
+        if hasattr(socket, "SO_PEERCRED"):
             creds = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
             peer_uid = int.from_bytes(creds[4:8], sys.byteorder)
             if peer_uid != os.getuid():
                 raise PermissionError(f"peer uid {peer_uid}")
         msg, fds, _, _ = socket.recv_fds(conn, MAX_REQUEST, 8)
-        while len(msg) < MAX_REQUEST and (more := conn.recv(65536)):  # the rest of the request, up to EOF
+        while len(msg) < MAX_REQUEST and (more := conn.recv(65536)):
             msg += more
         header = json.loads(msg)
         if header["kind"] in ("ping", "stop"):
             conn.sendall(b'{"ok": true}')
             if header["kind"] == "stop":
-                raise SystemExit(0)  # out of serve_warm's loop: the server exits
+                raise SystemExit(0)
             return
         assert header["kind"] in ("trusted", "untrusted"), header["kind"]
         pid = os.fork()
@@ -847,8 +709,6 @@ def _handle(listener: socket.socket, conn: socket.socket) -> None:
 
 
 def _in_fork(header: dict[str, Any], fds: list[int], keep: set[int], close: tuple[socket.socket, ...]) -> None:
-    """Never returns: the fork runs its target and _exits. fds: untrusted [to_child_r, from_child_w, log];
-    trusted [out_w, err]."""
     code = 1
     try:
         for sock in close:
@@ -866,10 +726,10 @@ def _in_fork(header: dict[str, Any], fds: list[int], keep: set[int], close: tupl
         os.chdir(header["cwd"])
         os.environ.clear()
         os.environ.update(header["env"])
-        if sys.platform == "darwin":  # macOS: the system proxy lookup (urllib -> _scproxy) segfaults after fork
+        if sys.platform == "darwin":
             os.environ.setdefault("no_proxy", "*")
-        tempfile.tempdir = None  # recomputed from the new TMPDIR
-        sys.dont_write_bytecode = True  # no __pycache__ in the reader's tree (the env var only counts at startup)
+        tempfile.tempdir = None
+        sys.dont_write_bytecode = True
         sys.path.insert(0, header["pythonpath"])
         if header["kind"] == "untrusted":
             code = _untrusted(header, fds)
@@ -889,7 +749,6 @@ def _in_fork(header: dict[str, Any], fds: list[int], keep: set[int], close: tupl
 
 
 def _untrusted(header: dict[str, Any], fds: list[int]) -> int:
-    """Drop privileges first; only then import anything the candidate can influence."""
     if header.get("uid") is not None:
         os.setgroups([])
         os.setgid(header["gid"])
@@ -898,7 +757,7 @@ def _untrusted(header: dict[str, Any], fds: list[int]) -> int:
     os.umask(0o077)
     hub = sys.modules.get("huggingface_hub.constants")
     if hub is not None and header["env"].get("HF_HUB_OFFLINE") == "1":
-        hub.HF_HUB_OFFLINE = True  # constants were read when the server imported the hub
+        hub.HF_HUB_OFFLINE = True
     module = importlib.import_module(header["module"])
     module.main(fds[0], fds[1])
     return 0

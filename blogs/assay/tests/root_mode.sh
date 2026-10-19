@@ -1,12 +1,4 @@
 #!/bin/bash
-# Root-mode proof (the Modal sandbox's situation: the check runs as root, candidate children must run as `nobody`).
-# On a laptop, run it in a throwaway Linux container from blogs/:
-#   docker run --rm -v "$PWD":/src:ro -v ~/.cache/huggingface:/hf:ro -v "$PWD/assay/tests/root_mode.sh":/r.sh:ro \
-#     debian:bookworm-slim bash /r.sh
-# Shows: who the child is and what it can touch, the toy as nobody, every cheat caught (reads_store by PermissionError,
-# not a hole), timings of the warm process. Python must live where `nobody` can read it (UV_PYTHON_INSTALL_DIR):
-# the child imports stdlib modules lazily after dropping privileges.
-# Root-mode proof for the check core: runs as root in Linux; children must run as nobody.
 set -uo pipefail
 t() { date +%s%N; }
 echo "== setup"

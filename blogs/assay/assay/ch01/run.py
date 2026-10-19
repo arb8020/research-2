@@ -1,9 +1,3 @@
-"""Chapter 1's run step: the trusted parent computes expected answers and stores candidate Runs; the untrusted child
-imports the reader's file and calls one function. Both sides import this module (the child only uses its child part).
-
-Sections: tensors over frames, the untrusted child, the run step (trusted parent).
-"""
-
 from __future__ import annotations
 
 import ast
@@ -41,13 +35,6 @@ from assay.core import (
     sha256,
 )
 
-# --------------------------------------------------------------------------------------------------------------------
-# tensors over frames
-#
-# Tensors over frames: a spec in the JSON header (dtype, shape) + raw bytes in a blob. Both sides use this; the parent
-# parses what the child sends with `decode`, which checks every size before it interprets a byte.
-# --------------------------------------------------------------------------------------------------------------------
-
 DTYPES = {"float64": torch.float64, "float32": torch.float32, "float16": torch.float16, "bfloat16": torch.bfloat16,
           "int64": torch.int64, "int32": torch.int32, "bool": torch.bool}
 
@@ -58,7 +45,6 @@ def raw(tensor: torch.Tensor) -> bytes:
 
 
 def digest(tensor: torch.Tensor) -> str:
-    """sha256 of dtype, shape and raw bytes: equal digests = bitwise equal (NaN payloads and -0.0 included)."""
     h = hashlib.sha256(f"{tensor.dtype}|{list(tensor.shape)}|".encode())
     h.update(raw(tensor))
     return h.hexdigest()
@@ -87,7 +73,6 @@ def decode(spec_: Any, data: bytes) -> torch.Tensor:
 
 
 def pack_args(args: tuple) -> tuple[list[Any], dict[str, bytes]]:
-    """Call arguments -> header list (a tensor spec, or a plain JSON scalar) + blobs arg0, arg1, ..."""
     header: list[Any] = []
     blobs: dict[str, bytes] = {}
     for i, arg in enumerate(args):
@@ -104,27 +89,6 @@ def unpack_args(header: list[Any], blobs: dict[str, bytes]) -> tuple:
     return tuple(decode(a["tensor"], blobs[f"arg{i}"]) if "tensor" in a else a["scalar"]
                  for i, a in enumerate(header))
 
-
-# --------------------------------------------------------------------------------------------------------------------
-# the untrusted child
-#
-# The untrusted side: runs in the isolated child (sandbox.Child), imports the reader's file, calls one function.
-#
-#     parent                                         child
-#                                                    import torch, coverage          -> boot
-#     load {file, attr, adapter, device, coverage}   coverage.start(); import file    -> ready | import_error {file, line}
-#                                                                                        | bind_error
-#     call {args, dtype} + arg blobs                 out0 = fn(clones); out1 = fn(clones)
-#                                                    -> returned {out spec, sha256 of out1 and of every arg after each
-#                                                       run} + out0's bytes | raised {error, line: the deepest frame in
-#                                                       the reader's file, e.g. the stub that raised}
-#     finish                                         coverage.stop()                  -> coverage {missing lines/branches}
-#
-# Only run 0's output crosses the pipe in full; run 1 and the inputs-after come back as digests, which the parent
-# compares against the bytes it has (a gpt2 output is ~77 MB at 384 tokens; two of them per call would be waste).
-# Everything here is as honest as the candidate lets it be: it can patch this module (forges_reply does), but the parent
-# only ever parses JSON + raw bytes from it.
-# --------------------------------------------------------------------------------------------------------------------
 
 def main(in_fd: int, out_fd: int) -> None:
     import coverage
@@ -170,7 +134,7 @@ def _serve(in_fd: int, out_fd: int, fn: Callable[..., Any], device: str, tracer:
 
 
 def _import(path: Path) -> Any:
-    sys.path.insert(0, str(path.parent))  # the reader's file may import its siblings
+    sys.path.insert(0, str(path.parent))
     spec_ = importlib.util.spec_from_file_location(path.stem, path)
     assert spec_ is not None and spec_.loader is not None, f"cannot load {path}"
     module = importlib.util.module_from_spec(spec_)
@@ -180,8 +144,6 @@ def _import(path: Path) -> Any:
 
 
 def _where(exc: BaseException, path: Path) -> dict[str, Any]:
-    """file:line of an import failure, in the reader's file when it is there (a SyntaxError, or the deepest frame of
-    the traceback inside the file)."""
     line = None
     if isinstance(exc, SyntaxError) and exc.filename and Path(exc.filename).resolve() == path.resolve():
         line = exc.lineno
@@ -205,8 +167,6 @@ def _plain(module: Any, attr: str, device: str) -> Callable[..., Any]:
 
 
 def _model(module: Any, attr: str, device: str) -> tuple[Callable[..., Any], Callable[[torch.dtype], Any]]:
-    """gpt2.py's model contract: `load(dtype, device) -> (weights, config)` (given code), then the op's function.
-    Weights load once per dtype, inside the first call (under its timeout)."""
     for name in ("load", attr):
         if not hasattr(module, name):
             raise AttributeError(f"{Path(module.__file__).name} defines no `{name}`")
@@ -221,7 +181,6 @@ def _model(module: Any, attr: str, device: str) -> tuple[Callable[..., Any], Cal
 
 
 def _forward(module: Any, attr: str, device: str) -> Callable[..., Any]:
-    """forward(weights, config, tokens_T) -> logits [T, V]."""
     fn, weights = _model(module, attr, device)
 
     def call(tokens_T: torch.Tensor, *, dtype: torch.dtype) -> Any:
@@ -233,7 +192,6 @@ def _forward(module: Any, attr: str, device: str) -> Callable[..., Any]:
 
 
 def _block(module: Any, attr: str, device: str) -> Callable[..., Any]:
-    """block(x_TD, weights.layers[i], config) -> [T, D]; x arrives fp32 and is cast to the case's dtype here."""
     fn, weights = _model(module, attr, device)
 
     def call(x_TD: torch.Tensor, layer: int, *, dtype: torch.dtype) -> Any:
@@ -245,7 +203,6 @@ def _block(module: Any, attr: str, device: str) -> Callable[..., Any]:
 
 
 def _generate(module: Any, attr: str, device: str) -> Callable[..., Any]:
-    """generate(weights, config, prompt ids (a list), n) -> n new ids (a list), returned as an int64 tensor."""
     fn, weights = _model(module, attr, device)
 
     def call(prompt_T: torch.Tensor, n: int, *, dtype: torch.dtype) -> Any:
@@ -253,7 +210,7 @@ def _generate(module: Any, attr: str, device: str) -> Callable[..., Any]:
         with torch.no_grad():
             ids = fn(w, cfg, prompt_T.tolist(), n)
         if not (isinstance(ids, list) and all(isinstance(i, int) for i in ids)):
-            return ids  # not a list of ints: returned as is, and the check says what it was
+            return ids
         return torch.tensor(ids, dtype=torch.int64)
 
     return call
@@ -264,7 +221,6 @@ ADAPTERS = {"plain": _plain, "forward": _forward, "block": _block, "generate": _
 
 def _call_twice(fn: Callable[..., Any], args: tuple, dtype: torch.dtype, device: str,
                 path: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
-    """Two runs on fresh clones; digests of run 1's output and of the args right after each run."""
     out0: torch.Tensor | None = None
     digests: dict[str, Any] = {"args_after": []}
     started = time.perf_counter()
@@ -307,31 +263,13 @@ def _send(fd: int, header: dict[str, Any], blobs: dict[str, bytes]) -> None:
     child_send(fd, header, blobs)
 
 
-# --------------------------------------------------------------------------------------------------------------------
-# the run step (trusted parent)
-#
-# The run step for chapter 1: expected answers (trusted, cached) and candidate Runs (isolated child, cached).
-#
-#     execute(ctx, op, candidate, cases)
-#       expected(case)       store "expected" <- (fp64 truth on ctx.device, the reference's own error); the truth tensor
-#                            itself is a "truth" entry (a model's is dtype-independent: one ~150 MB copy, not one per dtype)
-#       run keys             candidate file sha256 + attr + case + env + runner code fp + expected key
-#       all in the store?    -> done, no child at all (a warm check never imports the reader's code)
-#       else one Child       load -> blocked (import / bind error) | ready
-#                            per case: call -> facts (returned? dtype, shape, inputs unchanged, deterministic, error
-#                            frontier vs truth, logit reductions) -> store "run"
-#                            finish -> coverage of the bound function's lines -> store "run" (case "coverage")
-# A died / timed-out call is recorded for grading but not cached (it may be the machine, not the code), and the cases
-# after it are reported as not run.
-# --------------------------------------------------------------------------------------------------------------------
-
-ASSAY = Path(__file__).resolve().parents[1]  # .../assay (the package)
+ASSAY = Path(__file__).resolve().parents[1]
 RUN_CODE = ("core.py", "ch01/ops.py", "ch01/run.py")
-KEEP_FULL_BYTES = 16 << 20  # outputs up to this size are stored whole; bigger ones only when malformed
+KEEP_FULL_BYTES = 16 << 20
 
 
 class InfraError(Exception):
-    """Not evidence about the candidate (the child never booted, the store broke): exit 2, nothing graded."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -342,7 +280,7 @@ class Ctx:
     log: Callable[[str], None]
     startup_timeout: float = 180.0
     call_timeout: float = 60.0
-    warm: Path | None = None  # the warm process's socket: children fork from it instead of spawning
+    warm: Path | None = None
 
     @property
     def device(self) -> str:
@@ -353,7 +291,7 @@ class Ctx:
 class Candidate:
     file: Path
     attr: str
-    adapter: str  # ADAPTERS: "plain" | "forward" | "block" | "generate"
+    adapter: str
 
     def fp(self) -> dict[str, str]:
         return {"file": self.file.name, "sha256": sha256(self.file.read_bytes()), "attr": self.attr,
@@ -362,14 +300,13 @@ class Candidate:
 
 @dataclass(frozen=True)
 class OpRuns:
-    blocked: dict[str, Any] | None  # {notes, where} when the file would not import / bind
-    runs: list[tuple[Case, Entry | None]]  # None: not run (the child died on an earlier case)
+    blocked: dict[str, Any] | None
+    runs: list[tuple[Case, Entry | None]]
     coverage: Entry | None
-    executed: bool  # False: everything came from the store
+    executed: bool
 
 
 def detect_env() -> dict[str, Any]:
-    """One env per process: where expected answers and runs are computed. Part of every cache key."""
     cuda = torch.cuda.is_available()
     chip = "sm_{}{}".format(*torch.cuda.get_device_capability()) if cuda else "cpu"
     return {"chip": chip, "device": "cuda" if cuda else "cpu", "torch": torch.__version__,
@@ -389,14 +326,13 @@ def runner_fp() -> str:
 
 
 def reference_fp(op: Op) -> str:
-    """The references, inputs, prompts and numerics all live in ops.py: any edit there recomputes expected answers."""
     return files_fp([ASSAY / "ch01/ops.py"], ASSAY)
 
 
 def _inputs_key(case: Case) -> dict[str, Any]:
-    """What the truth depends on: a model's token ids do not depend on the dtype; an op's randn inputs do."""
     full = case.to_json()
-    return {k: v for k, v in full.items() if k != "dtype"} if case.prompt else full
+    inputs_ignore_dtype = bool(case.prompt)
+    return {k: v for k, v in full.items() if k != "dtype"} if inputs_ignore_dtype else full
 
 
 def expected(ctx: Ctx, op: Op, case: Case, inputs: tuple) -> Entry:
@@ -468,8 +404,6 @@ def execute(ctx: Ctx, op: Op, cand: Candidate, cases: list[Case], *, grade_only:
 
 
 def _load(ctx: Ctx, child: Child, cand: Candidate, coverage: bool) -> dict[str, Any] | None:
-    """Boot + import the candidate. None when ready; a `blocked` record when the reader's file is the problem;
-    InfraError when the child never booted (that is our environment, not their code)."""
     try:
         boot, _ = child.recv(ctx.startup_timeout)
     except (ChildTimeout, ChildDied, ProtocolError) as exc:
@@ -495,7 +429,6 @@ def _load(ctx: Ctx, child: Child, cand: Candidate, coverage: bool) -> dict[str, 
 
 
 def _call(ctx: Ctx, child: Child, case: Case, inputs: tuple, exp: Entry) -> tuple[dict[str, Any], dict[str, bytes]]:
-    """One case: the child's reply -> facts (no thresholds; the grader decides) + files to keep."""
     header_args, blobs = pack_args(inputs)
     want = {"dtype": exp.meta["dtype"], "shape": exp.meta["shape"]}
     base = {"want": want, "ref_err": exp.meta["ref_err"], "scale": exp.meta["scale"],
@@ -539,7 +472,6 @@ def _call(ctx: Ctx, child: Child, case: Case, inputs: tuple, exp: Entry) -> tupl
 
 
 def _coverage(ctx: Ctx, child: Child, cand: Candidate) -> dict[str, Any]:
-    """The bound function's lines and branches the whole sweep never executed."""
     try:
         child.send({"kind": "finish"}, {}, ctx.call_timeout)
         report, _ = child.recv(ctx.call_timeout)
@@ -558,8 +490,6 @@ def _coverage(ctx: Ctx, child: Child, cand: Candidate) -> dict[str, Any]:
                                  and isinstance(b[0], int) and first <= b[0] <= last]}
 
 
-# ---- where (file, line, region), from the source text: parsed, never imported ---------------------------------------
-
 REGION = re.compile(r"^\s*#\s*region:\s*(\S+)")
 ENDREGION = re.compile(r"^\s*#\s*endregion")
 
@@ -576,7 +506,6 @@ def function_lines(path: Path, name: str) -> tuple[int, int] | None:
 
 
 def region_at(path: Path, line: int) -> str | None:
-    """The `# region: <name>` ... `# endregion` block holding `line` (markers are navigation; a broken one -> None)."""
     current = None
     for number, text in enumerate(path.read_text(errors="replace").splitlines(), start=1):
         opened = REGION.match(text)

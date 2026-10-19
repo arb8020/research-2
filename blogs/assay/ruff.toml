@@ -1,9 +1,7 @@
-# blogs/ruff.toml (the canonical rules), plus what this package needs on top.
 extend = "../ruff.toml"
 
 [lint.isort]
 known-first-party = ["assay"]
 
 [lint.per-file-ignores]
-# jaxtyping's dim strings (`Float[Tensor, "rows hidden"]`) are not forward references.
 "assay/ch01/ops.py" = ["F722", "F821", "UP037"]
