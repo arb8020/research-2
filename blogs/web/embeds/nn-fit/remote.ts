@@ -1,30 +1,21 @@
-// <nn-fit>'s remote backend, the page side: the config remote_train.py trains from, the code sent to the
-// kernel, and parsing the JSON lines it prints. No DOM, so it runs under node too (parity.ts).
-// The wire format is documented once, at the top of remote_train.py.
-import source from "./remote_train.py"; // the program's text, bundled at build time (esbuild text loader)
+import programText from "./remote_train.py";
 import type { Activation, Adam, Batch, Grads, Mlp, Task } from "./mlp";
 import { INPUT_SCALE } from "./datasets";
 import { isJsonObject } from "../../json";
 import type { JsonObject } from "../../json";
 
-// Plot grids the remote predicts on. The curve: points evenly across the plot's x (the browser samples every
-// 2 CSS px, ~320 points at full width). The spiral heatmap: a square raster, coarser than the browser's (up to
-// 128) because every tick carries it: 64 x 64 predictions are ~25 KB of JSON.
 export const CURVE_POINTS = 321;
 export const HEAT_GRID = 64;
-export const TICK_SECONDS = 0.1; // at most 10 ticks a second
-// Remote runs always stop: "off" budgets become these (the widget shows them as the run's budget).
+export const TICK_SECONDS = 0.1;
 export const REMOTE_MAX_STEPS = 1_000_000;
 export const REMOTE_MAX_SECONDS = 300;
 
 export type Dtype = "float32" | "float64";
 
-// x in plot coordinates [-1, 1], left to right, as network inputs.
 export function curveGrid(points: number): Float64Array {
   return new Float64Array(points).map((_, i) => (-1 + (2 * i) / (points - 1)) * INPUT_SCALE);
 }
 
-// Pixel centres of a size x size raster, rows top to bottom, as (x, y) network inputs: the spiral heatmap.
 export function heatGrid(size: number): Float64Array {
   const out = new Float64Array(2 * size * size);
   for (let j = 0; j < size; j++) {
@@ -40,7 +31,6 @@ export function heatGrid(size: number): Float64Array {
 interface WireLayer { readonly w: number[]; readonly b: number[] }
 interface WireBatch { readonly x: number[]; readonly y: number[] }
 
-// The JSON remote_train.py parses (field names are its).
 export interface RemoteConfig {
   readonly task: Task;
   readonly activation: Activation;
@@ -58,15 +48,12 @@ export interface RemoteConfig {
   readonly tick_seconds: number;
 }
 
-// What to train on: the training sample, what the test metrics score against (the whole true curve, or the
-// spiral's held-out sample), and where to predict for the plot.
 export interface RemoteData {
   readonly train: Batch;
   readonly test: Batch;
   readonly grid: Float64Array;
 }
 
-// Where the run starts (the widget's counters) and its budgets (absolute, Infinity = off).
 export interface RemoteSettings {
   readonly lr: number;
   readonly dtype: Dtype;
@@ -101,21 +88,16 @@ export function remoteConfig(net: Mlp, opt: Adam, task: Task, data: RemoteData, 
   };
 }
 
-// The Python the kernel runs: the program in its own namespace (so its names don't land in the kernel's
-// globals, and its `if __name__ == "__main__"` stays off), then run(config). A JSON string literal is also a
-// valid Python string literal, so both are inlined with JSON.stringify.
 export function remoteCode(config: RemoteConfig): string {
   return [
     `_nn_fit = {"__name__": "nn_fit_remote"}`,
-    `exec(compile(${JSON.stringify(source)}, "remote_train.py", "exec"), _nn_fit)`,
+    `exec(compile(${JSON.stringify(programText)}, "remote_train.py", "exec"), _nn_fit)`,
     `try:`,
     `    _nn_fit["run"](${JSON.stringify(JSON.stringify(config))})`,
     `finally:`,
     `    del _nn_fit`,
   ].join("\n");
 }
-
-// --- the lines it prints ---
 
 export interface NetState {
   readonly layers: readonly { readonly w: Float64Array; readonly b: Float64Array }[];
@@ -136,15 +118,12 @@ export type RemoteLine =
 
 export type RemoteTick = Extract<RemoteLine, { kind: "tick" }>;
 
-// Split stdout chunks into whole lines; `pending` is the unterminated tail carried to the next chunk.
 export function splitLines(pending: string, chunk: string): { lines: string[]; pending: string } {
   const parts = (pending + chunk).split("\n");
   const rest = parts.pop() ?? "";
   return { lines: parts.filter((l) => l.trim() !== ""), pending: rest };
 }
 
-// Parse one line, or throw with what was wrong (the line crossed a network). Non-finite numbers arrive as
-// null (JSON has no NaN) and become NaN again here.
 export function parseLine(text: string): RemoteLine {
   const where = `remote line ${text.length > 80 ? `${text.slice(0, 80)}…` : text}`;
   let raw: unknown;
@@ -170,7 +149,6 @@ export function parseLine(text: string): RemoteLine {
   }
 }
 
-// Copy a remote state into the browser's net and optimizer (same shapes, checked), so training continues from it.
 export function loadState(net: Mlp, opt: Adam, state: NetState): void {
   const copy = (into: Float64Array, from: Float64Array | undefined, what: string): void => {
     if (from?.length !== into.length) throw new Error(`remote state: ${what} has ${String(from?.length)} values, expected ${String(into.length)}`);
@@ -190,8 +168,6 @@ export function loadState(net: Mlp, opt: Adam, state: NetState): void {
   });
   opt.t = state.t;
 }
-
-// Parsing helpers, shared with grok.ts (its lines cross the same network).
 
 export function record(v: unknown, where: string): JsonObject {
   if (!isJsonObject(v)) throw new Error(`${where}: expected an object`);

@@ -29,22 +29,22 @@ from playwright.sync_api import Locator, Page, sync_playwright
 
 BLOGS = Path(__file__).resolve().parents[3]
 EVIDENCE = BLOGS / ".evidence" / "nn-fit-remote"
-SERVER_START_SECONDS = 120  # connect_dev.py's first start installs jupyter_server (+ torch from uv's cache)
-CONNECT_SECONDS = 120  # the fake boot, then a local Jupyter Server and kernel
-RUN_SECONDS = 2.0  # how long the Stop case lets a remote run train
-FAKE_TOKEN = ("ak-nn-fit-remote-e2e", "as-nn-fit-remote-e2e")  # connect_dev.py boots any id starting "ak-"
+SERVER_START_SECONDS = 120
+CONNECT_SECONDS = 120
+RUN_SECONDS = 2.0
+FAKE_TOKEN = ("ak-nn-fit-remote-e2e", "as-nn-fit-remote-e2e")
 STATS = "document.querySelector('nn-fit').stats"
-FAKE_DEVICE = "cpu (remote)"  # connect_dev.py's kernel: torch on this computer's CPU
-GPU_DEVICE = "cuda · Tesla T4"  # a real gateway: a Modal T4
-GATEWAY_CONNECT_SECONDS = 600  # a real gateway: a workspace's first connect builds the image (~90 s seen)
-GROK_FIRST_STEPS = 300  # the grokking case trains this far, stops, then continues
-GROK_FAKE_STEPS = 1000  # the fake gateway (CPU, ~40 steps/s) trains this far: fits, doesn't grok
-GROK_TIME_BUDGET = "6"  # slider stop 6 = 60 s: a T4 groks in ~20-30 s (test accuracy past 95%)
+FAKE_DEVICE = "cpu (remote)"
+GPU_DEVICE = "cuda · Tesla T4"
+GATEWAY_CONNECT_SECONDS = 600
+GROK_FIRST_STEPS = 300
+GROK_FAKE_STEPS = 1000
+GROK_TIME_BUDGET = "6"
+STEP_BUDGET_1000_STOP = "1"
+BUDGET_OFF_STOP = "7"
 
 
 class Run:
-    """What differs between the fake gateway and a real one: the token, how long Connect takes, where it trains."""
-
     token: tuple[str, str] = FAKE_TOKEN
     connect_seconds: float = CONNECT_SECONDS
     device: str = FAKE_DEVICE
@@ -63,7 +63,6 @@ def free_port() -> int:
 
 
 def wait_for_http(url: str, proc: subprocess.Popen, seconds: float) -> None:
-    """Until `url` answers at all (an HTTP error status counts: the server is up)."""
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
         if proc.poll() is not None:
@@ -79,7 +78,6 @@ def wait_for_http(url: str, proc: subprocess.Popen, seconds: float) -> None:
 
 
 def connect(page: Page) -> None:
-    """Connect through the header pill, as a reader would: token, GPU, go; wait for the kernel."""
     page.locator(".connect-pill").click()
     page.fill("input[name=token-id]", Run.token[0])
     page.fill("input[name=token-secret]", Run.token[1])
@@ -90,7 +88,7 @@ def connect(page: Page) -> None:
 
 
 def is_disabled(locator: Locator) -> bool:
-    return locator.evaluate("(el) => el.disabled")  # Locator.is_disabled() sees neither a disabled <option> nor <fieldset>
+    return locator.evaluate("(el) => el.disabled")
 
 
 def nn(page: Page, part: str) -> str:
@@ -103,7 +101,6 @@ def stopped(page: Page) -> dict:
 
 
 def curve_run(page: Page) -> None:
-    """The default widget (wave, 1-12-12-1): Stop mid-run keeps the remote's weights; the browser continues them."""
     before = page.evaluate(STATS)
     page.select_option(nn(page, "select.backend"), "remote")
     page.click(nn(page, "button.train"))
@@ -112,7 +109,7 @@ def curve_run(page: Page) -> None:
     page.wait_for_timeout(RUN_SECONDS * 1000)
     mid = page.evaluate(STATS)
     page.locator("nn-fit").screenshot(path=EVIDENCE / "wave-remote-running.png")
-    page.click(nn(page, "button.train"))  # Stop -> kernel interrupt
+    page.click(nn(page, "button.train"))
     after = stopped(page)
     print(f"  wave: loss {before['loss']:.3g} -> {mid['loss']:.3g} (step {mid['steps']}) -> {after['loss']:.3g} at step {after['steps']} on {after['device']}")
     check(mid["device"] == Run.device, f"remote run: reports where it ran ({mid['device']!r})")
@@ -123,8 +120,6 @@ def curve_run(page: Page) -> None:
     text = page.locator(nn(page, ".usage")).text_content() or ""
     check(f"on {Run.device}" in text, f"readout names the backend ({text!r})")
     page.locator("nn-fit").screenshot(path=EVIDENCE / "wave-remote-stopped.png")
-
-    # Back in the browser, training continues from the remote's weights (not from scratch).
     page.select_option(nn(page, "select.backend"), "browser")
     page.click(nn(page, "button.train"))
     page.wait_for_function(f"{STATS}.steps >= {after['steps'] + 200}", timeout=30_000)
@@ -135,10 +130,9 @@ def curve_run(page: Page) -> None:
 
 
 def spiral_run(page: Page) -> None:
-    """The spiral with a step budget: the run ends by itself; the heatmap comes from the remote's predictions."""
     page.select_option(nn(page, "select.dataset"), "spiral")
     page.click(nn(page, "button.reset"))
-    page.locator(nn(page, "input.step-budget")).evaluate("(el) => { el.value = '1'; el.dispatchEvent(new Event('input')); }")  # 1000 steps
+    slider(page, "step-budget", STEP_BUDGET_1000_STOP)
     page.select_option(nn(page, "select.backend"), "remote")
     page.click(nn(page, "button.train"))
     page.wait_for_function(f"{STATS}.steps > 0", timeout=60_000)
@@ -157,16 +151,15 @@ def slider(page: Page, cls: str, stop: str) -> None:
 
 
 def grok_run(page: Page, gpu: bool) -> None:
-    """Grokking (remote only): Stop keeps the run on the kernel, Train continues it; on a GPU it groks."""
     page.select_option(nn(page, "select.dataset"), "grok")
-    slider(page, "step-budget", "7")  # off (the spiral case set 1000 steps)
-    slider(page, "time-budget", "7")
+    slider(page, "step-budget", BUDGET_OFF_STOP)
+    slider(page, "time-budget", BUDGET_OFF_STOP)
     check(page.locator(nn(page, "fieldset.network")).is_hidden(), "grok: the MLP's network controls are hidden")
     check(is_disabled(page.locator(nn(page, "select.backend"))) and page.locator(nn(page, "select.backend")).input_value() == "remote",
           "grok: runs remotely, and only there")  # fmt: skip
     page.click(nn(page, "button.train"))
     page.wait_for_function(f"{STATS}.steps >= {GROK_FIRST_STEPS} && {STATS}.device === {Run.device!r}", timeout=120_000)
-    page.click(nn(page, "button.train"))  # Stop
+    page.click(nn(page, "button.train"))
     first = stopped(page)
     print(f"  grok: stopped at step {first['steps']}: train {first['accuracy']:.1%}, test {first['heldOutAccuracy']:.1%} on {first['device']}")
     status = page.locator("nn-fit [role=status]").text_content() or ""
@@ -177,8 +170,8 @@ def grok_run(page: Page, gpu: bool) -> None:
     if gpu:
         slider(page, "time-budget", GROK_TIME_BUDGET)
     else:
-        slider(page, "step-budget", "1")  # 1000 steps
-    page.click(nn(page, "button.train"))  # continues the same run
+        slider(page, "step-budget", STEP_BUDGET_1000_STOP)
+    page.click(nn(page, "button.train"))
     page.wait_for_function(f"{STATS}.training && {STATS}.steps > {first['steps']}", timeout=60_000)
     end = page.wait_for_function(f"!{STATS}.training && {STATS}", timeout=180_000).json_value()
     g = end["grok"]
@@ -186,7 +179,7 @@ def grok_run(page: Page, gpu: bool) -> None:
           f"test {end['heldOutAccuracy']:.1%}; test past 95% at {g['grokked']}")  # fmt: skip
     status = page.locator("nn-fit [role=status]").text_content() or ""
     budget = "time budget used up" if gpu else "step budget used up"
-    check(f"Remote run stopped: {budget}" in status, f"grok: the budget ended it, not a failure ({status!r})")  # a 60 s run outlives 2 keepalives
+    check(f"Remote run stopped: {budget}" in status, f"grok: the budget ended it, not a failure ({status!r})")
     check(g["run"] == first["grok"]["run"] and end["steps"] > first["steps"], "grok: Train continued the stopped run (same run, more steps)")
     check(end["accuracy"] == 1.0, "grok: fits every training pair")
     if gpu:
@@ -196,30 +189,24 @@ def grok_run(page: Page, gpu: bool) -> None:
     text = page.locator(nn(page, ".usage")).text_content() or ""
     check(f"on {Run.device}" in text, f"grok readout names the backend ({text!r})")
     page.locator("nn-fit").screenshot(path=EVIDENCE / "grok-done.png")
-    # Back to where the next case expects the widget: spiral, budgets off.
-    slider(page, "time-budget", "7")
-    slider(page, "step-budget", "7")
+    slider(page, "time-budget", BUDGET_OFF_STOP)
+    slider(page, "step-budget", BUDGET_OFF_STOP)
     page.select_option(nn(page, "select.dataset"), "spiral")
 
 
 def disconnect_mid_run(page: Page) -> None:
-    """Disconnect while a remote run trains: the run fails with the reason, the weights stay, remote goes away."""
     page.click(nn(page, "button.reset"))
-    page.locator(nn(page, "input.step-budget")).evaluate("(el) => { el.value = '7'; el.dispatchEvent(new Event('input')); }")  # off
+    slider(page, "step-budget", BUDGET_OFF_STOP)
     page.click(nn(page, "button.train"))
     page.wait_for_function(f"{STATS}.steps > 0", timeout=60_000)
     page.locator(".connect-pill").click()
     page.locator(".connect-end").click()
     end = stopped(page)
     need = page.locator(nn(page, "p.need")).text_content() or ""
-    # The reason depends on which goes first, the page's detach or the gateway's kernel: "disconnected" or
-    # "the connection to the kernel dropped".
     check(need.startswith("Remote run failed: ") and len(need) > len("Remote run failed: "), f"disconnect mid-run: the run fails and says why ({need!r})")
     check(end["steps"] == 0 and end["device"] == "this browser", "disconnect mid-run: the weights are left as they were")
     option = page.locator(nn(page, "select.backend option[value=remote]"))
     check(is_disabled(option) and (option.text_content() or "") == "remote (Connect first)", "disconnected: remote is offered only when connected")
-    # The kernel can drop before the gateway has answered POST /end (a real one closes the machine first, ~2 s):
-    # the fallback follows the session's phase, so wait for it rather than sample it.
     page.wait_for_function(f"{STATS}.backend === 'browser'", timeout=30_000)
     check(page.evaluate(STATS)["backend"] == "browser", "disconnected: the widget falls back to the browser")
     page.locator("nn-fit").screenshot(path=EVIDENCE / "disconnected-mid-run.png")
@@ -253,7 +240,7 @@ def drive(page_url: str, case: str) -> None:
         check(errors == [], f"no page errors ({errors})")
         video = page.video
         assert video is not None
-        context.close()  # finishes the video file
+        context.close()
         recorded = Path(video.path())
         browser.close()
     webm = EVIDENCE / "nn-fit-remote.webm"

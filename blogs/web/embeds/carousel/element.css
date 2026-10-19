@@ -1,4 +1,3 @@
-/* <embed-carousel>. Colours are page.css tokens only, so every theme x scheme follows. */
 embed-carousel { display: block; margin: 1.6em 0; }
 .carousel-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
                   scrollbar-width: none; position: relative; }
@@ -8,7 +7,6 @@ embed-carousel { display: block; margin: 1.6em 0; }
 .slide-media { position: relative; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: var(--code-bg);
                outline: 1px solid var(--rule); outline-offset: -1px; }
 .slide-media > img { width: 100%; height: 100%; object-fit: contain; display: block; }
-/* Published figures are drawn for a light page (some are transparent PNGs with black ink): keep them on a light plate. */
 .slide-media:has(> img) { color-scheme: light; background: Canvas; }
 .slide-media iframe { width: 100%; height: 100%; border: 0; display: block; }
 

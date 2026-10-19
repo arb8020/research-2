@@ -1,7 +1,3 @@
-// <embed-carousel>: embed.py renders every slide into a horizontally scrolling, snapping track, so the
-// page works without JS. This adds prev/next buttons, a "n / N" counter, arrow/Home/End keys, and the
-// video facades: a thumbnail link until clicked, then a youtube-nocookie.com iframe. Nothing loads from
-// YouTube but the thumbnails until a reader clicks, and a video is unloaded when its slide is left.
 import { must } from "../../dom";
 
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -10,11 +6,11 @@ class EmbedCarousel extends HTMLElement {
   private track = document.createElement("div");
   private slides: HTMLElement[] = [];
   private current = 0;
-  private target: number | undefined; // slide a button/key scroll is heading to; slides passed on the way don't count
+  private scrollingTo: number | undefined;
   private counter = document.createElement("span");
   private prev = document.createElement("button");
   private next = document.createElement("button");
-  private facades = new Map<HTMLIFrameElement, HTMLAnchorElement>(); // playing video -> its facade
+  private facadeByFrame = new Map<HTMLIFrameElement, HTMLAnchorElement>();
 
   connectedCallback(): void {
     this.track = must(this, ".carousel-track", HTMLDivElement);
@@ -36,19 +32,18 @@ class EmbedCarousel extends HTMLElement {
     for (const facade of [...this.track.querySelectorAll("a.facade")].filter((el) => el instanceof HTMLAnchorElement)) {
       facade.addEventListener("click", (e) => { e.preventDefault(); this.play(facade); });
     }
-    // The track also scrolls by touch/trackpad; whichever slide is mostly in view is the current one.
-    const seen = new IntersectionObserver((entries) => {
+    const mostlyInView = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         const i = entry.target instanceof HTMLElement ? this.slides.indexOf(entry.target) : -1;
-        if (!entry.isIntersecting || i < 0 || (this.target !== undefined && i !== this.target)) continue;
-        this.target = undefined;
+        if (!entry.isIntersecting || i < 0 || (this.scrollingTo !== undefined && i !== this.scrollingTo)) continue;
+        this.scrollingTo = undefined;
         this.settle(i);
       }
     }, { root: this.track, threshold: 0.6 });
     for (const grab of ["pointerdown", "wheel", "touchstart"]) {
-      this.track.addEventListener(grab, () => { this.target = undefined; }, { passive: true });
+      this.track.addEventListener(grab, () => { this.scrollingTo = undefined; }, { passive: true });
     }
-    for (const slide of this.slides) seen.observe(slide);
+    for (const slide of this.slides) mostlyInView.observe(slide);
     this.settle(0);
   }
 
@@ -63,17 +58,15 @@ class EmbedCarousel extends HTMLElement {
     const i = Math.max(0, Math.min(this.slides.length - 1, index));
     const slide = this.slides[i];
     if (slide === undefined) return;
-    if (i !== this.current) this.target = i;
+    if (i !== this.current) this.scrollingTo = i;
     this.track.scrollTo({ left: slide.offsetLeft, behavior: reducedMotion.matches ? "instant" : "smooth" });
     this.settle(i);
   }
 
-  // Record slide i as current: counter, button states, and unload any video playing on another slide.
   private settle(i: number): void {
     this.current = i;
     const n = this.slides.length;
     this.counter.textContent = `${String(i + 1)} / ${String(n)}`;
-    // aria-disabled, not disabled: a disabled button drops keyboard focus to <body> at either end.
     this.prev.setAttribute("aria-disabled", String(i === 0));
     this.next.setAttribute("aria-disabled", String(i === n - 1));
     this.slides.forEach((slide, j) => {
@@ -90,15 +83,15 @@ class EmbedCarousel extends HTMLElement {
     frame.title = facade.dataset.title ?? "video";
     frame.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
     frame.allowFullscreen = true;
-    this.facades.set(frame, facade);
+    this.facadeByFrame.set(frame, facade);
     facade.replaceWith(frame);
     frame.focus();
   }
 
   private unplay(frame: HTMLIFrameElement): void {
-    const facade = this.facades.get(frame);
+    const facade = this.facadeByFrame.get(frame);
     if (facade === undefined) throw new Error("carousel: an iframe with no facade to restore");
-    this.facades.delete(frame);
+    this.facadeByFrame.delete(frame);
     frame.replaceWith(facade);
   }
 }

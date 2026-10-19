@@ -1,6 +1,4 @@
-// Correctness checks for mlp.ts and datasets.ts, run under node: `npm run test:nn-fit`.
-// Throws (exit 1) on the first failure; prints one line per check.
-import type { Activation, Batch, Mlp, Task } from "./mlp";
+import type { Activation, Batch, Mlp, Rng, Task } from "./mlp";
 import { ACTIVATIONS, evaluate, get, initMlp, lossAndGrad, makeAdam, seeded, trainStep } from "./mlp";
 import type { WaveParams } from "./datasets";
 import {
@@ -13,8 +11,10 @@ function check(ok: boolean, message: string): void {
   console.log(`ok   ${message}`);
 }
 
-// Central finite differences on every parameter vs backprop. Relative error per parameter:
-// |analytic - numeric| / max(1e-8, |analytic| + |numeric|).
+function moveBiasesOffTheReluKink(net: Mlp, rng: Rng): void {
+  for (const layer of net.layers) layer.b.forEach((_, i) => { layer.b[i] = 0.1 * (2 * rng() - 1); });
+}
+
 function gradCheck(activation: Activation, task: Task): number {
   const rng = seeded(7);
   const net = initMlp([2, 4, 3, 1], activation, rng);
@@ -24,8 +24,7 @@ function gradCheck(activation: Activation, task: Task): number {
     x: new Float64Array(2 * n).map(() => 2 * rng() - 1),
     y: new Float64Array(n).map(() => (task === "binary" ? (rng() < 0.5 ? 0 : 1) : 2 * rng() - 1)),
   };
-  // Nudge biases off zero so relu units aren't all sitting near the same kink.
-  for (const layer of net.layers) layer.b.forEach((_, i) => { layer.b[i] = 0.1 * (2 * rng() - 1); });
+  moveBiasesOffTheReluKink(net, rng);
   const { grads } = lossAndGrad(net, task, batch);
   const h = 1e-6;
   let worst = 0;
@@ -58,10 +57,9 @@ for (const task of ["regression", "binary"] as const) {
   }
 }
 
-// Draw buffer: one y per column, overwrite, interpolation across a fast stroke.
 {
   const buf = makeDrawBuffer(100);
-  paintStroke(buf, { x: -0.9, y: -1 }, { x: 0.9, y: 1 }); // one long segment, as a fast stroke gives
+  paintStroke(buf, { x: -0.9, y: -1 }, { x: 0.9, y: 1 });
   const first = columnAt(100, -0.9), last = columnAt(100, 0.9);
   check(filledColumns(buf) === last - first + 1, `fast stroke fills every column it crosses (${String(filledColumns(buf))})`);
   const mid = get(buf, columnAt(100, 0));
@@ -78,7 +76,6 @@ for (const task of ["regression", "binary"] as const) {
   check(gaps(full).length === 0, "a stroke from edge to edge leaves no gaps");
 }
 
-// Completion: flat ends, linear interior, drawn columns untouched.
 {
   const buf = makeDrawBuffer(10);
   buf[2] = 0.5; buf[3] = 0.4; buf[7] = -0.2;
@@ -92,7 +89,6 @@ for (const task of ["regression", "binary"] as const) {
   check(completeCurve(one)?.every((v) => v === 0.3) ?? false, "completeCurve of a single column is flat");
 }
 
-// Wave generator: determinism, range, and "turning K or d up keeps the same curve".
 {
   const wave = (p: Partial<WaveParams>): Float64Array => {
     const buf = makeDrawBuffer(640);
@@ -122,7 +118,6 @@ for (const task of ["regression", "binary"] as const) {
   check(d1[0]?.amp.every((a, k) => a === k4[0]?.amp[k]) === true, "wave: raising d keeps the earlier stages");
 }
 
-// Training samples: prefix-stable in n, noise rescales the same draw, y on the curve when sigma = 0.
 {
   const buf = makeDrawBuffer(640);
   fillWave(buf, waveStages({ wiggles: 4, roughness: 1.5, stages: 1, seed: 1 }, seeded));
@@ -135,7 +130,6 @@ for (const task of ["regression", "binary"] as const) {
   check(s8.x.every((x, i) => x === s64.x[i]) && s64.y.reduce((n, y) => n + y, 0) === 32, "spiral: n=8 is a prefix of n=64, classes alternate (32/32)");
 }
 
-// Training sanity: the defaults the widget ships with do what the prose will claim.
 function train(net: Mlp, task: Task, batch: Batch, steps: number, lr: number): { before: number; after: number; accuracy: number | null } {
   const opt = makeAdam(net);
   const before = evaluate(net, task, batch).loss;
@@ -143,7 +137,6 @@ function train(net: Mlp, task: Task, batch: Batch, steps: number, lr: number): {
   const after = evaluate(net, task, batch);
   return { before, after: after.loss, accuracy: after.accuracy };
 }
-// MSE of the least-squares line through a 1D batch: the floor for any linear net.
 function bestLineMse(b: Batch): number {
   let sx = 0, sy = 0, sxx = 0, sxy = 0;
   for (let i = 0; i < b.n; i++) {
