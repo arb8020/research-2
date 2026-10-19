@@ -38,7 +38,7 @@ STEPS_REL = 0.1  # ...within 10% of mlp.ts's
 TAIL = 200  # median loss over the last TAIL steps (the final value alone is spiky: Adam at lr 0.03)...
 TAIL_FACTOR = 1.5  # ...within this factor of mlp.ts's
 # Spiral held-out accuracy (500 points): within this many points of each other.
-ACCURACY_POINTS = 25
+ACCURACY_POINTS = 3
 
 
 def check(ok: bool, message: str) -> None:
