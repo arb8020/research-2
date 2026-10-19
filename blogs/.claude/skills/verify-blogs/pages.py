@@ -2,14 +2,13 @@
 """verify-blogs browser drives that the repo's own harnesses don't cover. `vb drive` calls these; by hand:
 
     cd blogs && uv run --with playwright python .claude/skills/verify-blogs/pages.py <case> \
-        --base http://127.0.0.1:<static port> --gateway http://127.0.0.1:<gateway port> --out <evidence dir> [--path /x/]
+        --base http://127.0.0.1:<static port> --out <evidence dir> [--path /x/]
 
 cases:
     plan       /00-plan/: title, wip banner, heading ids, no code cells, no Connect, no request to the session
     embeds     /01-flappy/: carousel next/prev + counter, <env-play> on the reference env;
                /neural-nets/: <nn-fit> trains in this browser and its loss falls
     links      /01-flappy/: [[neural-nets#fitting a curve]] hover card (title, heading, live nn-fit), Escape, click
-    bad-token  /neural-nets/?gateway=: a token connect_dev.py rejects -> red pill + "failed to start" in the panel
     fixture    --path /vf-page-ok/: excerpt (file:lines, read-only), wip banner, todo note, page-link
 Screenshots go to --out; each step prints one line. Exit 1 on the first failed check.
 """
@@ -150,25 +149,6 @@ def links(browser: Browser, a: argparse.Namespace) -> None:
     check(not errors, f"no page errors {errors}")
 
 
-def bad_token(browser: Browser, a: argparse.Namespace) -> None:
-    errors: list[str] = []
-    page = new_page(browser, errors)
-    page.goto(f"{a.base}/neural-nets/?gateway={a.gateway}")
-    expect(page.locator(".connect-label")).to_have_text("Connect")
-    page.locator(".connect-pill").click()
-    expect(page.locator(".connect-panel")).to_be_visible()
-    page.fill("input[name=token-id]", "not-a-modal-token")
-    page.fill("input[name=token-secret]", "nope")
-    page.screenshot(path=a.out / "bad-token-panel.png")
-    page.locator(".connect-go").click()
-    page.wait_for_selector("connect-pill[data-failed]", timeout=30_000)
-    page.locator(".connect-pill").click()
-    failure = page.locator(".connect-failure").inner_text()
-    check("failed to start" in failure, f"bad token: {failure!r}")
-    page.screenshot(path=a.out / "bad-token-failed.png")
-    check(not errors, f"no page errors {errors}")
-
-
 def fixture(browser: Browser, a: argparse.Namespace) -> None:
     errors: list[str] = []
     page = new_page(browser, errors)
@@ -183,14 +163,13 @@ def fixture(browser: Browser, a: argparse.Namespace) -> None:
     check(not errors, f"no page errors {errors}")
 
 
-CASES = {"plan": plan, "embeds": embeds, "links": links, "bad-token": bad_token, "fixture": fixture}
+CASES = {"plan": plan, "embeds": embeds, "links": links, "fixture": fixture}
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("case", choices=sorted(CASES))
     ap.add_argument("--base", required=True, help="the static server, e.g. http://127.0.0.1:<port>")
-    ap.add_argument("--gateway", required=True, help="the fake gateway (connect_dev.py)")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--path", default="/vf-page-ok/", help="fixture: the built fixture page")
     a = ap.parse_args()

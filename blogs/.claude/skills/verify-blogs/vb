@@ -2,10 +2,10 @@
 """verify-blogs helper: launch, doctor, drive, and clean up one verification instance of blogs/.
 
     vb setup                      once per fresh worktree: npm ci in web/ (the only mutating setup step)
-    vb launch [--fresh]           build every page, start session.py + static server + connect_dev.py on free ports
+    vb launch [--fresh]           build every page, start session.py + static server + box's relay (local) on free ports
     vb doctor                     read-only: is the launched instance worth driving? exit 1 on any FAIL
     vb drive <feature> [...]      run a feature's recipe; transcript + artifacts into the run's evidence dir
-                                    features: build plan cells embeds links connect nn-fit-remote all
+                                    features: build plan cells embeds links connect slow all
     vb status                     print the run's URLs, ports, PIDs and evidence dir
     vb cleanup                    kill what launch/drive started (by recorded process group), remove scratch state;
                                     evidence stays in blogs/.evidence/verify-blogs/<run id>/
@@ -30,10 +30,14 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parent
 BLOGS = SKILL.parents[2]
+sys.path.insert(0, str(BLOGS))
+import local_relay  # noqa: E402
+
 RUN_FILE = BLOGS / ".session" / "verify-blogs" / "run.json"
 EVIDENCE_ROOT = BLOGS / ".evidence" / "verify-blogs"
 SCAFFOLD = BLOGS / "verify-blogs-scaffold"
@@ -42,7 +46,7 @@ USER_PORTS = {8010, 8012, 8060, 8787, 8790}
 CHROME_GLOB = "~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
 FAKE_TOKEN = ("ak-verify-blogs", "as-verify-blogs-secret")
 JUPYTER_FIRST_START_S = 240
-FEATURES = ("build", "plan", "cells", "embeds", "links", "connect", "nn-fit-remote")
+FEATURES = ("build", "plan", "cells", "embeds", "links", "connect", "slow")
 ALL = ("build", "plan", "embeds", "links", "cells", "connect")
 
 
@@ -191,6 +195,7 @@ def cmd_launch(args: argparse.Namespace) -> int:
     ports = {"session": free_port(), "static": free_port(), "gateway": free_port()}
     run = {
         "id": run_id, "evidence": str(evidence), "ports": ports, "procs": [], "reader_state_ours": True,
+        "machines": str(RUN_FILE.parent / f"machines-{run_id}"),
         "branch": subprocess.run(["git", "branch", "--show-current"], cwd=BLOGS, capture_output=True, text=True).stdout.strip(),
         "head": subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=BLOGS, capture_output=True, text=True).stdout.strip(),
         "urls": {
@@ -216,8 +221,8 @@ def cmd_launch(args: argparse.Namespace) -> int:
          f"--port {ports['session']}", f"{run['urls']['session']}/state", (200,), 180),
         ("static", [sys.executable, "-m", "http.server", str(ports["static"]), "-d", "dist", "--bind", "127.0.0.1"],
          f"http.server {ports['static']}", f"{run['urls']['static']}/01-flappy/", (200,), 30),
-        ("gateway", ["uv", "run", "connect_dev.py", "--port", str(ports["gateway"]), "--boot-delay", "0.6"],
-         f"--port {ports['gateway']}", f"{run['urls']['gateway']}/sessions/none", (404,), JUPYTER_FIRST_START_S),
+        ("gateway", local_relay.relay(ports["gateway"], "--provider", "local", "--machines-dir", run["machines"]),
+         f"--port {ports['gateway']}", f"{run['urls']['gateway']}/limits", (200,), JUPYTER_FIRST_START_S),
     ]
     for name, argv, match, probe, ok, seconds in specs:
         proc = spawn(name, argv, evidence / "logs" / f"{name}.log", match)
@@ -318,10 +323,10 @@ def doctor(log: Path | None = None, quiet: bool = False) -> bool:
     except OSError as e:
         check(False, f"static server answers ({e})")
     try:
-        code, body = http_get(f"{s['gateway']}/sessions/none")
-        check(code == 404 and "no session" in body, "connect_dev.py answers (GET /sessions/none -> 404)")
-    except OSError as e:
-        check(False, f"connect_dev.py answers ({e})")
+        code, body = http_get(f"{s['gateway']}/limits")
+        check(code == 200 and "lease" in json.loads(body), f"the relay answers (GET /limits -> {body})")
+    except (OSError, ValueError) as e:
+        check(False, f"the relay answers ({e})")
     built = BLOGS / "dist" / "01-flappy" / "page.js"
     sources = [BLOGS / "web" / "page.ts", *BLOGS.glob("web/connect/*.ts"), *BLOGS.glob("*/*.md")]
     newest = max(p.stat().st_mtime for p in sources if p.exists() and not {".claude", "notes"} & set(p.relative_to(BLOGS).parts))
@@ -368,7 +373,7 @@ class Drive:
 
     def pages(self, case: str, *extra: str) -> int:
         rc, _ = self.sh(["uv", "run", "--with", "playwright", "python", str(SKILL / "pages.py"), case,
-                         "--base", self.run["urls"]["static"], "--gateway", self.run["urls"]["gateway"],
+                         "--base", self.run["urls"]["static"],
                          "--out", str(self.dir), *extra])
         return rc
 
@@ -475,29 +480,19 @@ def restore_neural_nets(d: Drive) -> None:
     d.expect(rc == 0, "dist/neural-nets rebuilt with our gateway (the harness rebuilt it with the default :8790)")
 
 
-def drive_connect(d: Drive) -> None:
-    d.expect(d.pages("bad-token") == 0, "a token the gateway rejects shows the failure in the panel")
-    since = time.time()
-    rc, out = d.sh(["uv", "run", "--with", "playwright", "verify_connect.py", "--gateway", d.run["urls"]["gateway"],
-                    "--page-port", str(free_port())], env={"MODAL_TOKEN_ID": FAKE_TOKEN[0], "MODAL_TOKEN_SECRET": FAKE_TOKEN[1]})
-    d.collect(BLOGS / ".evidence" / "verify_connect", since)
-    d.expect(rc == 0, "verify_connect.py passes against our connect_dev.py")
-    d.expect("nvidia-smi:" in out and "(FAKE)" in out, "scratch cell ran !nvidia-smi on the local kernel")
-    d.expect("stop: 'KeyboardInterrupt (" in out, "Stop interrupts a running scratch cell")
-    d.expect("same kernel" in out, "reload reattaches to the same session + kernel")
-    restore_neural_nets(d)
+def drive_tier(tier: str) -> Callable[[Drive], None]:
+    def drive(d: Drive) -> None:
+        since = time.time()
+        rc, out = d.sh(["uv", "run", "--with", "playwright", "replay.py", tier])
+        d.collect(BLOGS / ".evidence" / "replay", since)
+        d.expect(rc == 0 and f"ok: {tier} tier" in out, f"replay.py {tier}: Connect, workspace cells and nn-fit's remote runs")
+        restore_neural_nets(d)
 
-
-def drive_nn_fit_remote(d: Drive) -> None:
-    since = time.time()
-    rc, _ = d.sh(["uv", "run", "--with", "playwright", "python", "web/embeds/nn-fit/remote_e2e.py"])
-    d.collect(BLOGS / ".evidence" / "nn-fit-remote", since)
-    d.expect(rc == 0, "remote_e2e.py passes (nn-fit trains on a connect_dev.py kernel)")
-    restore_neural_nets(d)
+    return drive
 
 
 DRIVES = {"build": drive_build, "plan": drive_plan, "cells": drive_cells, "embeds": drive_embeds, "links": drive_links,
-          "connect": drive_connect, "nn-fit-remote": drive_nn_fit_remote}
+          "connect": drive_tier("fast"), "slow": drive_tier("slow")}
 
 
 def cmd_drive(args: argparse.Namespace) -> int:
@@ -537,6 +532,11 @@ def cmd_cleanup(_: argparse.Namespace) -> int:
         say(f"no run recorded in {RUN_FILE}: nothing of ours to stop")
     else:
         say(f"cleanup run {run['id']}", log)
+        machines = Path(run["machines"])
+        try:
+            say(f"  ended sessions {local_relay.end_all(run['urls']['gateway'], machines, FAKE_TOKEN)}", log)
+        except OSError as e:
+            say(f"  could not end the relay's sessions: {e}", log)
         for p in reversed(run["procs"]):
             if not group_alive(p["pgid"]):
                 say(f"  {p['name']}: already gone", log)
@@ -550,6 +550,7 @@ def cmd_cleanup(_: argparse.Namespace) -> int:
         if run.get("reader_state_ours") and READER_STATE.exists():
             shutil.rmtree(READER_STATE)
             say(f"  removed this run's reader state {READER_STATE.relative_to(BLOGS)}", log)
+        shutil.rmtree(machines, ignore_errors=True)
         RUN_FILE.unlink()
         say(f"  removed {RUN_FILE.relative_to(BLOGS)}", log)
     if SCAFFOLD.exists():

@@ -32,8 +32,8 @@ Layout under the root (the cwd: Jupyter's root_dir, where the kernel runs):
 
 The manifest checks/<chapter>.json (in the repo, read at HEAD) lists the cells: {name, file, region, ops, cmd}. A
 cell's cmd[0] names a trusted command (COMMANDS); it never runs a program from the reader's tree. It runs with this
-interpreter (the kernel's python: in the sandbox the image's, which has torch etc.; locally the one connect_dev.py
-runs under, see its docstring) as `python -P -m assay.cli`, with only _blogs/ on PYTHONPATH: -P keeps the cwd (the
+interpreter (the kernel's python: in the sandbox the image's, which has torch etc.; locally the local relay's
+--python, e.g. assay's) as `python -P -m assay.cli`, with only _blogs/ on PYTHONPATH: -P keeps the cwd (the
 reader's tree) off sys.path, so a reader's `torch.py` or `assay.py` can't shadow what the trusted parent imports.
 
 Persistence: $BLOGS_WS_PERSIST names a directory that outlives the sandbox (locally any directory; on Modal a

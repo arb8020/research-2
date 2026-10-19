@@ -1,5 +1,5 @@
-import { createSession, endSession, extendSession, getSession, subscribe } from "./gateway";
-import type { EndedReason, GatewayEvent, Status, Token } from "./gateway";
+import { createSession, endSession, extendSession, getLimits, getSession, subscribe } from "./gateway";
+import type { EndedReason, GatewayEvent, Limits, Status, Token } from "./gateway";
 import { attach, detach, onKernelState } from "./kernel";
 import { isJsonObject } from "../json";
 
@@ -54,6 +54,7 @@ let gatewayCache: string | undefined;
 const gateway = (): string => (gatewayCache ??= gatewayUrl());
 
 export const currentPhase = (): Phase => phase;
+export const limits = (): Promise<Limits> => getLimits(gateway());
 export const logLines = (): { lines: readonly LogLine[]; dropped: number } => ({ lines: log, dropped });
 export function onPhase(listener: (p: Phase) => void): () => void {
   phaseListeners.add(listener);
@@ -210,7 +211,7 @@ export async function extend(until: number): Promise<void> {
   if (current === undefined || phase.kind !== "connected") throw new Error(`extend() while ${phase.kind}`);
   const status = await extendSession(gateway(), current.stored.session_id, current.token, until);
   if (status.state === "ended") { note("extend: the session had already ended"); apply(status); return; }
-  const clamped = status.leaseUntil < until ? " (capped at 12 h after the start)" : "";
+  const clamped = status.leaseUntil < until ? ` (capped at the ceiling, ${new Date(status.ceiling * 1000).toLocaleTimeString()})` : "";
   note(`lease extended: asked until ${new Date(until * 1000).toLocaleTimeString()}, now ends ${new Date(status.leaseUntil * 1000).toLocaleTimeString()}${clamped}`);
   apply(status);
 }

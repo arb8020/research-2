@@ -1,6 +1,6 @@
 import { must } from "../dom";
-import { LEASE_MAX_S, LEASE_MIN_S } from "./gateway";
-import { connect, currentPhase, disconnect, extend, logLines, onLog, onPhase, resume, savedToken, signOut } from "./session";
+import type { Limits } from "./gateway";
+import { connect, currentPhase, disconnect, extend, limits, logLines, onLog, onPhase, resume, savedToken, signOut } from "./session";
 import type { LogLine, Phase } from "./session";
 
 const GPUS: readonly (readonly [gpu: string | null, label: string])[] = [
@@ -9,17 +9,16 @@ const GPUS: readonly (readonly [gpu: string | null, label: string])[] = [
   ["A10G", "A10G · 24 GB · $1.10/h"],
   [null, "CPU only · no GPU"],
 ];
-const LENGTHS: readonly (readonly [seconds: number, label: string])[] = [
-  [30 * 60, "30 min"], [60 * 60, "1 h"], [90 * 60, "90 min"], [2 * 3600, "2 h"], [4 * 3600, "4 h"], [8 * 3600, "8 h"], [LEASE_MAX_S, "12 h (most)"],
-];
-const DEFAULT_LENGTH_S = 90 * 60;
+const LENGTHS = [30 * 60, 60 * 60, 90 * 60, 2 * 3600, 4 * 3600, 8 * 3600];
 const TO_CEILING = 0;
-const EXTENDS: readonly (readonly [seconds: number, label: string])[] = [[30 * 60, "+30 min"], [3600, "+1 h"], [2 * 3600, "+2 h"], [4 * 3600, "+4 h"], [TO_CEILING, "to the 12 h limit"]];
+const EXTENDS = [30 * 60, 3600, 2 * 3600, 4 * 3600, TO_CEILING];
 const ENDING_SOON_S = 10 * 60;
 const TICK_MS = 10_000;
 const SCROLL_SLACK_PX = 8;
 
 const gpuName = (gpu: string | null): string => gpu ?? "CPU";
+const span = (s: number): string => (s % 3600 === 0 ? `${String(s / 3600)} h` : s % 60 === 0 ? `${String(s / 60)} min` : `${String(s)} s`);
+const option = (value: string, label: string, selected = false): string => `<option value="${value}"${selected ? " selected" : ""}>${label}</option>`;
 const mask = (id: string): string => (id.length > 8 ? `${id.slice(0, 3)}…${id.slice(-4)}` : "…");
 const now = (): number => Date.now() / 1000;
 
@@ -57,21 +56,16 @@ const PANEL = `
         <a href="https://modal.com/settings/tokens" target="_blank" rel="noopener">modal.com/settings/tokens</a>.
         Stored only in this browser.</p>
     </fieldset>
-    <label class="connect-gpu"><span>GPU</span><select name="gpu">
-      ${GPUS.map(([gpu, label]) => `<option value="${gpu ?? ""}">${label}</option>`).join("")}
-    </select></label>
-    <label class="connect-length"><span>Session length</span><select name="length">
-      ${LENGTHS.map(([s, label]) => `<option value="${String(s)}"${s === DEFAULT_LENGTH_S ? " selected" : ""}>${label}</option>`).join("")}
-      <option value="custom">Custom…</option>
-    </select></label>
+    <label class="connect-gpu"><span>GPU</span><select name="gpu"></select></label>
+    <label class="connect-length"><span>Session length</span><select name="length"></select></label>
     <label class="connect-custom" hidden><span>Minutes</span><input name="length-min" type="number" inputmode="numeric"
-      min="${String(LEASE_MIN_S / 60)}" max="${String(LEASE_MAX_S / 60)}" step="1" required disabled></label>
+      step="1" required disabled></label>
     <p class="connect-hint connect-ends"></p>
     <p class="connect-hint">Runs in your Modal workspace, billed to it while connected.
       Closing the tab ends it after about 5 min, whatever the length.</p>
     <div class="connect-actions">
       <button type="button" class="connect-details">Details</button>
-      <button type="submit" class="connect-go">Connect</button>
+      <button type="submit" class="connect-go" disabled>Connect</button>
     </div>
   </form>
   <div class="connect-menu" hidden>
@@ -79,9 +73,7 @@ const PANEL = `
     <p class="connect-lease"></p>
     <button type="button" class="connect-extend-open" aria-expanded="false" aria-controls="connect-extend">Extend…</button>
     <div class="connect-extend" id="connect-extend" hidden>
-      <label><span>Extend</span><select name="extend-by">
-        ${EXTENDS.map(([s, label]) => `<option value="${String(s)}">${label}</option>`).join("")}
-      </select></label>
+      <label><span>Extend</span><select name="extend-by"></select></label>
       <button type="button" class="connect-extend-go">Extend</button>
     </div>
     <p class="connect-extend-result" role="status"></p>
@@ -107,6 +99,7 @@ class ConnectPill extends HTMLElement {
   private tick: ReturnType<typeof setInterval> | undefined;
   private lastFollowScrollTop = 0;
   private announced: Phase["kind"] | undefined;
+  private limits: Limits | string | undefined;
 
   connectedCallback(): void {
     this.innerHTML = `
@@ -125,7 +118,34 @@ class ConnectPill extends HTMLElement {
     onLog((line) => { this.appendLog(line); });
     document.addEventListener("connect:open", () => { this.open(true); });
     this.render(currentPhase());
+    this.loadLimits();
     void resume();
+  }
+
+  private loadLimits(): void {
+    limits().then((l) => { this.applyLimits(l); }, (cause: unknown) => {
+      this.limits = `the gateway's limits: ${cause instanceof TypeError ? "unreachable" : cause instanceof Error ? cause.message : String(cause)}`;
+      this.renderEnds();
+    });
+  }
+
+  private applyLimits(l: Limits): void {
+    this.limits = l;
+    const { minS, maxS, defaultS } = l.lease;
+    must(this, "select[name=gpu]", HTMLSelectElement).innerHTML = GPUS.filter(([gpu]) => l.gpus.includes(gpu)).map(([gpu, label]) => option(gpu ?? "", label)).join("");
+    const lengths = [...new Set([...LENGTHS.filter((s) => s >= minS && s < maxS), defaultS, maxS])].sort((a, b) => a - b);
+    must(this, "select[name=length]", HTMLSelectElement).innerHTML = lengths.map((s) => option(String(s), s === maxS ? `${span(s)} (most)` : span(s), s === defaultS)).join("")
+      + option("custom", "Custom…");
+    const minutes = must(this, "input[name=length-min]", HTMLInputElement);
+    minutes.min = String(Math.ceil(minS / 60));
+    minutes.max = String(Math.floor(maxS / 60));
+    must(this, "select[name=extend-by]", HTMLSelectElement).innerHTML = EXTENDS.map((s) => option(String(s), s === TO_CEILING ? `to ${this.ceilingText()}` : `+${span(s)}`)).join("");
+    must(this, ".connect-go", HTMLButtonElement).disabled = false;
+    this.render(currentPhase());
+  }
+
+  private ceilingText(): string {
+    return typeof this.limits === "object" ? `the ${span(this.limits.ceilingS)} limit` : "the limit";
   }
 
   private get pill(): HTMLButtonElement { return must(this, ".connect-pill", HTMLButtonElement); }
@@ -135,6 +155,7 @@ class ConnectPill extends HTMLElement {
     this.panel.hidden = !on;
     this.pill.setAttribute("aria-expanded", String(on));
     if (!on) return;
+    if (typeof this.limits === "string") this.loadLimits();
     this.render(currentPhase());
     const form = must(this, ".connect-form", HTMLFormElement);
     const fresh = must(form, ".connect-token-new", HTMLFieldSetElement);
@@ -164,7 +185,7 @@ class ConnectPill extends HTMLElement {
     length.onchange = () => {
       custom.hidden = length.value !== "custom";
       minutes.disabled = custom.hidden;
-      if (!custom.hidden) { if (minutes.value === "") minutes.value = String(DEFAULT_LENGTH_S / 60); minutes.focus(); }
+      if (!custom.hidden) { if (minutes.value === "" && typeof this.limits === "object") minutes.value = String(Math.round(this.limits.lease.defaultS / 60)); minutes.focus(); }
       this.renderEnds();
     };
     minutes.oninput = () => { this.renderEnds(); };
@@ -183,18 +204,22 @@ class ConnectPill extends HTMLElement {
   }
 
   private lengthS(): number | undefined {
+    if (typeof this.limits !== "object") return undefined;
     const choice = must(this, "select[name=length]", HTMLSelectElement).value;
     if (choice !== "custom") return Number(choice);
     const minutes = must(this, "input[name=length-min]", HTMLInputElement);
     const seconds = Number(minutes.value) * 60;
-    return minutes.value !== "" && minutes.checkValidity() && seconds >= LEASE_MIN_S && seconds <= LEASE_MAX_S ? seconds : undefined;
+    return minutes.value !== "" && minutes.checkValidity() && seconds >= this.limits.lease.minS && seconds <= this.limits.lease.maxS ? seconds : undefined;
   }
 
   private renderEnds(): void {
+    const ends = must(this, ".connect-ends", HTMLParagraphElement);
+    if (typeof this.limits !== "object") { ends.textContent = this.limits === undefined ? "Asking the gateway for its limits…" : `Can't connect: ${this.limits}.`; return; }
     const seconds = this.lengthS();
-    must(this, ".connect-ends", HTMLParagraphElement).textContent = seconds === undefined
-      ? `Pick ${String(LEASE_MIN_S / 60)} to ${String(LEASE_MAX_S / 60)} minutes (12 h at most).`
-      : `Ends at ${endsAt(now() + seconds)} if you connect now. You can extend it later, up to 12 h.`;
+    const minutes = must(this, "input[name=length-min]", HTMLInputElement);
+    ends.textContent = seconds === undefined
+      ? `Pick ${minutes.min} to ${minutes.max} minutes (${span(this.limits.lease.maxS)} at most).`
+      : `Ends at ${endsAt(now() + seconds)} if you connect now. You can extend it later, up to ${span(this.limits.ceilingS)}.`;
   }
 
   private wireExtend(): void {
@@ -216,12 +241,12 @@ class ConnectPill extends HTMLElement {
       const add = Number(by.value);
       const until = add === TO_CEILING ? p.ceiling : Math.max(p.leaseUntil, now()) + add;
       go.disabled = true;
-      result.textContent = "Extending…";
+      result.textContent = "Now ends …";
       extend(until).then(() => {
         const q = currentPhase();
         if (q.kind !== "connected") return;
         const capped = q.leaseUntil >= q.ceiling;
-        result.textContent = `Now ends ${endsAt(q.leaseUntil)}${capped ? ", the 12 h limit" : ""}.`;
+        result.textContent = `Now ends ${endsAt(q.leaseUntil)}${capped ? `, ${this.ceilingText()}` : ""}.`;
         row.hidden = true;
         opener.setAttribute("aria-expanded", "false");
       }, (cause: unknown) => {
@@ -334,19 +359,11 @@ class ConnectPill extends HTMLElement {
     }
     const atCeiling = p.leaseUntil >= p.ceiling;
     line.hidden = false;
-    line.textContent = `Ends ${endsAt(p.leaseUntil)} · ${left(p.leaseUntil)}${atCeiling ? " · at the 12 h limit" : ""}`;
+    line.textContent = `Ends ${endsAt(p.leaseUntil)} · ${left(p.leaseUntil)}${atCeiling ? ` · at ${this.ceilingText()}` : ""}`;
     opener.hidden = false;
     opener.disabled = atCeiling;
     if (atCeiling) row.hidden = true;
     opener.setAttribute("aria-expanded", String(!row.hidden));
-    const ceiling = p.ceiling;
-    const options = must(row, "select", HTMLSelectElement).options;
-    EXTENDS.forEach(([add, label], i) => {
-      const until = add === TO_CEILING ? ceiling : Math.max(p.leaseUntil, now()) + add;
-      const capped = add !== TO_CEILING && until > ceiling ? " (capped)" : "";
-      const option = options[i];
-      if (option !== undefined) option.textContent = `${label}${capped}, ends ${endsAt(Math.min(until, ceiling))}`;
-    });
   }
 }
 

@@ -10,7 +10,8 @@ import time
 import urllib.request
 from pathlib import Path
 
-from box.gateway import kernel_client
+import kernel_client
+
 from box.providers.modal import ModalToken
 
 PROFILE = "arb8020"

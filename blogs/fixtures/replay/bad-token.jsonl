@@ -1,0 +1,5 @@
+{"create": {"request": {}, "response": {"session_id": "s-0c7a216d3eab", "status": {"state": "booting", "gpu": null, "started_at": 1792452233.16049, "lease_until": 1792452253.16049, "ceiling": 1792452268.16049}}}}
+{"event": {"t": 1792452233.1605499, "kind": "status", "status": {"state": "booting", "gpu": null, "started_at": 1792452233.16049, "lease_until": 1792452253.16049, "ceiling": 1792452268.16049}}}
+{"event": {"t": 1792452233.160612, "kind": "step", "source": "gateway", "text": "checking your Modal token"}}
+{"event": {"t": 1792452233.1606588, "kind": "step", "source": "gateway", "text": "boot failed: PermissionError: local relay: a token id starts 'ak-', as Modal's do (got 'not'...)"}}
+{"event": {"t": 1792452233.160661, "kind": "status", "status": {"state": "ended", "gpu": null, "started_at": 1792452233.16049, "lease_until": 1792452253.16049, "ceiling": 1792452268.16049, "reason": "boot_failed"}}}

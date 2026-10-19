@@ -1,0 +1,88 @@
+{"limits": {"lease": {"min_s": 2, "max_s": 35, "default_s": 20}, "ceiling_s": 35, "gpus": [null]}}
+{"create": {"request": {"provider": "modal", "token": {"id": "ak-replay", "secret": "as-replay-secret"}, "gpu": null, "lease_s": 20, "labels": {"box.caller": "blogs"}}, "response": {"session_id": "s-1b3ee33a766a", "status": {"state": "booting", "gpu": null, "started_at": 1792452196.8182569, "lease_until": 1792452216.8182569, "ceiling": 1792452231.8182569}}}}
+{"event": {"t": 1792452196.818315, "kind": "status", "status": {"state": "booting", "gpu": null, "started_at": 1792452196.8182569, "lease_until": 1792452216.8182569, "ceiling": 1792452231.8182569}}}
+{"event": {"t": 1792452196.818402, "kind": "step", "source": "gateway", "text": "checking your Modal token"}}
+{"event": {"t": 1792452196.818503, "kind": "step", "source": "gateway", "text": "creating sandbox: gpu none (a workspace's first connect builds the image: minutes)"}}
+{"event": {"t": 1792452196.825669, "kind": "step", "source": "gateway", "text": "sandbox local-fd4d314d created in 0.0 s; waiting for it to start"}}
+{"event": {"t": 1792452197.3635972, "kind": "step", "source": "machine", "text": "supervisor up (0.5 s since connect)"}}
+{"event": {"t": 1792452197.426741, "kind": "step", "source": "machine", "text": "starting Jupyter Server"}}
+{"event": {"t": 1792452197.430607, "kind": "step", "source": "gateway", "text": "tunnel open: http://127.0.0.1:52747"}}
+{"event": {"t": 1792452198.512176, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:18.055 ServerApp] jupyter_server_terminals | extension was successfully linked."}}
+{"event": {"t": 1792452198.512198, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:18.078 ServerApp] jupyter_server_terminals | extension was successfully loaded."}}
+{"event": {"t": 1792452198.5121999, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:18.080 ServerApp] Serving notebooks from local directory: /private/var/folders/4j/w1qj64z90jsb7xqys5g3wypm0000gn/T/replay-slow-q0okmxwt/local-fd4d314d/box/services/jupyter"}}
+{"event": {"t": 1792452198.512202, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:18.080 ServerApp] Jupyter Server 2.21.1 is running at:"}}
+{"event": {"t": 1792452198.512203, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:18.080 ServerApp] http://127.0.0.1:52747/?token=..."}}
+{"event": {"t": 1792452198.512203, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:18.080 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation)."}}
+{"event": {"t": 1792452198.529023, "kind": "step", "source": "machine", "text": "Jupyter Server ready (1.7 s since connect)"}}
+{"event": {"t": 1792452198.5290382, "kind": "status", "status": {"state": "running", "gpu": null, "started_at": 1792452196.8705122, "lease_until": 1792452216.818518, "ceiling": 1792452231.818518, "kernel": {"url": "http://127.0.0.1:52747", "token": "4b9f68e543e4c3191cc2fe4db67e8409defd488ed14887cc"}}}}
+{"event": {"t": 1792452199.911293, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:18.582 ServerApp] Kernel started: a4b9728d-72d1-4644-9807-839e47042a78"}}
+{"event": {"t": 1792452199.911356, "kind": "log", "source": "machine", "stream": "stderr", "text": "[W 2026-10-19 19:23:18.586 ServerApp] No session ID specified"}}
+{"event": {"t": 1792452199.911365, "kind": "log", "source": "machine", "stream": "stderr", "text": "[IPKernelApp] WARNING | Kernel is running over TCP without encryption. All communication (including code and outputs) is sent in plain text and is susceptible to eavesdropping. Use IPC transport or launch with kernel manager-provisioned CurveZMQ keys to enable transport encryption."}}
+{"event": {"t": 1792452199.911375, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:18.720 ServerApp] Adapting from protocol version 5.3 (kernel a4b9728d-72d1-4644-9807-839e47042a78) to 5.4 (client)."}}
+{"event": {"t": 1792452199.91139, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:18.720 ServerApp] Connecting to kernel a4b9728d-72d1-4644-9807-839e47042a78."}}
+{"event": {"t": 1792452199.911395, "kind": "log", "source": "machine", "stream": "stderr", "text": "[W 2026-10-19 19:23:18.721 ServerApp] The websocket_ping_timeout (90000) cannot be longer than the websocket_ping_interval (30000)."}}
+{"event": {"t": 1792452199.911399, "kind": "log", "source": "machine", "stream": "stderr", "text": "    Setting websocket_ping_timeout=30000"}}
+{"event": {"t": 1792452199.911402, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.246 ServerApp] Uploading file to /_blogs"}}
+{"event": {"t": 1792452199.9114099, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.261 ServerApp] Uploading file to /_blogs/assay"}}
+{"event": {"t": 1792452199.911414, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.264 ServerApp] Uploading file to /_blogs/assay/ch01"}}
+{"event": {"t": 1792452199.911417, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.265 ServerApp] Uploading file to /_blogs/assay/ch01/selftest"}}
+{"event": {"t": 1792452199.9114208, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.271 ServerApp] Uploading file to /_blogs/assay/__init__.py"}}
+{"event": {"t": 1792452199.911424, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.275 ServerApp] Uploading file to /_blogs/assay/ch00.py"}}
+{"event": {"t": 1792452199.911427, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.276 ServerApp] Uploading file to /_blogs/assay/ch01/ops.py"}}
+{"event": {"t": 1792452199.9114308, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.277 ServerApp] Uploading file to /_blogs/assay/ch01/__init__.py"}}
+{"event": {"t": 1792452199.911434, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.283 ServerApp] Uploading file to /_blogs/assay/ch01/run.py"}}
+{"event": {"t": 1792452199.911437, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.284 ServerApp] Uploading file to /_blogs/assay/ch01/selftest/adversarial.py"}}
+{"event": {"t": 1792452199.9114408, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.284 ServerApp] Uploading file to /_blogs/assay/ch01/selftest/forges_reply.py"}}
+{"event": {"t": 1792452199.911448, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.284 ServerApp] Uploading file to /_blogs/assay/ch01/selftest/candidates.py"}}
+{"event": {"t": 1792452199.9114509, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.284 ServerApp] Uploading file to /_blogs/assay/ch01/suite.py"}}
+{"event": {"t": 1792452199.911454, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.285 ServerApp] Uploading file to /_blogs/assay/core.py"}}
+{"event": {"t": 1792452199.911458, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.288 ServerApp] Uploading file to /_blogs/assay/cli.py"}}
+{"event": {"t": 1792452199.911465, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.303 ServerApp] Uploading file to /_blogs/workspace.py"}}
+{"event": {"t": 1792452199.911468, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.305 ServerApp] Uploading file to /_blogs/MANIFEST.sha256"}}
+{"event": {"t": 1792452199.9114711, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.308 ServerApp] Uploading file to /_blogs/ref.bundle"}}
+{"event": {"t": 1792452199.911474, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:19.470 ServerApp] Saving file at /workspace/ring.cpp"}}
+{"extend": {"request": {"until": 1792452221.818518}, "response": {"session_id": "s-1b3ee33a766a", "status": {"state": "running", "gpu": null, "started_at": 1792452196.8705122, "lease_until": 1792452221.818518, "ceiling": 1792452231.818518, "kernel": {"url": "http://127.0.0.1:52747", "token": "4b9f68e543e4c3191cc2fe4db67e8409defd488ed14887cc"}}}}}
+{"extend": {"request": {"until": 1792452231.818518}, "response": {"session_id": "s-1b3ee33a766a", "status": {"state": "running", "gpu": null, "started_at": 1792452196.8705122, "lease_until": 1792452231.818518, "ceiling": 1792452231.818518, "kernel": {"url": "http://127.0.0.1:52747", "token": "4b9f68e543e4c3191cc2fe4db67e8409defd488ed14887cc"}}}}}
+{"event": {"t": 1792452200.2492568, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:20.234 ServerApp] Saving file at /workspace/ring.cpp"}}
+{"event": {"t": 1792452201.271381, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:21.239 ServerApp] Saving file at /workspace/loop.cpp"}}
+{"event": {"t": 1792452202.2904398, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.267 ServerApp] Starting buffering for a4b9728d-72d1-4644-9807-839e47042a78:b83a3a82-1dd8db04aae372da0ae371ea"}}
+{"event": {"t": 1792452202.3404999, "kind": "log", "source": "machine", "stream": "stderr", "text": "[W 2026-10-19 19:23:22.327 ServerApp] No session ID specified"}}
+{"event": {"t": 1792452202.340544, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.328 ServerApp] Adapting from protocol version 5.3 (kernel a4b9728d-72d1-4644-9807-839e47042a78) to 5.4 (client)."}}
+{"event": {"t": 1792452202.340554, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.328 ServerApp] Connecting to kernel a4b9728d-72d1-4644-9807-839e47042a78."}}
+{"event": {"t": 1792452202.340561, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.338 ServerApp] Uploading file to /_blogs"}}
+{"event": {"t": 1792452202.39889, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.340 ServerApp] Uploading file to /_blogs/assay"}}
+{"event": {"t": 1792452202.398936, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.341 ServerApp] Uploading file to /_blogs/assay/ch01"}}
+{"event": {"t": 1792452202.398944, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.342 ServerApp] Uploading file to /_blogs/assay/ch01/selftest"}}
+{"event": {"t": 1792452202.3989491, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.347 ServerApp] Saving file at /_blogs/assay/ch01/__init__.py"}}
+{"event": {"t": 1792452202.398954, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.350 ServerApp] Saving file at /_blogs/assay/ch00.py"}}
+{"event": {"t": 1792452202.3989592, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.351 ServerApp] Saving file at /_blogs/assay/__init__.py"}}
+{"event": {"t": 1792452202.398963, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.353 ServerApp] Saving file at /_blogs/assay/ch01/selftest/adversarial.py"}}
+{"event": {"t": 1792452202.398967, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.356 ServerApp] Saving file at /_blogs/assay/ch01/ops.py"}}
+{"event": {"t": 1792452202.3989708, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.358 ServerApp] Saving file at /_blogs/assay/ch01/selftest/candidates.py"}}
+{"event": {"t": 1792452202.398974, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.359 ServerApp] Saving file at /_blogs/assay/ch01/run.py"}}
+{"event": {"t": 1792452202.398988, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.361 ServerApp] Saving file at /_blogs/assay/ch01/selftest/forges_reply.py"}}
+{"event": {"t": 1792452202.3989918, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.361 ServerApp] Saving file at /_blogs/assay/ch01/suite.py"}}
+{"event": {"t": 1792452202.3989959, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.362 ServerApp] Saving file at /_blogs/workspace.py"}}
+{"event": {"t": 1792452202.3990002, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.364 ServerApp] Saving file at /_blogs/assay/core.py"}}
+{"event": {"t": 1792452202.399004, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.366 ServerApp] Saving file at /_blogs/assay/cli.py"}}
+{"event": {"t": 1792452202.399008, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.369 ServerApp] Saving file at /_blogs/MANIFEST.sha256"}}
+{"event": {"t": 1792452202.3990169, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.372 ServerApp] Saving file at /_blogs/ref.bundle"}}
+{"event": {"t": 1792452202.564233, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:22.533 ServerApp] Saving file at /workspace/loop.cpp"}}
+{"event": {"t": 1792452203.061149, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:23.051 ServerApp] Saving file at /workspace/budget.py"}}
+{"event": {"t": 1792452203.633866, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:23.587 ServerApp] Starting buffering for a4b9728d-72d1-4644-9807-839e47042a78:b6ffd3fb-8beb8f5978c17bc805a853ff"}}
+{"event": {"t": 1792452203.6869, "kind": "log", "source": "machine", "stream": "stderr", "text": "[W 2026-10-19 19:23:23.655 ServerApp] No session ID specified"}}
+{"event": {"t": 1792452203.686949, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:23.655 ServerApp] Adapting from protocol version 5.3 (kernel a4b9728d-72d1-4644-9807-839e47042a78) to 5.4 (client)."}}
+{"event": {"t": 1792452203.6869571, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:23.655 ServerApp] Connecting to kernel a4b9728d-72d1-4644-9807-839e47042a78."}}
+{"event": {"t": 1792452204.143432, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:24.118 ServerApp] Kernel interrupted: a4b9728d-72d1-4644-9807-839e47042a78"}}
+{"event": {"t": 1792452204.254582, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:24.207 ServerApp] Starting buffering for a4b9728d-72d1-4644-9807-839e47042a78:0b02c005-d7f74994995c12fbaacf28fe"}}
+{"event": {"t": 1792452204.306178, "kind": "log", "source": "machine", "stream": "stderr", "text": "[W 2026-10-19 19:23:24.261 ServerApp] No session ID specified"}}
+{"event": {"t": 1792452204.306252, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:24.261 ServerApp] Adapting from protocol version 5.3 (kernel a4b9728d-72d1-4644-9807-839e47042a78) to 5.4 (client)."}}
+{"event": {"t": 1792452204.306262, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:24.261 ServerApp] Connecting to kernel a4b9728d-72d1-4644-9807-839e47042a78."}}
+{"event": {"t": 1792452206.1034088, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:26.066 ServerApp] Kernel interrupted: a4b9728d-72d1-4644-9807-839e47042a78"}}
+{"event": {"t": 1792452209.7583601, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:29.734 ServerApp] Kernel interrupted: a4b9728d-72d1-4644-9807-839e47042a78"}}
+{"event": {"t": 1792452231.94237, "kind": "log", "source": "machine", "stream": "stderr", "text": "[C 2026-10-19 19:23:51.934 ServerApp] received signal 15, stopping"}}
+{"event": {"t": 1792452231.9425669, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:51.936 ServerApp] Shutting down 1 extension"}}
+{"event": {"t": 1792452231.942595, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:51.936 ServerApp] Shutting down 1 kernel"}}
+{"event": {"t": 1792452231.942613, "kind": "log", "source": "machine", "stream": "stderr", "text": "[I 2026-10-19 19:23:51.937 ServerApp] Kernel shutdown: a4b9728d-72d1-4644-9807-839e47042a78"}}
+{"event": {"t": 1792452232.725558, "kind": "status", "status": {"state": "ended", "gpu": null, "started_at": 1792452196.8705122, "lease_until": 1792452216.0, "ceiling": 1792452231.0, "reason": "lease"}}}
+{"end": {"session_id": "s-1b3ee33a766a", "status": {"state": "ended", "gpu": null, "started_at": 1792452196.8705122, "lease_until": 1792452216.0, "ceiling": 1792452231.0, "reason": "lease"}}}

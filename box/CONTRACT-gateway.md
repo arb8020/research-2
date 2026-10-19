@@ -12,9 +12,11 @@ Base URL is configured on the page (`data-gateway="http://localhost:8790"`). COR
 
 ## Control
 ```
+GET  /limits                       no token -> {lease:{min_s, max_s, default_s}, ceiling_s, gpus:[string|null]}
+                                   what this gateway accepts (the relay's flags; default 60, 43200, 5400, 43200, [null, "T4"])
 POST /sessions                     body {provider:"modal", token:{id, secret}, gpu:"T4"|null, labels?:{}, lease_s?:int}
-                                   lease_s: 60..43200 (default 5400); else 400. The session ends when its lease
-                                   does, at most 12 h after it was created (its ceiling).
+                                   lease_s: min_s..max_s (default default_s); else 400. The session ends when its lease
+                                   does, at most ceiling_s after it was created (its ceiling).
                                    -> 202 {session_id, status}          returns immediately; boot continues
 GET  /sessions/{id}                header X-Box-Token: <id>:<secret> (A/C; B ignores)
                                    -> {session_id, status}

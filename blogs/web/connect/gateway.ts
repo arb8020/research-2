@@ -9,8 +9,11 @@ export interface Token {
 export const ENDED_REASONS = ["stopped", "lease", "idle", "boot_failed", "machine_lost"] as const;
 export type EndedReason = (typeof ENDED_REASONS)[number];
 
-export const LEASE_MIN_S = 60;
-export const LEASE_MAX_S = 12 * 3600;
+export interface Limits {
+  lease: { minS: number; maxS: number; defaultS: number };
+  ceilingS: number;
+  gpus: (string | null)[];
+}
 
 interface Times {
   gpu: string | null;
@@ -67,19 +70,29 @@ export function parseEvent(raw: unknown): GatewayEvent {
 
 const auth = (token: Token): string => `${token.id}:${token.secret}`;
 
-async function call(url: string, init: RequestInit, token: Token): Promise<unknown> {
+async function call(url: string, init: RequestInit, token?: Token): Promise<unknown> {
   const res = await fetch(url, init);
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
-    const why = isJsonObject(body) && typeof body["error"] === "string" ? body["error"].replaceAll(token.secret, "[redacted]") : `HTTP ${String(res.status)}`;
+    const error = isJsonObject(body) && typeof body["error"] === "string" ? body["error"] : `HTTP ${String(res.status)}`;
+    const why = token === undefined ? error : error.replaceAll(token.secret, "[redacted]");
     throw new GatewayError(`gateway ${init.method ?? "GET"} ${new URL(url).pathname}: ${why}`, { cause: res.status });
   }
   return body;
 }
 
+export async function getLimits(gateway: string): Promise<Limits> {
+  const raw = await call(`${gateway}/limits`, {});
+  if (!isJsonObject(raw) || !isJsonObject(raw["lease"])) return fail("limits {lease, ceiling_s, gpus}", raw);
+  const { min_s: minS, max_s: maxS, default_s: defaultS } = raw["lease"];
+  const { ceiling_s: ceilingS, gpus } = raw;
+  if (typeof minS !== "number" || typeof maxS !== "number" || typeof defaultS !== "number" || typeof ceilingS !== "number") return fail("limits {lease: {min_s, max_s, default_s}, ceiling_s} in seconds", raw);
+  if (!Array.isArray(gpus) || !gpus.every((g): g is string | null => g === null || typeof g === "string")) return fail("limits {gpus: (string | null)[]}", raw);
+  return { lease: { minS, maxS, defaultS }, ceilingS, gpus };
+}
+
 export async function createSession(gateway: string, token: Token, gpu: string | null, leaseS: number): Promise<{ id: string; status: Status }> {
   if (!Number.isInteger(leaseS)) throw new Error(`createSession: lease_s must be whole seconds, got ${String(leaseS)}`);
-  if (leaseS < LEASE_MIN_S || leaseS > LEASE_MAX_S) throw new Error(`createSession: lease_s ${String(leaseS)} outside ${String(LEASE_MIN_S)}..${String(LEASE_MAX_S)}`);
   const body = await call(`${gateway}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
