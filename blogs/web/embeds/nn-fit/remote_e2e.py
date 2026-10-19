@@ -1,15 +1,15 @@
-"""<nn-fit> remote backend, end to end: the built page in headless Chromium, Connect to a local fake gateway
-(connect_dev.py, its kernel a local Jupyter with torch, CPU), then train <nn-fit> remotely on it.
+"""<nn-fit> remote backend, end to end: the built page in headless Chromium, Connect to box's relay on the local
+provider (its kernel a local Jupyter on assay's python, with torch, CPU), then train <nn-fit> remotely on it.
 
     uv run --with playwright python web/embeds/nn-fit/remote_e2e.py
     uv run --with playwright python web/embeds/nn-fit/remote_e2e.py --gateway http://localhost:8790   # a running
         gateway instead (the real relay, box/examples/notebook-gateway/relay.py); token from MODAL_TOKEN_ID / MODAL_TOKEN_SECRET; T4
 
 Cases: a curve run with Stop, a spiral run to its step budget, the grokking dataset (Stop, then continue: on a
-real GPU until test accuracy passes 95%, on the fake gateway's CPU for 1000 steps), a disconnect mid-run.
+real GPU until test accuracy passes 95%, on the local relay's CPU for 1000 steps), a disconnect mid-run.
 --case grok runs only the grokking case.
 
-Builds dl/neural-nets.md, starts connect_dev.py (with torch added to its env, so the kernel can import it) and a
+Builds dl/neural-nets.md, starts the local relay (--python assay's, so the kernel can import torch) and a
 static server for dist/, then drives the page through the real Connect UI and kernel client (web/connect/).
 Writes screenshots and a video to .evidence/nn-fit-remote/ (gitignored). Exits 1 on the first failed check.
 """
@@ -20,6 +20,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -28,24 +29,29 @@ from urllib.request import urlopen
 from playwright.sync_api import Locator, Page, sync_playwright
 
 BLOGS = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(BLOGS))
+import local_relay  # noqa: E402
+import ref  # noqa: E402
+
 EVIDENCE = BLOGS / ".evidence" / "nn-fit-remote"
-SERVER_START_SECONDS = 120  # connect_dev.py's first start installs jupyter_server (+ torch from uv's cache)
-CONNECT_SECONDS = 120  # the fake boot, then a local Jupyter Server and kernel
+SERVER_START_SECONDS = 120
+CONNECT_SECONDS = 120  # a local session: its supervisor, Jupyter Server and kernel
 RUN_SECONDS = 2.0  # how long the Stop case lets a remote run train
-FAKE_TOKEN = ("ak-nn-fit-remote-e2e", "as-nn-fit-remote-e2e")  # connect_dev.py boots any id starting "ak-"
+FAKE_TOKEN = ("ak-nn-fit-remote-e2e", "as-nn-fit-remote-e2e")  # the local relay boots any id starting "ak-"
 STATS = "document.querySelector('nn-fit').stats"
-FAKE_DEVICE = "cpu (remote)"  # connect_dev.py's kernel: torch on this computer's CPU
+FAKE_DEVICE = "cpu (remote)"  # the local relay's kernel: torch on this computer's CPU
 GPU_DEVICE = "cuda · Tesla T4"  # a real gateway: a Modal T4
 GATEWAY_CONNECT_SECONDS = 600  # a real gateway: a workspace's first connect builds the image (~90 s seen)
 GROK_FIRST_STEPS = 300  # the grokking case trains this far, stops, then continues
-GROK_FAKE_STEPS = 1000  # the fake gateway (CPU, ~40 steps/s) trains this far: fits, doesn't grok
+GROK_FAKE_STEPS = 1000  # the local relay (CPU, ~40 steps/s) trains this far: fits, doesn't grok
 GROK_TIME_BUDGET = "6"  # slider stop 6 = 60 s: a T4 groks in ~20-30 s (test accuracy past 95%)
 
 
 class Run:
-    """What differs between the fake gateway and a real one: the token, how long Connect takes, where it trains."""
+    """What differs between the local relay and one on Modal: the token, the GPU, how long Connect takes, where it trains."""
 
     token: tuple[str, str] = FAKE_TOKEN
+    gpu: str | None = None
     connect_seconds: float = CONNECT_SECONDS
     device: str = FAKE_DEVICE
 
@@ -83,7 +89,8 @@ def connect(page: Page) -> None:
     page.locator(".connect-pill").click()
     page.fill("input[name=token-id]", Run.token[0])
     page.fill("input[name=token-secret]", Run.token[1])
-    page.select_option("select[name=gpu]", "T4")
+    if Run.gpu is not None:
+        page.select_option("select[name=gpu]", Run.gpu)
     page.locator(".connect-go").click()
     page.wait_for_selector("connect-pill[data-phase=connected]", timeout=Run.connect_seconds * 1000)
     page.keyboard.press("Escape")
@@ -267,7 +274,7 @@ def drive(page_url: str, case: str) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--gateway", help="a running gateway's URL (default: start connect_dev.py)")
+    ap.add_argument("--gateway", help="a running gateway's URL (default: start box's relay on the local provider)")
     ap.add_argument("--case", choices=("all", "grok"), default="all", help="grok: only the grokking case")
     args = ap.parse_args()
     shutil.rmtree(EVIDENCE, ignore_errors=True)
@@ -275,27 +282,30 @@ def main() -> None:
     subprocess.run(["uv", "run", "build_page.py", "dl/neural-nets.md"], cwd=BLOGS, check=True, stdout=subprocess.DEVNULL)
     sport = free_port()
     procs = []
+    machines = Path(tempfile.mkdtemp(prefix="nn-fit-remote-"))
     if args.gateway:
-        Run.token, Run.connect_seconds, Run.device = (os.environ["MODAL_TOKEN_ID"], os.environ["MODAL_TOKEN_SECRET"]), GATEWAY_CONNECT_SECONDS, GPU_DEVICE
+        Run.token, Run.gpu, Run.connect_seconds, Run.device = (os.environ["MODAL_TOKEN_ID"], os.environ["MODAL_TOKEN_SECRET"]), "T4", GATEWAY_CONNECT_SECONDS, GPU_DEVICE
         gateway_url = args.gateway.rstrip("/")
     else:
         gport = free_port()
-        log = (EVIDENCE / "connect_dev.log").open("wb")
-        procs.append(subprocess.Popen(["uv", "run", "--with", "torch", "connect_dev.py", "--port", str(gport), "--boot-delay", "0.2"],
-                                      cwd=BLOGS, stdout=log, stderr=log))  # fmt: skip
+        log = (EVIDENCE / "relay.log").open("wb")
+        procs.append(subprocess.Popen(local_relay.local(gport, machines, "--python", ref.assay_python()), cwd=BLOGS, stdout=log, stderr=log))
         gateway_url = f"http://127.0.0.1:{gport}"
     static = subprocess.Popen([sys.executable, "-m", "http.server", str(sport), "-d", str(BLOGS / "dist")],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # fmt: skip
     procs.append(static)
     try:
         if not args.gateway:
-            wait_for_http(f"{gateway_url}/sessions/none", procs[0], SERVER_START_SECONDS)
+            local_relay.limits(gateway_url, procs[0], SERVER_START_SECONDS)
         wait_for_http(f"http://127.0.0.1:{sport}/neural-nets/", static, SERVER_START_SECONDS)
         drive(f"http://127.0.0.1:{sport}/neural-nets/?gateway={gateway_url}", args.case)
     finally:
+        if not args.gateway:
+            print(f"ended {local_relay.end(gateway_url, local_relay.sessions(machines), Run.token)}")
         for proc in procs:
             proc.terminate()
             proc.wait(timeout=20)
+        shutil.rmtree(machines, ignore_errors=True)
 
 
 if __name__ == "__main__":

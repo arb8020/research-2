@@ -26,8 +26,8 @@ packages = ["assay"]
 
 [dependency-groups]
 dev = ["pytest>=8"]
-# The local stand-in for the sandbox image's Jupyter (blogs/connect_dev.py runs under this env, so the kernel and the
-# checks it runs have assay's deps): `uv run --project assay python connect_dev.py ...` from blogs/.
+# The local stand-in for the sandbox image's Jupyter (box's local relay runs Jupyter on this env's python, so the kernel
+# and the checks it runs have assay's deps): `relay.py --provider local --python <assay's .venv python>`.
 kernel = [
     "ipykernel~=7.1",
     "jupyter-server~=2.17",

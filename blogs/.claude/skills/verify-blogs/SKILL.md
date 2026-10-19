@@ -1,6 +1,6 @@
 ---
 name: verify-blogs
-description: Verify the blogs/ interactive textbook (built chapter pages in a browser, checked cells against session.py, Connect against a local Jupyter via connect_dev.py, embeds, [[links]]). Use before claiming a blogs/ change works, or to show it working; launches an isolated local instance on free ports, drives it with Playwright, keeps screenshots and transcripts.
+description: Verify the blogs/ interactive textbook (built chapter pages in a browser, checked cells against session.py, Connect against box's relay on the local provider, embeds, [[links]]). Use before claiming a blogs/ change works, or to show it working; launches an isolated local instance on free ports, drives it with Playwright, keeps screenshots and transcripts.
 ---
 
 # verify-blogs
@@ -8,7 +8,7 @@ description: Verify the blogs/ interactive textbook (built chapter pages in a br
 blogs/ turns one Markdown file per chapter into a reader page (`build_page.py` -> `dist/<stem>/index.html`). The
 reader's surface is that page in a browser: checked code cells run against `session.py` (stand-in for the
 reader's sandbox), scratch cells and nn-fit's "remote" run on a Jupyter kernel reached through a Connect
-gateway (`connect_dev.py` locally; the real relay on Modal), and embeds (carousel, nn-fit, the flappy play
+gateway (box's relay: `--provider local` here, Modal for real GPUs), and embeds (carousel, nn-fit, the flappy play
 widget). The author's surface is the build itself: it fails loudly on bad chapters.
 
 Every command below runs from `blogs/`. `vb` is `.claude/skills/verify-blogs/vb` (stdlib python3; its
@@ -31,14 +31,15 @@ when it already exists (pass `--fresh` to delete it).
 
 `launch` builds every chapter with `--session-url`/`--gateway-url` pointing at its own ports, then starts
 `uv run session.py rl/01-flappy.md --port P --timeout 20`, `python3 -m http.server Q -d dist --bind 127.0.0.1`
-and `uv run connect_dev.py --port G`. Ready = it prints `ready.` and the URLs (also `vb status`):
+and box's relay (`box/examples/notebook-gateway/relay.py --provider local --port G --machines-dir
+.session/verify-blogs/machines-<run id> --lease-min-s 2`, CPU only). Ready = it prints `ready.` and the URLs (also `vb status`):
 
     flappy (checked cells): http://127.0.0.1:Q/01-flappy/
     neural-nets (Connect):  http://127.0.0.1:Q/neural-nets/?gateway=http://127.0.0.1:G
     engine plan:            http://127.0.0.1:Q/00-plan/
 
-It waits on `GET /state` (session), `GET /01-flappy/` (static), and `GET /sessions/none` -> 404 (gateway; the
-first run installs jupyter_server, up to a few minutes). Server logs: `<evidence>/logs/*.log`.
+It waits on `GET /state` (session), `GET /01-flappy/` (static), and `GET /limits` -> 200 (gateway; the
+first run syncs box's uv env, up to a few minutes). Server logs: `<evidence>/logs/*.log`.
 
 ## Doctor
 
@@ -48,7 +49,7 @@ Checks: branch and HEAD, `web/node_modules` (a fresh worktree's only symptom is 
 uv, `.venv`, Playwright Chromium, emcc + clang, raylib fetched, no leftover scaffolding, a recorded run launched on
 this branch, each process alive and still running the recorded command, each port listened on only by our
 process group, run ports avoid the author's, session `/state` answers, the served page's `session-url` meta is our
-session, neural-nets' `data-gateway` is our gateway, connect_dev answers, `dist/` newer than the sources. Run it
+session, neural-nets' `data-gateway` is our gateway, the relay answers `/limits`, `dist/` newer than the sources. Run it
 first, after anything surprising, and before trusting a result. `vb drive` runs it before every feature and
 refuses to drive on a FAIL.
 
@@ -63,8 +64,8 @@ refuses to drive on a FAIL.
 | `cells` | flappy checked cells through the page (`verify_page.py`: stub fails, solution passes, gating, crash, hang, reload) |
 | `embeds` | carousel, flappy play widget, nn-fit in the browser (`pages.py embeds`) |
 | `links` | `[[page#heading]]` hover card, Escape, click (`pages.py links`) |
-| `connect` | bad token (`pages.py bad-token`), then `verify_connect.py --gateway <ours>`: connect, `!nvidia-smi`, Stop, reload reattach, disconnect, sign out, phone/dark, axe |
-| `nn-fit-remote` | `web/embeds/nn-fit/remote_e2e.py` (starts its own connect_dev with torch; ~3 min; not in `all`) |
+| `connect` | `verify_connect.py --gateway <ours>`: bad token, connect (CPU), Stop, reload reattach, disconnect, sign out, lease (extend, run out), phone/dark, axe |
+| `nn-fit-remote` | `web/embeds/nn-fit/remote_e2e.py` (starts its own local relay on assay's python, with torch; ~3 min; not in `all`) |
 
 Each drive prints `ok`/`FAIL` lines and ends with `== <feature>: PASS|FAIL`; exit 1 if any feature failed. Real
 handles, recipes and gotchas per feature: `features/<feature>.md` (`nn-fit-remote` is in `embeds.md`). To drive by hand, open the launched URLs in a
@@ -89,8 +90,8 @@ Proof standards: drive the reader's path in the page (click Run, the pill, the c
 endpoints directly; capture the action and the result (before/after screenshots, the status line text); check
 side effects next to what's visible (`cells` saves the session's `/state` after the run: `state-after.json`
 must list the cells that passed); mocks only where a production boundary already isolates the external system
-(connect_dev.py stands in for the Modal relay at the gateway contract; its `nvidia-smi` prints `FAKE`). A pass
-from `connect` proves the page against the contract, not Modal.
+(the relay's local provider stands in for Modal: same relay, same contract, CPU only, no `nvidia-smi`). A pass
+from `connect` proves the page against the relay, not Modal.
 
 ## Cleanup
 

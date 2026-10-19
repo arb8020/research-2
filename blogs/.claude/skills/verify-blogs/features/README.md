@@ -5,7 +5,7 @@ This directory is the maintained source for verifying what readers and the autho
 ## Baseline preconditions
 
 - `vb setup` has run in this checkout (`web/node_modules` present; Playwright Chromium installed).
-- `vb launch` started this run's own session.py, static server and connect_dev.py on free ports, and printed `ready.`.
+- `vb launch` started this run's own session.py, static server and local relay on free ports, and printed `ready.`.
 - `vb doctor` reports `doctor: ok`: right branch, our processes alive and owning their ports, the served pages built for our session and gateway.
 - Never drive the author's long-running instances (tmux `blogs` :8787/:8010, `reader-path` :8790/:8012, `blogs-nnfit` :8060).
 - The session starts as a fresh reader (`/state` shows `passed: []`); `vb drive cells` resets this run's reader state itself.
@@ -44,9 +44,9 @@ Keep implementation details out of the map. Name only user paths, stable handles
 - [Checked cells](./cells.md) covers flappy's cells against session.py: run, pass/fail, crash/hang, gating, propagation, reload restore, the play widget rebuilt from the reader's env.
 - [Embeds and widgets](./embeds.md) covers the carousel, the flappy play widget (reference env), nn-fit in the browser and on a Connect kernel (`nn-fit-remote`).
 - [Page links](./links.md) covers the `[[page#heading]]` hover card, Escape, click navigation.
-- [Connect](./connect.md) covers the Connect pill against connect_dev.py (bad token, boot drawer, scratch cell, Stop, reload reattach, disconnect, sign out) and how the real Modal path is reached.
+- [Connect](./connect.md) covers the Connect pill against the local relay (bad token, boot drawer, scratch cell, Stop, reload reattach, disconnect, sign out) and how the real Modal path is reached.
 
 ## Known upcoming features (not mapped yet)
 
-- **Workspace-backed file cells** (branch `blogs/workspace-cells`: changes connect_dev.py, page.ts, kernel.ts, check.py). Once merged, a maintain pass adds a feature file and a `vb drive` recipe for them.
+- **Workspace-backed file cells** (branch `blogs/workspace-cells`: changes page.ts, kernel.ts, check.py). Once merged, a maintain pass adds a feature file and a `vb drive` recipe for them.
 - **Chapter 1 of the inference-engine series** (`engine/`, per `engine/00-plan.md`: gpt2 forward with the correctness machinery). Once it has cells, map it like [cells](./cells.md).

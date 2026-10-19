@@ -1,19 +1,19 @@
 """Workspace cells end to end: engine/ch00-toy.md and engine/ch01-forward.md in headless Chromium, through the
-Connect path (connect_dev.py). Ports are free ones picked at start (never the author's 8790 / 8012).
+Connect path (box's relay). Ports are free ones picked at start (never the author's 8790 / 8012).
 
-    uv run --with playwright verify_workspace.py [--page ch00|ch01|all]   # sandbox = a local Jupyter (connect_dev --root)
-    uv run --with playwright --with modal verify_workspace.py --modal --page ch00   # ch00 on a Modal CPU sandbox
+    uv run --with playwright verify_workspace.py [--page ch00|ch01|all]   # the relay on the local provider (CPU)
+    uv run --with playwright --with modal verify_workspace.py --modal --page ch00   # ch00 on the relay on Modal (CPU)
 
-Checks run the real check core (blogs/assay, shipped as _blogs/assay/). Locally connect_dev.py runs under assay's uv
-env (`uv run --project assay python connect_dev.py`), so the kernel, workspace.py and run_checks have torch etc.
+Checks run the real check core (blogs/assay, shipped as _blogs/assay/). Locally the relay's Jupyter runs on assay's uv
+env's python (`--python`), so the kernel, workspace.py and run_checks have torch etc.
 
 Evidence goes to .evidence/verify_workspace/<page>/ (or verify_workspace-modal/; gitignored, kept until the next run):
 numbered screenshots, story.log (what each step saw), timings.json, git-log.txt (the workspace's history),
-connect_dev logs; locally also the Jupyter roots and the persist dir (root1/, root2/, persist/).
+relay logs; locally also each relay's machines (sandbox1/, sandbox2/: a Jupyter root per session) and persist/.
 
 Phases (the shape a verify-blogs skill can call one by one):
-  launch   build the page; serve dist/; start sandbox 1 (local root1, or a Modal sandbox with Jupyter on the relay's
-           flags and the persist dir on a Volume) and connect_dev.py in front of it
+  launch   build the page; serve dist/; start the relay for sandbox 1 (local, its machines in sandbox1/, or on Modal
+           with the lesson image and the persist dir on a Volume made for the run)
   doctor   g++ / make / git in the sandbox; the page ships _blogs/ (workspace.py, assay/, MANIFEST.sha256) +
            ref.bundle; after Connect the workspace is seeded (tag ref/<chapter>/start) and every cell can run
   drive    the ch00 story (C++ + Python, whole-file cells, the legacy plain-text check output):
@@ -25,14 +25,15 @@ Phases (the shape a verify-blogs skill can call one by one):
              4  loop.cpp that never returns -> Run; while it runs, a scratch cell runs on the same kernel; Stop kills
                 the check (and its check_trace) without committing
              5  loop passes; a budget.py draft (the Python cell) is typed but not run
-             6  sandbox 1 and connect_dev stop; sandbox 2 starts fresh with the same persist dir. Reconnect: the
+             6  sandbox 1's session ends and its relay stops; a new relay and session (sandbox 2) start fresh with the
+                same persist dir. Reconnect: the
                 workspace is restored from the bundle (refs identical to sandbox 1's); ring/loop show their passing
                 versions; the budget draft comes back from the browser's copy and is written to the new workspace
              7  budget passes in the restored workspace
            the ch01 story (one gpt2.py, seven region cells over one shared doc, the real check core on real GPT-2):
              0  stop any running assay warm process, so the first check pays its start (the "cold" timing)
              1  before Connect: edit the linear region in its cell; the gelu cell's view of gpt2.py shows the same
-                edit at once; Run linear while disconnected -> "waiting for sandbox"; Connect (slow boot) -> the
+                edit at once; Run linear while disconnected -> "waiting for sandbox"; Connect -> the
                 queued run starts once the workspace is up and passes on the edit made before Connect: tag
                 pass/ch01/linear on exactly that text, the bundle saved
              2  edit gelu in the gelu cell; undo (Mod-z) from the attention cell undoes it everywhere (one history
@@ -59,9 +60,9 @@ Phases (the shape a verify-blogs skill can call one by one):
                 banner and the sandbox's text; "Use this browser's draft" puts it in (saved to the workspace); Run
                 generate passes (24 greedy tokens = HF's)
   evidence screenshots, story.log, timings.json, git-log.txt
-  cleanup  stop only what this script started: connect_dev (every process it spawned must be gone, or the run fails),
-           the static server, and on Modal both sandboxes (none of this app's sandboxes may be left; the Volume is
-           ephemeral)
+  cleanup  stop only what this script started: the relay, after ending its sessions (every process it spawned must be
+           gone, or the run fails), the static server, and on Modal both sandboxes (none labelled
+           box.purpose=verify-workspace may be left) and the run's Volume
 """
 
 from __future__ import annotations
@@ -86,10 +87,10 @@ from dataclasses import dataclass, field
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.request import urlopen
 
 from playwright.sync_api import Page, expect, sync_playwright
 
+import local_relay
 import ref
 
 HERE = Path(__file__).parent
@@ -115,32 +116,36 @@ CELLS = 3
 class Box(Protocol):
     name: str
     persist: str  # $BLOGS_WS_PERSIST as the sandbox sees it
+    token: tuple[str, str]
 
     def gateway_args(self) -> list[str]: ...
+    def sessions(self) -> list[str]: ...
     def sh(self, cmd: str) -> str: ...  # bash -c in the Jupyter root (the kernel's cwd); raises on a non-zero exit
-    def close(self) -> None: ...
 
 
 class LocalBox:
-    """connect_dev.py starts Jupyter itself, on this root; the box is just the directories."""
+    """The local relay starts Jupyter itself, a root per session under machines/; the box is just the directories."""
+
+    token = TOKEN
 
     def __init__(self, name: str, out: Path) -> None:
         self.name = name
-        self.root = out / name
+        self.machines = out / name
         self.persist = str(out / "persist")
 
     def gateway_args(self) -> list[str]:
-        return ["--root", str(self.root), "--persist", self.persist]
+        return ["--provider", "local", "--machines-dir", str(self.machines), "--python", ref.assay_python()]
+
+    def sessions(self) -> list[str]:
+        return local_relay.sessions(self.machines)
 
     def sh(self, cmd: str) -> str:
-        self.root.mkdir(parents=True, exist_ok=True)
-        proc = subprocess.run(["bash", "-c", cmd], cwd=self.root, capture_output=True, text=True, check=False)
+        root = local_relay.jupyter_root(self.machines) or self.machines
+        root.mkdir(parents=True, exist_ok=True)
+        proc = subprocess.run(["bash", "-c", cmd], cwd=root, capture_output=True, text=True, check=False)
         if proc.returncode != 0:
             raise RuntimeError(f"[{self.name}] `{cmd}` exited {proc.returncode}:\n{proc.stdout}{proc.stderr}")
         return proc.stdout
-
-    def close(self) -> None:
-        pass  # connect_dev owned its Jupyter; Gateway.stop proved it gone
 
 
 @dataclass
@@ -212,12 +217,12 @@ def bundle_note(output: str) -> tuple[float, int]:
     return float(m[1]), int(m[2])
 
 
-def connect(page: Page, cells: int = CELLS) -> None:
+def connect(page: Page, token: tuple[str, str], cells: int = CELLS) -> None:
     if page.locator(".connect-panel").is_hidden():
         page.locator(".connect-pill").click()
     if page.locator("input[name=token-id]").is_visible():
-        page.fill("input[name=token-id]", TOKEN[0])
-        page.fill("input[name=token-secret]", TOKEN[1])
+        page.fill("input[name=token-id]", token[0])
+        page.fill("input[name=token-secret]", token[1])
     page.locator(".connect-go").click()
     page.wait_for_selector("connect-pill[data-phase=connected]", timeout=120_000)
     page.wait_for_function(f"document.querySelectorAll('ws-cell[data-loaded]').length === {cells}", timeout=120_000)
@@ -270,39 +275,32 @@ def alive(pids: set[int]) -> set[int]:
 
 
 class Gateway:
-    """connect_dev.py in front of one box, started by this script and only stopped by it. Remembers every process
-    it spawned (locally: Jupyter, kernels, check jobs) so stop() can prove they all ended."""
+    """box's relay in front of one box, started by this script and only stopped by it. Remembers every process
+    it spawned (locally: supervisors, Jupyter, kernels, check jobs) so stop() can prove they all ended."""
 
-    def __init__(self, port: int, box: Box, out: Path, boot_delay: float = 0.1) -> None:
+    def __init__(self, port: int, box: Box, out: Path) -> None:
         self.box = box
-        self.log = (out / f"connect_dev-{box.name}.log").open("wb")
-        self.proc = subprocess.Popen(["uv", "run", "--project", "assay", "python", "connect_dev.py", "--port", str(port), "--boot-delay", str(boot_delay), *box.gateway_args()],
-                                     cwd=HERE, stdout=self.log, stderr=self.log)  # fmt: skip
+        self.url = f"http://127.0.0.1:{port}"
+        self.log = (out / f"relay-{box.name}.log").open("wb")
+        self.proc = subprocess.Popen(local_relay.command(port, *box.gateway_args()), cwd=HERE, stdout=self.log, stderr=self.log,
+                                     env={**os.environ, "BLOGS_WS_PERSIST": box.persist})  # fmt: skip
         self.seen: set[int] = set()
-        for _ in range(240):  # the first run installs jupyter_server
-            try:
-                urlopen(f"http://127.0.0.1:{port}/sessions/none")
-            except OSError as e:
-                if getattr(e, "code", None) == 404:
-                    return
-                time.sleep(0.5)
-        self.proc.kill()
-        raise RuntimeError(f"connect_dev.py never answered on :{port} (see {self.log.name})")
+        local_relay.limits(self.url, self.proc)
 
     def remember(self) -> None:
         self.seen |= descendants(self.proc.pid)
 
     def stop(self) -> str:
         self.remember()
-        self.proc.send_signal(signal.SIGTERM)  # connect_dev ends every session (stops its Jupyter) on TERM
+        ended = local_relay.end(self.url, self.box.sessions(), self.box.token)
+        self.proc.send_signal(signal.SIGTERM)
         self.proc.wait(30)
         deadline = time.monotonic() + 15
         while alive(self.seen) and time.monotonic() < deadline:
             time.sleep(0.2)
         left = alive(self.seen)
-        assert not left, f"processes connect_dev ({self.box.name}) started are still running: {left}"
-        self.box.close()
-        return f"cleanup: connect_dev ({self.box.name}) stopped; all {len(self.seen)} processes it started are gone"
+        assert not left, f"processes the relay ({self.box.name}) started are still running: {left}"
+        return f"cleanup: ended {ended}; the relay ({self.box.name}) stopped; all {len(self.seen)} processes it started are gone"
 
 
 # ---- doctor ----
@@ -449,7 +447,7 @@ def step_restart(run: Run, old: Gateway) -> Gateway:
     page.reload()
     page.wait_for_selector("connect-pill[data-phase=disconnected]", timeout=30_000)
     t0 = time.perf_counter()
-    connect(page)
+    connect(page, box.token)
     run.timings["reconnect_to_loaded_s"] = round(time.perf_counter() - t0, 3)
     boot = page.evaluate("document.documentElement.dataset.workspaceBoot")
     assert boot.startswith("restored "), boot
@@ -472,8 +470,9 @@ def step_restart(run: Run, old: Gateway) -> Gateway:
 def drive(run: Run, gateway: Gateway) -> Gateway:
     box = gateway.box
     t0 = time.perf_counter()
-    connect(run.page)
+    connect(run.page, box.token)
     run.timings["first_connect_to_loaded_s"] = round(time.perf_counter() - t0, 3)
+    run.say(doctor_box(box))
     doctor_workspace(run, box)
     run.shot("0-connected")
     step_compile_error(run, box)
@@ -489,13 +488,14 @@ def drive(run: Run, gateway: Gateway) -> Gateway:
     return gateway
 
 
-def box_factory(modal: bool, out: Path, origin: str, stack: ExitStack) -> Callable[[str], Box]:
+def box_factory(modal: bool, out: Path, stack: ExitStack) -> Callable[[str], Box]:
     if not modal:
         return lambda name: LocalBox(name, out)
     import ws_modal  # only with --modal: needs the modal package and a Modal token
 
-    volume = stack.enter_context(ws_modal.modal.Volume.ephemeral())  # deleted when the run ends
-    return lambda name: ws_modal.ModalBox(name, volume, origin)
+    volume = f"blogs-verify-workspace-{os.getpid()}"
+    stack.callback(ws_modal.delete_volume, volume)
+    return lambda name: ws_modal.ModalBox(name, volume)
 
 
 # ---- ch01: one gpt2.py, region cells over one shared doc ----
@@ -505,7 +505,6 @@ PAGE1 = "ch01-forward"
 CHAPTER1 = HERE / "engine" / "ch01-forward.md"
 SOL1 = ref.materialize(CH1, "solution")["gpt2.py"].data.decode()
 CELLS1 = 7
-SLOW_BOOT_S = 1.5  # connect_dev's delay between boot steps in ch01: time to edit and press Run while it connects
 
 
 def region_text(text: str, name: str) -> str:
@@ -593,8 +592,8 @@ def ch01_before_connect(run: Run, gateway: Gateway) -> None:
     expect(page.locator("ws-cell[name=linear] .cell-status")).to_have_text("waiting for sandbox: connect to run")
     expect(page.locator(".connect-panel")).to_be_visible()  # Run opened the Connect panel
     t0 = time.perf_counter()
-    page.fill("input[name=token-id]", TOKEN[0])
-    page.fill("input[name=token-secret]", TOKEN[1])
+    page.fill("input[name=token-id]", box.token[0])
+    page.fill("input[name=token-secret]", box.token[1])
     page.locator(".connect-go").click()
     page.wait_for_function("document.querySelector('ws-cell[name=linear] .cell-status').textContent.startsWith('waiting for sandbox (')", timeout=30_000)
     waiting = page.locator("ws-cell[name=linear] .cell-status").inner_text()
@@ -846,7 +845,7 @@ def ch01_conflict(run: Run, old: Gateway) -> Gateway:
     page.reload()
     page.wait_for_selector("connect-pill[data-phase=disconnected]", timeout=30_000)
     assert doc(page, "linear") == SOL1, "before Connect the editors should show this browser's draft"
-    connect(page, CELLS1)
+    connect(page, box.token, CELLS1)
     boot = page.evaluate("document.documentElement.dataset.workspaceBoot")
     assert boot.startswith("restored "), boot
     in_workspace = box.sh("cat workspace/gpt2.py")
@@ -874,6 +873,7 @@ def ch01_conflict(run: Run, old: Gateway) -> Gateway:
 def drive_ch01(run: Run, gateway: Gateway) -> Gateway:
     run.say(f"0 before the story, stop any running warm process: {stop_warm(gateway.box)}")
     ch01_before_connect(run, gateway)
+    run.say(doctor_box(gateway.box))
     assert "refs/tags/ref/ch01/start" in refs(gateway.box)
     assert "ring.cpp" not in gateway.box.sh("ls workspace"), "ch00's toy files leaked into ch01's tree"
     ch01_gelu(run, gateway.box)
@@ -896,12 +896,11 @@ def drive_ch01(run: Run, gateway: Gateway) -> Gateway:
 class Story:
     chapter: Path
     page: str
-    boot_delay: float
     first: str  # a cell checked before Connect
     drive: Callable[[Run, Gateway], Gateway]
 
 
-STORIES = {"ch00": Story(CHAPTER, PAGE, 0.1, "ring", drive), "ch01": Story(CHAPTER1, PAGE1, SLOW_BOOT_S, "linear", drive_ch01)}
+STORIES = {"ch00": Story(CHAPTER, PAGE, "ring", drive), "ch01": Story(CHAPTER1, PAGE1, "linear", drive_ch01)}
 
 
 def free_port() -> int:
@@ -916,7 +915,7 @@ def run_story(name: str, story: Story, args: argparse.Namespace, out: Path, brow
     gateway: Gateway | None = None
     print(f"== {name}: launch", flush=True)
     with ExitStack() as stack:
-        new_box = box_factory(args.modal, out, origin, stack)
+        new_box = box_factory(args.modal, out, stack)
         context = browser.new_context(viewport={"width": 1100, "height": 900})  # fresh localStorage per story
         page = context.new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
@@ -925,8 +924,7 @@ def run_story(name: str, story: Story, args: argparse.Namespace, out: Path, brow
             box = new_box("sandbox1")
             print(f"== {name}: doctor", flush=True)
             run.say(doctor_page(story.page))
-            run.say(doctor_box(box))
-            gateway = Gateway(args.gateway_port, box, out, story.boot_delay)
+            gateway = Gateway(args.gateway_port, box, out)
             page.goto(f"{origin}/{story.page}/?gateway=http://localhost:{args.gateway_port}")
             expect(page.locator(f"ws-cell[name={story.first}] .cell-status")).to_have_text("not connected: edits are kept in this browser")
             print(f"== {name}: drive", flush=True)
@@ -946,7 +944,7 @@ def run_story(name: str, story: Story, args: argparse.Namespace, out: Path, brow
 
                 left = ws_modal.leftovers(kill=True)
                 assert left == 0, f"{left} Modal sandbox(es) were still running (now terminated)"
-                run.say(f"cleanup: no sandboxes left under Modal app {ws_modal.APP}; the Volume was ephemeral")
+                run.say(f"cleanup: no sandboxes tagged {ws_modal.TAG} left under Modal app {ws_modal.APP}")
     assert not errors, f"page errors: {errors}"
     (out / "timings.json").write_text(json.dumps(run.timings, indent=1))
     (out / "story.log").write_text("\n".join(run.log) + "\n")
