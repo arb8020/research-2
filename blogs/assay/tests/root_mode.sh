@@ -1,5 +1,10 @@
 #!/bin/bash
 set -uo pipefail
+if [ ! -f /.dockerenv ]; then
+  cd "$(dirname "$0")/../.."
+  exec docker run --rm -v "$PWD":/src:ro -v ~/.cache/huggingface:/hf:ro -v "$PWD/assay/tests/root_mode.sh":/r.sh:ro \
+    debian:bookworm-slim bash /r.sh
+fi
 t() { date +%s%N; }
 echo "== setup"
 apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends g++ make curl ca-certificates >/dev/null
@@ -8,6 +13,7 @@ mkdir -p /opt /work && cp -r /src/engine /opt/engine && cp -r /src/assay /opt/as
 cd /opt/assay && UV_PYTHON_INSTALL_DIR=/opt/uvpython uv sync -q --python 3.12 2>&1 | tail -2
 chmod -R a+rX /opt/uvpython; export BLOGS_ASSAY=/opt/assay
 PY=/opt/assay/.venv/bin/python; RC=/opt/assay/.venv/bin/run_checks
+runuser -u nobody -- $PY -V >/dev/null || { echo "nobody can't run $PY: the child imports stdlib lazily after dropping privileges, so set UV_PYTHON_INSTALL_DIR to a dir nobody can read"; exit 1; }
 export HF_HOME=/hf HF_HUB_OFFLINE=1
 cp -r /src/engine/ref/ch00/files /work/ch00 && rm -rf /work/ch00/build && chmod -R a+rX /work
 id nobody; ls -ld /root
