@@ -18,6 +18,8 @@ from torch import Tensor
 NAMES = {"fp64": torch.float64, "fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}
 SHORT = {v: k for k, v in NAMES.items()}
 INPUTS = {"centered": (0.0, 1.0), "offset": (3.0, 0.5)}
+GPT2_D, GPT2_QKV, GPT2_MLP = 768, 2304, 3072
+VISIBLE_EPS = 0.1
 DIM_LETTERS = {"T": "query len", "S": "kv len", "D": "d_model", "F": "mlp hidden", "N": "heads", "H": "head dim",
                "V": "vocab"}
 
@@ -143,17 +145,17 @@ def bind(kernels: dict[Op, str] | None = None, *, torch_ops: bool = False) -> Bi
 ALL = (torch.float32, torch.float16, torch.bfloat16)
 
 
-@op(dims={"T": (1, 3, 17, 64), "D": (1, 7, 768), "F": (1, 5, 2304)}, dtypes=ALL)
+@op(dims={"T": (1, 3, 17, 64), "D": (1, 7, GPT2_D), "F": (1, 5, GPT2_QKV)}, dtypes=ALL)
 def linear(x_TD: Float[Tensor, "T D"], w_DF: Float[Tensor, "D F"], b_F: Float[Tensor, "F"]) -> Float[Tensor, "T F"]:
     return x_TD @ w_DF + b_F
 
 
-@op(dims={"T": (1, 3, 64), "F": (1, 7, 768, 3072)}, dtypes=ALL)
+@op(dims={"T": (1, 3, 64), "F": (1, 7, GPT2_D, GPT2_MLP)}, dtypes=ALL)
 def gelu(x_TF: Float[Tensor, "T F"]) -> Float[Tensor, "T F"]:
     return 0.5 * x_TF * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (x_TF + 0.044715 * x_TF ** 3)))
 
 
-@op(dims={"T": (1, 2, 3, 17, 64), "D": (1, 3, 7, 64, 769)}, dtypes=ALL, scalars={"eps": (1e-5, 1e-1)})
+@op(dims={"T": (1, 2, 3, 17, 64), "D": (1, 3, 7, 64, GPT2_D + 1)}, dtypes=ALL, scalars={"eps": (1e-5, VISIBLE_EPS)})
 def layer_norm(x_TD: Float[Tensor, "T D"], w_D: Float[Tensor, "D"], b_D: Float[Tensor, "D"],
                eps: float) -> Float[Tensor, "T D"]:
     mean = x_TD.mean(dim=-1, keepdim=True)

@@ -31,7 +31,7 @@ from verify_connect import CHROME, open_menu, run_cell, serve_dist  # noqa: E402
 OUT = HERE / ".evidence" / "demo-tour"
 CONNECT_SECONDS = 600
 GROK_SECONDS = 180
-GROK_TIME_BUDGET = "6"
+TIME_BUDGET_60S_STOP = "6"
 BUDGET_OFF = "7"
 SPEEDUP = 2.5
 CONTACT_FRAMES = 8
@@ -136,7 +136,7 @@ def grok(page: Page) -> None:
     caption(page, "5. Grokking: a + b mod 113, a 1-layer transformer, trained until test accuracy passes 95%")
     page.select_option(nn(page, "select.dataset"), "grok")
     slider(page, "step-budget", BUDGET_OFF)
-    slider(page, "time-budget", GROK_TIME_BUDGET)
+    slider(page, "time-budget", TIME_BUDGET_60S_STOP)
     page.locator("nn-fit").scroll_into_view_if_needed()
     page.wait_for_timeout(1500)
     page.click(nn(page, "button.train"))

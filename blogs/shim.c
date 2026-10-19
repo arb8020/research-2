@@ -6,6 +6,8 @@
 
 #include ENV_HEADER
 
+#define VEC_LOG_CAP_TOO_SMALL (-1)
+
 _Static_assert(sizeof(obs_t) == sizeof(float), "shim expects float32 obs (PRECISION_FLOAT)");
 _Static_assert(sizeof(Log) % sizeof(float) == 0, "Log must be a flat struct of floats");
 _Static_assert(NUM_ATNS == 1, "shim supports one action head");
@@ -120,7 +122,7 @@ int vec_log(void* handle, char* out, int cap) {
             dict.items[i].key, dict.items[i].value);
         if (w < 0 || w >= cap - len) {
             dict_clear(&dict);
-            return -1;
+            return VEC_LOG_CAP_TOO_SMALL;
         }
         len += w;
     }

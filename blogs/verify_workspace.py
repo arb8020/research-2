@@ -106,6 +106,7 @@ HANG = "void sched_step(const Request* reqs, Ring* waiting, u32 budget, Batch* o
 SCRATCH = "print('scratch ran while the check was running:', 6 * 7)"
 CHECK_TIMEOUT_MS = 180_000
 SAVE_WAIT_S = 15
+JUPYTER_FIRST_START_POLLS = 240
 CELLS = 3
 
 
@@ -261,7 +262,7 @@ class Gateway:
         self.proc = subprocess.Popen(["uv", "run", "--project", "assay", "python", "connect_dev.py", "--port", str(port), "--boot-delay", str(boot_delay), *box.gateway_args()],
                                      cwd=HERE, stdout=self.log, stderr=self.log)  # fmt: skip
         self.seen: set[int] = set()
-        for _ in range(240):
+        for _ in range(JUPYTER_FIRST_START_POLLS):
             try:
                 urlopen(f"http://127.0.0.1:{port}/sessions/none")
             except OSError as e:

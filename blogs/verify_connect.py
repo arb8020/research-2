@@ -45,6 +45,7 @@ FAKE_TOKEN = ("ak-verify-connect-0001", "as-verify-connect-secret")
 PID = "import os\nprint('kernel pid', os.getpid())"
 LONG = "import time\nfor i in range(600):\n    print(i, flush=True)\n    time.sleep(0.05)"
 CEILING_S = 12 * 3600
+JUPYTER_FIRST_START_POLLS = 240
 
 
 def created_at(status: dict[str, Any]) -> float:
@@ -71,7 +72,7 @@ def serve_dist(port: int) -> ThreadingHTTPServer:
 def start_fake(port: int) -> subprocess.Popen[bytes]:
     log = (OUT / "connect_dev.log").open("wb")
     proc = subprocess.Popen(["uv", "run", "connect_dev.py", "--port", str(port), "--boot-delay", "0.8"], cwd=HERE, stdout=log, stderr=log)
-    for _ in range(240):
+    for _ in range(JUPYTER_FIRST_START_POLLS):
         try:
             urlopen(f"http://127.0.0.1:{port}/sessions/none")
         except OSError as e:

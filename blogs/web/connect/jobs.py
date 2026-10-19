@@ -12,6 +12,7 @@ import threading as _threading
 class _BlogsJobs:
     CHUNK = 65536
     MAX_OUTPUT_BYTES = 4 << 20
+    JOB_MIME = "application/vnd.blogs.job+json"
 
     def __init__(self) -> None:
         self.procs: dict[str, _subprocess.Popen[bytes]] = {}
@@ -39,7 +40,7 @@ class _BlogsJobs:
                         send("stream", {"name": "stdout", "text": f"\n[output past {self.MAX_OUTPUT_BYTES >> 20} MB dropped]\n"})
             rc = proc.wait()
             self.procs.pop(job_id, None)
-            send("display_data", {"data": {"application/vnd.blogs.job+json": {"job": job_id, "exit": rc}, "text/plain": f"job {job_id} exited {rc}"},
+            send("display_data", {"data": {self.JOB_MIME: {"job": job_id, "exit": rc}, "text/plain": f"job {job_id} exited {rc}"},
                                   "metadata": {}, "transient": {}})
 
         self.procs[job_id] = proc

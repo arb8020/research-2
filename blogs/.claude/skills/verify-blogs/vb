@@ -41,6 +41,7 @@ READER_STATE = BLOGS / ".session" / "01-flappy"
 USER_PORTS = {8010, 8012, 8060, 8787, 8790}
 CHROME_GLOB = "~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
 FAKE_TOKEN = ("ak-verify-blogs", "as-verify-blogs-secret")
+JUPYTER_FIRST_START_S = 240
 FEATURES = ("build", "plan", "cells", "embeds", "links", "connect", "nn-fit-remote")
 ALL = ("build", "plan", "embeds", "links", "cells", "connect")
 
@@ -216,7 +217,7 @@ def cmd_launch(args: argparse.Namespace) -> int:
         ("static", [sys.executable, "-m", "http.server", str(ports["static"]), "-d", "dist", "--bind", "127.0.0.1"],
          f"http.server {ports['static']}", f"{run['urls']['static']}/01-flappy/", (200,), 30),
         ("gateway", ["uv", "run", "connect_dev.py", "--port", str(ports["gateway"]), "--boot-delay", "0.6"],
-         f"--port {ports['gateway']}", f"{run['urls']['gateway']}/sessions/none", (404,), 240),
+         f"--port {ports['gateway']}", f"{run['urls']['gateway']}/sessions/none", (404,), JUPYTER_FIRST_START_S),
     ]
     for name, argv, match, probe, ok, seconds in specs:
         proc = spawn(name, argv, evidence / "logs" / f"{name}.log", match)

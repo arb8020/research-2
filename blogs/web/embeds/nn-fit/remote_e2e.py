@@ -39,7 +39,7 @@ GPU_DEVICE = "cuda · Tesla T4"
 GATEWAY_CONNECT_SECONDS = 600
 GROK_FIRST_STEPS = 300
 GROK_FAKE_STEPS = 1000
-GROK_TIME_BUDGET = "6"
+TIME_BUDGET_60S_STOP = "6"
 STEP_BUDGET_1000_STOP = "1"
 BUDGET_OFF_STOP = "7"
 
@@ -168,7 +168,7 @@ def grok_run(page: Page, gpu: bool) -> None:
     page.locator("nn-fit").screenshot(path=EVIDENCE / "grok-stopped.png")
 
     if gpu:
-        slider(page, "time-budget", GROK_TIME_BUDGET)
+        slider(page, "time-budget", TIME_BUDGET_60S_STOP)
     else:
         slider(page, "step-budget", STEP_BUDGET_1000_STOP)
     page.click(nn(page, "button.train"))
