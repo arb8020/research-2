@@ -38,7 +38,7 @@ export function jump(path: string, line: number, col: number): void {
 
 interface Hit { start: number; end: number; path: string; line: number; col: number }
 
-function hits(line: string): Hit[] {
+export function hits(line: string): Hit[] {
   const found: Hit[] = [];
   for (const m of line.matchAll(LOCATION)) {
     const path = resolve(m[1] ?? "");

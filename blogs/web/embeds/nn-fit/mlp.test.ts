@@ -77,6 +77,12 @@ for (const task of ["regression", "binary"] as const) {
 }
 
 {
+  const buf = makeDrawBuffer(640).fill(0);
+  for (const c of [0, 320, 639]) buf[c] = NaN;
+  check(describeGaps(buf) === "left edge to 1%, 50–51%, 99% to right edge", `a one-column gap never reads as 0% or empty: "${describeGaps(buf)}"`);
+}
+
+{
   const buf = makeDrawBuffer(10);
   buf[2] = 0.5; buf[3] = 0.4; buf[7] = -0.2;
   const done = completeCurve(buf);

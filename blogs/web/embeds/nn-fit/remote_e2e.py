@@ -179,7 +179,8 @@ def grok_run(page: Page, gpu: bool) -> None:
           f"test {end['heldOutAccuracy']:.1%}; test past 95% at {g['grokked']}")  # fmt: skip
     status = page.locator("nn-fit [role=status]").text_content() or ""
     budget = "time budget used up" if gpu else "step budget used up"
-    check(f"Remote run stopped: {budget}" in status, f"grok: the budget ended it, not a failure ({status!r})")
+    check(f"Remote run stopped: {budget}" in status,
+          f"grok: the budget ended it, not a failure, so a 60 s run outlives 2 keepalives (pinged on control, not shell) ({status!r})")
     check(g["run"] == first["grok"]["run"] and end["steps"] > first["steps"], "grok: Train continued the stopped run (same run, more steps)")
     check(end["accuracy"] == 1.0, "grok: fits every training pair")
     if gpu:

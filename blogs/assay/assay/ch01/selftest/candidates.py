@@ -48,6 +48,12 @@ def layer_norm_untested_branch(x: Tensor, weight: Tensor, bias: Tensor, eps: flo
     return F.layer_norm(x, (x.shape[-1],), weight, bias, eps)
 
 
+def layer_norm_pragma_hides_branch(x: Tensor, weight: Tensor, bias: Tensor, eps: float) -> Tensor:
+    if x.shape[-1] % 1024 == 0:  # pragma: no cover
+        return F.layer_norm(x.float(), (x.shape[-1],), weight.float(), bias.float(), eps).to(x.dtype)
+    return F.layer_norm(x, (x.shape[-1],), weight, bias, eps)
+
+
 def _attend(q_TNH: Tensor, k_SNH: Tensor, v_SNH: Tensor, scale: float, diagonal: int) -> Tensor:
     q, k, v = (t.transpose(0, 1) for t in (q_TNH, k_SNH, v_SNH))
     T, S = q.shape[-2], k.shape[-2]

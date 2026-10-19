@@ -314,7 +314,8 @@ def selftests(scratch: Path) -> list[Expect]:
         ("attention", "attention_scale", TOL_CATCH, ()),
         ("attention", "attention_mask_off_by_one", TOL_CATCH, ()),
         ("linear", "linear_no_bias", TOL_CATCH, ()))]
-    tests.append(Expect("layer_norm", honest, "layer_norm_untested_branch", "coverage: sweep never executed"))
+    tests += [Expect("layer_norm", honest, attr, "coverage: sweep never executed")
+              for attr in ("layer_norm_untested_branch", "layer_norm_pragma_hides_branch")]
     tests += [Expect("layer_norm", adv, attr, why, *extra) for attr, why, *extra in (
         ("mutates_input", "inputs_unchanged: mutated input"),
         ("cached_result", "dtype_shape: output shape"),

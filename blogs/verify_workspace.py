@@ -325,7 +325,8 @@ def step_compile_error(run: Run, box: Box) -> None:
     assert ring_links, f"no ring.cpp link in the output; links {locs}\n{out}"
     target = ring_links[0]
     link_line = int(target.split(":")[1])
-    assert link_line in (line, line + 1), f"the error points at line {link_line}; the broken statement is line {line}"
+    assert link_line in (line, line + 1), (f"the error points at line {link_line}; the broken statement is line {line} "
+                                           "(clang points past the statement, its own line; gcc at the next token, the next line)")
     page.locator(f"ws-cell[name=ring] .cell-out a.out-link[data-loc='{target}']").first.click()
     cursor = page.evaluate("() => { const v = document.querySelector('ws-cell[name=ring]').view; const h = v.state.selection.main.head; return {line: v.state.doc.lineAt(h).number, focused: v.hasFocus}; }")
     assert cursor == {"line": link_line, "focused": True}, cursor

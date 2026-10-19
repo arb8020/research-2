@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -68,6 +70,33 @@ def test_derive_builds_once(tmp_path: Path) -> None:
     a = store.derive("expected", {"x": 1}, build)
     b = store.derive("expected", {"x": 1}, build)
     assert a.key == b.key and len(calls) == 1
+
+
+def test_concurrent_put_first_writer_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ours, theirs = Store(tmp_path / "s"), Store(tmp_path / "s")
+    rename = Path.rename
+
+    def theirs_lands_first(self: Path, target: Path) -> Path:
+        monkeypatch.setattr(Path, "rename", rename)
+        theirs.put("run", "abcdef0123", {"who": "theirs"}, {})
+        return rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", theirs_lands_first)
+    entry = ours.put("run", "abcdef0123", {"who": "ours"}, {})
+    assert entry.meta["who"] == "theirs"
+    assert not list((tmp_path / "s" / "tmp").iterdir()), "ours is dropped"
+
+
+def test_client_path_imports_no_third_party() -> None:
+    refuse = ("import sys\n"
+              "class Refuse:\n"
+              "    def find_spec(self, name, path=None, target=None):\n"
+              "        if name.partition('.')[0] not in (*sys.stdlib_module_names, 'assay'):\n"
+              "            raise ImportError(f'third-party import on the client path: {name}')\n"
+              "sys.meta_path.insert(0, Refuse())\n"
+              "import assay.cli, assay.core, assay.ch00\n")
+    proc = subprocess.run([sys.executable, "-c", refuse], cwd=Path(core.__file__).parents[1], capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stderr
 
 
 def test_frame_parser_rejects_lies() -> None:

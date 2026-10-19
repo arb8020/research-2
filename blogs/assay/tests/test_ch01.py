@@ -61,6 +61,11 @@ def test_frontier_gives_the_exact_allclose_ratio_for_any_tolerance() -> None:
     assert ops.tolerance_ratio(ops.load_frontier([[0.0, "inf"]]), 1.0, 1.0)[0] == math.inf, "the store writes inf as a string"
 
 
+def test_linear_output_is_not_logits() -> None:
+    assert not ops.is_logits(torch.zeros(3, ops.GPT2_QKV)), "linear's [T, 2304] is not logits"
+    assert ops.is_logits(torch.zeros(3, ops.VOCAB))
+
+
 def test_op_inputs_include_offset_cases() -> None:
     for name in ("linear", "gelu", "layer_norm", "attention"):
         cases = ops.sweep(ops.REGISTRY[name])
@@ -96,6 +101,16 @@ def test_run_keys_are_stable_and_move_with_code_case_and_env(ctx: Ctx, monkeypat
     moved = Ctx(ctx.store, {**ctx.env, "torch": "9.9.9"}, ctx.iso, ctx.log)
     with pytest.raises(ch01_run.InfraError, match="missing from the store"):
         execute(moved, op, cand, cases, grade_only=True)
+
+
+def test_a_died_call_is_not_cached(ctx: Ctx) -> None:
+    cases = ops.sweep(ops.layer_norm)[:1]
+    cand = Candidate(ASSAY / "assay" / "ch01" / "selftest" / "adversarial.py", "exits", "plain")
+    first = execute(ctx, ops.layer_norm, cand, cases)
+    ((_, died),) = first.runs
+    assert died is not None and died.meta["facts"]["status"] == "died" and died.path is None, died
+    again = execute(ctx, ops.layer_norm, cand, cases)
+    assert again.executed, "a died call is recorded but not cached, so the next check runs it again"
 
 
 def test_regrade_without_rerun(tmp_path: Path) -> None:

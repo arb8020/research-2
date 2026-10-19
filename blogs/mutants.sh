@@ -13,6 +13,7 @@ Path(out).write_text(text[:start] + sol.replace(old, new) + text[end:])
 PY
 }
 run() { echo; echo "\$ check.py $*"; uv run check.py "$@" 2>&1 | grep -v -E '^    #([3-9]|[1-9][0-9]) ' | awk 'NR<=8 || /FAIL|PASS|steps\/s/'; }
+status=0
 
 echo "===== 1. out-of-bounds write: obs[2] = 0 in spawn_pipe"
 mutate oob 'obs[BOTTOM] = env->flappy_env.pipe_row == BOTTOM;' 'obs[BOTTOM] = env->flappy_env.pipe_row == BOTTOM;
@@ -40,9 +41,10 @@ mutate wextra '    // increment env by a tick' '    if (flappy_env->tick < sizeo
 run $M/wextra.md flappy
 run $M/wextra.md flappy --build prod
 
-echo; echo "===== 3b. an assert that changes state: assert(action = truncf(action))"
+echo; echo "===== 3b. assert_with_assignment_fails_the_check_build: assert(action = truncf(action)) (macOS's assert parens hide it from -Wparentheses; include/assert.h)"
 mutate assign 'assert(action == truncf(action));' 'assert(action = truncf(action));'
-run $M/assign.md flappy
+out=$(run $M/assign.md flappy); echo "$out"
+if ! grep -q "does not compile" <<<"$out"; then echo "FAIL assert_with_assignment_fails_the_check_build: the check build compiled it"; status=1; fi
 
 echo; echo "===== 3c. vendor headers: the unchanged solution compiles silently under the check flags"
 run rl/01-flappy.md flappy
@@ -61,3 +63,4 @@ PY
 echo "(first line: check build + sanitizer runtime; second: prod build, clean process)"
 run $M/speed.md flappy
 rm -rf "$M"
+exit $status
