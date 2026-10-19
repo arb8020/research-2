@@ -125,6 +125,8 @@ def sanitizer_env() -> dict[str, str]:
         names = [f"libclang_rt.asan-{platform.machine()}.so", "libclang_rt.asan.so"]
     else:
         names = ["libclang_rt.asan_osx_dynamic.dylib"]
+        assert not sys.executable.startswith("/usr/bin/"), (
+            f"{sys.executable}: SIP strips DYLD_INSERT_LIBRARIES from /usr/bin binaries, so ASan can't load; use uv's python")
     found = [subprocess.run(["clang", f"-print-file-name={n}"], capture_output=True, text=True, check=True) for n in names]
     path = next((f.stdout.strip() for f in found if Path(f.stdout.strip()).is_file()), "")
     assert path, f"clang has no ASan runtime; looked for {names}"

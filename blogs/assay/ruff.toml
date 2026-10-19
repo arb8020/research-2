@@ -1,7 +1,14 @@
 extend = "../ruff.toml"
 
+[lint]
+extend-select = ["TID251"]
+
+[lint.flake8-tidy-imports.banned-api]
+"pickle".msg = "frames are JSON + raw bytes; never unpickle child output (unpickling runs code)"
+
 [lint.isort]
 known-first-party = ["assay"]
 
 [lint.per-file-ignores]
 "assay/ch01/ops.py" = ["F722", "F821", "UP037"]
+"assay/ch01/selftest/forges_reply.py" = ["TID251"]

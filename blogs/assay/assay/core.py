@@ -14,6 +14,7 @@ import select
 import shutil
 import signal
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -83,6 +84,8 @@ class Store:
         root.mkdir(parents=True, exist_ok=True)
         if os.geteuid() == 0:
             root.chmod(0o700)
+            st = root.stat()
+            assert stat.S_IMODE(st.st_mode) == 0o700 and st.st_uid == 0, f"{root}: the store must be root-only (0700, uid 0)"
 
     @classmethod
     def from_env(cls) -> Store:
@@ -302,8 +305,10 @@ def isolation() -> Isolation:
 def child_env(scratch: Path, extra: Mapping[str, str] | None = None) -> dict[str, str]:
     env = {k: os.environ[k] for k in PASS_ENV if k in os.environ}
     env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
-    return {**env, "HOME": str(scratch), "TMPDIR": str(scratch), "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONUNBUFFERED": "1", **(extra or {})}
+    env = {**env, "HOME": str(scratch), "TMPDIR": str(scratch), "PYTHONDONTWRITEBYTECODE": "1",
+           "PYTHONUNBUFFERED": "1", **(extra or {})}
+    assert not {"ASSAY_STORE", "BLOGS_WS_PERSIST"} & env.keys(), "a child's env must not name the store"
+    return env
 
 
 @dataclass(frozen=True)
@@ -652,6 +657,7 @@ def serve_warm(path_str: str) -> None:
     path = Path(path_str)
     for name in WARM_MODULES:
         importlib.import_module(name)
+    warm_modules = frozenset(sys.modules)
     signal.signal(signal.SIGCHLD, signal.SIG_IGN)
     with contextlib.suppress(FileNotFoundError):
         path.unlink()
@@ -670,13 +676,21 @@ def serve_warm(path_str: str) -> None:
             return
         with conn:
             try:
-                _handle(listener, conn)
+                _handle(listener, conn, warm_modules)
             except SystemExit:
                 path.unlink(missing_ok=True)
                 return
 
 
-def _handle(listener: socket.socket, conn: socket.socket) -> None:
+def _assert_fork_safe(warm_modules: frozenset[str]) -> None:
+    assert threading.active_count() == 1, f"the warm process must not start threads: {threading.enumerate()}"
+    torch = sys.modules.get("torch")
+    assert torch is None or not torch.cuda.is_initialized(), "the warm process must not initialize CUDA"
+    imported = {m for m in set(sys.modules) - warm_modules if m.partition(".")[0] not in sys.stdlib_module_names}
+    assert not imported, f"the warm process must not import candidate code: {sorted(imported)}"
+
+
+def _handle(listener: socket.socket, conn: socket.socket, warm_modules: frozenset[str]) -> None:
     fds: list[int] = []
     try:
         conn.settimeout(10)
@@ -695,6 +709,7 @@ def _handle(listener: socket.socket, conn: socket.socket) -> None:
                 raise SystemExit(0)
             return
         assert header["kind"] in ("trusted", "untrusted"), header["kind"]
+        _assert_fork_safe(warm_modules)
         pid = os.fork()
         if pid == 0:
             _in_fork(header, fds, keep=set(fds), close=(listener, conn))
@@ -748,13 +763,17 @@ def _in_fork(header: dict[str, Any], fds: list[int], keep: set[int], close: tupl
         os._exit(code)
 
 
-def _untrusted(header: dict[str, Any], fds: list[int]) -> int:
+def _drop_privileges(header: dict[str, Any]) -> None:
     if header.get("uid") is not None:
         os.setgroups([])
         os.setgid(header["gid"])
         os.setuid(header["uid"])
         assert os.getuid() != 0 and os.geteuid() != 0, "privilege drop failed"
     os.umask(0o077)
+
+
+def _untrusted(header: dict[str, Any], fds: list[int]) -> int:
+    _drop_privileges(header)
     hub = sys.modules.get("huggingface_hub.constants")
     if hub is not None and header["env"].get("HF_HUB_OFFLINE") == "1":
         hub.HF_HUB_OFFLINE = True

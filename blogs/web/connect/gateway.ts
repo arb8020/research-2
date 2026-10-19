@@ -67,11 +67,11 @@ export function parseEvent(raw: unknown): GatewayEvent {
 
 const auth = (token: Token): string => `${token.id}:${token.secret}`;
 
-async function call(url: string, init: RequestInit): Promise<unknown> {
+async function call(url: string, init: RequestInit, token: Token): Promise<unknown> {
   const res = await fetch(url, init);
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
-    const why = isJsonObject(body) && typeof body["error"] === "string" ? body["error"] : `HTTP ${String(res.status)}`;
+    const why = isJsonObject(body) && typeof body["error"] === "string" ? body["error"].replaceAll(token.secret, "[redacted]") : `HTTP ${String(res.status)}`;
     throw new GatewayError(`gateway ${init.method ?? "GET"} ${new URL(url).pathname}: ${why}`, { cause: res.status });
   }
   return body;
@@ -84,14 +84,14 @@ export async function createSession(gateway: string, token: Token, gpu: string |
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ provider: "modal", token, gpu, lease_s: leaseS, labels: { "box.caller": "blogs" } }),
-  });
+  }, token);
   if (!isJsonObject(body) || typeof body["session_id"] !== "string") return fail("{session_id, status}", body);
   return { id: body["session_id"], status: parseStatus(body["status"]) };
 }
 
 export async function getSession(gateway: string, id: string, token: Token): Promise<Status | "gone"> {
   try {
-    const body = await call(`${gateway}/sessions/${encodeURIComponent(id)}`, { headers: { "X-Box-Token": auth(token) } });
+    const body = await call(`${gateway}/sessions/${encodeURIComponent(id)}`, { headers: { "X-Box-Token": auth(token) } }, token);
     return isJsonObject(body) ? parseStatus(body["status"]) : fail("{session_id, status}", body);
   } catch (cause) {
     if (cause instanceof GatewayError && cause.cause === 404) return "gone";
@@ -100,7 +100,7 @@ export async function getSession(gateway: string, id: string, token: Token): Pro
 }
 
 export async function endSession(gateway: string, id: string, token: Token): Promise<void> {
-  await call(`${gateway}/sessions/${encodeURIComponent(id)}/end`, { method: "POST", headers: { "X-Box-Token": auth(token) } });
+  await call(`${gateway}/sessions/${encodeURIComponent(id)}/end`, { method: "POST", headers: { "X-Box-Token": auth(token) } }, token);
 }
 
 export async function extendSession(gateway: string, id: string, token: Token, until: number): Promise<Status> {
@@ -108,7 +108,7 @@ export async function extendSession(gateway: string, id: string, token: Token, u
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Box-Token": auth(token) },
     body: JSON.stringify({ until }),
-  });
+  }, token);
   return isJsonObject(body) ? parseStatus(body["status"]) : fail("{status}", body);
 }
 

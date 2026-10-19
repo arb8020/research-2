@@ -5,6 +5,9 @@ export class ContentsError extends Error {}
 function url(path: string, query = ""): string {
   const address = kernelAddress();
   if (address === undefined) throw new ContentsError("contents: not connected");
+  if (path.split("/").some((p) => p.startsWith("."))) {
+    throw new ContentsError(`contents: ${path} is hidden; the Contents API refuses dot paths with no CORS headers, so the page would see only "Failed to fetch"`);
+  }
   const encoded = path.split("/").map(encodeURIComponent).join("/");
   return `${address.url}/api/contents/${encoded}?token=${encodeURIComponent(address.token)}${query}`;
 }

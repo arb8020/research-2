@@ -18,6 +18,8 @@ from torch import Tensor
 NAMES = {"fp64": torch.float64, "fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}
 SHORT = {v: k for k, v in NAMES.items()}
 INPUTS = {"centered": (0.0, 1.0), "offset": (3.0, 0.5)}
+DIM_LETTERS = {"T": "query len", "S": "kv len", "D": "d_model", "F": "mlp hidden", "N": "heads", "H": "head dim",
+               "V": "vocab"}
 
 
 REGISTRY: dict[str, Op] = {}
@@ -257,6 +259,7 @@ def _assert_dims_match(declared: Op) -> None:
     used = {dim for _, annotation in _params(declared) if _is_tensor_annotation(annotation)
             for dim in annotation.dim_str.split()}
     sized = set(declared.sweep.dims)
+    assert used <= DIM_LETTERS.keys(), f"{declared.name}: dims {sorted(used - DIM_LETTERS.keys())} are not the series' letters {DIM_LETTERS}"
     assert used <= sized | set(declared.sweep.tied), f"{declared.name}: dims without sizes: {sorted(used - sized)}"
     assert sized <= used, f"{declared.name}: sized dims no input uses: {sorted(sized - used)}"
 

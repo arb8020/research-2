@@ -181,9 +181,10 @@ def reader_bundle(chapter: str, out: Path, root: Path = REF) -> Path:
         git(repo, "bundle", "create", "-q", str(out.resolve()), f"refs/tags/{chapter}/start")
         listed = git(repo, "bundle", "list-heads", str(out.resolve()))
         assert listed.split()[1:] == [f"refs/tags/{chapter}/start"], f"bundle refs: {listed}"
-        solution = git(repo, "rev-parse", f"{chapter}/solution").strip()
         reachable = git(repo, "rev-list", f"{chapter}/start").split()
-        assert solution not in reachable, f"{chapter}/solution is reachable from {chapter}/start"
+        for tag in git(repo, "tag", "--list", "*/solution").split():
+            if tag.split("/")[0] >= chapter:
+                assert git(repo, "rev-parse", tag).strip() not in reachable, f"{tag} is reachable from {chapter}/start"
     return out
 
 

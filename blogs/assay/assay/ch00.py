@@ -70,6 +70,7 @@ def toolchain() -> dict[str, str]:
 def build_dir(tree: Path, iso: Isolation) -> str:
     tag = hashlib.sha256(f"{tree.resolve()}|{iso.uid}".encode()).hexdigest()[:12]
     path = Path(tempfile.gettempdir()) / f"assay-ch00-build-{tag}"
+    assert not path.resolve().is_relative_to(tree.resolve()), f"{path}: build objects must live outside the tree, or a copied tree carries stale objects"
     path.mkdir(exist_ok=True)
     if iso.mode == "unprivileged":
         os.chown(path, iso.uid, iso.gid)
