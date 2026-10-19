@@ -166,13 +166,14 @@ def selftest_ok(lines: list[dict]) -> None:
 
 
 def test_layer_norm_selftest_spawned(tmp_path: Path) -> None:
-    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm"], REF, tmp_path / "store")
+    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm", "--timeout", "1"], REF, tmp_path / "store")
     assert code == 0
     selftest_ok(lines)
 
 
 def test_layer_norm_selftest_forked_from_the_warm_process(tmp_path: Path, warm: None) -> None:
-    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm"], REF, tmp_path / "store", spawn=False)
+    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm", "--timeout", "1"], REF, tmp_path / "store",
+                             spawn=False)
     assert code == 0
     assert any("forked from the warm process" in line.get("text", "") for line in lines)
     selftest_ok(lines)

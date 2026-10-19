@@ -421,7 +421,8 @@ def run_selftest(ctx: Ctx, test: Expect, req: Request) -> dict[str, Any]:
     """Grade one self-test candidate against its expectation, per dtype: caught (in the stated words), an expected
     miss (passes at a dtype in `missed_at`), or a correct candidate passing."""
     op, adapter = OPS[test.op]
-    sub = Ctx(ctx.store, ctx.env, ctx.iso, ctx.log, ctx.startup_timeout, test.call_timeout, ctx.warm)
+    sub = Ctx(ctx.store, ctx.env, ctx.iso, ctx.log, ctx.startup_timeout, min(test.call_timeout, req.call_timeout),
+              ctx.warm)
     verdicts = list(check_op(sub, op, Candidate(test.file, test.attr, adapter), req, blocking=True))
     ran = [v for v in verdicts if v["outcome"] != "skip"]
     dtypes = sorted({v["dtype"] for v in ran} - {"*"})
