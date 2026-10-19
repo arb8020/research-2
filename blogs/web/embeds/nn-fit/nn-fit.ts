@@ -716,6 +716,15 @@ export class NnFit extends HTMLElement {
     return this.#runsRemote() ? Math.min(budget, REMOTE_MAX_SECONDS) : budget;
   }
 
+  #budgetText(): { steps: string; seconds: string } {
+    const of = (inForce: number, setting: number, unit: string): string =>
+      (inForce === Infinity ? "" : ` / ${formatInt(inForce)}${unit}${inForce < setting ? " (cap)" : ""}`);
+    return {
+      steps: of(this.#stepBudget(), at(STEP_BUDGETS, this.#stepBudgetK), ""),
+      seconds: of(this.#timeBudget(), at(TIME_BUDGETS, this.#timeBudgetK), " s"),
+    };
+  }
+
   #budgetLeft(): boolean {
     const [steps, ms] = this.#dataset === "grok" ? [this.#grok.steps, this.#grok.ms] : [this.#steps, this.#trainMs];
     return steps < this.#stepBudget() && ms < this.#timeBudget() * 1000;
@@ -1354,10 +1363,10 @@ export class NnFit extends HTMLElement {
       ? [`train MSE ${s.loss === null ? "—" : b(formatLoss(s.loss))}`, `vs true curve ${s.trueError === null ? "—" : b(formatLoss(s.trueError))}`]
       : [`train loss ${s.loss === null ? "—" : b(formatLoss(s.loss))}`, `train accuracy ${b(formatPct(s.accuracy ?? 0))}`,
         `held-out accuracy ${b(formatPct(s.heldOutAccuracy ?? 0))}`];
-    const of = (budget: number, unit: string): string => (budget === Infinity ? "" : ` / ${formatInt(budget)}${unit}`);
+    const budget = this.#budgetText();
     const usage = [
-      `step ${formatInt(s.steps)}${of(s.stepBudget, "")}`,
-      `${s.seconds.toFixed(1)} s${of(s.timeBudget, " s")}`,
+      `step ${formatInt(s.steps)}${budget.steps}`,
+      `${s.seconds.toFixed(1)} s${budget.seconds}`,
       `~${formatFlops(s.flops)}`,
       arch,
       `on ${s.device}`,
@@ -1384,12 +1393,12 @@ export class NnFit extends HTMLElement {
     const b = (v: string): string => `<b>${v}</b>`;
     const pct = (a: number | null): string => (a === null ? "—" : b(formatPct(a)));
     const loss = (l: number | null): string => (l === null ? "—" : b(formatLoss(l)));
-    const of = (budget: number, unit: string): string => ` / ${formatInt(budget)}${unit}`;
+    const budget = this.#budgetText();
     const pairs = `a + b mod ${String(g.p)}: trains on ${s.samples === null ? "—" : formatInt(s.samples)} of ${formatInt(g.p * g.p)} pairs`;
     this.#el(".metrics", HTMLSpanElement).innerHTML = [`train accuracy ${pct(s.accuracy)}`, `test accuracy ${pct(s.heldOutAccuracy)}`,
       `train loss ${loss(s.loss)}`, `test loss ${loss(g.testLoss)}`,
       ...(g.grokked === null ? [] : [`test past 95% at step ${b(formatInt(g.grokked.step))} (${g.grokked.seconds.toFixed(1)} s)`])].join(" · ");
-    this.#el(".usage", HTMLSpanElement).innerHTML = [`step ${formatInt(s.steps)}${of(s.stepBudget, "")}`, `${s.seconds.toFixed(1)} s${of(s.timeBudget, " s")}`,
+    this.#el(".usage", HTMLSpanElement).innerHTML = [`step ${formatInt(s.steps)}${budget.steps}`, `${s.seconds.toFixed(1)} s${budget.seconds}`,
       s.flops === null ? "—" : `~${formatFlops(s.flops)}`, pairs, g.model === null || s.params === null ? "—" : `${g.model} (${formatInt(s.params)} params)`,
       `on ${s.device}`].join(" · ");
 

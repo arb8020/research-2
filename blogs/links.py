@@ -23,7 +23,7 @@ from markdown_it.token import Token
 
 HERE = Path(__file__).parent
 # Directories under blogs/ that hold Markdown that isn't a chapter (as are hidden ones: .venv, .session, .evidence).
-NOT_CHAPTERS = frozenset({"notes", "vendor", "dist", "web", "include", "node_modules"})
+NOT_CHAPTERS = frozenset({"notes", "vendor", "dist", "web", "include", "node_modules", "assay"})
 WIKILINK = re.compile(r"\[\[([^\[\]\n]+)\]\]")
 
 
