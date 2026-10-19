@@ -1,13 +1,3 @@
-// The page's Connect session: one state machine, the token and session in localStorage, the event log.
-//
-//   disconnected --connect()--> connecting --status running + kernel attached--> connected <-+
-//        ^                          |                                               |   |      |
-//        +---- ended / disconnect() / failure (the reason stays on `failure`) ------+   +------+
-//                                                                  status / extend(): new lease times
-//
-// Storage (box/CONTRACT-gateway.md, "Browser storage"):
-//   connect.token.modal = {id, secret}                        until Sign out
-//   connect.session     = {gateway, session_id, provider, gpu} while a session lives; any opted-in page reattaches
 import { createSession, endSession, extendSession, getSession, subscribe } from "./gateway";
 import type { EndedReason, GatewayEvent, Status, Token } from "./gateway";
 import { attach, detach, onKernelState } from "./kernel";
@@ -19,9 +9,9 @@ export type Phase =
   | { kind: "connected"; id: string; gpu: string | null; startedAt: number; leaseUntil: number; ceiling: number };
 
 export interface LogLine {
-  t: number; // unix seconds
+  t: number;
   source: "gateway" | "machine" | "page";
-  kind: "step" | "log" | "error"; // progress, machine output, something went wrong
+  kind: "step" | "log" | "error";
   text: string;
 }
 
@@ -34,11 +24,10 @@ interface Stored {
 
 const TOKEN_KEY = "connect.token.modal";
 const SESSION_KEY = "connect.session";
-const MAX_LOG = 2000; // lines kept for the drawer; older ones are dropped (it says so)
+const MAX_LOG = 2000;
 const REATTACH_GAP_MS = 10_000;
 
 const REASONS: Record<EndedReason, string | undefined> = {
-  // Only seen when this tab didn't end it (its own Disconnect stops listening first): another tab, or box release.
   stopped: "the session was stopped outside this page (another tab, or released)",
   lease: "the session length ran out (Connect again to keep going)",
   idle: "the session was idle too long and was stopped",
@@ -53,9 +42,8 @@ const phaseListeners = new Set<(p: Phase) => void>();
 const logListeners = new Set<(line: LogLine) => void>();
 let live: { stored: Stored; token: Token; close: () => void } | undefined;
 let lastReattach = 0;
-let attaching = false; // a status replayed while the kernel attaches must not start a second attach
+let attaching = false;
 
-// The gateway's base URL: <connect-pill data-gateway> (build_page.py --gateway-url), or ?gateway= for dev.
 function gatewayUrl(): string {
   const fromQuery = new URLSearchParams(location.search).get("gateway");
   const url = fromQuery !== null && fromQuery !== "" ? fromQuery : document.querySelector("connect-pill")?.getAttribute("data-gateway") ?? "";
@@ -88,8 +76,6 @@ function append(line: LogLine): void {
 }
 const note = (text: string, kind: "step" | "error" = "step"): void => { append({ t: Date.now() / 1000, source: "page", kind, text }); };
 
-// ---- storage (it can be blocked: then nothing is remembered, and Connect still works for this page) ----
-
 const readJson = (key: string): unknown => {
   try { return JSON.parse(localStorage.getItem(key) ?? "null"); } catch { return null; }
 };
@@ -97,7 +83,7 @@ const writeJson = (key: string, value: unknown): void => {
   try {
     if (value === null) localStorage.removeItem(key);
     else localStorage.setItem(key, JSON.stringify(value));
-  } catch { /* storage blocked */ }
+  } catch { return; }
 };
 
 export function savedToken(): Token | undefined {
@@ -115,8 +101,6 @@ function storedSession(): Stored | undefined {
   return { gateway: raw["gateway"], session_id: raw["session_id"], provider: "modal", gpu };
 }
 
-// ---- transitions ----
-
 const describe = (e: unknown): string =>
   e instanceof TypeError ? `the gateway at ${gateway()} is unreachable` : e instanceof Error ? e.message : String(e);
 
@@ -127,7 +111,8 @@ export async function connect(token: Token, gpu: string | null, leaseS: number):
   note(`connect: modal, gpu ${gpu ?? "none"}, length ${String(leaseS / 60)} min, gateway ${gateway()}`);
   try {
     const { id, status } = await createSession(gateway(), token, gpu, leaseS);
-    if (currentPhase().kind !== "connecting") { // cancelled while the gateway was creating it
+    const cancelledWhileCreating = currentPhase().kind !== "connecting";
+    if (cancelledWhileCreating) {
       note(`session ${id} created after Cancel; ending it`);
       await endSession(gateway(), id, token);
       return;
@@ -142,11 +127,10 @@ export async function connect(token: Token, gpu: string | null, leaseS: number):
   }
 }
 
-// A session from an earlier page or tab: reattach if it still runs, forget it if it ended.
 export async function resume(): Promise<void> {
   const stored = storedSession();
   const token = savedToken();
-  if (stored?.gateway !== gateway()) return; // none, or another gateway's (left alone)
+  if (stored?.gateway !== gateway()) return;
   if (token === undefined) { writeJson(SESSION_KEY, null); return; }
   setPhase({ kind: "connecting", gpu: stored.gpu, step: "reattaching" });
   note(`reattaching to session ${stored.session_id}`);
@@ -196,7 +180,6 @@ function apply(status: Status): void {
   }).finally(() => { attaching = false; });
 }
 
-// The event stream broke or the kernel stopped answering: ask the gateway what happened.
 async function recheck(): Promise<void> {
   const current = live;
   if (current === undefined) return;
@@ -222,8 +205,6 @@ function end(reason: EndedReason | undefined, failure: string | undefined): void
   setPhase({ kind: "disconnected", failure });
 }
 
-// Ask for the lease to run until `until` (unix s). The gateway clamps to the ceiling; the phase gets what it granted.
-// Throws on a gateway error (the menu shows it); the session itself is unaffected.
 export async function extend(until: number): Promise<void> {
   const current = live;
   if (current === undefined || phase.kind !== "connected") throw new Error(`extend() while ${phase.kind}`);
@@ -237,14 +218,12 @@ export async function extend(until: number): Promise<void> {
 export async function disconnect(): Promise<void> {
   const current = live;
   if (current === undefined) { end(undefined, undefined); return; }
-  // Stop listening first: the "ended (stopped)" this causes must not read as stopped from elsewhere.
   live = undefined;
   current.close();
   note(`ending session ${current.stored.session_id}`);
   try {
     await endSession(gateway(), current.stored.session_id, current.token);
   } catch (cause) {
-    // The machine may outlive this (the gateway reaps it when its lease ends); say so rather than pretend.
     note(`end failed: ${describe(cause)}; the session stops when its length runs out`, "error");
   }
   end(undefined, undefined);

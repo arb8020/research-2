@@ -1,7 +1,3 @@
-// Files in the connected sandbox through Jupyter's Contents API (the same server and token as the kernel). The page
-// reads and writes workspace files this way rather than through the kernel: ~15 ms a round trip on Modal, and it
-// works while a long cell keeps the kernel busy. Cross-origin PUT with a JSON body is preflighted; the relay's
-// Jupyter flags allow it (spike/workspace-cells exp1).
 import { kernelAddress } from "./kernel";
 
 export class ContentsError extends Error {}
@@ -13,7 +9,6 @@ function url(path: string, query = ""): string {
   return `${address.url}/api/contents/${encoded}?token=${encodeURIComponent(address.token)}${query}`;
 }
 
-// The Contents API models the page PUTs: a file (text or base64) or a directory.
 type Model = { type: "file"; format: "text" | "base64"; content: string } | { type: "directory" };
 
 async function put(path: string, body: Model): Promise<void> {
@@ -21,7 +16,6 @@ async function put(path: string, body: Model): Promise<void> {
   if (!res.ok) throw new ContentsError(`PUT ${path}: ${String(res.status)} ${await res.text()}`);
 }
 
-// The file's text, or undefined if there is no such file.
 export async function readText(path: string): Promise<string | undefined> {
   const res = await fetch(url(path, "&type=file&format=text&content=1"));
   if (res.status === 404) return undefined;
