@@ -53,19 +53,25 @@ def train(config: dict, clock: Callable[[], float] = time.monotonic) -> list[dic
     return lines
 
 
-def loss_trace(config: dict) -> list[float]:
-    """The training loss after every step, 0..max_steps: a clock that jumps past tick_seconds on every read
-    makes the program tick after each step."""
+def fake_clock(per_read: float) -> Callable[[], float]:
     now = [0.0]
 
     def clock() -> float:
-        now[0] += config["tick_seconds"] * 2
+        now[0] += per_read
         return now[0]
 
-    ticks = [line for line in train({**config, "max_seconds": rt.MAX_SECONDS}, clock) if line["kind"] == "tick"]
+    return clock
+
+
+def loss_trace(config: dict) -> tuple[list[float], dict]:
+    """The training loss after every step, 0..max_steps, and the final tick: a clock that jumps past
+    tick_seconds on every read makes the program tick after each step; a one-point grid keeps ticks cheap."""
+    one_point = config["grid"][: config["sizes"][0]]
+    lines = train({**config, "max_seconds": rt.MAX_SECONDS, "grid": one_point}, fake_clock(config["tick_seconds"] * 2))
+    ticks = [line for line in lines if line["kind"] == "tick"]
     trace = {t["step"]: t["loss"] for t in ticks}
     assert sorted(trace) == list(range(config["max_steps"] + 1)), "expected a tick after every step"
-    return [trace[k] for k in range(config["max_steps"] + 1)]
+    return [trace[k] for k in range(config["max_steps"] + 1)], ticks[-1]
 
 
 def rel(a: float, b: float) -> float:
@@ -83,8 +89,8 @@ def parity(report: dict) -> None:
     print(f"  {'case':<22}{'seed':>5}{'mlp.ts':>8}{'f64':>8}{'f32':>8}{'mlp.ts':>12}{'f64':>12}{'f32':>12}{'mlp.ts':>9}{'f32':>9}")
     for r in report["results"]:
         b = r["browser"]
-        mine, f64, f32 = b["trace"], loss_trace(r["config"]["float64"]), loss_trace(r["config"]["float32"])
-        last32 = train(r["config"]["float32"])[-2]  # the final tick, for the test metrics (the last line is "end")
+        mine = b["trace"]
+        (f64, _), (f32, last32) = loss_trace(r["config"]["float64"]), loss_trace(r["config"]["float32"])
         reach = [first_below(t, CONVERGED) for t in (mine, f64, f32)]
         tail = [statistics.median(t[-TAIL:]) for t in (mine, f64, f32)]
         binary = b["testAccuracy"] is not None
@@ -115,9 +121,8 @@ def resume(config: dict) -> None:
 
 def tick_rate(config: dict) -> None:
     seconds = 1.0
-    start = time.monotonic()
-    lines = train({**config, "max_steps": rt.MAX_STEPS, "max_seconds": seconds, "tick_seconds": 0.1})
-    took = time.monotonic() - start
+    lines = train({**config, "max_steps": rt.MAX_STEPS, "max_seconds": seconds, "tick_seconds": 0.1}, fake_clock(0.001))
+    took = lines[-1]["seconds"]
     ticks = [line for line in lines if line["kind"] == "tick"]
     check(lines[-1]["reason"] == "time", f"time budget: stopped by time after {lines[-1]['step']} steps")
     # One at the start, at most one per tick_seconds, one at the end.
@@ -154,8 +159,15 @@ def bad_configs(config: dict) -> None:
         ({**config, "sizes": [*config["sizes"][:-1], 2]}, "end in 1 output"),
     ]
     for bad, expected in cases:
-        proc = subprocess.run([sys.executable, str(PROGRAM)], input=json.dumps(bad), capture_output=True, text=True, check=False)
-        check(proc.returncode != 0 and expected in proc.stderr and proc.stdout == "", f"bad config fails before any output: {expected}")
+        try:
+            rt.parse_config(bad, rt.pick_device())
+            error = ""
+        except ValueError as e:
+            error = str(e)
+        check(expected in error, f"bad config fails to parse: {expected}")
+    bad, expected = cases[0]
+    proc = subprocess.run([sys.executable, str(PROGRAM)], input=json.dumps(bad), capture_output=True, text=True, check=False)
+    check(proc.returncode != 0 and expected in proc.stderr and proc.stdout == "", f"cli: bad config fails before any output: {expected}")
 
 
 def main() -> None:
