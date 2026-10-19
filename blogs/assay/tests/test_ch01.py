@@ -6,7 +6,6 @@ from __future__ import annotations
 import itertools
 import math
 import shutil
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -152,12 +151,6 @@ def test_missing_function_is_blocked(tmp_path: Path, store_dir: Path) -> None:
 # ---- self-tests, both isolation paths --------------------------------------------------------------------------------
 
 
-@pytest.fixture
-def warm() -> Iterator[None]:
-    yield
-    core.stop_warm()
-
-
 def selftest_ok(lines: list[dict]) -> None:
     tests = [line for line in lines if line["kind"] == "selftest"]
     missed = [t for t in tests if not t["ok"]]
@@ -166,22 +159,22 @@ def selftest_ok(lines: list[dict]) -> None:
 
 
 def test_layer_norm_selftest_spawned(store_dir: Path) -> None:
-    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm", "--timeout", "1"], REF, store_dir)
+    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm", "--timeout", "1"], REF, store_dir,
+                             spawn=True)
     assert code == 0
     selftest_ok(lines)
 
 
-def test_layer_norm_selftest_forked_from_the_warm_process(store_dir: Path, warm: None) -> None:
-    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm", "--timeout", "1"], REF, store_dir,
-                             spawn=False)
+def test_layer_norm_selftest_forked_from_the_warm_process(store_dir: Path) -> None:
+    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm", "--timeout", "1"], REF, store_dir)
     assert code == 0
     assert any("forked from the warm process" in line.get("text", "") for line in lines)
     selftest_ok(lines)
 
 
 @pytest.mark.slow
-def test_full_selftest_including_model_level(store_dir: Path, warm: None) -> None:
-    code, lines = run_checks(["ch01", "--selftest"], REF, store_dir, spawn=False)
+def test_full_selftest_including_model_level(store_dir: Path) -> None:
+    code, lines = run_checks(["ch01", "--selftest"], REF, store_dir)
     assert code == 0
     selftest_ok(lines)
     names = {t["candidate"] for t in lines if t["kind"] == "selftest"}

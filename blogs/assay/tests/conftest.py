@@ -5,17 +5,27 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
+from assay import core
 
 ASSAY = Path(__file__).resolve().parents[1]
 BLOGS = ASSAY.parent
 
 
+@pytest.fixture(scope="session", autouse=True)
+def warm() -> Iterator[None]:
+    running = core.warm_alive(core.warm_socket())
+    yield
+    if not running:
+        core.stop_warm()
+
+
 @pytest.fixture(scope="session")
 def reference_store(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    from assay import core
     from assay.ch01 import ops
     from assay.ch01.run import Ctx, detect_env, expected
 
@@ -39,7 +49,7 @@ def store_dir(tmp_path: Path, reference_store: Path, monkeypatch: pytest.MonkeyP
     return path
 
 
-def run_checks(args: list[str], cwd: Path, store: Path, *, spawn: bool = True,
+def run_checks(args: list[str], cwd: Path, store: Path, *, spawn: bool = False,
                shim: Path | None = None) -> tuple[int, list[dict]]:
     """run_checks as a reader runs it; returns (exit code, the JSON lines)."""
     env = {**os.environ, "ASSAY_STORE": str(store), "BLOGS_ASSAY": str(ASSAY)}
