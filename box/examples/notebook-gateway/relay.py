@@ -301,12 +301,12 @@ def boot(cfg: Config, access: Access, rec: Boot, req: CreateRequest, origin: str
             LABEL_LEASE: str(req.lease_s), LABEL_CEILING_S: str(cfg.limits.ceiling_s)}, idle_timeout_s=cfg.idle_timeout_s, ports=(port,),
         )  # fmt: skip
         rec.step("gateway", f"sandbox {made.machine.id} created in {time.monotonic() - created_at:.1f} s; waiting for it to start")
+        session = made
         try:
             made.wait_up(BOOT_TIMEOUT_S)
         except BaseException:
             made.machine.terminate()
             raise
-        session = made
         rec.step("machine", f"supervisor up ({time.monotonic() - t0:.1f} s since connect)")
         if rec.cancelled:
             raise Cancelled
@@ -376,6 +376,8 @@ def wait_for_jupyter(rec: Boot, job: sdk.Job, kernel: dict[str, str]) -> None:
         read = forward_logs(rec, job)
         if read.done:
             raise RuntimeError(f"Jupyter Server exited: {read.status}")
+        if isinstance(ended := job.session.status(), Ended):
+            raise RuntimeError(f"the session ended ({ended.reason}) while Jupyter Server started")
         if rec.cancelled:
             raise Cancelled
         if time.monotonic() > give_up:

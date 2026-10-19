@@ -211,10 +211,10 @@ def test_resuming_a_replay_from_the_record_sends_only_what_came_after(make_relay
     assert lines(again) == lines(replay[machine[0] + 1 :])
 
 
-def relay_on(tmp_path: Path, access: Callable[[object], relay.Access]) -> relay.Server:
+def relay_on(tmp_path: Path, access: Callable[[object], relay.Access], limits: relay.Limits | None = None) -> relay.Server:
     cfg = relay.Config(
         access=access, image=None, gpus=(None,), labels={"box.purpose": "relay-test"}, origins=re.compile(relay.LOCAL_ORIGIN),
-        python=sys.executable, ip="127.0.0.1", port=relay.free_port,
+        python=sys.executable, ip="127.0.0.1", port=relay.free_port, limits=limits or relay.Limits(),
     )  # fmt: skip
     server = relay.serve(cfg, relay.free_port())
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -413,6 +413,40 @@ def test_a_session_ends_when_its_lease_does(make_relay: Callable[..., str]) -> N
     assert [e["status"]["state"] for _, e in got if e["kind"] == "status"][-2:] == ["running", "ended"]
     assert got[-1][1]["status"]["reason"] == "lease"
     assert status(gw, sid) == (200, got[-1][1]["status"])
+
+
+class SlowLaunch(Counted):
+    delay_s = 3.0
+
+    def launch(self, **kw: object) -> object:
+        time.sleep(self.delay_s)
+        return self.inner.launch(**kw)
+
+
+@pytest.mark.parametrize("launch_s", [0.5, 1.5])
+def test_a_lease_that_runs_out_while_booting_ends_the_session_lease(tmp_path: Path, launch_s: float) -> None:
+    provider = SlowLaunch(Local(tmp_path / "machines"), [])
+    provider.delay_s = launch_s
+    server = relay_on(tmp_path, lambda token: relay.Access(provider, DirStore(tmp_path / "records")), relay.Limits(min_s=1))
+    gw = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        got = events(gw, create(gw, lease_s=1), "ended", timeout_s=20)
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert got[-1][1]["status"]["reason"] == "lease", got[-1]
+
+
+def test_extend_while_booting_is_409(tmp_path: Path) -> None:
+    server = relay_on(tmp_path, lambda token: relay.Access(SlowLaunch(Local(tmp_path / "machines"), []), DirStore(tmp_path / "records")))
+    gw = f"http://127.0.0.1:{server.server_address[1]}"
+    sid = create(gw)
+    try:
+        assert extend(gw, sid, {"until": time.time() + 3600})[0] == 409
+    finally:
+        call(f"{gw}/sessions/{sid}/end", "POST", headers={"X-Box-Token": AUTH})
+        server.shutdown()
+        server.server_close()
 
 
 LEASE = {"until": 100.0, "ceiling": 200.0, "released": False}
