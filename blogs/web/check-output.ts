@@ -1,7 +1,3 @@
-// A workspace check's streamed output (the check command's contract, notes/ch01-design-2026-10-09.md) rendered under
-// its cell: JSON lines become a verdict table (op, dtype, chip, outcome, key metric, notes; SKIP and BLOCKED styled
-// apart, `where` a link that jumps the file's editor) and a summary line; log lines and anything that isn't JSON
-// (a legacy check, a compiler, a traceback) are plain output with file:line links.
 import { jump, LineSplitter, linkify } from "./out-links";
 import { isJsonObject } from "./json";
 
@@ -17,10 +13,8 @@ type Line = { kind: "log"; text: string } | { kind: "verdict"; verdict: Verdict 
 
 const OUTCOMES: readonly Outcome[] = ["pass", "fail", "skip", "blocked"];
 const str = (x: unknown): string => (typeof x === "string" ? x : "");
-// The numeric entries of an object, in order (a metric that is null or a string has no number to show).
 const numbers = (x: unknown): Record<string, number> => {
   const out: Record<string, number> = {};
-  // JSON has no infinities: blogs/assay sends a non-finite metric as "inf" / "-inf" / "nan".
   const special: Record<string, number> = { "inf": Infinity, "-inf": -Infinity, "nan": NaN };
   if (isJsonObject(x)) {
     for (const [k, v] of Object.entries(x)) {
@@ -36,7 +30,6 @@ function parseWhere(raw: unknown): Where | undefined {
   return { file: raw["file"], line: raw["line"], region: typeof raw["region"] === "string" ? raw["region"] : undefined };
 }
 
-// One line of output. Anything that isn't a well-formed contract line is plain text (shown, never dropped).
 export function parseLine(line: string): Line {
   if (!line.startsWith("{")) return { kind: "text", text: line };
   let raw: unknown;
@@ -61,13 +54,10 @@ export function parseLine(line: string): Line {
   return { kind: "text", text: line };
 }
 
-// The gate metrics a row prefers to show (blogs/assay: the worst error as a fraction of its allclose tolerance, per-position KL, tokens), in
-// order.
 const KEY_METRICS: readonly (readonly [string, string])[] = [["ratio", "err/tol"], ["kl_max", "KL max"], ["first_diff", "first bad token"], ["tokens", "tokens"]];
 const shown = (x: number | undefined): string | undefined =>
   x === undefined ? undefined : Number.isFinite(x) ? String(Number(x.toPrecision(3))) : Number.isNaN(x) ? "nan" : x > 0 ? "inf" : "-inf";
 
-// The one number a row shows: its gate's metric if it has one, else the first metric with a value, else the score.
 function keyMetric(v: Verdict): string {
   for (const [k, label] of KEY_METRICS) {
     const value = shown(v.metrics[k]);
@@ -100,7 +90,7 @@ const cell = (text: string, cls = ""): HTMLTableCellElement => {
 export class CheckOutput {
   readonly verdicts: Verdict[] = [];
   summary: Summary | undefined;
-  refusal: string | undefined; // workspace.py refused to run the check (a `workspace: refused: ...` log line)
+  refusal: string | undefined;
   private readonly lines = new LineSplitter((line) => { this.add(parseLine(line)); });
   private readonly table: HTMLTableElement;
   private readonly summaryEl: HTMLParagraphElement;
@@ -152,7 +142,6 @@ export class CheckOutput {
     this.table.hidden = false;
   }
 
-  // The first verdict that points somewhere a reader should look (blocked, then fail).
   firstWhere(): Where | undefined {
     return (this.verdicts.find((v) => v.outcome === "blocked" && v.where) ?? this.verdicts.find((v) => v.outcome === "fail" && v.where))?.where;
   }
