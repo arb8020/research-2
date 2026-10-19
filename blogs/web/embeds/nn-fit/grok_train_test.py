@@ -41,7 +41,7 @@ def train(config: dict, runs: dict) -> list[dict]:
 def model() -> None:
     run = gt.new_run(gt.parse_config({**SMALL, "p": 113, "train_fraction": 0.3}), gt.torch.device("cpu"))
     start = gt.describe(gt.torch.device("cpu"), run)
-    check(start["params"] == PARAMS_113, f"p 113: {start['params']} parameters, as grok.ts counts")
+    check(start["params"] == PARAMS_113, f"p 113: {start['params']} parameters")
     check((start["train"], start["test"]) == (3831, 12769 - 3831), "p 113 at 30%: 3831 training pairs (round(0.3 p^2)), the rest test")
     pairs = run.data.tokens
     check(bool(((pairs[:, 0] + pairs[:, 1]) % 113 == run.data.labels).all()), "labels are (a + b) mod p")

@@ -7,17 +7,6 @@ export const GROK_P = 113;
 export const TRAIN_FRACTIONS: readonly number[] = [0.3, 0.4, 0.5];
 export const GROK_TICK_SECONDS = 0.1;
 export const MAX_GROK_POINTS = 20_000;
-const D_MODEL = 128;
-const D_MLP = 512;
-
-export function grokParams(p: number): number {
-  return (p + 1) * D_MODEL + 3 * D_MODEL + 3 * D_MODEL * D_MODEL + D_MODEL * D_MODEL
-    + D_MODEL * D_MLP + D_MLP + D_MLP * D_MODEL + D_MODEL + D_MODEL * p;
-}
-
-export const grokTrainPairs = (p: number, fraction: number): number => Math.round(fraction * p * p);
-
-export const GROK_MODEL = `1-layer transformer (d ${String(D_MODEL)}, 4 heads, MLP ${String(D_MLP)}) · AdamW lr 1e-3, weight decay 1`;
 
 export interface GrokConfig {
   readonly run: string;
@@ -56,7 +45,7 @@ export interface GrokPoint {
 export type GrokLine =
   | {
     readonly kind: "start"; readonly device: string; readonly deviceName: string; readonly torch: string;
-    readonly params: number; readonly train: number; readonly test: number;
+    readonly params: number; readonly train: number; readonly test: number; readonly model: string;
   }
   | ({ readonly kind: "tick" } & GrokPoint)
   | { readonly kind: "end"; readonly reason: StopReason; readonly step: number; readonly seconds: number };
@@ -80,7 +69,7 @@ export function parseGrokLine(text: string): GrokLine {
     case "start":
       return {
         kind: "start", device: str(obj, "device", where), deviceName: str(obj, "device_name", where), torch: str(obj, "torch", where),
-        params: int(obj, "params", where), train: int(obj, "train", where), test: int(obj, "test", where),
+        params: int(obj, "params", where), train: int(obj, "train", where), test: int(obj, "test", where), model: str(obj, "model", where),
       };
     case "tick":
       return {

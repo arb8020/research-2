@@ -5,7 +5,7 @@ import type { Dtype, RemoteConfig, RemoteData } from "./remote";
 import { CURVE_POINTS, HEAT_GRID, curveGrid, heatGrid, remoteConfig } from "./remote";
 
 const STEPS = 2000;
-const SEEDS = [1, 2, 3, 4, 5];
+const SEEDS = [1, 2];
 const LR = 0.03;
 const COLUMNS = 640;
 const SAMPLES = 128;
