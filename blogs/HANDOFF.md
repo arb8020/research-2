@@ -15,7 +15,7 @@
   - `<nn-fit>` is an embed (```` ```nn-fit file=... ````, `key: value` settings, bad keys fail the build). It lives on its own page `dl/neural-nets.md` under a `<!-- wip: ... -->` banner (new: renders a 🚧 note; plain `<!-- -->` stays a todo).
   - Links: `[[page#heading]]` (page = chapter file stem, section = heading slug; missing page/heading, duplicate stems or heading ids fail the build). Hover/focus shows an Alignment-Forum-style card built at build time from the target's source (live embeds, lazy-loaded); click navigates; no card on touch. `build_page.py --all`; `links.py`, `web/page-link.ts`. Flappy has one link line where the widget was (the author to reword). Notes: `notes/research/links.md`.
   - Layout defaults: measure 64ch (~68 chars/line), leading 1.6, ~18px on phones, Mono reaches code cells. The Aa panel now saves only non-defaults (readers who touched it before keep 80ch/1.75 until Reset).
-  - `TODO(page):` markers in `web/page.ts`, `page.css`, `play.html` for the queued page work (drafts survive reload, show-solution, ports in one place, `light-dark()`, raw colour, overlapping corner buttons) and the "copy for your agent" stand-in.
+  - Queued page work (was `TODO(page):` markers; the code no longer has them, so the list lives here): drafts survive reload (`code-cell` in `web/page.ts`: keep unpassed edits in localStorage, "draft" in the status, "revert to last passing"; fold in: cell order is decided twice, `check.py` `cell_order` vs DOM order); show-solution (fetched from the session on click so the page stays solution-free, read-only, copy blocked); ports and the session URL in one place (`build_page.py --session-url` default, `session.py --port`, `dev.sh`, `verify_page.py`/`a11y.py` default URLs); `light-dark()` in `page.css` (each dark block is written twice: OS media query + `[data-scheme="dark"]`); raw colour `#061818` in `play.html` (the env's clear colour, not a token); overlapping corner buttons; the "copy for your agent" stand-in (on a text selection, a button copies a prompt: the highlight, its section, the chapter URL, a slot for the question; agent panel deferred, `notes/research/infra/agent-panel.md`).
 - **Deferred:** in-page agent panel (decision + picture in `notes/research/infra/agent-panel.md`). Left-sidebar TOC and margin sidenotes (Thinking Machines style) until the chapter has `##` sections and footnotes; measurements in this session's research (TM 660px, AF 682px; code cells should extend into the right margin).
 - **Split into their own sessions (notes on `main`):**
   - box sessions: `box/NOTES-sessions.md`. Decided: one SDK for the CLI and the blogs relay; explicit credentials; the machine is the session, plus persisted status/logs and fan-out-only proxies (no stored reader tokens). First customer: nn-fit "run bigger".
@@ -46,7 +46,7 @@ Branch `blogs/flappy`, worktree `worktrees/blogs-flappy`. The page-builder spike
 ## State at end of session (2026-10-08 night)
 - Worktrees: `blogs-flappy` (main line), `blogs-nnfit` (to integrate), `blogs-modal` (spike, keep). `blogs-build-split`, `blogs-lint`, `blogs-result`, `blogs-carousel` were merged and deleted (worktrees + branches) on 2026-10-09.
 - tmux: `blogs` (`./dev.sh`: session :8787 + page :8010; the :8010 pane died once and was restarted), `blogs-nnfit` (demo :8060). Stop with `tmux kill-session -t <name>`.
-- The pre-commit hook is a symlink into `worktrees/blogs-flappy/blogs/pre-commit`; relink if that worktree is removed. New worktrees need `npm ci` in `blogs/web` before committing under `blogs/`.
+- The pre-commit hook is a symlink into `worktrees/blogs-flappy/blogs/pre-commit`; relink with `blogs/pre-commit --install` if that worktree is removed. New worktrees need `npm ci` in `blogs/web` before committing under `blogs/`.
 - Untracked: `play.py` (throwaway).
 
 ## Done 2026-10-08 (late)
@@ -79,7 +79,7 @@ uv run session.py rl/01-flappy.md --timeout 20      # local session stand-in, :8
 rm -rf .session && uv run --with playwright verify_page.py   # headless proof, screenshots in .evidence/verify_page/ (gitignored)
 uv run --with playwright a11y.py                    # axe accessibility lint, light + dark (page must be served)
 (cd web && npm ci)                                  # once: esbuild/tsc/oxlint + codemirror (build_page.py bundles web/*.ts)
-(cd web && npm run lint)                            # tsc + oxlint + ruff; blogs/pre-commit runs it (install line inside)
+(cd web && npm run lint)                            # tsc + oxlint + ruff; blogs/pre-commit runs it (install: `blogs/pre-commit --install`)
 ```
 verify_page.py and a11y.py take the page URL as an argument (default `http://localhost:8010/01-flappy/`).
 `play.py` is a throwaway terminal player.
