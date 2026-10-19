@@ -38,3 +38,4 @@ default-groups = ["dev", "kernel"]
 
 [tool.pytest.ini_options]
 markers = ["slow: loads gpt2 / runs the full suite (minutes)"]
+addopts = ["-m", "not slow"]

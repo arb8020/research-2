@@ -6,7 +6,6 @@ from __future__ import annotations
 import itertools
 import math
 import shutil
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -80,8 +79,8 @@ def test_op_inputs_include_offset_cases() -> None:
 
 
 @pytest.fixture
-def ctx(tmp_path: Path) -> Ctx:
-    return Ctx(core.Store(tmp_path / "store"), detect_env(), core.isolation(), lambda text: None)
+def ctx(store_dir: Path) -> Ctx:
+    return Ctx(core.Store(store_dir), detect_env(), core.isolation(), lambda text: None)
 
 
 def test_run_keys_are_stable_and_move_with_code_case_and_env(ctx: Ctx, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -107,8 +106,8 @@ def test_run_keys_are_stable_and_move_with_code_case_and_env(ctx: Ctx, monkeypat
         execute(moved, op, cand, cases, grade_only=True)  # another env (versions, chip) is another key
 
 
-def test_regrade_without_rerun(tmp_path: Path) -> None:
-    store = tmp_path / "store"
+def test_regrade_without_rerun(store_dir: Path) -> None:
+    store = store_dir
     code, lines = run_checks(["ch01", "--op", "layer_norm"], REF, store)
     assert code == 0, [line for line in lines if line["kind"] != "verdict"]
     before = {(v["case"], v["dtype"]): v for v in lines if v["kind"] == "verdict" and v["outcome"] != "skip"}
@@ -125,13 +124,13 @@ def test_regrade_without_rerun(tmp_path: Path) -> None:
 # ---- blocked ---------------------------------------------------------------------------------------------------------
 
 
-def test_import_failure_is_blocked_with_file_line_region(tmp_path: Path) -> None:
+def test_import_failure_is_blocked_with_file_line_region(tmp_path: Path, store_dir: Path) -> None:
     tree = tmp_path / "tree"
     shutil.copytree(REF, tree)
     src = (tree / "gpt2.py").read_text()
     line = '    return einsum(x_TD, w_DF, "T D, D F -> T F") + b_F'
     (tree / "gpt2.py").write_text(src.replace(line, line.removesuffix(" b_F")))
-    code, lines = run_checks(["ch01", "--op", "attention"], tree, tmp_path / "store")
+    code, lines = run_checks(["ch01", "--op", "attention"], tree, store_dir)
     blocked = [v for v in lines if v["kind"] == "verdict" and v["outcome"] == "blocked"]
     assert code == 1 and blocked, lines
     where = blocked[0]["where"]
@@ -140,22 +139,16 @@ def test_import_failure_is_blocked_with_file_line_region(tmp_path: Path) -> None
     assert lines[-1]["outcome"] == "blocked"
 
 
-def test_missing_function_is_blocked(tmp_path: Path) -> None:
+def test_missing_function_is_blocked(tmp_path: Path, store_dir: Path) -> None:
     tree = tmp_path / "tree"
     tree.mkdir()
     (tree / "gpt2.py").write_text("import torch\n")
-    code, lines = run_checks(["ch01", "--op", "gelu"], tree, tmp_path / "store")
+    code, lines = run_checks(["ch01", "--op", "gelu"], tree, store_dir)
     blocked = next(v for v in lines if v["kind"] == "verdict" and v["outcome"] == "blocked")
     assert code == 1 and "defines no `gelu`" in blocked["notes"]
 
 
 # ---- self-tests, both isolation paths --------------------------------------------------------------------------------
-
-
-@pytest.fixture
-def warm() -> Iterator[None]:
-    yield
-    core.stop_warm()
 
 
 def selftest_ok(lines: list[dict]) -> None:
@@ -165,22 +158,23 @@ def selftest_ok(lines: list[dict]) -> None:
     assert lines[-1]["outcome"] == "pass"
 
 
-def test_layer_norm_selftest_spawned(tmp_path: Path) -> None:
-    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm"], REF, tmp_path / "store")
+def test_layer_norm_selftest_spawned(store_dir: Path) -> None:
+    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm", "--timeout", "1"], REF, store_dir,
+                             spawn=True)
     assert code == 0
     selftest_ok(lines)
 
 
-def test_layer_norm_selftest_forked_from_the_warm_process(tmp_path: Path, warm: None) -> None:
-    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm"], REF, tmp_path / "store", spawn=False)
+def test_layer_norm_selftest_forked_from_the_warm_process(store_dir: Path) -> None:
+    code, lines = run_checks(["ch01", "--selftest", "--op", "layer_norm", "--timeout", "1"], REF, store_dir)
     assert code == 0
     assert any("forked from the warm process" in line.get("text", "") for line in lines)
     selftest_ok(lines)
 
 
 @pytest.mark.slow
-def test_full_selftest_including_model_level(tmp_path: Path, warm: None) -> None:
-    code, lines = run_checks(["ch01", "--selftest"], REF, tmp_path / "store", spawn=False)
+def test_full_selftest_including_model_level(store_dir: Path) -> None:
+    code, lines = run_checks(["ch01", "--selftest"], REF, store_dir)
     assert code == 0
     selftest_ok(lines)
     names = {t["candidate"] for t in lines if t["kind"] == "selftest"}
