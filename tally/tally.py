@@ -2,14 +2,17 @@
 tally: a build system + durable execution in one file. Read top to bottom.
 After "Build Systems a la Carte" (Mokhov, Mitchell, Peyton Jones, ICFP 2018).
 
-  store      Handle/Hashed, sqlite tables (derivations = cache, effects = history), blob dir
+  store      Handle/Hashed, Store(db, root): sqlite = state (derivations = cache, effects = history, edges), dirs = bytes
   keys       Fingerprint, KeyFn (user-owned), recipe (Nix) vs bytes (Bazel)
   steps      Step: a cached derivation
-  build      Store (persists) / Build (per run) / StepCtx (all a step ever holds); fetch
-  effects    named key -> recorded, or run: intent log + on_unknown policy
+  build      Build (per run) / StepCtx (all a step ever holds); fetch, afetch
+  effects    name@sha(inputs) -> recorded, or run: intent log + on_unknown policy; effect, aeffect
+  runner     pool(limits), hold(pool, needs), run: aeffect under resource limits
+  invalidate archive keys (and what consumed them) into invalidated/<ts>/
   check      the paper's correctness oracle, KeyFn stability
 """
 import ast
+import asyncio
 import hashlib
 import importlib
 import inspect
@@ -23,8 +26,11 @@ import subprocess
 import sys
 import tempfile
 import textwrap
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Sequence
+from contextlib import asynccontextmanager, contextmanager
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from string import hexdigits
@@ -33,12 +39,25 @@ from typing import Any, Literal, Protocol
 
 # === store ======================================================================================================
 
-type Key = str  # hex sha256
+type Key = str  # hex sha256 (derivations) or name@hash8 (effects)
 type State = Literal["pending", "done"]
 type EffectState = Literal["intent", "done", "failed"]
 
+META_DB = "meta.sqlite"
 BLOBS_DIR = "blobs"
+EFFECTS_DIR = "effects"
+INVALIDATED_DIR = "invalidated"
 TMP_DIR = "tmp"
+PENDING_SUFFIX = ".pending"
+EFFECT_JSON = "effect.json"
+SCHEMA_VERSION = 1
+SCHEMA = (
+    "create table derivations (key text primary key, state text not null, digest text, path text)",
+    "create table effects (key text primary key, input_hash text not null, inputs text not null, state text not null,"
+    " outcome text, started_at real not null, finished_at real)",
+    "create table edges (consumer text not null, dependency text not null, primary key (consumer, dependency))",
+    "create index edges_by_dependency on edges (dependency)",
+)
 
 
 @dataclass(frozen=True)
@@ -59,99 +78,166 @@ class StoreError(Exception):
 
 
 @dataclass(frozen=True)
-class Meta:
-    """key -> pending | done(handle). Only `done` is ever a hit. Digest is filled in later, if ever."""
-    db: sqlite3.Connection
+class Store:
+    """Persists across builds. Owned by the build system: steps never see it."""
+    db: sqlite3.Connection  # state: derivations (cache, disposable), effects (history, never GC'd), edges
+    root: Path              # bytes: blobs/<key> (derivations), effects/<name>@<hash8>/ (effects)
+    inflight: dict[Key, asyncio.Future[Handle]]
 
-    @staticmethod
-    def open(path: Path) -> "Meta":
-        db = sqlite3.connect(path, isolation_level=None)  # autocommit: each write is durable on return
-        db.execute("create table if not exists derivations (key text primary key, state text not null, digest text, path text)")
-        return Meta(db)
 
-    def get(self, key: Key) -> Handle | None:
-        row = self.db.execute("select digest, path from derivations where key = ? and state = 'done'", (key,)).fetchone()
-        if row is None: return None
-        digest, path = row
-        if not isinstance(path, str): raise StoreError(f"done row without path: {key}")
-        return Handle(key, path) if digest is None else Hashed(key, path, digest)
+@contextmanager
+def _tx(db: sqlite3.Connection) -> Iterator[None]:
+    db.execute("begin immediate")
+    try:
+        yield
+    except BaseException:
+        db.execute("rollback")
+        raise
+    db.execute("commit")
 
-    def state(self, key: Key) -> State | None:
-        row = self.db.execute("select state from derivations where key = ?", (key,)).fetchone()
-        if row is None: return None
-        (state,) = row
-        if state not in ("pending", "done"): raise StoreError(f"bad state {state!r} for {key}")
-        return state
 
-    def pending(self, key: Key) -> None:
-        # never demote a row another process already finished
-        self.db.execute(
-            "insert into derivations values (?, 'pending', null, null) on conflict(key) do update set state = 'pending' where state != 'done'",
-            (key,),
-        )
+def open_store(root: Path) -> Store:
+    root.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(root / META_DB, isolation_level=None)  # autocommit: each write is durable on return
+    with _tx(db):
+        db.execute("create table if not exists schema (version integer not null)")
+        row = db.execute("select version from schema").fetchone()
+        if row is None:
+            (others,) = db.execute("select count(*) from sqlite_master where type = 'table' and name != 'schema'").fetchone()
+            if others: raise StoreError(f"{root}: store has no schema version (older tally); move it aside")
+            for statement in SCHEMA: db.execute(statement)
+            db.execute("insert into schema values (?)", (SCHEMA_VERSION,))
+        elif row[0] != SCHEMA_VERSION:
+            raise StoreError(f"{root}: schema version {row[0]}, this tally reads {SCHEMA_VERSION}")
+    return Store(db, root, {})
 
-    def done(self, handle: Handle) -> None:
-        # first writer wins: if another process marked it done already, keep theirs
-        self.db.execute(
-            "update derivations set state = 'done', digest = ?, path = ? where key = ? and state = 'pending'",
-            (handle.digest if isinstance(handle, Hashed) else None, handle.path, handle.key),
-        )
-        if self.state(handle.key) != "done": raise StoreError(f"done without pending: {handle.key}")
 
-    def set_digest(self, key: Key, digest: str) -> None:
-        self.db.execute("update derivations set digest = ? where key = ? and state = 'done'", (digest, key))
+# --- derivations: key -> pending | done(handle). Only `done` is ever a hit. Digest is filled in later, if ever. ---
 
+def derivation(store: Store, key: Key) -> Handle | None:
+    row = store.db.execute("select digest, path from derivations where key = ? and state = 'done'", (key,)).fetchone()
+    if row is None: return None
+    digest, path = row
+    if not isinstance(path, str): raise StoreError(f"done row without path: {key}")
+    return Handle(key, path) if digest is None else Hashed(key, path, digest)
+
+
+def derivation_state(store: Store, key: Key) -> State | None:
+    row = store.db.execute("select state from derivations where key = ?", (key,)).fetchone()
+    if row is None: return None
+    (state,) = row
+    if state not in ("pending", "done"): raise StoreError(f"bad state {state!r} for {key}")
+    return state
+
+
+def mark_pending(store: Store, key: Key) -> None:
+    # never demote a row another process already finished
+    store.db.execute(
+        "insert into derivations values (?, 'pending', null, null) on conflict(key) do update set state = 'pending' where state != 'done'",
+        (key,),
+    )
+
+
+def mark_done(store: Store, handle: Handle) -> None:
+    # first writer wins: if another process marked it done already, keep theirs
+    store.db.execute(
+        "update derivations set state = 'done', digest = ?, path = ? where key = ? and state = 'pending'",
+        (handle.digest if isinstance(handle, Hashed) else None, handle.path, handle.key),
+    )
+    if derivation_state(store, handle.key) != "done": raise StoreError(f"done without pending: {handle.key}")
+
+
+def set_digest(store: Store, key: Key, digest: str) -> None:
+    store.db.execute("update derivations set digest = ? where key = ? and state = 'done'", (digest, key))
+
+
+def tmp_dir(store: Store) -> Path:
+    (store.root / TMP_DIR).mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(dir=store.root / TMP_DIR))
+
+
+def commit(store: Store, tmp: Path, key: Key) -> Handle:
+    """
+    Atomic rename tmp -> blobs/<key>. No hashing here: digest is computed lazily, only if a consumer asks.
+    If blobs/<key> already exists it is complete (rename is all-or-nothing), from another writer or a
+    crash before mark_done. Same key = equivalent output, so first writer wins and ours is discarded.
+    """
+    if not tmp.is_dir(): raise StoreError(f"missing tmp dir {tmp}")
+    dest = store.root / BLOBS_DIR / key
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.rename(tmp, dest)
+    except OSError:  # dest exists and is non-empty: someone else committed first
+        if not dest.is_dir(): raise
+        shutil.rmtree(tmp)
+    return Handle(key=key, path=str(dest))
+
+
+# --- effects: history, not cache. key -> intent | done(outcome) | failed(outcome). Never GC'd. ---------------
+# intent = "about to touch the world"; a surviving intent row means we crashed mid-flight.
 
 @dataclass(frozen=True)
 class EffectRow:
-    key: str
+    key: Key
+    input_hash: str
+    inputs: str           # JSON description of the declared inputs
     state: EffectState
-    path: str | None   # set iff done
-    error: str | None  # JSON, set iff failed
+    outcome: str | None   # JSON value (done) or error (failed); set iff not intent
+    started_at: float
+    finished_at: float | None
 
 
-@dataclass(frozen=True)
-class Effects:
-    """
-    History, not cache: key -> intent | done(path) | failed(error). Never GC'd, separate from derivations.
-    intent = "about to touch the world"; a surviving intent row means we crashed mid-flight.
-    """
-    db: sqlite3.Connection
+def effect_row(store: Store, key: Key) -> EffectRow | None:
+    row = store.db.execute(
+        "select input_hash, inputs, state, outcome, started_at, finished_at from effects where key = ?", (key,),
+    ).fetchone()
+    if row is None: return None
+    input_hash, inputs, state, outcome, started_at, finished_at = row
+    if state not in ("intent", "done", "failed"): raise StoreError(f"bad effect state {state!r} for {key}")
+    if state != "intent" and not isinstance(outcome, str): raise StoreError(f"{state} effect without outcome: {key}")
+    if state == "intent" and outcome is not None: raise StoreError(f"intent effect with outcome: {key}")
+    return EffectRow(key, input_hash, inputs, state, outcome, started_at, finished_at)
 
-    @staticmethod
-    def open(db: sqlite3.Connection) -> "Effects":
-        db.execute("create table if not exists effects (key text primary key, state text not null, path text, error text)")
-        return Effects(db)
 
-    def get(self, key: str) -> EffectRow | None:
-        row = self.db.execute("select state, path, error from effects where key = ?", (key,)).fetchone()
-        if row is None: return None
-        state, path, error = row
-        if state not in ("intent", "done", "failed"): raise StoreError(f"bad effect state {state!r} for {key}")
-        if state == "done" and not isinstance(path, str): raise StoreError(f"done effect without path: {key}")
-        if state == "failed" and not isinstance(error, str): raise StoreError(f"failed effect without error: {key}")
-        return EffectRow(key, state, path, error)
+def _intent(store: Store, key: Key, input_hash: str, inputs: str) -> None:
+    store.db.execute(
+        "insert into effects (key, input_hash, inputs, state, started_at) values (?, ?, ?, 'intent', ?) on conflict(key) do nothing",
+        (key, input_hash, inputs, time.time()),
+    )
+    row = effect_row(store, key)
+    if row is None or row.state != "intent": raise StoreError(f"intent over a finished effect: {key}")
 
-    def intent(self, key: str) -> None:
-        self.db.execute("insert into effects values (?, 'intent', null, null) on conflict(key) do nothing", (key,))
-        row = self.get(key)
-        if row is None or row.state != "intent": raise StoreError(f"intent over a finished effect: {key}")
 
-    def _finish(self, key: str, state: EffectState, path: str | None, error: str | None) -> None:
-        self.db.execute(
-            "update effects set state = ?, path = ?, error = ? where key = ? and state = 'intent'", (state, path, error, key),
-        )
-        row = self.get(key)
-        if row is None or row.state != state: raise StoreError(f"{state} without intent: {key}")
+def _finish_row(store: Store, key: Key, state: EffectState, outcome: str, finished_at: float) -> None:
+    store.db.execute(
+        "update effects set state = ?, outcome = ?, finished_at = ? where key = ? and state = 'intent'",
+        (state, outcome, finished_at, key),
+    )
+    row = effect_row(store, key)
+    if row is None or row.state != state: raise StoreError(f"{state} without intent: {key}")
 
-    def done(self, key: str, path: str) -> None:
-        self._finish(key, "done", path, None)
 
-    def failed(self, key: str, error: str) -> None:
-        self._finish(key, "failed", None, error)
+def _clear_intent(store: Store, key: Key) -> None:
+    store.db.execute("delete from effects where key = ? and state = 'intent'", (key,))
 
-    def clear_intent(self, key: str) -> None:
-        self.db.execute("delete from effects where key = ? and state = 'intent'", (key,))
+
+def _effect_dir(store: Store, key: Key, suffix: str = "") -> Path:
+    return store.root / EFFECTS_DIR / (key + suffix)
+
+
+def _record_edges(store: Store, build: "Build", key: Key, received: Any) -> None:
+    rows = [(key, handle.key) for handle in _handles_in(received)] + [(caller, key) for caller in build.chain[-1:]]
+    store.db.executemany("insert or ignore into edges values (?, ?)", rows)
+
+
+def _handles_in(value: Any) -> Iterator[Handle]:
+    match value:
+        case Handle():
+            yield value
+        case list() | tuple():
+            for item in value: yield from _handles_in(item)
+        case dict():
+            for item in value.values(): yield from _handles_in(item)
 
 
 def dir_digest(root: Path) -> str:
@@ -164,38 +250,11 @@ def dir_digest(root: Path) -> str:
     return hasher.hexdigest()
 
 
-@dataclass(frozen=True)
-class LocalBlobStore:
-    root: Path
-
-    def tmp(self) -> Path:
-        (self.root / TMP_DIR).mkdir(parents=True, exist_ok=True)
-        return Path(tempfile.mkdtemp(dir=self.root / TMP_DIR))
-
-    def commit(self, tmp: Path, key: Key) -> Handle:
-        """
-        Atomic rename tmp -> blobs/<key>. No hashing here: digest is computed lazily, only if a consumer asks.
-        If blobs/<key> already exists it is complete (rename is all-or-nothing), from another writer or a
-        crash before meta.done. Same key = equivalent output, so first writer wins and ours is discarded.
-        """
-        if not tmp.is_dir(): raise StoreError(f"missing tmp dir {tmp}")
-        dest = self.root / BLOBS_DIR / key
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            os.rename(tmp, dest)
-        except OSError:  # dest exists and is non-empty: someone else committed first
-            if not dest.is_dir(): raise
-            shutil.rmtree(tmp)
-        return Handle(key=key, path=str(dest))
-
-
 # === core ======================================================================================================
 
 SHA256_HEX_LEN = 64
-META_DB = "meta.sqlite"
-EFFECT_KEY = re.compile(r"[A-Za-z0-9_.:@=+-]+")  # user-named, readable; no "/" so it is safe inside a blob path
-EFFECT_BLOB_PREFIX = "effect."                    # derivation blobs are bare hex, so the namespaces never collide
-EFFECT_ACTIVE_PREFIX = "effect:"                  # Build.active entry for an in-flight effect
+EFFECT_NAME = re.compile(r"[A-Za-z0-9_.:=+-]+(/[A-Za-z0-9_.:=+-]+)*")  # readable, "/" nests dirs; no "@": it ends the name
+INPUT_HASH_SHOWN = 8
 UNKNOWN_AFTER_CRASH = "unknown after crash"
 
 
@@ -349,90 +408,136 @@ def step(
 # --- the build system ------------------------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class Store:
-    """Persists across builds. Owned by the build system: steps never see it."""
-    meta: Meta        # derivations: cache, disposable
-    effects: Effects  # effects: history, never GC'd
-    blobs: LocalBlobStore
-
-
-@dataclass
 class Build:
     """Per-build scratch, thrown away with the build."""
-    active: set[Key]  # keys on the call stack, for cycle detection
-    ran: list[str]    # what actually executed, in completion order
+    chain: tuple[Key, ...]  # keys on this call stack, for cycle detection and caller -> callee edges
+    ran: list[str]          # what actually executed, in completion order; shared by the whole build
 
 
 @dataclass(frozen=True)
 class StepCtx:
     """All a step (or top-level code) ever holds. The paper's tasks get only `fetch`; load/ran are conveniences."""
     fetch: Callable[..., Handle]
+    afetch: Callable[..., Awaitable[Handle]]
     load: Callable[..., Any]
     effect: Callable[..., Handle]
+    aeffect: Callable[..., Awaitable[Handle]]
     ran: list[str]  # the Build's list, for inspection
 
 
-def open_store(root: Path) -> Store:
-    root.mkdir(parents=True, exist_ok=True)
-    meta = Meta.open(root / META_DB)
-    return Store(meta, Effects.open(meta.db), LocalBlobStore(root))
-
-
 def _step_ctx(store: Store, build: Build) -> StepCtx:
-    return StepCtx(fetch=partial(fetch, store, build), load=load, effect=partial(effect, store, build), ran=build.ran)
+    return StepCtx(
+        fetch=partial(fetch, store, build), afetch=partial(afetch, store, build), load=load,
+        effect=partial(effect, store, build), aeffect=partial(aeffect, store, build), ran=build.ran,
+    )
 
 
 def start(store: Store) -> StepCtx:
-    return _step_ctx(store, Build(active=set(), ran=[]))
+    return _step_ctx(store, Build(chain=(), ran=[]))
 
 
-def fetch(store: Store, build: Build, step: Step, *args: Any, **kwargs: Any) -> Handle:
+def _enter(build: Build, key: Key) -> Build:
+    return Build(build.chain + (key,), build.ran)
+
+
+async def _lead(store: Store, key: Key, work: Awaitable[Handle]) -> Handle:
+    future: asyncio.Future[Handle] = asyncio.get_running_loop().create_future()
+    store.inflight[key] = future
+    try:
+        handle = await work
+    except asyncio.CancelledError:
+        future.cancel()
+        raise
+    except BaseException as error:
+        future.set_exception(error)
+        future.exception()
+        raise
+    finally:
+        del store.inflight[key]
+    future.set_result(handle)
+    return handle
+
+
+async def _follow(build: Build, key: Key, running: asyncio.Future[Handle]) -> Handle:
+    assert key not in build.chain, f"cycle: {key} awaited itself"
+    return await asyncio.shield(running)  # a cancelled follower must not cancel the leader
+
+
+def _keyed(store: Store, build: Build, step: Step, args: tuple, kwargs: dict) -> tuple[Key, tuple, dict]:
     hashes = step.key.needs == "digest"  # the consumer pays for hashing its inputs, lazily
     keyed_args = tuple(_digested(store, arg, step) for arg in args) if hashes else args
     keyed_kwargs = {name: _digested(store, arg, step) for name, arg in kwargs.items()} if hashes else kwargs
     key = step.key(step, keyed_args, keyed_kwargs)
     assert len(key) == SHA256_HEX_LEN, f"{step.name}: KeyFn must return hex sha256, got {key!r}"
     assert all(char in hexdigits for char in key), f"{step.name}: KeyFn must return hex sha256, got {key!r}"
-    hit = store.meta.get(key)
-    if hit is not None: return hit
-    assert key not in build.active, f"cycle: {step.name} fetched itself with the same key"
-    build.active.add(key)
-    tmp = store.blobs.tmp()
-    try:
-        store.meta.pending(key)
-        returned = step.fn(_step_ctx(store, build), *keyed_args, out=tmp, **keyed_kwargs)  # may fetch more, inline
-        if returned is not None:
-            dest = tmp / step.serialize.filename
-            assert not dest.exists(), f"{step.name} both wrote and returned {dest.name}"
-            dest.write_text(step.serialize.dump(returned))
-        committed = store.blobs.commit(tmp, key)
-        store.meta.done(committed)
-    except BaseException:
-        shutil.rmtree(tmp, ignore_errors=True)
-        raise
-    finally:
-        build.active.discard(key)
+    _record_edges(store, build, key, (args, kwargs))
+    return key, keyed_args, keyed_kwargs
+
+
+def _begin_derivation(store: Store, build: Build, step: Step, key: Key) -> Path:
+    assert key not in build.chain, f"cycle: {step.name} fetched itself with the same key"
+    tmp = tmp_dir(store)
+    mark_pending(store, key)
+    return tmp
+
+
+def _commit_derivation(store: Store, build: Build, step: Step, key: Key, tmp: Path, returned: Any) -> Handle:
+    if returned is not None:
+        dest = tmp / step.serialize.filename
+        assert not dest.exists(), f"{step.name} both wrote and returned {dest.name}"
+        dest.write_text(step.serialize.dump(returned))
+    committed = commit(store, tmp, key)
+    mark_done(store, committed)
     build.ran.append(step.name)
-    return store.meta.get(key) or committed  # first writer wins: return whatever meta committed
+    return derivation(store, key) or committed  # first writer wins: return whatever meta committed
+
+
+def fetch(store: Store, build: Build, step: Step, *args: Any, **kwargs: Any) -> Handle:
+    key, keyed_args, keyed_kwargs = _keyed(store, build, step, args, kwargs)
+    hit = derivation(store, key)
+    if hit is not None: return hit
+    tmp = _begin_derivation(store, build, step, key)
+    try:
+        returned = step.fn(_step_ctx(store, _enter(build, key)), *keyed_args, out=tmp, **keyed_kwargs)  # may fetch more, inline
+        return _commit_derivation(store, build, step, key, tmp, returned)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+async def afetch(store: Store, build: Build, step: Step, *args: Any, **kwargs: Any) -> Handle:
+    key, keyed_args, keyed_kwargs = _keyed(store, build, step, args, kwargs)
+    hit = derivation(store, key)
+    if hit is not None: return hit
+    running = store.inflight.get(key)
+    if running is not None: return await _follow(build, key, running)
+    tmp = _begin_derivation(store, build, step, key)
+
+    async def work() -> Handle:
+        try:
+            returned = await step.fn(_step_ctx(store, _enter(build, key)), *keyed_args, out=tmp, **keyed_kwargs)
+            return _commit_derivation(store, build, step, key, tmp, returned)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    return await _lead(store, key, work())
 
 
 def digest(store: Store, handle: Handle) -> Hashed:
     """Handle with its content hash known. Computed at most once per key, then remembered in meta."""
     if isinstance(handle, Hashed): return handle
-    stored = store.meta.get(handle.key)
+    stored = derivation(store, handle.key)
     if isinstance(stored, Hashed): return stored
     blob_path = Path(handle.path)
     content_digest = dir_digest(blob_path) if blob_path.is_dir() else file_fp(blob_path)
-    store.meta.set_digest(handle.key, content_digest)
+    set_digest(store, handle.key, content_digest)
     return Hashed(handle.key, handle.path, content_digest)
 
 
-def _digested(store: Store, arg: Any, consumer: Step) -> Any:
+def _digested(store: Store, arg: Any, consumer: Step | None) -> Any:
     match arg:
         case Hashed():
             return arg
         case Handle():
-            if consumer.warn_hash: print(f"tally: {consumer.name} is hashing {arg.path}", file=sys.stderr)
+            if consumer is not None and consumer.warn_hash: print(f"tally: {consumer.name} is hashing {arg.path}", file=sys.stderr)
             return digest(store, arg)
         case list() | tuple():
             return type(arg)(_digested(store, item, consumer) for item in arg)
@@ -471,8 +576,8 @@ class Rerun:
 
 @dataclass(frozen=True)
 class Reconcile:
-    """Unknown after crash -> ask the world. lookup(key): Ok = it happened, record it; None = it didn't, run fn."""
-    lookup: Callable[[str], Ok[Any] | None]
+    """Unknown after crash -> ask the world. lookup(key, out): Ok = it happened, record it; None = it didn't, run fn."""
+    lookup: Callable[[Key, Path], Ok[Any] | None]
 
 
 @dataclass(frozen=True)
@@ -500,73 +605,119 @@ class EffectPending(Exception):
         self.reason = reason
 
 
-def effect(store: Store, build: Build, key: str, fn: Callable[..., Any], *args: Any, on_unknown: OnUnknown, **kwargs: Any) -> Handle:
+def effect_key(name: str, inputs: Any) -> Key:
+    if not EFFECT_NAME.fullmatch(name) or any(part in (".", "..") for part in name.split("/")):
+        raise ValueError(f"effect key name must match {EFFECT_NAME.pattern} without . or .. parts: {name!r}")
+    return f"{name}@{sha(_encode(inputs, 'digest'))[:INPUT_HASH_SHOWN]}"
+
+
+def _describe(handle: Any) -> dict[str, str]:
+    if not isinstance(handle, Hashed): raise TypeError(f"not JSON and not a Hashed handle: {type(handle).__name__}")
+    return {"key": handle.key, "digest": handle.digest}
+
+
+def effect(
+    store: Store, build: Build, name: str, fn: Callable[..., Any], *args: Any, inputs: Any, on_unknown: OnUnknown, **kwargs: Any,
+) -> Handle:
     """
     Run fn(step_ctx, *args, idem_key=key, out=Path, **kwargs) -> Ok | Err | Pending at most once per recorded outcome.
     Exactly once needs the other side too: pass idem_key along so a rerun after a crash is deduped there.
     """
-    if not EFFECT_KEY.fullmatch(key): raise ValueError(f"effect key must match {EFFECT_KEY.pattern}: {key!r}")
-    row = store.effects.get(key)
-    if row is None: return _run_effect(store, build, key, fn, args, kwargs)
-    if row.state == "done":
-        assert row.path is not None, f"done effect without path: {key}"
-        return Handle(key, row.path)
+    digested = _digested(store, inputs, None)
+    key = effect_key(name, digested)
+    if key in store.inflight: raise RuntimeError(f"effect {key!r} is running in aeffect: await it instead")
+    planned = _plan_effect(store, build, key, digested, on_unknown, (args, kwargs))
+    if isinstance(planned, Handle): return planned
+    outcome = fn(_step_ctx(store, _enter(build, key)), *args, idem_key=key, out=planned, **kwargs)
+    return _finish_effect(store, build, key, planned, outcome)
+
+
+async def aeffect(
+    store: Store, build: Build, name: str, fn: Callable[..., Awaitable[Any]], *args: Any, inputs: Any, on_unknown: OnUnknown,
+    **kwargs: Any,
+) -> Handle:
+    digested = _digested(store, inputs, None)
+    key = effect_key(name, digested)
+    running = store.inflight.get(key)
+    if running is not None: return await _follow(build, key, running)
+    planned = _plan_effect(store, build, key, digested, on_unknown, (args, kwargs))
+    if isinstance(planned, Handle): return planned
+
+    async def work() -> Handle:
+        outcome = await fn(_step_ctx(store, _enter(build, key)), *args, idem_key=key, out=planned, **kwargs)
+        return _finish_effect(store, build, key, planned, outcome)
+    return await _lead(store, key, work())
+
+
+def _plan_effect(store: Store, build: Build, key: Key, digested: Any, on_unknown: OnUnknown, received: Any) -> Handle | Path:
+    assert key not in build.chain, f"cycle: effect {key!r} called itself"
+    _record_edges(store, build, key, (received, digested))
+    row = effect_row(store, key)
+    pending = _effect_dir(store, key, PENDING_SUFFIX)
+    if row is None:
+        _intent(store, key, sha(_encode(digested, "digest")), json.dumps(digested, sort_keys=True, default=_describe))
+        pending.mkdir(parents=True, exist_ok=True)
+        return pending
+    if row.state == "done": return Handle(key, str(_effect_dir(store, key)))
     if row.state == "failed":
-        assert row.error is not None, f"failed effect without error: {key}"
-        raise EffectFailed(key, json.loads(row.error))
-    assert EFFECT_ACTIVE_PREFIX + key not in build.active, f"cycle: effect {key!r} called itself"
+        assert row.outcome is not None, f"failed effect without outcome: {key}"
+        raise EffectFailed(key, json.loads(row.outcome))
+    if _effect_dir(store, key).is_dir():
+        _adopt(store, key)
+        return _plan_effect(store, build, key, digested, on_unknown, received)
     # intent survived a previous run: it crashed between telling the world and recording the answer
+    pending.mkdir(parents=True, exist_ok=True)
     match on_unknown:
         case Rerun():
-            return _run_effect(store, build, key, fn, args, kwargs)
+            return pending
         case Reconcile(lookup):
-            found = lookup(key)
-            if isinstance(found, Ok): return _record_effect(store, key, store.blobs.tmp(), found.value)
+            found = lookup(key, pending)
+            if isinstance(found, Ok): return _commit_effect(store, key, pending, "done", found.value)
             if found is not None: raise TypeError(f"reconcile lookup for {key!r} must return Ok or None, got {found!r}")
-            return _run_effect(store, build, key, fn, args, kwargs)
+            return pending
         case AtMostOnce():
-            store.effects.failed(key, json.dumps(UNKNOWN_AFTER_CRASH))
+            _commit_effect(store, key, pending, "failed", UNKNOWN_AFTER_CRASH)
             raise EffectFailed(key, UNKNOWN_AFTER_CRASH)
     raise TypeError(f"on_unknown must be rerun | reconcile(lookup) | at_most_once, got {on_unknown!r}")
 
 
-def _run_effect(store: Store, build: Build, key: str, fn: Callable[..., Any], args: tuple, kwargs: dict) -> Handle:
-    store.effects.intent(key)  # before touching the world
-    active_marker = EFFECT_ACTIVE_PREFIX + key
-    build.active.add(active_marker)
-    tmp = store.blobs.tmp()
-    try:
-        outcome = fn(_step_ctx(store, build), *args, idem_key=key, out=tmp, **kwargs)
-    except BaseException:
-        shutil.rmtree(tmp, ignore_errors=True)
-        raise  # intent stays: the world state is unknown, next run's on_unknown decides
-    finally:
-        build.active.discard(active_marker)
+def _finish_effect(store: Store, build: Build, key: Key, pending: Path, outcome: Any) -> Handle:
     build.ran.append(key)
     match outcome:
         case Ok(value):
-            return _record_effect(store, key, tmp, value)
+            return _commit_effect(store, key, pending, "done", value)
         case Err(error):
-            shutil.rmtree(tmp, ignore_errors=True)
-            store.effects.failed(key, json.dumps(error))
+            _commit_effect(store, key, pending, "failed", error)
             raise EffectFailed(key, error)
         case Pending(reason):
-            shutil.rmtree(tmp, ignore_errors=True)
-            store.effects.clear_intent(key)
+            shutil.rmtree(pending, ignore_errors=True)
+            _clear_intent(store, key)
             raise EffectPending(key, reason)
-    shutil.rmtree(tmp, ignore_errors=True)
     raise TypeError(f"effect {key!r}: fn must return Ok | Err | Pending, got {type(outcome).__name__}")
 
 
-def _record_effect(store: Store, key: str, tmp: Path, value: Any) -> Handle:
-    try:
-        if value is not None: (tmp / JSON.filename).write_text(JSON.dump(value))
-        committed = store.blobs.commit(tmp, EFFECT_BLOB_PREFIX + key)
-    except BaseException:
-        shutil.rmtree(tmp, ignore_errors=True)
-        raise
-    store.effects.done(key, committed.path)
-    return Handle(key, committed.path)
+def _commit_effect(store: Store, key: Key, pending: Path, state: EffectState, outcome: Any) -> Handle:
+    row = effect_row(store, key)
+    assert row is not None, f"commit without intent: {key}"
+    assert row.state == "intent", f"commit over {row.state}: {key}"
+    if state == "done" and outcome is not None:
+        value_path = pending / JSON.filename
+        assert not value_path.exists(), f"effect {key!r} both wrote and returned {JSON.filename}"
+        value_path.write_text(JSON.dump(outcome))
+    finished_at = time.time()
+    snapshot = {**asdict(row), "inputs": json.loads(row.inputs), "state": state, "outcome": outcome, "finished_at": finished_at}
+    (pending / EFFECT_JSON).write_text(json.dumps(snapshot, indent=2, sort_keys=True))
+    final = _effect_dir(store, key)
+    if final.exists(): raise StoreError(f"effect dir already committed: {final}")
+    os.rename(pending, final)
+    _finish_row(store, key, state, json.dumps(outcome), finished_at)
+    return Handle(key, str(final))
+
+
+def _adopt(store: Store, key: Key) -> None:
+    snapshot = json.loads((_effect_dir(store, key) / EFFECT_JSON).read_text())
+    if snapshot.get("state") not in ("done", "failed"): raise StoreError(f"bad {EFFECT_JSON} state for {key}: {snapshot!r}")
+    _finish_row(store, key, snapshot["state"], json.dumps(snapshot["outcome"]), snapshot["finished_at"])
 
 
 def src(path: str | Path) -> Handle:
@@ -575,6 +726,86 @@ def src(path: str | Path) -> Handle:
     if not source_path.is_file(): raise FileNotFoundError(f"src must be a file: {source_path}")
     content_digest = file_fp(source_path)
     return Hashed(key=content_digest, path=str(source_path), digest=content_digest)
+
+
+# --- runner: aeffect under resource limits ---------------------------------------------------------------------
+
+type Resources = dict[str, int]
+
+
+@dataclass(frozen=True)
+class Pool:
+    limits: Resources
+    free: Resources
+    changed: asyncio.Condition
+
+
+def pool(limits: Resources) -> Pool:
+    return Pool(dict(limits), dict(limits), asyncio.Condition())
+
+
+@asynccontextmanager
+async def hold(pool: Pool, needs: Resources) -> AsyncIterator[None]:
+    over = {name: count for name, count in needs.items() if count > pool.limits.get(name, 0)}
+    if over: raise ValueError(f"needs exceed limits {pool.limits}: {over}")
+    async with pool.changed:
+        await pool.changed.wait_for(lambda: all(pool.free[name] >= count for name, count in needs.items()))
+        for name, count in needs.items(): pool.free[name] -= count
+    try:
+        yield
+    finally:
+        async with pool.changed:
+            for name, count in needs.items(): pool.free[name] += count
+            pool.changed.notify_all()
+
+
+async def run(
+    ctx: StepCtx, pool: Pool, name: str, fn: Callable[..., Awaitable[Any]], *args: Any, needs: Resources, inputs: Any,
+    on_unknown: OnUnknown, **kwargs: Any,
+) -> Handle:
+    async with hold(pool, needs):
+        return await ctx.aeffect(name, fn, *args, inputs=inputs, on_unknown=on_unknown, **kwargs)
+
+
+# --- invalidate: archive into invalidated/<ts>/, never delete -------------------------------------------------
+
+def downstream_of(store: Store, keys: Sequence[Key]) -> list[Key]:
+    found = list(keys)
+    for key in found:
+        for (consumer,) in store.db.execute("select consumer from edges where dependency = ?", (key,)).fetchall():
+            if consumer not in found: found.append(consumer)
+    return found
+
+
+def invalidate(store: Store, keys: Sequence[Key], *, downstream: bool = True) -> Path:
+    missing = [key for key in keys if effect_row(store, key) is None and derivation_state(store, key) is None]
+    if missing: raise KeyError(f"not in store: {missing}")
+    targets = downstream_of(store, keys) if downstream else list(keys)
+    archive = store.root / INVALIDATED_DIR / datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+    effects, derivations = [], []
+    for key in targets:
+        row = effect_row(store, key)
+        if row is not None:
+            effects.append({**asdict(row), "inputs": json.loads(row.inputs)})
+            for suffix in ("", PENDING_SUFFIX):
+                _move(_effect_dir(store, key, suffix), archive / EFFECTS_DIR / (key + suffix))
+        done = derivation(store, key)
+        if derivation_state(store, key) is not None:
+            derivations.append({"key": key, "path": done and done.path})
+            if done is not None: _move(Path(done.path), archive / BLOBS_DIR / key)
+    manifest = {"roots": list(keys), "downstream": downstream, "effects": effects, "derivations": derivations}
+    archive.mkdir(parents=True, exist_ok=True)
+    (archive / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
+    with _tx(store.db):
+        store.db.executemany("delete from effects where key = ?", [(row["key"],) for row in effects])
+        store.db.executemany("delete from derivations where key = ?", [(row["key"],) for row in derivations])
+    return archive
+
+
+def _move(source: Path, dest: Path) -> None:
+    if not source.exists(): return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    os.rename(source, dest)
 
 
 # === check: debug helpers (paper Definition 3.1 oracle, KeyFn stability) ==================================

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from _stripe import DECLINED_CARD, CardDeclined, SimulatedCrash, World
 
-from tally import EffectFailed, Err, Ok, StepCtx, at_most_once, open_store, reconcile, rerun, start
+from tally import EffectFailed, Err, Ok, StepCtx, at_most_once, effect_key, open_store, reconcile, rerun, start
 
 GOOD_CARD = "4242-4242-4242-4242"
 
@@ -30,9 +30,9 @@ def send_email(ctx: StepCtx, world: World, order: dict, *, idem_key: str, out: P
 
 
 def fulfill(ctx: StepCtx, world: World, order: dict, attempt: int) -> None:
-    ctx.effect(f"charge:{order['id']}:{attempt}", charge, world, order, on_unknown=rerun)
-    ctx.effect(f"reserve:{order['id']}", reserve, world, order, on_unknown=reconcile(world.inventory.lookup))
-    ctx.effect(f"email:{order['id']}", send_email, world, order, on_unknown=at_most_once)
+    ctx.effect(f"charge:{order['id']}:{attempt}", charge, world, order, inputs=order, on_unknown=rerun)
+    ctx.effect(f"reserve:{order['id']}", reserve, world, order, inputs=order, on_unknown=reconcile(lambda key, out: world.inventory.lookup(key)))
+    ctx.effect(f"email:{order['id']}", send_email, world, order, inputs=order, on_unknown=at_most_once)
 
 
 def order(order_id: int, card: str = GOOD_CARD) -> dict:
@@ -86,11 +86,11 @@ def declined_then_new_attempt(root: Path) -> None:
             raise AssertionError("expected a decline")
         except EffectFailed as failed:
             declined_errors.append((failed.key, failed.error))
-    assert declined_errors == [("charge:3:1", "card_declined")] * 2
+    assert declined_errors == [(effect_key("charge:3:1", order(3, card=DECLINED_CARD)), "card_declined")] * 2
     retry = start(store)
     fulfill(retry, world, order(3, card=GOOD_CARD), attempt=2)
     report("6 declined, then attempt 2", world, f"attempt 1 -> {declined_errors[0]}, attempt 2 ran={retry.ran}")
-    assert list(world.stripe.charges) == ["charge:3:2"]
+    assert list(world.stripe.charges) == [effect_key("charge:3:2", order(3, card=GOOD_CARD))]
     assert world.counts() == (1, 1, 1)
 
 

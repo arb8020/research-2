@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tally import Handle, Hashed, Step, keys, open_store, start
+from tally import Handle, Hashed, Step, commit, derivation, derivation_state, keys, mark_pending, open_store, start, tmp_dir
 
 
 def _write(ctx, x: int, out: Path):  # noqa: ANN001, ANN201
@@ -25,7 +25,7 @@ def test_recipe_steps_never_hash(tmp_path: Path) -> None:
     h = ctx.fetch(WRITE, 10)
     assert not isinstance(h, Hashed)                          # commit did not read the bytes
     ctx.fetch(Step(_use, key=keys.recipe), h)
-    assert not isinstance(store.meta.get(h.key), Hashed)        # recipe consumer never asked for it
+    assert not isinstance(derivation(store, h.key), Hashed)        # recipe consumer never asked for it
 
 
 def test_bytes_consumer_hashes_once_and_remembers(tmp_path: Path) -> None:
@@ -33,20 +33,20 @@ def test_bytes_consumer_hashes_once_and_remembers(tmp_path: Path) -> None:
     ctx = start(store)
     h = ctx.fetch(WRITE, 10)
     ctx.fetch(Step(_use, key=keys.bytes), h)
-    stored = store.meta.get(h.key)
+    stored = derivation(store, h.key)
     assert isinstance(stored, Hashed)                         # hashed lazily, saved to meta
     ctx.fetch(Step(_use, key=keys.bytes), h)                  # second consumer: served from meta
-    assert store.meta.get(h.key) == stored
+    assert derivation(store, h.key) == stored
 
 
 def test_second_writer_does_not_clobber_first(tmp_path: Path) -> None:
     first, late = open_store(tmp_path), open_store(tmp_path)  # two processes, one store
     h = start(first).fetch(WRITE, 10)
-    late.meta.pending(h.key)                                  # late writer: must not demote done
-    assert late.meta.state(h.key) == "done"
-    tmp = late.blobs.tmp()
+    mark_pending(late, h.key)                                  # late writer: must not demote done
+    assert derivation_state(late, h.key) == "done"
+    tmp = tmp_dir(late)
     (tmp / "blob.bin").write_bytes(b"late")
-    h2 = late.blobs.commit(tmp, h.key)
+    h2 = commit(late, tmp, h.key)
     assert h2.path == h.path and not tmp.exists()             # first writer wins, late tmp discarded
     assert (Path(h.path) / "blob.bin").read_bytes() == b"x" * 10
 
