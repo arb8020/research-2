@@ -12,7 +12,6 @@ After "Build Systems a la Carte" (Mokhov, Mitchell, Peyton Jones, ICFP 2018).
   check      the paper's correctness oracle, KeyFn stability
 """
 import ast
-import asyncio
 import hashlib
 import importlib
 import inspect
@@ -29,13 +28,16 @@ import textwrap
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from string import hexdigits
 from types import SimpleNamespace
 from typing import Any, Literal, Protocol
+
+import anyio
+from anyio.abc import TaskGroup
 
 # === store ======================================================================================================
 
@@ -77,12 +79,30 @@ class StoreError(Exception):
     """The on-disk store disagrees with what the protocol expects (world-caused, so raise, not assert)."""
 
 
+class StoreClosed(Exception):
+    pass
+
+
+@dataclass
+class Run:
+    scope: anyio.CancelScope
+    done: anyio.Event
+    waiters: int
+    outcome: Handle | Exception | None
+
+
+@dataclass
+class Runs:
+    group: TaskGroup | None
+    inflight: dict[Key, Run]
+
+
 @dataclass(frozen=True)
 class Store:
     """Persists across builds. Owned by the build system: steps never see it."""
     db: sqlite3.Connection  # state: derivations (cache, disposable), effects (history, never GC'd), edges
     root: Path              # bytes: blobs/<key> (derivations), effects/<name>@<hash8>/ (effects)
-    inflight: dict[Key, asyncio.Future[Handle]]
+    runs: Runs | None
 
 
 @contextmanager
@@ -109,7 +129,18 @@ def open_store(root: Path) -> Store:
             db.execute("insert into schema values (?)", (SCHEMA_VERSION,))
         elif row[0] != SCHEMA_VERSION:
             raise StoreError(f"{root}: schema version {row[0]}, this tally reads {SCHEMA_VERSION}")
-    return Store(db, root, {})
+    return Store(db, root, None)
+
+
+@asynccontextmanager
+async def open_async_store(root: Path) -> AsyncIterator[Store]:
+    runs = Runs(None, {})
+    try:
+        async with anyio.create_task_group() as group:
+            runs.group = group
+            yield replace(open_store(root), runs=runs)
+    finally:
+        runs.group = None
 
 
 # --- derivations: key -> pending | done(handle). Only `done` is ever a hit. Digest is filled in later, if ever. ---
@@ -440,27 +471,54 @@ def _enter(build: Build, key: Key) -> Build:
     return Build(build.chain + (key,), build.ran)
 
 
-async def _lead(store: Store, key: Key, work: Awaitable[Handle]) -> Handle:
-    future: asyncio.Future[Handle] = asyncio.get_running_loop().create_future()
-    store.inflight[key] = future
+def _live(store: Store) -> tuple[dict[Key, Run], TaskGroup]:
+    if store.runs is None: raise RuntimeError(f"{store.root}: afetch/aeffect need a store from open_async_store, not open_store")
+    if store.runs.group is None: raise StoreClosed(f"{store.root}: the store's async with has exited")
+    return store.runs.inflight, store.runs.group
+
+
+async def _join(store: Store, build: Build, key: Key, plan: Callable[[], Handle | Callable[[], Awaitable[Handle]]]) -> Handle:
+    inflight, group = _live(store)
+    running = inflight.get(key)
+    while running is not None and running.scope.cancel_called:
+        await running.done.wait()
+        inflight, group = _live(store)
+        running = inflight.get(key)
+    if running is not None:
+        assert key not in build.chain, f"cycle: {key} awaited itself"
+        return await _wait(key, running)
+    planned = plan()
+    if isinstance(planned, Handle): return planned
+    running = Run(anyio.CancelScope(), anyio.Event(), 0, None)
+    inflight[key] = running
+    group.start_soon(_drive, inflight, key, running, planned)
+    return await _wait(key, running)
+
+
+async def _drive(inflight: dict[Key, Run], key: Key, running: Run, work: Callable[[], Awaitable[Handle]]) -> None:
     try:
-        handle = await work
-    except asyncio.CancelledError:
-        future.cancel()
-        raise
-    except BaseException as error:
-        future.set_exception(error)
-        future.exception()
-        raise
+        with running.scope:
+            running.outcome = await work()
+    except Exception as error:
+        running.outcome = error
     finally:
-        del store.inflight[key]
-    future.set_result(handle)
-    return handle
+        del inflight[key]
+        running.done.set()
 
 
-async def _follow(build: Build, key: Key, running: asyncio.Future[Handle]) -> Handle:
-    assert key not in build.chain, f"cycle: {key} awaited itself"
-    return await asyncio.shield(running)  # a cancelled follower must not cancel the leader
+async def _wait(key: Key, running: Run) -> Handle:
+    running.waiters += 1
+    try:
+        await running.done.wait()
+    finally:
+        running.waiters -= 1
+        if running.waiters == 0 and not running.done.is_set(): running.scope.cancel()
+    match running.outcome:
+        case Handle():
+            return running.outcome
+        case Exception():
+            raise running.outcome
+    raise StoreClosed(f"{key}: the store's async with exited while this run was in flight")
 
 
 def _keyed(store: Store, build: Build, step: Step, args: tuple, kwargs: dict) -> tuple[Key, tuple, dict]:
@@ -505,20 +563,22 @@ def fetch(store: Store, build: Build, step: Step, *args: Any, **kwargs: Any) -> 
 
 
 async def afetch(store: Store, build: Build, step: Step, *args: Any, **kwargs: Any) -> Handle:
+    _live(store)
     key, keyed_args, keyed_kwargs = _keyed(store, build, step, args, kwargs)
-    hit = derivation(store, key)
-    if hit is not None: return hit
-    running = store.inflight.get(key)
-    if running is not None: return await _follow(build, key, running)
-    tmp = _begin_derivation(store, build, step, key)
 
-    async def work() -> Handle:
-        try:
-            returned = await step.fn(_step_ctx(store, _enter(build, key)), *keyed_args, out=tmp, **keyed_kwargs)
-            return _commit_derivation(store, build, step, key, tmp, returned)
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-    return await _lead(store, key, work())
+    def plan() -> Handle | Callable[[], Awaitable[Handle]]:
+        hit = derivation(store, key)
+        if hit is not None: return hit
+        tmp = _begin_derivation(store, build, step, key)
+
+        async def work() -> Handle:
+            try:
+                returned = await step.fn(_step_ctx(store, _enter(build, key)), *keyed_args, out=tmp, **keyed_kwargs)
+                return _commit_derivation(store, build, step, key, tmp, returned)
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+        return work
+    return await _join(store, build, key, plan)
 
 
 def digest(store: Store, handle: Handle) -> Hashed:
@@ -625,7 +685,7 @@ def effect(
     """
     digested = _digested(store, inputs, None)
     key = effect_key(name, digested)
-    if key in store.inflight: raise RuntimeError(f"effect {key!r} is running in aeffect: await it instead")
+    if store.runs is not None and key in store.runs.inflight: raise RuntimeError(f"effect {key!r} is running in aeffect: await it instead")
     planned = _plan_effect(store, build, key, digested, on_unknown, (args, kwargs))
     if isinstance(planned, Handle): return planned
     outcome = fn(_step_ctx(store, _enter(build, key)), *args, idem_key=key, out=planned, **kwargs)
@@ -636,17 +696,19 @@ async def aeffect(
     store: Store, build: Build, name: str, fn: Callable[..., Awaitable[Any]], *args: Any, inputs: Any, on_unknown: OnUnknown,
     **kwargs: Any,
 ) -> Handle:
+    _live(store)
     digested = _digested(store, inputs, None)
     key = effect_key(name, digested)
-    running = store.inflight.get(key)
-    if running is not None: return await _follow(build, key, running)
-    planned = _plan_effect(store, build, key, digested, on_unknown, (args, kwargs))
-    if isinstance(planned, Handle): return planned
 
-    async def work() -> Handle:
-        outcome = await fn(_step_ctx(store, _enter(build, key)), *args, idem_key=key, out=planned, **kwargs)
-        return _finish_effect(store, build, key, planned, outcome)
-    return await _lead(store, key, work())
+    def plan() -> Handle | Callable[[], Awaitable[Handle]]:
+        planned = _plan_effect(store, build, key, digested, on_unknown, (args, kwargs))
+        if isinstance(planned, Handle): return planned
+
+        async def work() -> Handle:
+            outcome = await fn(_step_ctx(store, _enter(build, key)), *args, idem_key=key, out=planned, **kwargs)
+            return _finish_effect(store, build, key, planned, outcome)
+        return work
+    return await _join(store, build, key, plan)
 
 
 def _plan_effect(store: Store, build: Build, key: Key, digested: Any, on_unknown: OnUnknown, received: Any) -> Handle | Path:
@@ -737,11 +799,11 @@ type Resources = dict[str, int]
 class Pool:
     limits: Resources
     free: Resources
-    changed: asyncio.Condition
+    changed: anyio.Condition
 
 
 def pool(limits: Resources) -> Pool:
-    return Pool(dict(limits), dict(limits), asyncio.Condition())
+    return Pool(dict(limits), dict(limits), anyio.Condition())
 
 
 @asynccontextmanager

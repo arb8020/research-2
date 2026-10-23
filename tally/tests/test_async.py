@@ -1,7 +1,7 @@
-import asyncio
 from pathlib import Path
 from typing import Any
 
+import anyio
 import pytest
 
 from tally import (
@@ -9,11 +9,13 @@ from tally import (
     Handle,
     Ok,
     Step,
+    StepCtx,
     at_most_once,
     derivation_state,
     effect_key,
     effect_row,
     load,
+    open_async_store,
     open_store,
     pool,
     run,
@@ -24,41 +26,57 @@ NAME = "trial"
 INPUTS = "x"
 
 
+class StoreAborted(Exception):
+    pass
+
+
 async def crowd(root: Path, kind: str, outcome: str, callers: int, cancel: str | None) -> tuple[list[str | None], list[Any]]:
     calls: list[str | None] = []
     arrived = 0
-    all_in, release = asyncio.Event(), asyncio.Event()
-    leader: list[asyncio.Task] = []
+    results: list[Any] = [None] * callers
+    scopes = [anyio.CancelScope() for _ in range(callers)]
+    left = [anyio.Event() for _ in range(callers)]
+    all_in, started, release = anyio.Event(), anyio.Event(), anyio.Event()
 
     async def trial(ctx: Any, *, out: Path, idem_key: str | None = None) -> Any:
         calls.append(idem_key)
-        leader.append(asyncio.current_task())
+        started.set()
         await release.wait()
         if outcome == "raise": raise RuntimeError("boom")
         return Ok("v") if kind == "aeffect" else "v"
 
-    ctx = start(open_store(root))
-
-    async def caller() -> Handle:
+    async def caller(index: int, ctx: StepCtx) -> None:
         nonlocal arrived
         arrived += 1
         if arrived == callers: all_in.set()
-        if kind == "aeffect": return await ctx.aeffect(NAME, trial, inputs=INPUTS, on_unknown=at_most_once)
-        return await ctx.afetch(Step(trial, label=NAME))
+        with scopes[index]:
+            try:
+                if kind == "aeffect": results[index] = await ctx.aeffect(NAME, trial, inputs=INPUTS, on_unknown=at_most_once)
+                else: results[index] = await ctx.afetch(Step(trial, label=NAME))
+            except Exception as error:
+                results[index] = error
+        if scopes[index].cancelled_caught: results[index] = "cancelled"
+        left[index].set()
 
-    tasks = [asyncio.create_task(caller()) for _ in range(callers)]
-    await all_in.wait()
-    cancelled = None
-    if cancel == "leader": cancelled = leader[0]
-    if cancel == "follower": cancelled = next(task for task in tasks if task is not leader[0])
-    if cancelled is not None: cancelled.cancel()
-    release.set()
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    return calls, [result for task, result in zip(tasks, results, strict=True) if task is not cancelled]
+    cancelled = {"one": scopes[:1], "all": scopes}.get(cancel or "", [])
+    async with anyio.create_task_group() as outside:
+        try:
+            async with open_async_store(root) as store:
+                for index in range(callers): outside.start_soon(caller, index, start(store))
+                await all_in.wait()
+                if cancel is not None: await started.wait()
+                if cancel == "store": raise StoreAborted
+                for scope in cancelled: scope.cancel()
+                for index in range(len(cancelled)): await left[index].wait()
+                release.set()
+        except* StoreAborted:
+            pass
+    return calls, results
 
 
 def describe(result: Any) -> Any:
-    return load(result) if isinstance(result, Handle) else type(result).__name__
+    if isinstance(result, Handle): return load(result)
+    return result if isinstance(result, str) else type(result).__name__
 
 
 def record(root: Path, kind: str) -> tuple[str | None, bool]:
@@ -73,7 +91,7 @@ def record(root: Path, kind: str) -> tuple[str | None, bool]:
 
 def check_crowd(root: Path, kind: str, outcome: str, cancel: str | None, seen: list[Any], state: tuple[str | None, bool]) -> None:
     callers = 4
-    calls, results = asyncio.run(crowd(root, kind, outcome, callers, cancel))
+    calls, results = anyio.run(crowd, root, kind, outcome, callers, cancel)
     assert len(calls) == 1, (kind, outcome, cancel, calls)
     assert [describe(result) for result in results] == seen, (kind, outcome, cancel, results)
     if cancel is None:
@@ -87,31 +105,35 @@ def test_concurrent_same_key_runs_once(tmp_path: Path) -> None:
         ("aeffect", "raise", None, ["RuntimeError"] * 4, ("intent", True)),
         ("afetch", "ok", None, ["v"] * 4, ("done", False)),
         ("afetch", "raise", None, ["RuntimeError"] * 4, ("pending", False)),
-        ("aeffect", "ok", "follower", ["v"] * 3, ("done", False)),
-        ("afetch", "ok", "follower", ["v"] * 3, ("done", False)),
-        ("aeffect", "ok", "leader", ["CancelledError"] * 3, ("intent", True)),
-        ("afetch", "ok", "leader", ["CancelledError"] * 3, ("pending", False)),
+        ("aeffect", "ok", "one", ["cancelled"] + ["v"] * 3, ("done", False)),
+        ("afetch", "ok", "one", ["cancelled"] + ["v"] * 3, ("done", False)),
+        ("aeffect", "ok", "all", ["cancelled"] * 4, ("intent", True)),
+        ("afetch", "ok", "all", ["cancelled"] * 4, ("pending", False)),
+        ("aeffect", "ok", "store", ["StoreClosed"] * 4, ("intent", True)),
+        ("afetch", "ok", "store", ["StoreClosed"] * 4, ("pending", False)),
     ]
     for index, (kind, outcome, cancel, seen, state) in enumerate(table):
         check_crowd(tmp_path / str(index), kind, outcome, cancel, seen, state)
 
 
-def test_cancelled_leader_leaves_unknown_for_next_run(tmp_path: Path) -> None:
+def test_cancelled_run_leaves_unknown_for_next_run(tmp_path: Path) -> None:
     table = [
-        ("aeffect", 0, ["EffectFailed"], ("failed", False)),
-        ("afetch", 1, ["v"], ("done", False)),
+        ("aeffect", "all", 0, ["EffectFailed"], ("failed", False)),
+        ("aeffect", "store", 0, ["EffectFailed"], ("failed", False)),
+        ("afetch", "all", 1, ["v"], ("done", False)),
+        ("afetch", "store", 1, ["v"], ("done", False)),
     ]
-    for kind, calls_next, seen_next, state_next in table:
-        root = tmp_path / kind
-        asyncio.run(crowd(root, kind, "ok", 2, "leader"))
-        calls, results = asyncio.run(crowd(root, kind, "ok", 1, None))
-        assert (len(calls), [describe(result) for result in results], record(root, kind)) == (calls_next, seen_next, state_next), kind
+    for kind, cancel, calls_next, seen_next, state_next in table:
+        root = tmp_path / f"{kind}-{cancel}"
+        anyio.run(crowd, root, kind, "ok", 2, cancel)
+        calls, results = anyio.run(crowd, root, kind, "ok", 1, None)
+        assert (len(calls), [describe(result) for result in results], record(root, kind)) == (calls_next, seen_next, state_next), (kind, cancel)
         if kind == "aeffect": assert isinstance(results[0], EffectFailed) and results[0].error == "unknown after crash"
 
 
 async def limited(root: Path, limit: int, need: int, tasks: int) -> tuple[int, list[Any]]:
     in_use = peak = entered = 0
-    waves = [asyncio.Event()]
+    waves = [anyio.Event()]
 
     async def trial(ctx: Any, index: int, *, idem_key: str, out: Path) -> Ok[int]:
         nonlocal in_use, peak, entered
@@ -120,22 +142,25 @@ async def limited(root: Path, limit: int, need: int, tasks: int) -> tuple[int, l
         peak = max(peak, in_use)
         wave = waves[-1]
         if limit - in_use < need or entered == tasks:
-            asyncio.get_running_loop().call_soon(wave.set)
-            waves.append(asyncio.Event())
+            wave.set()
+            waves.append(anyio.Event())
         await wave.wait()
         in_use -= need
         return Ok(index)
 
-    ctx, slots = start(open_store(root)), pool({"docker": limit})
-    handles = await asyncio.gather(*(
-        run(ctx, slots, f"t{index}", trial, index, needs={"docker": need}, inputs=index, on_unknown=at_most_once)
-        for index in range(tasks)
-    ))
-    return peak, [load(handle) for handle in handles]
+    slots = pool({"docker": limit})
+    handles: dict[int, Handle] = {}
+
+    async def one(ctx: StepCtx, index: int) -> None:
+        handles[index] = await run(ctx, slots, f"t{index}", trial, index, needs={"docker": need}, inputs=index, on_unknown=at_most_once)
+
+    async with open_async_store(root) as store, anyio.create_task_group() as group:
+        for index in range(tasks): group.start_soon(one, start(store), index)
+    return peak, [load(handles[index]) for index in range(tasks)]
 
 
 def check_limits(root: Path, limit: int, need: int, tasks: int, peak: int) -> None:
-    assert asyncio.run(limited(root, limit, need, tasks)) == (peak, list(range(tasks))), (limit, need, tasks)
+    assert anyio.run(limited, root, limit, need, tasks) == (peak, list(range(tasks))), (limit, need, tasks)
 
 
 def test_run_never_exceeds_limits_and_fills_them(tmp_path: Path) -> None:
@@ -151,8 +176,9 @@ def test_run_never_exceeds_limits_and_fills_them(tmp_path: Path) -> None:
 
 def test_run_rejects_needs_over_limits(tmp_path: Path) -> None:
     async def attempt(needs: dict[str, int]) -> None:
-        await run(start(open_store(tmp_path)), pool({"docker": 1}), "t", lambda: None, needs=needs, inputs=0, on_unknown=at_most_once)
+        async with open_async_store(tmp_path) as store:
+            await run(start(store), pool({"docker": 1}), "t", lambda: None, needs=needs, inputs=0, on_unknown=at_most_once)
 
     for needs in ({"docker": 2}, {"gpu": 1}):
-        with pytest.raises(ValueError, match="needs exceed limits"):
-            asyncio.run(attempt(needs))
+        with pytest.RaisesGroup(pytest.RaisesExc(ValueError, match="needs exceed limits")):
+            anyio.run(attempt, needs)
