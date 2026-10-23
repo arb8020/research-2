@@ -1,4 +1,5 @@
 """Every branch of effect(): recorded done/failed, intent x {rerun, reconcile, at_most_once}, Ok/Err/Pending/raise/bad."""
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -35,7 +36,9 @@ class World:
     def __call__(self, ctx: StepCtx, payload: str, *, idem_key: str, out: Path) -> Any:
         self.idem_keys.append(idem_key)
         outcome = self.script.pop(0)
-        if outcome == "raise": raise RuntimeError("died mid-flight")
+        if outcome == "raise":
+            (out / "result.json").write_text(json.dumps({"found": idem_key}))
+            raise RuntimeError("died mid-flight")
         return outcome
 
 
@@ -104,7 +107,8 @@ def test_intent_reconcile_found_records_without_running(tmp_path: Path) -> None:
     _crashed(tmp_path)
     world = World()
     ctx = start(open_store(tmp_path))
-    handle = ctx.effect(NAME, world, "hi", inputs="hi", on_unknown=reconcile(lambda key, out: Ok({"found": key})))
+    lookup = reconcile(lambda key, out: Ok(json.loads((out / "result.json").read_text())))
+    handle = ctx.effect(NAME, world, "hi", inputs="hi", on_unknown=lookup)
     assert ctx.load(handle) == {"found": KEY}
     assert world.idem_keys == []
     assert ctx.ran == []
