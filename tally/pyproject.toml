@@ -1,0 +1,30 @@
+[project]
+name = "tally"
+version = "0.1.0"
+description = "Build systems a la carte: cached pure steps with pluggable keys."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "anyio>=4.15.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-timeout>=2.4.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+timeout = 30

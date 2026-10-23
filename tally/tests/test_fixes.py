@@ -1,0 +1,85 @@
+"""Regression tests: lazy digests, first-writer-wins commit, module_fp default, tmp cleanup."""
+import importlib
+import sys
+from pathlib import Path
+
+import pytest
+
+from tally import Handle, Hashed, Step, commit, derivation, derivation_state, keys, mark_pending, open_store, start, tmp_dir
+
+
+def _write(ctx, x: int, out: Path):  # noqa: ANN001, ANN201
+    (out / "blob.bin").write_bytes(b"x" * x)
+
+
+def _use(ctx, h, out: Path) -> int:  # noqa: ANN001
+    return len((Path(h.path) / "blob.bin").read_bytes())
+
+
+WRITE = Step(_write)
+
+
+def test_recipe_steps_never_hash(tmp_path: Path) -> None:
+    store = open_store(tmp_path)
+    ctx = start(store)
+    h = ctx.fetch(WRITE, 10)
+    assert not isinstance(h, Hashed)                          # commit did not read the bytes
+    ctx.fetch(Step(_use, key=keys.recipe), h)
+    assert not isinstance(derivation(store, h.key), Hashed)        # recipe consumer never asked for it
+
+
+def test_bytes_consumer_hashes_once_and_remembers(tmp_path: Path) -> None:
+    store = open_store(tmp_path)
+    ctx = start(store)
+    h = ctx.fetch(WRITE, 10)
+    ctx.fetch(Step(_use, key=keys.bytes), h)
+    stored = derivation(store, h.key)
+    assert isinstance(stored, Hashed)                         # hashed lazily, saved to meta
+    ctx.fetch(Step(_use, key=keys.bytes), h)                  # second consumer: served from meta
+    assert derivation(store, h.key) == stored
+
+
+def test_second_writer_does_not_clobber_first(tmp_path: Path) -> None:
+    first, late = open_store(tmp_path), open_store(tmp_path)  # two processes, one store
+    h = start(first).fetch(WRITE, 10)
+    mark_pending(late, h.key)                                  # late writer: must not demote done
+    assert derivation_state(late, h.key) == "done"
+    tmp = tmp_dir(late)
+    (tmp / "blob.bin").write_bytes(b"late")
+    h2 = commit(late, tmp, h.key)
+    assert h2.path == h.path and not tmp.exists()             # first writer wins, late tmp discarded
+    assert (Path(h.path) / "blob.bin").read_bytes() == b"x" * 10
+
+
+def test_module_fp_sees_helper_edits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = tmp_path / "mod_under_test.py"
+    src = "def helper():\n    return {v}\n\ndef work(ctx, out):\n    return helper()\n"
+    mod.write_text(src.format(v=1))
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)     # else reload may serve a same-second stale .pyc
+    m = importlib.import_module("mod_under_test")
+    ctx = start(open_store(tmp_path / "store"))
+    assert ctx.load(ctx.fetch(Step(m.work))) == 1
+    mod.write_text(src.format(v=2))                           # edit only the helper
+    m = importlib.reload(m)
+    assert ctx.load(ctx.fetch(Step(m.work))) == 2             # default code_fp caught it
+    assert ctx.ran == ["work", "work"]
+    sys.modules.pop("mod_under_test")
+
+
+def _boom(ctx, out: Path):  # noqa: ANN001, ANN201
+    (out / "half.bin").write_bytes(b"partial")
+    raise RuntimeError("crash")
+
+
+def test_raising_step_leaves_no_tmp(tmp_path: Path) -> None:
+    ctx = start(open_store(tmp_path))
+    with pytest.raises(RuntimeError):
+        ctx.fetch(Step(_boom))
+    assert list((tmp_path / "tmp").iterdir()) == []
+
+
+def test_digest_keyfn_rejects_unhashed_handle() -> None:
+    step = Step(_use, key=keys.bytes)
+    with pytest.raises(TypeError, match="unhashed"):
+        keys.bytes(step, (Handle(key="k" * 64, path="/x"),), {})  # called directly, bypassing fetch's hashing
