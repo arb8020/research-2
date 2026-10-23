@@ -61,10 +61,11 @@ async def crowd(root: Path, kind: str, outcome: str, callers: int, cancel: str |
     cancelled = {"one": scopes[:1], "all": scopes}.get(cancel or "", [])
     async with anyio.create_task_group() as outside:
         try:
-            async with open_async_store(root) as store:
+            async with open_async_store(root) as live:
+                store = open_store(root) if cancel == "sync" else live
                 for index in range(callers): outside.start_soon(caller, index, start(store))
                 await all_in.wait()
-                if cancel is not None: await started.wait()
+                if cancel not in (None, "sync"): await started.wait()
                 if cancel == "store": raise StoreAborted
                 for scope in cancelled: scope.cancel()
                 for index in range(len(cancelled)): await left[index].wait()
@@ -92,7 +93,7 @@ def record(root: Path, kind: str) -> tuple[str | None, bool]:
 def check_crowd(root: Path, kind: str, outcome: str, cancel: str | None, seen: list[Any], state: tuple[str | None, bool]) -> None:
     callers = 4
     calls, results = anyio.run(crowd, root, kind, outcome, callers, cancel)
-    assert len(calls) == 1, (kind, outcome, cancel, calls)
+    assert len(calls) == (cancel != "sync"), (kind, outcome, cancel, calls)
     assert [describe(result) for result in results] == seen, (kind, outcome, cancel, results)
     if cancel is None:
         assert len({result if isinstance(result, Handle) else id(result) for result in results}) == 1, results
@@ -111,6 +112,8 @@ def test_concurrent_same_key_runs_once(tmp_path: Path) -> None:
         ("afetch", "ok", "all", ["cancelled"] * 4, ("pending", False)),
         ("aeffect", "ok", "store", ["StoreClosed"] * 4, ("intent", True)),
         ("afetch", "ok", "store", ["StoreClosed"] * 4, ("pending", False)),
+        ("aeffect", "ok", "sync", ["RuntimeError"] * 4, (None, False)),
+        ("afetch", "ok", "sync", ["RuntimeError"] * 4, (None, False)),
     ]
     for index, (kind, outcome, cancel, seen, state) in enumerate(table):
         check_crowd(tmp_path / str(index), kind, outcome, cancel, seen, state)
@@ -129,6 +132,72 @@ def test_cancelled_run_leaves_unknown_for_next_run(tmp_path: Path) -> None:
         calls, results = anyio.run(crowd, root, kind, "ok", 1, None)
         assert (len(calls), [describe(result) for result in results], record(root, kind)) == (calls_next, seen_next, state_next), (kind, cancel)
         if kind == "aeffect": assert isinstance(results[0], EffectFailed) and results[0].error == "unknown after crash"
+
+
+async def rejoin(root: Path, kind: str) -> tuple[int, int, list[Any]]:
+    entered = inside = peak = 0
+    results: list[Any] = [None, None]
+    scope = anyio.CancelScope()
+    started, unwinding, unwind, arriving, left, late = (anyio.Event() for _ in range(6))
+
+    async def trial(ctx: Any, *, out: Path, idem_key: str | None = None) -> Any:
+        nonlocal entered, inside, peak
+        entered += 1
+        inside += 1
+        peak = max(peak, inside)
+        try:
+            if entered == 1:
+                started.set()
+                try:
+                    await anyio.Event().wait()
+                except anyio.get_cancelled_exc_class():
+                    unwinding.set()
+                    with anyio.CancelScope(shield=True): await unwind.wait()
+                    raise
+            return Ok("v") if kind == "aeffect" else "v"
+        finally:
+            inside -= 1
+
+    async def call(ctx: StepCtx) -> Any:
+        try:
+            if kind == "aeffect": return await ctx.aeffect(NAME, trial, inputs=INPUTS, on_unknown=at_most_once)
+            return await ctx.afetch(Step(trial, label=NAME))
+        except Exception as error:
+            return error
+
+    async def first(ctx: StepCtx) -> None:
+        with scope: results[0] = await call(ctx)
+        if scope.cancelled_caught: results[0] = "cancelled"
+        left.set()
+
+    async def second(ctx: StepCtx) -> None:
+        arriving.set()
+        results[1] = await call(ctx)
+        late.set()
+
+    async with open_async_store(root) as store, anyio.create_task_group() as group:
+        group.start_soon(first, start(store))
+        await started.wait()
+        scope.cancel()
+        await left.wait()
+        await unwinding.wait()
+        group.start_soon(second, start(store))
+        await arriving.wait()
+        unwind.set()
+        await late.wait()
+    return entered, peak, results
+
+
+def test_caller_arriving_while_cancelled_run_unwinds_waits_then_replans(tmp_path: Path) -> None:
+    table = [
+        ("aeffect", 1, ["cancelled", "EffectFailed"], ("failed", False)),
+        ("afetch", 2, ["cancelled", "v"], ("done", False)),
+    ]
+    for kind, entered, seen, state in table:
+        root = tmp_path / kind
+        calls, peak, results = anyio.run(rejoin, root, kind)
+        assert (calls, peak, [describe(result) for result in results], record(root, kind)) == (entered, 1, seen, state), kind
+        if kind == "aeffect": assert results[1].error == "unknown after crash"
 
 
 async def limited(root: Path, limit: int, need: int, tasks: int) -> tuple[int, list[Any]]:
