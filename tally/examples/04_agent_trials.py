@@ -1,17 +1,22 @@
 """
-deepswe-shaped task pipeline with fake agent trials (asyncio.sleep + random pass/fail; no harbor, no network).
+deepswe-shaped task pipeline with fake agent trials (anyio.sleep + random pass/fail; no harbor, no network).
   python 04_agent_trials.py                      cold run, rerun, invalidate T1, rerun (temp store, asserts)
   python 04_agent_trials.py STORE                one run against STORE
   python 04_agent_trials.py STORE --invalidate T1  archive T1's write_tests and everything downstream, then run
 """
-import asyncio
 import json
 import random
 import sys
 import tempfile
+from collections.abc import Awaitable, Callable
+from functools import partial
 from pathlib import Path
 
-from tally import Handle, Ok, Pool, Step, StepCtx, effect_key, invalidate, keys, load, open_store, pool, reconcile, run, start
+import anyio
+
+from tally import (
+    Handle, Ok, Pool, Step, StepCtx, effect_key, invalidate, keys, load, open_async_store, open_store, pool, reconcile, run, start,
+)
 
 SPECS = {"T1": "parse ISO-8601 durations", "T2": "LRU cache with TTL", "T3": "stable toposort", "T4": "token bucket"}
 PASS_RATE = {
@@ -23,13 +28,24 @@ LIMITS = {"docker": 6, "hy4": 4, "frontier": 2}
 F2P_NAME = "fail_to_pass"
 
 
+async def gather[T](*calls: Callable[[], Awaitable[T]]) -> list[T]:
+    results: dict[int, T] = {}
+
+    async def one(index: int, call: Callable[[], Awaitable[T]]) -> None:
+        results[index] = await call()
+
+    async with anyio.create_task_group() as group:
+        for index, call in enumerate(calls): group.start_soon(one, index, call)
+    return [results[index] for index in range(len(calls))]
+
+
 def harbor_result(key: str, out: Path) -> Ok[dict] | None:
     result = out / "result.json"
     return Ok(json.loads(result.read_text())) if result.is_file() else None
 
 
 async def write_tests(ctx: StepCtx, task: str, spec: str, *, idem_key: str, out: Path) -> Ok[dict]:
-    await asyncio.sleep(random.uniform(0.02, 0.06))
+    await anyio.sleep(random.uniform(0.02, 0.06))
     test_ids = [f"tests/test_{task.lower()}.py::test_{index}" for index in range(random.randint(3, 6))]
     (out / "tests").mkdir()
     (out / "tests" / f"test_{task.lower()}.py").write_text("".join(f"def test_{i}():  # {spec}\n    ...\n" for i in range(len(test_ids))))
@@ -49,7 +65,7 @@ F2P = Step(fail_to_pass, key=keys.bytes)
 
 
 async def trial(ctx: StepCtx, task: str, rung: str, pass_rate: float, f2p_ids: list[str], *, idem_key: str, out: Path) -> Ok[dict]:
-    await asyncio.sleep(random.uniform(0.02, 0.08))
+    await anyio.sleep(random.uniform(0.02, 0.08))
     result = {"passed": random.random() < pass_rate, "rung": rung}
     (out / "trajectory.txt").write_text(f"{idem_key}: {rung} worked on {task} against {len(f2p_ids)} f2p tests\n")
     (out / "result.json").write_text(json.dumps(result))
@@ -57,9 +73,9 @@ async def trial(ctx: StepCtx, task: str, rung: str, pass_rate: float, f2p_ids: l
 
 
 async def gate(ctx: StepCtx, slots: Pool, task: str, stage: str, rung: str, runs: int, f2p: Handle) -> list[Handle]:
-    return await asyncio.gather(*(
-        run(ctx, slots, f"{task}/{stage}/a{attempt}", trial, task, rung, PASS_RATE[stage][task], load(f2p),
-            needs={"docker": 1, rung: 1}, inputs={"f2p": f2p, "rung": rung}, on_unknown=reconcile(harbor_result))
+    return await gather(*(
+        partial(run, ctx, slots, f"{task}/{stage}/a{attempt}", trial, task, rung, PASS_RATE[stage][task], load(f2p),
+                needs={"docker": 1, rung: 1}, inputs={"f2p": f2p, "rung": rung}, on_unknown=reconcile(harbor_result))
         for attempt in range(runs)
     ))
 
@@ -81,8 +97,9 @@ async def pipeline(ctx: StepCtx, slots: Pool, task: str) -> tuple[str, list[Hand
 
 
 async def build(root: Path, label: str) -> tuple[list[str], dict[str, list[Handle]]]:
-    ctx, slots = start(open_store(root)), pool(LIMITS)
-    results = await asyncio.gather(*(pipeline(ctx, slots, task) for task in SPECS))
+    async with open_async_store(root) as store:
+        ctx, slots = start(store), pool(LIMITS)
+        results = await gather(*(partial(pipeline, ctx, slots, task) for task in SPECS))
     ran = set(ctx.ran)
     print(f"\n{label}  ({ctx.ran.count(F2P_NAME)} {F2P_NAME} derivations ran)")
     for task, (verdict, handles) in zip(SPECS, results, strict=True):
@@ -119,12 +136,12 @@ def main() -> None:
     match sys.argv[1:]:
         case []:
             with tempfile.TemporaryDirectory() as tmp:
-                asyncio.run(demo(Path(tmp)))
+                anyio.run(demo, Path(tmp))
         case [store]:
-            asyncio.run(build(Path(store), f"run against {store}"))
+            anyio.run(build, Path(store), f"run against {store}")
         case [store, "--invalidate", task]:
             invalidate_write_tests(Path(store), task)
-            asyncio.run(build(Path(store), f"rerun against {store}"))
+            anyio.run(build, Path(store), f"rerun against {store}")
         case _:
             raise SystemExit(__doc__)
 
