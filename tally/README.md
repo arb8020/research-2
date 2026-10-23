@@ -3,7 +3,7 @@
 A tiny build system + (eventually) durable execution SDK, derived from
 "Build Systems à la Carte" (Mokhov, Mitchell, Peyton Jones, ICFP 2018).
 Slice 1: derivations (cached pure steps). Slice 2: effects (durable execution). Slice 3: async, resource-limited
-runner, invalidate. Stdlib only (sqlite3, asyncio).
+runner, invalidate. Stdlib (sqlite3) + anyio.
 
 ## The four core types
 
@@ -17,7 +17,8 @@ runner, invalidate. Stdlib only (sqlite3, asyncio).
 
 ## Who holds what
 
-- `Store(db, root, inflight)` — persists across builds; belongs to the build system. `open_store(root)`.
+- `Store(db, root, runs)` — persists across builds; belongs to the build system. `open_store(root)` (sync only),
+  `async with open_async_store(root) as store` (sync and async; owns shared async runs).
 - `Build(chain, ran)` — per-build scratch (this call chain, for cycles and fetch edges; what executed); thrown away.
 - `StepCtx(fetch, afetch, load, effect, aeffect, ran)` — all a step or top-level code ever holds. `start(store)` makes
   a fresh Build and returns its StepCtx. Steps never see Store or Build (paper: tasks get only `fetch`).
@@ -66,8 +67,15 @@ Bytes: fn writes into `out = effects/<key>.pending/`; on Ok/Err tally writes `va
 
 ## Async, limits, invalidate
 
-- `afetch` / `aeffect`: same as `fetch` / `effect`, awaiting an async fn. Concurrent calls with one key in one
-  process run once (`store.inflight`); the rest await the leader's result or exception.
+- `afetch` / `aeffect`: same as `fetch` / `effect`, awaiting an async fn. They need a store from
+  `async with open_async_store(root)` (a sync `open_store` raises `RuntimeError`). Concurrent calls with one key in
+  one process run once: the first call starts fn in the store's task group, and every caller (the first included)
+  waits for that run's result or exception.
+  - A cancelled caller only stops waiting; the run and the other callers carry on.
+  - When the last caller stops waiting, the run is cancelled. Cancelled = crashed: the intent row and `.pending`
+    stay (aeffect: next run applies `on_unknown`; afetch: next run recomputes).
+  - Leaving the `async with` normally waits for runs still in flight; leaving it with an error cancels them
+    (anyio wraps the error in an `ExceptionGroup`), and callers still waiting get `StoreClosed`.
 - `pool(limits)`, `hold(pool, needs)`, `run(ctx, pool, name, fn, *args, needs, inputs, on_unknown)`: `run` is
   `hold` around `ctx.aeffect`, nothing more, so dropping down to own the control flow is always possible.
 - `invalidate(store, keys, downstream=True)`: moves effect dirs and derivation blobs to `invalidated/<ts>/` with a
@@ -79,9 +87,9 @@ Exactly once = tally's intent log + the other side deduping the idempotency key;
 ## Run
 
 ```sh
-uv run pytest -q                     # if uv_build refuses the flat module: uv run --no-project --with pytest python -m pytest -q
-uv run python examples/01_bazel.py   # key=bytes: early cutoff on a comment-only header edit
-uv run python examples/02_nix.py     # key=recipe: same steps, no cutoff; bazel vs nix table; one-lookup plan
-uv run python examples/03_absurd.py  # effects: order fulfillment with crashes, declines, and three on_unknown policies
-uv run python examples/04_agent_trials.py  # async trials under limits, gated rungs, reuse, invalidate one task
+uv run pytest -q                     # tally is not built as a package; pytest finds tally.py via pythonpath
+PYTHONPATH=. uv run python examples/01_bazel.py   # key=bytes: early cutoff on a comment-only header edit
+PYTHONPATH=. uv run python examples/02_nix.py     # key=recipe: same steps, no cutoff; bazel vs nix table; one-lookup plan
+PYTHONPATH=. uv run python examples/03_absurd.py  # effects: order fulfillment with crashes, declines, and three on_unknown policies
+PYTHONPATH=. uv run python examples/04_agent_trials.py  # async trials under limits, gated rungs, reuse, invalidate one task
 ```
