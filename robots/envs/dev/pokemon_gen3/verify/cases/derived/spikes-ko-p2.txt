@@ -1,0 +1,18 @@
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+Hardy Nature
+- Splash
+
+Persian (M)
+Ability: Limber
+Level: 100
+IVs: 24 HP
+Hardy Nature
+- Splash
+
+Vaporeon (M)
+Ability: Water Absorb
+Level: 100
+Hardy Nature
+- Splash

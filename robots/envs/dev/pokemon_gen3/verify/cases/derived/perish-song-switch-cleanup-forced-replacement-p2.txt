@@ -1,0 +1,14 @@
+Lapras (F)
+Ability: Water Absorb
+Level: 100
+EVs: 252 HP / 4 SpA / 252 SpD
+Calm Nature
+- Protect
+- Rest
+
+Magikarp (F)
+Ability: Swift Swim
+Level: 100
+EVs: 4 HP
+Hardy Nature
+- Splash

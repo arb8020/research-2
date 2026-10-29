@@ -1,0 +1,104 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "volt-absorb-thunderbolt-full",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/abilities.ts; data/mods/gen3/scripts.ts",
+    "test_name": "volt-absorb-thunderbolt-full",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "volt-absorb-thunderbolt-full-p1.txt",
+      "normalized": [
+        {
+          "species": "raikou",
+          "level": 100,
+          "gender": "N",
+          "ability": "pressure",
+          "item": "",
+          "moves": [
+            "thunderbolt"
+          ],
+          "stats": [
+            321,
+            206,
+            186,
+            266,
+            236,
+            266
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "volt-absorb-thunderbolt-full-p2.txt",
+      "normalized": [
+        {
+          "species": "lanturn",
+          "level": 100,
+          "gender": "M",
+          "ability": "voltabsorb",
+          "item": "",
+          "moves": [
+            "tackle"
+          ],
+          "stats": [
+            391,
+            152,
+            152,
+            188,
+            188,
+            170
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "handler.try-hit",
+    "handler.volt-absorb",
+    "hit.accuracy",
+    "hit.immunity-cause",
+    "prng.labeled",
+    "queue.speed",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "immunity",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

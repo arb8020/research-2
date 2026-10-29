@@ -1,0 +1,4 @@
+Charizard (M) @ Charcoal
+Ability: Blaze
+- Ember
+- Scratch

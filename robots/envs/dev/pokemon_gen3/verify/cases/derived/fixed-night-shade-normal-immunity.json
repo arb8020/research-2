@@ -1,0 +1,98 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "fixed-night-shade-normal-immunity",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts",
+    "test_name": "Checkpoint 5D: Ghost fixed damage respects Normal immunity",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    7
+  ],
+  "teams": [
+    {
+      "source": "gengar-l42-night-shade-p1.txt",
+      "normalized": [
+        {
+          "species": "gengar",
+          "level": 42,
+          "gender": "M",
+          "ability": "levitate",
+          "item": "",
+          "moves": [
+            "nightshade"
+          ],
+          "stats": [
+            115,
+            72,
+            68,
+            127,
+            81,
+            110
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "persian-toxic-p2.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "toxic"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "damage.fixed-level",
+    "hit.type-immunity",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "immunity",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

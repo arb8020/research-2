@@ -1,0 +1,180 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "rapid-spin-leech-seed-combined-cleanup",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/abilities.ts; sim/battle.ts; sim/pokemon.ts",
+    "test_name": "A connected Rapid Spin atomically removes Leech Seed, partial trapping, and Spikes",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    701,
+    193,
+    43,
+    11
+  ],
+  "teams": [
+    {
+      "source": "rapid-spin-leech-seed-combined-cleanup-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "leechseed",
+            "bind",
+            "spikes",
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "rapid-spin-leech-seed-combined-cleanup-p2.txt",
+      "normalized": [
+        {
+          "species": "blastoise",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "torrent",
+          "item": "",
+          "moves": [
+            "rapidspin",
+            "withdraw"
+          ],
+          "stats": [
+            299,
+            202,
+            236,
+            206,
+            246,
+            192
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 8
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 2,
+      "range": 100,
+      "result": 73
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 1,
+      "range": 16,
+      "result": 5
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 1,
+      "range": 16,
+      "result": 12
+    },
+    {
+      "label": "condition.partiallytrapped.duration",
+      "occurrence": 1,
+      "range": 4,
+      "result": 2
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 3,
+      "range": 100,
+      "result": 80
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 2,
+      "range": 16,
+      "result": 3
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 2,
+      "range": 16,
+      "result": 3
+    }
+  ],
+  "features": [
+    "condition.side",
+    "condition.volatile",
+    "lifecycle.condition-duration",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "immunity",
+    "state",
+    "events",
+    "prng",
+    "terminal"
+  ],
+  "limits": {
+    "max_boundaries": 5,
+    "max_actions": 8
+  }
+}

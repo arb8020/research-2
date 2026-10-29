@@ -1,0 +1,28 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "simultaneous-voluntary-switch-order",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/misc/turn-order.js:158; sim/battle.ts; sim/battle-actions.ts",
+    "test_name": "Voluntary switches are ordered by the outgoing Pokemon's Speed",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {"source":"simultaneous-voluntary-switch-order-p1.txt","normalized":[
+      {"species":"jolteon","level":100,"gender":"M","nature":"hardy","ability":"voltabsorb","item":"","moves":["protect"],"stats":[271,166,156,256,226,296],"status":null},
+      {"species":"salamence","level":100,"gender":"M","nature":"hardy","ability":"intimidate","item":"","moves":["protect"],"stats":[331,306,196,256,196,236],"status":null}
+    ]},
+    {"source":"simultaneous-voluntary-switch-order-p2.txt","normalized":[
+      {"species":"snorlax","level":100,"gender":"M","nature":"hardy","ability":"immunity","item":"","moves":["rest"],"stats":[461,256,166,166,256,96],"status":null},
+      {"species":"blissey","level":100,"gender":"F","nature":"hardy","ability":"naturalcure","item":"","moves":["softboiled"],"stats":[651,56,56,186,306,146],"status":null}
+    ]}
+  ],
+  "source_choices": [["switch 2", "switch 2"]],
+  "choices": [["switch 2", "switch 2"]],
+  "forced_outcomes": [],
+  "features": ["choice.switch", "queue.speed", "lifecycle.switch-persistence", "ability.intimidate", "state.canonical"],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 2, "max_actions": 2}
+}

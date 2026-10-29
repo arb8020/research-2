@@ -1,0 +1,172 @@
+{
+  "schema": "pokemon-gen3ou-resolved-entity-test-gaps-v2",
+  "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "scope": "Standard entities in pinned Dex.forGen(3) with an upstream entity test file but no frozen descriptor-map entry.",
+  "entity_count": 1,
+  "test_count": 4,
+  "records": [
+    {
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "source_file": "test/sim/abilities/shadowtag.js",
+      "source_line": 13,
+      "full_test_name": "Shadow Tag > should prevent most Pokemon from switching out normally",
+      "descriptor_kind": "ability",
+      "descriptor_id": "shadowtag",
+      "census_status": "missing_because_descriptor_absent",
+      "mechanics": [
+        "trapping",
+        "legal-choice-restriction",
+        "trap-immunity"
+      ],
+      "semantic_boundaries": [
+        "request",
+        "choice",
+        "event-handlers",
+        "switch-lifecycle",
+        "canonical-state"
+      ],
+      "ou_reachability": "format-unreachable",
+      "ou_reachability_evidence": "Pinned [Gen 3] OU bans Uber; pinned Gen 3 formats data marks Wobbuffet and Wynaut Uber. They are the only standard Gen 3 Shadow Tag origins. Trace, Role Play, Skill Swap, and Transform only copy or transfer an already-present ability, so closure from legal initial abilities cannot create Shadow Tag.",
+      "native_unit_tests": [],
+      "differential_cases": [],
+      "invariant_ids": [],
+      "randomized_scenario_ids": [],
+      "evidence_scope": "source-proven-reachability-closure",
+      "coverage": "not-applicable-to-legal-gen3ou-runtime",
+      "needs_new_case": false,
+      "proposed_case": "",
+      "showdown_semantic_sources": [
+        "data/mods/gen3/abilities.ts#shadowtag",
+        "data/mods/gen3/abilities.ts#trace",
+        "data/moves.ts#roleplay",
+        "data/moves.ts#skillswap",
+        "sim/pokemon.ts#transformInto",
+        "data/mods/gen3/formats-data.ts#wobbuffet",
+        "data/mods/gen3/formats-data.ts#wynaut",
+        "config/formats.ts#[Gen 3] OU"
+      ]
+    },
+    {
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "source_file": "test/sim/abilities/shadowtag.js",
+      "source_line": 23,
+      "full_test_name": "Shadow Tag > should not prevent Pokemon from switching out using moves",
+      "descriptor_kind": "ability",
+      "descriptor_id": "shadowtag",
+      "census_status": "missing_because_descriptor_absent",
+      "mechanics": [
+        "trapping",
+        "move-driven-switching"
+      ],
+      "semantic_boundaries": [
+        "request",
+        "choice",
+        "event-handlers",
+        "switch-lifecycle",
+        "canonical-state"
+      ],
+      "ou_reachability": "format-unreachable",
+      "ou_reachability_evidence": "Pinned [Gen 3] OU bans Uber; pinned Gen 3 formats data marks Wobbuffet and Wynaut Uber. They are the only standard Gen 3 Shadow Tag origins. Trace, Role Play, Skill Swap, and Transform only copy or transfer an already-present ability, so closure from legal initial abilities cannot create Shadow Tag.",
+      "native_unit_tests": [],
+      "differential_cases": [],
+      "invariant_ids": [],
+      "randomized_scenario_ids": [],
+      "evidence_scope": "source-proven-reachability-closure",
+      "coverage": "not-applicable-to-legal-gen3ou-runtime",
+      "needs_new_case": false,
+      "proposed_case": "",
+      "showdown_semantic_sources": [
+        "data/mods/gen3/abilities.ts#shadowtag",
+        "data/mods/gen3/abilities.ts#trace",
+        "data/moves.ts#roleplay",
+        "data/moves.ts#skillswap",
+        "sim/pokemon.ts#transformInto",
+        "data/mods/gen3/formats-data.ts#wobbuffet",
+        "data/mods/gen3/formats-data.ts#wynaut",
+        "config/formats.ts#[Gen 3] OU"
+      ]
+    },
+    {
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "source_file": "test/sim/abilities/shadowtag.js",
+      "source_line": 34,
+      "full_test_name": "Shadow Tag > should not prevent other Pokemon with Shadow Tag from switching out",
+      "descriptor_kind": "ability",
+      "descriptor_id": "shadowtag",
+      "census_status": "missing_because_descriptor_absent",
+      "mechanics": [
+        "trapping",
+        "legal-choice-restriction",
+        "trap-immunity"
+      ],
+      "semantic_boundaries": [
+        "request",
+        "choice",
+        "event-handlers",
+        "switch-lifecycle",
+        "canonical-state"
+      ],
+      "ou_reachability": "format-unreachable",
+      "ou_reachability_evidence": "Pinned [Gen 3] OU bans Uber; pinned Gen 3 formats data marks Wobbuffet and Wynaut Uber. They are the only standard Gen 3 Shadow Tag origins. Trace, Role Play, Skill Swap, and Transform only copy or transfer an already-present ability, so closure from legal initial abilities cannot create Shadow Tag.",
+      "native_unit_tests": [],
+      "differential_cases": [],
+      "invariant_ids": [],
+      "randomized_scenario_ids": [],
+      "evidence_scope": "source-proven-reachability-closure",
+      "coverage": "not-applicable-to-legal-gen3ou-runtime",
+      "needs_new_case": false,
+      "proposed_case": "",
+      "showdown_semantic_sources": [
+        "data/mods/gen3/abilities.ts#shadowtag",
+        "data/mods/gen3/abilities.ts#trace",
+        "data/moves.ts#roleplay",
+        "data/moves.ts#skillswap",
+        "sim/pokemon.ts#transformInto",
+        "data/mods/gen3/formats-data.ts#wobbuffet",
+        "data/mods/gen3/formats-data.ts#wynaut",
+        "config/formats.ts#[Gen 3] OU"
+      ]
+    },
+    {
+      "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+      "source_file": "test/sim/abilities/shadowtag.js",
+      "source_line": 44,
+      "full_test_name": "Shadow Tag > should not prevent Pokemon immune to trapping from switching out",
+      "descriptor_kind": "ability",
+      "descriptor_id": "shadowtag",
+      "census_status": "missing_because_descriptor_absent",
+      "mechanics": [
+        "trapping",
+        "legal-choice-restriction",
+        "trap-immunity"
+      ],
+      "semantic_boundaries": [
+        "request",
+        "choice",
+        "event-handlers",
+        "switch-lifecycle",
+        "canonical-state"
+      ],
+      "ou_reachability": "format-unreachable",
+      "ou_reachability_evidence": "Pinned [Gen 3] OU bans Uber; pinned Gen 3 formats data marks Wobbuffet and Wynaut Uber. They are the only standard Gen 3 Shadow Tag origins. Trace, Role Play, Skill Swap, and Transform only copy or transfer an already-present ability, so closure from legal initial abilities cannot create Shadow Tag.",
+      "native_unit_tests": [],
+      "differential_cases": [],
+      "invariant_ids": [],
+      "randomized_scenario_ids": [],
+      "evidence_scope": "source-proven-reachability-closure",
+      "coverage": "not-applicable-to-legal-gen3ou-runtime",
+      "needs_new_case": false,
+      "proposed_case": "",
+      "showdown_semantic_sources": [
+        "data/mods/gen3/abilities.ts#shadowtag",
+        "data/mods/gen3/abilities.ts#trace",
+        "data/moves.ts#roleplay",
+        "data/moves.ts#skillswap",
+        "sim/pokemon.ts#transformInto",
+        "data/mods/gen3/formats-data.ts#wobbuffet",
+        "data/mods/gen3/formats-data.ts#wynaut",
+        "config/formats.ts#[Gen 3] OU"
+      ]
+    }
+  ]
+}

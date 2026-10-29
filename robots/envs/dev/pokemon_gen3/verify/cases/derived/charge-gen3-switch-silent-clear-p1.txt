@@ -1,0 +1,13 @@
+Smeargle (M)
+Ability: Own Tempo
+Level: 100
+EVs: 1 HP / 252 Spe
+Hardy Nature
+- Charge
+
+Blissey (F)
+Ability: Natural Cure
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Soft-Boiled

@@ -1,0 +1,49 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "upstream-disable-24",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/moves/disable.js",
+    "test_name": "Disable interrupts consecutively executed Outrage",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [191, 192, 193, 1],
+  "teams": [
+    {
+      "source": "upstream-disable-24-p1.txt",
+      "normalized": [
+        {
+          "species": "salamence", "level": 100, "gender": "M",
+          "ability": "intimidate", "item": "", "moves": ["outrage", "sleeptalk"],
+          "stats": [331, 306, 196, 256, 196, 236], "status": null
+        }
+      ]
+    },
+    {
+      "source": "upstream-disable-24-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle", "level": 100, "gender": "M",
+          "ability": "owntempo", "item": "", "moves": ["disable", "splash"],
+          "stats": [251, 76, 106, 76, 126, 186], "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    ["move 1", "move 1"],
+    ["move 1", "move 2"]
+  ],
+  "choices": [
+    ["move 1", "move 1"],
+    ["move 1", "move 2"]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move", "condition.volatile", "handler.before-move",
+    "lifecycle.condition-duration", "request.legal-choices", "state.canonical"
+  ],
+  "boundaries": ["choice", "events", "handlers", "prng", "queue", "request", "state"],
+  "limits": {"max_boundaries": 3, "max_actions": 4}
+}

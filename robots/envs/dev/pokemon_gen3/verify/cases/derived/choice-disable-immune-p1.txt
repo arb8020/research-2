@@ -1,0 +1,6 @@
+Gengar (M)
+Ability: Levitate
+Level: 100
+EVs: 4 HP
+Hardy Nature
+- Disable

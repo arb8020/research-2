@@ -1,0 +1,104 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "confusion-secondary-substitute",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; sim/battle-actions.ts; sim/battle.ts",
+    "test_name": "Damaging confusion secondary: confusion-secondary-substitute",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    606,
+    17,
+    31,
+    1
+  ],
+  "teams": [
+    {
+      "source": "confusion-secondary-substitute-p1.txt",
+      "normalized": [
+        {
+          "species": "alakazam",
+          "level": 100,
+          "gender": "M",
+          "ability": "synchronize",
+          "item": "",
+          "moves": [
+            "psybeam"
+          ],
+          "stats": [
+            251,
+            136,
+            126,
+            306,
+            206,
+            276
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "confusion-secondary-substitute-p2.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "substitute"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.gen3",
+    "effect.secondary",
+    "hit.accuracy",
+    "prng.labeled",
+    "prng.secondary",
+    "state.canonical",
+    "volatile.confusion"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "immunity",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "pursuit-sleep-at-turn-start",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/moves.ts#pursuit; data/moves.ts#pursuit; sim/battle-actions.ts#switchIn; sim/battle.ts#runAction",
+    "test_name": "Sleep at turn start suppresses interception even when the user wakes and attacks the incoming Pokemon",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    431,
+    432,
+    433,
+    434
+  ],
+  "teams": [
+    {
+      "source": "pursuit-sleep-at-turn-start-p1.txt",
+      "normalized": [
+        {
+          "species": "tyranitar",
+          "level": 100,
+          "gender": "M",
+          "ability": "sandstream",
+          "item": "",
+          "moves": [
+            "pursuit"
+          ],
+          "stats": [
+            341,
+            304,
+            256,
+            226,
+            236,
+            158
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "pursuit-sleep-at-turn-start-p2.txt",
+      "normalized": [
+        {
+          "species": "breloom",
+          "level": 100,
+          "gender": "M",
+          "ability": "effectspore",
+          "item": "",
+          "moves": [
+            "spore"
+          ],
+          "stats": [
+            261,
+            296,
+            196,
+            156,
+            156,
+            176
+          ],
+          "status": null
+        },
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "switch 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "switch 2"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "condition.volatile",
+    "handler.switch-out",
+    "prng.labeled",
+    "queue.move-priority",
+    "state.canonical",
+    "status.sleep"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

@@ -1,0 +1,6 @@
+Kingler (M)
+Ability: hypercutter
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- slam

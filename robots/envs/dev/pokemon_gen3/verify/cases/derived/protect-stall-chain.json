@@ -1,0 +1,9 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"protect-stall-chain",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen4/conditions.ts","test_name":"Checkpoint 4: Protect is guaranteed first, then forced to succeed at 1/2 and fail at 1/4","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,9],
+  "teams":[{"source":"persian-protect-scratch-p1.txt","normalized":[{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["protect","scratch"],"stats":[271,176,156,166,166,266],"status":null}]},{"source":"tyrogue-tackle-p2.txt","normalized":[{"species":"tyrogue","level":100,"gender":"M","ability":"guts","item":"","moves":["tackle"],"stats":[211,106,106,106,106,106],"status":null}]}],
+  "source_choices":[["move 1","move 1"],["move 1","move 1"],["move 1","move 1"]],"choices":[["move 1","move 1"],["move 1","move 1"],["move 1","move 1"]],
+  "forced_outcomes":[{"label":"stall.success","occurrence":1,"range":2,"result":0},{"label":"stall.success","occurrence":2,"range":4,"result":1}],
+  "features":["choice.move","condition.volatile","hit.protect","lifecycle.condition-duration","prng.labeled","prng.stall","state.canonical","volatile.protect"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],"limits":{"max_boundaries":4,"max_actions":6}
+}

@@ -1,0 +1,118 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "sport-mud-own-match-mismatch",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen4/moves.ts:940-953,1482-1495",
+    "test_name": "sport-mud-own-match-mismatch",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    71,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "sport-mud-own-match-mismatch-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "illuminate",
+          "item": "",
+          "moves": [
+            "mudsport",
+            "thunderbolt",
+            "surf"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            249
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "sport-mud-own-match-mismatch-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "M",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "handler.base-power",
+    "state.canonical",
+    "move.mudsport",
+    "volatile.mudsport"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

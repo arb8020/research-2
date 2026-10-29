@@ -1,0 +1,141 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "futuremove-fainted-occupant-no-accuracy",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/conditions.ts",
+    "test_name": "Poison faints the current occupant before Future Sight, which clears without accuracy and requests replacement",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "futuremove-fainted-occupant-no-accuracy-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "futuresight",
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "futuremove-fainted-occupant-no-accuracy-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "M",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "protect"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": "psn",
+          "initial_hp": 200
+        },
+        {
+          "species": "snorlax",
+          "level": 100,
+          "gender": "M",
+          "ability": "immunity",
+          "item": "",
+          "moves": [
+            "protect"
+          ],
+          "stats": [
+            461,
+            256,
+            166,
+            166,
+            256,
+            96
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.slot",
+    "lifecycle.condition-duration",
+    "lifecycle.forced-replacement",
+    "prng.delayed-hit",
+    "prng.labeled",
+    "slot.futuremove",
+    "state.canonical",
+    "status.poison"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

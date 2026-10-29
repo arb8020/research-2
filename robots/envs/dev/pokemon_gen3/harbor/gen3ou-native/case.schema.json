@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-2.local/gen3ou-native/case.schema.json",
+  "title": "Gen 3 OU differential verification case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "provenance", "format", "teams",
+    "battle_seed", "choices", "features", "interactions", "boundaries",
+    "invariants", "limits"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]+$"},
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "oracle_revision", "sources"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "showdown-focused-test", "showdown-random-runner",
+            "differential-regression", "coverage-generated", "hidden-recombination"
+          ]
+        },
+        "oracle_revision": {
+          "const": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "symbol_or_test": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "parent_case": {"type": "string", "minLength": 1},
+        "generator_revision": {"type": "string", "minLength": 1}
+      }
+    },
+    "format": {"const": "gen3ou"},
+    "teams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "values", "normalization_digest"],
+      "properties": {
+        "kind": {"const": "verifier-showdown-export-files"},
+        "values": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.txt$"
+          }
+        },
+        "normalization_digest": {
+          "type": "string", "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "battle_seed": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {"type": "integer", "minimum": 0, "maximum": 65535}
+    },
+    "choices": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "turns"],
+          "properties": {
+            "kind": {"const": "explicit"},
+            "turns": {
+              "type": "array",
+              "items": {
+                "type": "array", "minItems": 2, "maxItems": 2,
+                "items": {
+                  "type": ["string", "null"],
+                  "pattern": "^(move [1-4]|switch [2-6])$"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "policy", "seed"],
+          "properties": {
+            "kind": {"const": "seeded-policy"},
+            "policy": {
+              "enum": ["uniform-legal", "coverage-greedy", "switch-heavy", "faint-seeking"]
+            },
+            "seed": {"type": "integer", "minimum": 0},
+            "generator_revision": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
+    "features": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "interactions": {
+      "type": "array", "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "boundaries": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {
+        "enum": [
+          "initial", "request", "choice-normalized", "queue-ordered",
+          "action-begin", "action-end", "handler-group", "faint-drain",
+          "replacement-request", "residual-end", "terminal"
+        ]
+      }
+    },
+    "invariants": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "limits": {
+      "type": "object", "additionalProperties": false,
+      "required": ["max_decisions", "max_actions", "timeout_ms"],
+      "properties": {
+        "max_decisions": {"type": "integer", "minimum": 1},
+        "max_actions": {"type": "integer", "minimum": 1},
+        "timeout_ms": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

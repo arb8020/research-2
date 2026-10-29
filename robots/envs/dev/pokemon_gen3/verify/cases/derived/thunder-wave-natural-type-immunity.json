@@ -1,0 +1,28 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "thunder-wave-natural-type-immunity",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/moves/thunderwave.js:13; data/mods/gen3/scripts.ts#tryMoveHit",
+    "test_name": "Thunder Wave should respect Ground immunity in Gen 3",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {"source": "charge-gen3-any-move-and-electric-status-p1.txt", "normalized": [{
+      "species": "smeargle", "level": 100, "gender": "M", "ability": "owntempo", "item": "",
+      "moves": ["charge", "tackle", "thunderwave"], "stats": [251, 76, 106, 76, 126, 249], "status": null
+    }]},
+    {"source": "marowak-earthquake-p2.txt", "normalized": [{
+      "species": "marowak", "level": 100, "gender": "M", "ability": "rockhead", "item": "",
+      "moves": ["earthquake"], "stats": [261, 196, 256, 136, 196, 126], "status": null
+    }]}
+  ],
+  "source_choices": [["move 3", "move 1"]],
+  "choices": [["move 3", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["choice.move", "hit.type-immunity", "prng.labeled", "state.canonical", "status.paralysis"],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 2, "max_actions": 2}
+}

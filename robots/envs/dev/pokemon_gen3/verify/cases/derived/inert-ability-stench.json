@@ -1,0 +1,98 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "inert-ability-stench",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/abilities.ts; data/mods/gen4/abilities.ts; data/mods/gen8/abilities.ts",
+    "test_name": "Stench resolves to a callback-free battle identity",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "inert-ability-stench-p1.txt",
+      "normalized": [
+        {
+          "species": "muk",
+          "level": 100,
+          "gender": "M",
+          "ability": "stench",
+          "item": "leftovers",
+          "moves": [
+            "sludge"
+          ],
+          "stats": [
+            351,
+            246,
+            186,
+            166,
+            236,
+            136
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "inert-ability-stench-p2.txt",
+      "normalized": [
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "oranberry",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "catalog.species-static",
+    "choice.move",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "flash-fire-willowisp-fire-holder",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/abilities.ts; data/mods/gen4/abilities.ts; data/mods/gen3/abilities.ts; data/mods/gen3/scripts.ts",
+    "test_name": "Gen 3 Will-O-Wisp exception leaves an already ineligible Fire target to the ordinary status-immunity path",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    701,
+    193,
+    43,
+    11
+  ],
+  "teams": [
+    {
+      "source": "flash-fire-willowisp-fire-holder-p1.txt",
+      "normalized": [
+        {
+          "species": "dusclops",
+          "level": 100,
+          "gender": "M",
+          "ability": "pressure",
+          "item": "",
+          "moves": [
+            "willowisp"
+          ],
+          "stats": [
+            221,
+            176,
+            296,
+            156,
+            296,
+            86
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "flash-fire-willowisp-fire-holder-p2.txt",
+      "normalized": [
+        {
+          "species": "ponyta",
+          "level": 100,
+          "gender": "M",
+          "ability": "flashfire",
+          "item": "",
+          "moves": [
+            "growl"
+          ],
+          "stats": [
+            241,
+            206,
+            146,
+            166,
+            166,
+            216
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.volatile",
+    "handler.try-hit",
+    "hit.accuracy",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "immunity",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

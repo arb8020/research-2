@@ -1,0 +1,103 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "direct-heal-slack-off-full",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; sim/battle-actions.ts; sim/battle.ts",
+    "test_name": "slack-off direct half-heal full transaction",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "alakazam-direct-heals-p1.txt",
+      "normalized": [
+        {
+          "species": "alakazam",
+          "level": 100,
+          "gender": "M",
+          "ability": "synchronize",
+          "item": "",
+          "moves": [
+            "recover",
+            "milkdrink",
+            "slackoff",
+            "softboiled"
+          ],
+          "stats": [
+            251,
+            136,
+            126,
+            306,
+            206,
+            276
+          ],
+          "status": null,
+          "initial_hp": 251
+        }
+      ]
+    },
+    {
+      "source": "magikarp-splash-p2.txt",
+      "normalized": [
+        {
+          "species": "magikarp",
+          "level": 100,
+          "gender": "M",
+          "ability": "swiftswim",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            181,
+            56,
+            146,
+            66,
+            76,
+            196
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 3",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 3",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "effect.direct-heal",
+    "handler.try-heal",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

@@ -1,0 +1,6 @@
+Ponyta (M) @ Leftovers
+Ability: Run Away
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Tackle

@@ -1,0 +1,452 @@
+{
+  "schema_version": 1,
+  "name": "seed42-battle03-simultaneous-forced-replacement",
+  "description": "Simultaneous forced replacements resume an interrupted turn, preserving p2-before-p1 switch order, Leftovers healing, and seven structural PRNG draws.",
+  "tags": [
+    "simultaneous-forced-replacement",
+    "scheduler",
+    "residual",
+    "prng",
+    "nonterminal"
+  ],
+  "format": "gen3ou",
+  "battle_index": 3,
+  "action_seed": 42,
+  "battle_seed": [
+    41,
+    42,
+    3,
+    0
+  ],
+  "team_files": [
+    "../../../fixtures/gen3ou/balanced-alt.txt",
+    "../../../fixtures/gen3ou/balanced.txt"
+  ],
+  "choices": [
+    [
+      "switch 3",
+      "switch 6"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "switch 4",
+      "switch 5"
+    ],
+    [
+      "move 4",
+      "switch 4"
+    ],
+    [
+      "move 3",
+      "switch 2"
+    ],
+    [
+      "switch 6",
+      "switch 4"
+    ],
+    [
+      "move 2",
+      "move 4"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "switch 4"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 3",
+      "switch 4"
+    ],
+    [
+      "switch 6",
+      "move 3"
+    ],
+    [
+      "switch 5",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "switch 2"
+    ],
+    [
+      "move 2",
+      "switch 5"
+    ],
+    [
+      "switch 5",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "switch 4",
+      null
+    ],
+    [
+      "switch 2",
+      "switch 4"
+    ],
+    [
+      "switch 3",
+      "move 3"
+    ],
+    [
+      "switch 2",
+      "switch 5"
+    ],
+    [
+      "move 3",
+      "switch 6"
+    ],
+    [
+      "move 1",
+      "switch 5"
+    ],
+    [
+      "switch 3",
+      "switch 5"
+    ],
+    [
+      "switch 3",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "switch 5"
+    ],
+    [
+      "move 2",
+      "switch 4"
+    ],
+    [
+      "switch 2",
+      "switch 2"
+    ],
+    [
+      "switch 6",
+      "switch 2"
+    ],
+    [
+      "move 2",
+      "move 4"
+    ],
+    [
+      "switch 2",
+      "switch 2"
+    ],
+    [
+      "move 3",
+      "move 4"
+    ],
+    [
+      "switch 5",
+      "move 4"
+    ],
+    [
+      "switch 6",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "switch 5"
+    ],
+    [
+      "switch 3",
+      "switch 4"
+    ],
+    [
+      "switch 3",
+      "move 1"
+    ],
+    [
+      "switch 3",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "switch 6"
+    ],
+    [
+      "move 3",
+      "switch 5"
+    ],
+    [
+      null,
+      "switch 6"
+    ],
+    [
+      "move 1",
+      "switch 2"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "switch 2"
+    ],
+    [
+      "switch 6",
+      "move 1"
+    ],
+    [
+      "switch 5",
+      "move 3"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "switch 5"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "switch 5",
+      "switch 2"
+    ],
+    [
+      "switch 3",
+      "switch 4"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "switch 5",
+      "switch 2"
+    ],
+    [
+      "switch 2",
+      "switch 3"
+    ],
+    [
+      "switch 3",
+      "switch 3"
+    ],
+    [
+      "switch 2",
+      "move 3"
+    ],
+    [
+      "switch 5",
+      "move 2"
+    ],
+    [
+      "switch 2",
+      "move 3"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 2"
+    ],
+    [
+      "move 3",
+      "move 3"
+    ],
+    [
+      "move 3",
+      "move 3"
+    ],
+    [
+      "switch 3",
+      "move 3"
+    ],
+    [
+      "move 4",
+      "switch 4"
+    ],
+    [
+      "move 3",
+      "switch 2"
+    ],
+    [
+      "switch 2",
+      "move 2"
+    ],
+    [
+      "switch 6",
+      null
+    ],
+    [
+      "move 1",
+      "switch 4"
+    ],
+    [
+      "switch 3",
+      "move 4"
+    ],
+    [
+      "switch 5",
+      "move 2"
+    ],
+    [
+      "switch 2",
+      "switch 3"
+    ],
+    [
+      "move 4",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "switch 5"
+    ],
+    [
+      "switch 3",
+      "switch 4"
+    ],
+    [
+      "switch 2",
+      "switch 3"
+    ],
+    [
+      "switch 5",
+      null
+    ],
+    [
+      "move 4",
+      "switch 2"
+    ],
+    [
+      "move 2",
+      "switch 2"
+    ],
+    [
+      "switch 3",
+      "move 2"
+    ],
+    [
+      "switch 2",
+      null
+    ],
+    [
+      "switch 3",
+      "switch 3"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "switch 2"
+    ],
+    [
+      "move 3",
+      "switch 3"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 3",
+      "move 4"
+    ],
+    [
+      "move 1",
+      "switch 5"
+    ],
+    [
+      "move 3",
+      "switch 2"
+    ],
+    [
+      "move 1",
+      "switch 2"
+    ],
+    [
+      "move 4",
+      "move 4"
+    ],
+    [
+      null,
+      "switch 2"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "switch 3",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 4"
+    ],
+    [
+      "switch 3",
+      "switch 5"
+    ],
+    [
+      "move 4",
+      "switch 4"
+    ],
+    [
+      "move 1",
+      "switch 4"
+    ],
+    [
+      "move 1",
+      "move 4"
+    ],
+    [
+      "switch 3",
+      "switch 5"
+    ],
+    [
+      "move 2",
+      "switch 3"
+    ],
+    [
+      "move 4",
+      "move 4"
+    ],
+    [
+      "switch 3",
+      "switch 4"
+    ]
+  ],
+  "expected": {
+    "terminal": false
+  }
+}
+
+

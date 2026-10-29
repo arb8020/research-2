@@ -1,0 +1,68 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "shield-dust-holder-secondary-ownership",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/abilities/shielddust.js; data/abilities.ts; sim/battle-actions.ts",
+    "test_name": "Shield Dust does not filter secondaries belonging to attacks used by its holder",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [813, 17, 43, 81],
+  "teams": [
+    {
+      "source": "shield-dust-holder-secondary-ownership-p1.txt",
+      "normalized": [
+        {
+          "species": "venomoth",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "shielddust",
+          "item": "",
+          "moves": ["psychic", "silverwind"],
+          "stats": [281, 166, 156, 216, 186, 216],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "shield-dust-holder-secondary-ownership-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "nature": "hardy",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": ["softboiled"],
+          "stats": [651, 56, 56, 186, 306, 146],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    ["move 1", "move 1"],
+    ["move 2", "move 1"]
+  ],
+  "choices": [
+    ["move 1", "move 1"],
+    ["move 2", "move 1"]
+  ],
+  "forced_outcomes": [
+    {"label": "move.secondary", "occurrence": 1, "range": 100, "result": 1},
+    {"label": "move.secondary", "occurrence": 2, "range": 100, "result": 8}
+  ],
+  "features": [
+    "choice.move",
+    "effect.boost",
+    "effect.secondary",
+    "prng.labeled",
+    "prng.secondary",
+    "state.canonical"
+  ],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 3, "max_actions": 4}
+}

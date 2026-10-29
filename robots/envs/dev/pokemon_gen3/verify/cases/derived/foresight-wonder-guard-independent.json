@@ -1,0 +1,26 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "foresight-wonder-guard-independent",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/mods/gen4/abilities.ts; data/mods/gen3/scripts.ts; sim/pokemon.ts",
+    "test_name": "Foresight negates Ghost type immunity but does not bypass Wonder Guard",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [193, 318, 3, 42],
+  "teams": [
+    {"source": "smeargle-odor-sleuth-p1.txt", "normalized": [
+      {"species": "smeargle", "level": 100, "gender": "M", "nature": "hardy", "ability": "owntempo", "item": "", "moves": ["odorsleuth", "tackle"], "stats": [251, 76, 106, 76, 126, 186], "status": null}
+    ]},
+    {"source": "shedinja-splash-p2.txt", "normalized": [
+      {"species": "shedinja", "level": 100, "gender": "N", "nature": "hardy", "ability": "wonderguard", "item": "", "moves": ["splash"], "stats": [1, 216, 126, 96, 96, 116], "status": null}
+    ]}
+  ],
+  "source_choices": [["move 1", "move 1"], ["move 2", "move 1"]],
+  "choices": [["move 1", "move 1"], ["move 2", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["ability.wonder-guard", "condition.volatile", "handler.try-hit", "hit.type-immunity", "state.canonical"],
+  "boundaries": ["request", "choice", "queue", "handlers", "immunity", "state", "events", "prng"],
+  "limits": {"max_boundaries": 3, "max_actions": 4}
+}

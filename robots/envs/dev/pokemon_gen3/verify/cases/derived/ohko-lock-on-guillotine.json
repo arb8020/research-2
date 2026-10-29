@@ -1,0 +1,15 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "ohko-lock-on-guillotine",
+  "provenance": {"kind": "showdown-derived", "source_file": "data/mods/gen3/scripts.ts", "test_name": "Gen 3 Lock-On Accuracy handler admits Guillotine", "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format": "gen3ou", "seed": [1, 2, 3, 1],
+  "teams": [
+    {"source": "smeargle-lock-on-guillotine-p1.txt", "normalized": [{"species": "smeargle", "level": 100, "gender": "M", "ability": "owntempo", "item": "", "moves": ["lockon", "guillotine"], "stats": [251, 76, 106, 76, 126, 186], "status": null}]},
+    {"source": "lock-on-alias-repeat-accuracy-p2.txt", "normalized": [{"species": "blissey", "level": 100, "gender": "M", "ability": "naturalcure", "item": "", "moves": ["softboiled"], "stats": [651, 56, 56, 186, 306, 146], "status": null}]}
+  ],
+  "source_choices": [["move 1", "move 1"], ["move 2", "move 1"]], "choices": [["move 1", "move 1"], ["move 2", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["choice.move", "hit.accuracy-bypass", "state.canonical"],
+  "boundaries": ["choice", "events", "handlers", "immunity", "prng", "queue", "request", "state"],
+  "limits": {"max_boundaries": 3, "max_actions": 4}
+}

@@ -1,0 +1,144 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "upstream-wish-64",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/moves/wish.js:64; data/mods/gen4/moves.ts#wish",
+    "test_name": "Wish does not heal a fainted occupant or survive terminal resolution when hazards leave its position empty",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "upstream-wish-64-p1.txt",
+      "normalized": [
+        {
+          "species": "vaporeon",
+          "level": 100,
+          "gender": "M",
+          "ability": "waterabsorb",
+          "item": "",
+          "moves": [
+            "wish"
+          ],
+          "stats": [
+            401,
+            166,
+            156,
+            256,
+            226,
+            166
+          ],
+          "status": null,
+          "initial_hp": 1
+        },
+        {
+          "species": "shedinja",
+          "level": 100,
+          "gender": "M",
+          "ability": "wonderguard",
+          "item": "",
+          "moves": [
+            "sleeptalk"
+          ],
+          "stats": [
+            1,
+            216,
+            126,
+            96,
+            96,
+            116
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "upstream-wish-64-p2.txt",
+      "normalized": [
+        {
+          "species": "skarmory",
+          "level": 100,
+          "gender": "M",
+          "ability": "keeneye",
+          "item": "",
+          "moves": [
+            "spikes",
+            "protect"
+          ],
+          "stats": [
+            271,
+            196,
+            316,
+            116,
+            176,
+            176
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 2"
+    ],
+    [
+      "switch 2",
+      null
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 2"
+    ],
+    [
+      "switch 1",
+      null
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "condition.side",
+    "condition.slot",
+    "lifecycle.condition-duration",
+    "lifecycle.faint",
+    "lifecycle.forced-replacement",
+    "lifecycle.terminal",
+    "prng.labeled",
+    "side.spikes",
+    "slot.wish",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state",
+    "terminal"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

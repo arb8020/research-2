@@ -1,0 +1,6 @@
+Machop (M) @ Black Belt
+Ability: Guts
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Brickbreak

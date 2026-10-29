@@ -1,0 +1,13 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"choice-disable-fast",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen4/moves.ts","test_name":"Disable before target action rejects its queued move and expires through duration residual work","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[2,37,53,97],
+  "teams":[
+    {"source":"choice-disable-fast-p1.txt","normalized":[{"species":"alakazam","level":100,"gender":"M","ability":"synchronize","item":"","moves":["splash","disable"],"stats":[252,136,126,306,206,276],"status":null}]},
+    {"source":"choice-disable-fast-p2.txt","normalized":[{"species":"blissey","level":100,"gender":"F","ability":"naturalcure","item":"","moves":["pound","softboiled"],"stats":[652,56,56,186,306,146],"status":null}]}
+  ],
+  "source_choices":[["move 1","move 1"],["move 2","move 1"],["move 1","move 2"],["move 1","move 2"],["move 1","move 2"]],
+  "choices":[["move 1","move 1"],["move 2","move 1"],["move 1","move 2"],["move 1","move 2"],["move 1","move 2"]],
+  "forced_outcomes":[],"features":["choice.move","condition.volatile","handler.before-move","handler.residual","lifecycle.condition-duration","prng.labeled","request.legal-choices","state.canonical"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":6,"max_actions":10}
+}

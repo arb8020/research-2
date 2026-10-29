@@ -1,0 +1,160 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "ice-ball-wonder-guard-reset",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#rollout,data/moves.ts#iceball; test/sim/moves/rollout.js:18,42,72,100",
+    "test_name": "Wonder Guard blocks after accuracy and the rejected Ice Ball ramp expires before its next target",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    71,
+    29,
+    7
+  ],
+  "teams": [
+    {
+      "source": "ice-ball-wonder-guard-reset-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "iceball"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "ice-ball-wonder-guard-reset-p2.txt",
+      "normalized": [
+        {
+          "species": "shedinja",
+          "level": 100,
+          "gender": "N",
+          "ability": "wonderguard",
+          "item": "",
+          "moves": [
+            "swordsdance"
+          ],
+          "stats": [
+            1,
+            216,
+            126,
+            96,
+            96,
+            116
+          ],
+          "status": null
+        },
+        {
+          "species": "cloyster",
+          "level": 100,
+          "gender": "M",
+          "ability": "shellarmor",
+          "item": "",
+          "moves": [
+            "withdraw"
+          ],
+          "stats": [
+            241,
+            226,
+            396,
+            206,
+            126,
+            176
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "switch 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "switch 2"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 40
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 2,
+      "range": 100,
+      "result": 59
+    },
+    {
+      "label": "move.critical",
+      "occurrence": 1,
+      "range": 16,
+      "result": 15
+    },
+    {
+      "label": "move.damage_roll",
+      "occurrence": 1,
+      "range": 16,
+      "result": 7
+    }
+  ],
+  "features": [
+    "ability.wonder-guard",
+    "choice.move",
+    "choice.switch",
+    "condition.volatile",
+    "handler.base-power",
+    "handler.damaging-hit",
+    "hit.accuracy",
+    "hit.immunity-cause",
+    "lifecycle.condition-duration",
+    "prng.labeled",
+    "request.legal-choices",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "immunity",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

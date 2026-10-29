@@ -1,0 +1,12 @@
+Smeargle (M)
+Ability: Illuminate
+Level: 100
+EVs: 252 Spe
+Hardy Nature
+- Mud Sport
+
+Blissey (M)
+Ability: Natural Cure
+Level: 100
+Hardy Nature
+- Splash

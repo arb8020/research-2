@@ -1,0 +1,141 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "truant-post-residual-replacement",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/abilities.ts#truant; sim/battle.ts; sim/battle-actions.ts; sim/pokemon.ts",
+    "test_name": "A post-residual forced replacement receives no second toggle and loafs first",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    721,
+    722,
+    723,
+    724
+  ],
+  "teams": [
+    {
+      "source": "truant-post-residual-replacement-p1.txt",
+      "normalized": [
+        {
+          "species": "zigzagoon",
+          "level": 100,
+          "gender": "M",
+          "ability": "pickup",
+          "item": "",
+          "moves": [
+            "tackle"
+          ],
+          "stats": [
+            217,
+            96,
+            118,
+            96,
+            118,
+            156
+          ],
+          "status": "tox",
+          "status_state": {
+            "kind": "toxic",
+            "stage": 0
+          },
+          "initial_hp": 1
+        },
+        {
+          "species": "slaking",
+          "level": 100,
+          "gender": "M",
+          "ability": "truant",
+          "item": "",
+          "moves": [
+            "bulkup"
+          ],
+          "stats": [
+            441,
+            356,
+            236,
+            226,
+            166,
+            236
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "truant-post-residual-replacement-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      null
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      null
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "handler.before-move",
+    "handler.residual",
+    "lifecycle.switch-persistence",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 5
+  }
+}

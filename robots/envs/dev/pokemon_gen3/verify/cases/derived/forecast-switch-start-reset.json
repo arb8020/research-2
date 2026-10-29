@@ -1,0 +1,152 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "forecast-switch-start-reset",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/abilities.ts#forecast; data/mods/gen3/abilities.ts#forecast; sim/field.ts",
+    "test_name": "Forecast Start projects under existing weather; switch-out restores base identity; expiry projects clear",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "forecast-switch-start-reset-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "sunnyday",
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        },
+        {
+          "species": "castform",
+          "level": 100,
+          "gender": "M",
+          "ability": "forecast",
+          "item": "",
+          "moves": [
+            "rest"
+          ],
+          "stats": [
+            281,
+            176,
+            176,
+            176,
+            176,
+            176
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "forecast-switch-start-reset-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "switch 1",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "ability.forecast",
+    "choice.move",
+    "state.canonical",
+    "state.form-overlay",
+    "condition.weather"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 6,
+    "max_actions": 10
+  }
+}

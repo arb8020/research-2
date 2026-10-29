@@ -1,0 +1,193 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "flatter-boost-cap",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/abilities.ts; sim/battle.ts; sim/battle-actions.ts",
+    "test_name": "Repeated Flatter clamps its positive target boost at plus six",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    731,
+    43,
+    19,
+    7
+  ],
+  "teams": [
+    {
+      "source": "flatter-boost-cap-p1.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "ability": "limber",
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "item": "",
+          "moves": [
+            "flatter"
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "flatter-boost-cap-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "ability": "owntempo",
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 7
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 2,
+      "range": 100,
+      "result": 66
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 3,
+      "range": 100,
+      "result": 93
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 4,
+      "range": 100,
+      "result": 39
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 5,
+      "range": 100,
+      "result": 50
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 6,
+      "range": 100,
+      "result": 9
+    },
+    {
+      "label": "move.accuracy",
+      "occurrence": 7,
+      "range": 100,
+      "result": 49
+    }
+  ],
+  "features": [
+    "choice.move",
+    "effect.boost",
+    "handler.try-boost",
+    "hit.accuracy",
+    "prng.labeled",
+    "state.canonical",
+    "volatile.confusion"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 8,
+    "max_actions": 14
+  }
+}

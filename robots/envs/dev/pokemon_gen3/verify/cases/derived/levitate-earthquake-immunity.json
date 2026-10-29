@@ -1,0 +1,14 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "derived-levitate-earthquake-immunity",
+  "provenance": {"kind": "showdown-derived", "source_file": "sim/pokemon.ts", "test_name": "isGrounded Levitate ability immunity", "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format": "gen3ou", "seed": [1,2,3,4],
+  "teams": [
+    {"source": "marowak-earthquake-p1.txt", "normalized": [{"species":"marowak","level":100,"gender":"M","ability":"rockhead","item":"","moves":["earthquake"],"stats":[261,196,256,136,196,126],"status":null}]},
+    {"source": "gengar-thief-p2.txt", "normalized": [{"species":"gengar","level":100,"gender":"M","ability":"levitate","item":"","moves":["thief"],"stats":[261,166,156,296,186,256],"status":null}]}
+  ],
+  "source_choices": [["move 1","move 1"]], "choices": [["move 1","move 1"]], "forced_outcomes": [],
+  "features": ["choice.move","handler.try-hit","hit.accuracy","hit.grounding","hit.immunity-cause","prng.labeled","queue.speed","state.canonical"],
+  "boundaries": ["request","choice","queue","handlers","immunity","state","events","prng"],
+  "limits": {"max_boundaries":2,"max_actions":2}
+}

@@ -1,0 +1,28 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "thief-held-source-retains-items",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/moves/thief.js:21; data/moves.ts#thief",
+    "test_name": "Thief should not steal when the source already holds an item",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {"source": "gengar-black-glasses-thief-p1.txt", "normalized": [{
+      "species": "gengar", "level": 100, "gender": "M", "ability": "levitate", "item": "blackglasses",
+      "moves": ["thief"], "stats": [261, 166, 156, 296, 186, 256], "status": null
+    }]},
+    {"source": "tyrogue-black-belt-p2.txt", "normalized": [{
+      "species": "tyrogue", "level": 100, "gender": "M", "ability": "guts", "item": "blackbelt",
+      "moves": ["tackle"], "stats": [211, 106, 106, 106, 106, 106], "status": null
+    }]}
+  ],
+  "source_choices": [["move 1", "move 1"]],
+  "choices": [["move 1", "move 1"]],
+  "forced_outcomes": [],
+  "features": ["choice.move", "handler.take-item", "item.take", "prng.labeled", "state.canonical"],
+  "boundaries": ["request", "choice", "queue", "handlers", "state", "events", "prng"],
+  "limits": {"max_boundaries": 2, "max_actions": 2}
+}

@@ -1,0 +1,115 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "transform-forecast-freeze",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#transform; sim/pokemon.ts#transformInto; sim/pokemon.ts#clearVolatile",
+    "test_name": "a transformed Forecast holder retains the copied current form across later weather changes",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    147,
+    148,
+    149,
+    150
+  ],
+  "teams": [
+    {
+      "source": "transform-forecast-freeze-p1.txt",
+      "normalized": [
+        {
+          "species": "ditto",
+          "level": 100,
+          "gender": "N",
+          "nature": "hardy",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "transform"
+          ],
+          "stats": [
+            237,
+            132,
+            132,
+            132,
+            132,
+            132
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "transform-forecast-freeze-p2.txt",
+      "normalized": [
+        {
+          "species": "castform",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "forecast",
+          "item": "",
+          "moves": [
+            "sunnyday",
+            "raindance",
+            "rest"
+          ],
+          "stats": [
+            281,
+            176,
+            176,
+            176,
+            176,
+            176
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "ability.forecast",
+    "choice.move",
+    "condition.weather",
+    "prng.labeled",
+    "state.canonical",
+    "state.effective-type",
+    "state.form-overlay",
+    "state.transform-profile"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

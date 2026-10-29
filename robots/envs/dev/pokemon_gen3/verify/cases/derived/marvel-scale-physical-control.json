@@ -1,0 +1,104 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "marvel-scale-physical-control",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/abilities.ts; sim/battle-actions.ts",
+    "test_name": "marvel-scale-physical-control",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "teams": [
+    {
+      "source": "marvel-scale-physical-control-p1.txt",
+      "normalized": [
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "scratch"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "marvel-scale-physical-control-p2.txt",
+      "normalized": [
+        {
+          "species": "milotic",
+          "level": 100,
+          "gender": "F",
+          "ability": "marvelscale",
+          "item": "",
+          "moves": [
+            "surf"
+          ],
+          "stats": [
+            331,
+            156,
+            194,
+            236,
+            286,
+            198
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "handler.modify-defense",
+    "handler.marvel-scale",
+    "damage.gen3",
+    "damage.critical",
+    "condition.nonvolatile-status",
+    "prng.labeled",
+    "queue.speed",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

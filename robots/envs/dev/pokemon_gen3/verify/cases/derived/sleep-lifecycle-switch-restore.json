@@ -1,0 +1,15 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"sleep-lifecycle-switch-restore",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen3/conditions.ts","test_name":"SwitchIn restores sleep time skipped by sleep-usable moves and clears the accumulator","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[825,17,43,5],
+  "teams":[
+    {"source":"xatu-smeargle-switch-p1.txt","normalized":[
+      {"species":"xatu","level":100,"gender":"M","ability":"earlybird","item":"","moves":["splash"],"stats":[271,186,176,226,176,226],"status":null},
+      {"species":"smeargle","level":100,"gender":"M","ability":"owntempo","item":"","moves":["snore","splash"],"stats":[251,76,106,76,126,186],"status":"slp","status_state":{"kind":"sleep","time":2,"skipped_time":1}}
+    ]},
+    {"source":"magikarp-splash-p2.txt","normalized":[{"species":"magikarp","level":100,"gender":"M","ability":"swiftswim","item":"","moves":["splash"],"stats":[181,56,146,66,76,196],"status":null}]}
+  ],
+  "source_choices":[["switch 2","move 1"]],"choices":[["switch 2","move 1"]],"forced_outcomes":[],
+  "features":["choice.switch","handler.before-move","lifecycle.condition-duration","lifecycle.switch-persistence","state.canonical","status.sleep"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":2,"max_actions":2}
+}

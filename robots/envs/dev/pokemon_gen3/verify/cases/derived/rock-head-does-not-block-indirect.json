@@ -1,0 +1,101 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "rock-head-does-not-block-indirect",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "test/sim/abilities/rockhead.js:42; data/abilities.ts#rockhead",
+    "test_name": "Rock Head does not suppress toxic residual damage",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    12
+  ],
+  "teams": [
+    {
+      "source": "rock-head-does-not-block-indirect-p1.txt",
+      "normalized": [
+        {
+          "species": "sudowoodo",
+          "level": 100,
+          "gender": "M",
+          "ability": "rockhead",
+          "item": "",
+          "moves": [
+            "mimic"
+          ],
+          "stats": [
+            281,
+            236,
+            266,
+            96,
+            166,
+            96
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "rock-head-does-not-block-indirect-p2.txt",
+      "normalized": [
+        {
+          "species": "crobat",
+          "level": 100,
+          "gender": "M",
+          "ability": "innerfocus",
+          "item": "",
+          "moves": [
+            "toxic"
+          ],
+          "stats": [
+            311,
+            216,
+            196,
+            176,
+            196,
+            296
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "damage.residual",
+    "handler.rock-head",
+    "prng.labeled",
+    "state.canonical",
+    "status.toxic"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

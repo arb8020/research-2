@@ -1,0 +1,5 @@
+Alakazam (M)
+Ability: Synchronize
+Level: 100
+Hardy Nature
+- Ice Punch

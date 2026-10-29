@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-2.local/pokemon-gen3/descriptor-map-v1.schema.json",
+  "title": "Frozen Gen 3 OU descriptor classification map",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "oracle_revision", "format", "freeze_status", "inventories", "coverage_contract"],
+  "properties": {
+    "schema": {"const": "pokemon-native-descriptor-map-v1"},
+    "oracle_revision": {"const": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+    "format": {"const": "gen3ou"},
+    "freeze_status": {"enum": ["draft", "frozen"]},
+    "inventories": {
+      "type": "array", "minItems": 1,
+      "items": {"$ref": "#/$defs/inventory"}
+    },
+    "coverage_contract": {"$ref": "#/$defs/coverage_contract"}
+  },
+  "$defs": {
+    "ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "symbol"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "symbol": {"type": "string", "minLength": 1}
+      }
+    },
+    "inventory": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "source", "selector", "expected_count", "frozen_digest", "entries"],
+      "properties": {
+        "kind": {"enum": ["species_form", "move", "ability", "item", "condition", "format_rule", "target_mode", "event_hook", "simulator_only_condition"]},
+        "source": {"type": "string", "minLength": 1},
+        "selector": {"type": "string", "minLength": 1},
+        "expected_count": {"type": ["integer", "null"], "minimum": 0},
+        "frozen_digest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "entries": {"type": "array", "items": {"$ref": "#/$defs/entry"}}
+      }
+    },
+    "entry": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "id", "numeric_id", "classification", "oracle_revision", "showdown_sources",
+        "generation_boundaries", "native_boundaries", "semantic_features", "focused_tests",
+        "differential_cases", "verification_artifacts", "reachability_evidence", "gap_witnesses", "rationale"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "numeric_id": {"type": ["integer", "null"], "minimum": 0},
+        "classification": {"enum": ["implemented", "inert", "unreachable", "unsupported"]},
+        "oracle_revision": {"const": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+        "showdown_sources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/ref"}},
+        "generation_boundaries": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/ref"}},
+        "native_boundaries": {"type": "array", "items": {"$ref": "#/$defs/ref"}},
+        "semantic_features": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "focused_tests": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "differential_cases": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "verification_artifacts": {
+          "type": "array", "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["kind", "path", "symbol"],
+            "properties": {
+              "kind": {"enum": ["catalog-differential", "admission-differential", "focused-native"]},
+              "path": {"type": "string", "minLength": 1},
+              "symbol": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "reachability_evidence": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "gap_witnesses": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.:-]*$"}},
+        "rationale": {"type": "string", "minLength": 1}
+      }
+    },
+    "coverage_contract": {
+      "type": "object", "additionalProperties": false,
+      "required": ["descriptor_rotation", "recombination_gates", "progress_weights", "completion_gates"],
+      "properties": {
+        "descriptor_rotation": {
+          "type": "object", "additionalProperties": false,
+          "required": ["implemented_min_reached", "inert_min_reached", "unsupported_min_counterexamples"],
+          "properties": {
+            "implemented_min_reached": {"type": "integer", "minimum": 1},
+            "inert_min_reached": {"type": "integer", "minimum": 1},
+            "unsupported_min_counterexamples": {"type": "integer", "minimum": 1}
+          }
+        },
+        "recombination_gates": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "strength", "axes", "minimum_hidden_cases", "minimum_unseen_tuple_fraction"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]*$"},
+              "strength": {"enum": ["pairwise", "three_way", "sequence"]},
+              "axes": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string"}},
+              "minimum_hidden_cases": {"type": "integer", "minimum": 1},
+              "minimum_unseen_tuple_fraction": {"type": "number", "minimum": 0.5, "maximum": 1}
+            }
+          }
+        },
+        "progress_weights": {
+          "type": "object", "additionalProperties": false,
+          "required": ["classified", "source_mapped", "generation_mapped", "native_or_gap_mapped", "focused_evidence", "differential_evidence", "recombination"],
+          "properties": {
+            "classified": {"type": "integer", "minimum": 0},
+            "source_mapped": {"type": "integer", "minimum": 0},
+            "generation_mapped": {"type": "integer", "minimum": 0},
+            "native_or_gap_mapped": {"type": "integer", "minimum": 0},
+            "focused_evidence": {"type": "integer", "minimum": 0},
+            "differential_evidence": {"type": "integer", "minimum": 0},
+            "recombination": {"type": "integer", "minimum": 0}
+          }
+        },
+        "completion_gates": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}}
+      }
+    }
+  }
+}

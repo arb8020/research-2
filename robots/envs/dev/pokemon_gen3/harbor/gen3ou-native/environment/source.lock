@@ -1,0 +1,7 @@
+format = "gen3ou-native-starter-v1"
+repository_base_commit = "89e92352df3f9688b3bc773c70b097989f142a7e"
+archive = "starter.tar"
+archive_sha256 = "1e9c383b52e5ea3d8b0c662a74f61a9f70bda37e1b587b08ae32d22dc2877d70"
+inventory = "starter.files"
+inventory_sha256 = "68d7cbfc490f3b307b2c7f075be9c2d0d2e03131379e919a6512b80cc14cd4d5"
+excludes = ["build-products", "__pycache__", "node_modules", "harbor-task", "reference-checkouts"]

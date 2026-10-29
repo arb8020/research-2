@@ -1,0 +1,53 @@
+Pelipper (M) @ Leftovers
+Ability: Keen Eye
+EVs: 252 HP / 252 Def / 4 SpA
+Bold Nature
+- Rain Dance
+- Surf
+- Toxic
+- Protect
+
+Ludicolo (M) @ Leftovers
+Ability: Swift Swim
+EVs: 252 HP / 4 SpA / 252 SpD
+Calm Nature
+- Surf
+- Giga Drain
+- Leech Seed
+- Protect
+
+Jolteon (M) @ Leftovers
+Ability: Volt Absorb
+EVs: 4 HP / 252 SpA / 252 Spe
+Timid Nature
+- Thunderbolt
+- Bite
+- Toxic
+- Substitute
+
+Heracross (M) @ Choice Band
+Ability: Guts
+EVs: 252 Atk / 4 Def / 252 Spe
+Jolly Nature
+- Megahorn
+- Brick Break
+- Rock Slide
+- Sleep Talk
+
+Snorlax (M) @ Leftovers
+Ability: Immunity
+EVs: 252 HP / 252 Atk / 4 Def
+Adamant Nature
+- Body Slam
+- Shadow Ball
+- Rest
+- Sleep Talk
+
+Gengar (M) @ Leftovers
+Ability: Levitate
+EVs: 4 HP / 252 SpA / 252 Spe
+Timid Nature
+- Thunderbolt
+- Ice Punch
+- Will-O-Wisp
+- Explosion

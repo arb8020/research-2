@@ -1,0 +1,6 @@
+Smeargle (M)
+Ability: Own Tempo
+Level: 100
+EVs: 8 HP
+Hardy Nature
+- Splash

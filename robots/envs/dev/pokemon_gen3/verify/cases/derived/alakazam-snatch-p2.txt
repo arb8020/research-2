@@ -1,0 +1,7 @@
+Alakazam (M)
+Ability: Synchronize
+Level: 100
+EVs: 120 Spe
+Hardy Nature
+- Snatch
+- Splash

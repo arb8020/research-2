@@ -1,0 +1,13 @@
+Seviper (M)
+Ability: Shed Skin
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Bite
+
+Persian (M)
+Ability: Limber
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Scratch

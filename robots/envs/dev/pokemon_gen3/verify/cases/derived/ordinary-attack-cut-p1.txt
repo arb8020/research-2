@@ -1,0 +1,6 @@
+Bulbasaur (M)
+Ability: overgrow
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- cut

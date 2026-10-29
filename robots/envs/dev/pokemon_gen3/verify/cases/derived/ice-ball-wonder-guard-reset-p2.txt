@@ -1,0 +1,13 @@
+Shedinja
+Ability: Wonder Guard
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Swords Dance
+
+Cloyster (M)
+Ability: Shell Armor
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Withdraw

@@ -1,0 +1,6776 @@
+{
+  "schema": "pokemon-gen3ou-handler-binding-shape-v1",
+  "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "format": "gen3ou",
+  "frozen_binding_count": 514,
+  "owner_descriptor_count": 263,
+  "max_handler_span_per_owner": 6,
+  "owners_at_max_span": [
+    {
+      "owner_kind": "item",
+      "owner_id": "whiteherb"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "charge"
+    }
+  ],
+  "by_owner_kind": [
+    {
+      "owner_kind": "ability",
+      "binding_count": 89,
+      "owner_count": 64,
+      "max_handler_span": 5
+    },
+    {
+      "owner_kind": "condition",
+      "binding_count": 65,
+      "owner_count": 21,
+      "max_handler_span": 5
+    },
+    {
+      "owner_kind": "format",
+      "binding_count": 2,
+      "owner_count": 2,
+      "max_handler_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "binding_count": 95,
+      "owner_count": 58,
+      "max_handler_span": 6
+    },
+    {
+      "owner_kind": "move",
+      "binding_count": 263,
+      "owner_count": 118,
+      "max_handler_span": 6
+    }
+  ],
+  "by_scope": [
+    {
+      "scope": "target",
+      "binding_count": 459
+    },
+    {
+      "scope": "source",
+      "binding_count": 13
+    },
+    {
+      "scope": "ally",
+      "binding_count": 0
+    },
+    {
+      "scope": "foe",
+      "binding_count": 7
+    },
+    {
+      "scope": "any",
+      "binding_count": 13
+    },
+    {
+      "scope": "side",
+      "binding_count": 10
+    },
+    {
+      "scope": "field",
+      "binding_count": 12
+    }
+  ],
+  "by_event": [
+    {
+      "event": "Accuracy",
+      "binding_count": 2
+    },
+    {
+      "event": "AfterHit",
+      "binding_count": 4
+    },
+    {
+      "event": "AfterMega",
+      "binding_count": 1
+    },
+    {
+      "event": "AfterMove",
+      "binding_count": 6
+    },
+    {
+      "event": "AfterMoveSecondary",
+      "binding_count": 1
+    },
+    {
+      "event": "AfterMoveSecondarySelf",
+      "binding_count": 1
+    },
+    {
+      "event": "AfterSetStatus",
+      "binding_count": 2
+    },
+    {
+      "event": "AfterSubDamage",
+      "binding_count": 1
+    },
+    {
+      "event": "BasePower",
+      "binding_count": 13
+    },
+    {
+      "event": "BeforeMove",
+      "binding_count": 15
+    },
+    {
+      "event": "BeforeSwitchOut",
+      "binding_count": 1
+    },
+    {
+      "event": "CriticalHit",
+      "binding_count": 2
+    },
+    {
+      "event": "Damage",
+      "binding_count": 8
+    },
+    {
+      "event": "DamagingHit",
+      "binding_count": 8
+    },
+    {
+      "event": "DeductPP",
+      "binding_count": 1
+    },
+    {
+      "event": "DisableMove",
+      "binding_count": 6
+    },
+    {
+      "event": "DragOut",
+      "binding_count": 2
+    },
+    {
+      "event": "Eat",
+      "binding_count": 22
+    },
+    {
+      "event": "End",
+      "binding_count": 29
+    },
+    {
+      "event": "EntryHazard",
+      "binding_count": 1
+    },
+    {
+      "event": "Faint",
+      "binding_count": 2
+    },
+    {
+      "event": "Hit",
+      "binding_count": 47
+    },
+    {
+      "event": "HitField",
+      "binding_count": 2
+    },
+    {
+      "event": "Immunity",
+      "binding_count": 5
+    },
+    {
+      "event": "Invulnerability",
+      "binding_count": 6
+    },
+    {
+      "event": "LockMove",
+      "binding_count": 2
+    },
+    {
+      "event": "MaybeTrapPokemon",
+      "binding_count": 2
+    },
+    {
+      "event": "ModifyAccuracy",
+      "binding_count": 2
+    },
+    {
+      "event": "ModifyAtk",
+      "binding_count": 15
+    },
+    {
+      "event": "ModifyBoost",
+      "binding_count": 1
+    },
+    {
+      "event": "ModifyCritRatio",
+      "binding_count": 4
+    },
+    {
+      "event": "ModifyDamage",
+      "binding_count": 4
+    },
+    {
+      "event": "ModifyDamagePhase1",
+      "binding_count": 3
+    },
+    {
+      "event": "ModifyDef",
+      "binding_count": 2
+    },
+    {
+      "event": "ModifyMove",
+      "binding_count": 15
+    },
+    {
+      "event": "ModifySecondaries",
+      "binding_count": 1
+    },
+    {
+      "event": "ModifySpA",
+      "binding_count": 15
+    },
+    {
+      "event": "ModifySpD",
+      "binding_count": 3
+    },
+    {
+      "event": "ModifySpe",
+      "binding_count": 4
+    },
+    {
+      "event": "ModifyType",
+      "binding_count": 2
+    },
+    {
+      "event": "MoveAborted",
+      "binding_count": 4
+    },
+    {
+      "event": "MoveFail",
+      "binding_count": 2
+    },
+    {
+      "event": "NegateImmunity",
+      "binding_count": 1
+    },
+    {
+      "event": "OverrideAction",
+      "binding_count": 1
+    },
+    {
+      "event": "PrepareHit",
+      "binding_count": 5
+    },
+    {
+      "event": "RedirectTarget",
+      "binding_count": 4
+    },
+    {
+      "event": "Residual",
+      "binding_count": 39
+    },
+    {
+      "event": "Restart",
+      "binding_count": 9
+    },
+    {
+      "event": "SetStatus",
+      "binding_count": 9
+    },
+    {
+      "event": "StallMove",
+      "binding_count": 1
+    },
+    {
+      "event": "Start",
+      "binding_count": 67
+    },
+    {
+      "event": "SwitchIn",
+      "binding_count": 4
+    },
+    {
+      "event": "SwitchOut",
+      "binding_count": 1
+    },
+    {
+      "event": "TakeItem",
+      "binding_count": 2
+    },
+    {
+      "event": "TrapPokemon",
+      "binding_count": 5
+    },
+    {
+      "event": "Try",
+      "binding_count": 15
+    },
+    {
+      "event": "TryAddVolatile",
+      "binding_count": 6
+    },
+    {
+      "event": "TryBoost",
+      "binding_count": 5
+    },
+    {
+      "event": "TryEatItem",
+      "binding_count": 7
+    },
+    {
+      "event": "TryHeal",
+      "binding_count": 1
+    },
+    {
+      "event": "TryHit",
+      "binding_count": 23
+    },
+    {
+      "event": "TryImmunity",
+      "binding_count": 5
+    },
+    {
+      "event": "TryMove",
+      "binding_count": 9
+    },
+    {
+      "event": "TryPrimaryHit",
+      "binding_count": 1
+    },
+    {
+      "event": "Update",
+      "binding_count": 18
+    },
+    {
+      "event": "Use",
+      "binding_count": 1
+    },
+    {
+      "event": "UseMoveMessage",
+      "binding_count": 1
+    },
+    {
+      "event": "Weather",
+      "binding_count": 2
+    },
+    {
+      "event": "WeatherChange",
+      "binding_count": 1
+    },
+    {
+      "event": "WeatherModifyDamage",
+      "binding_count": 2
+    }
+  ],
+  "by_embedded_path": [
+    {
+      "embedded_path": "condition",
+      "binding_count": 145
+    },
+    {
+      "embedded_path": "secondary",
+      "binding_count": 1
+    },
+    {
+      "embedded_path": "self",
+      "binding_count": 2
+    }
+  ],
+  "owners": [
+    {
+      "owner_kind": "ability",
+      "owner_id": "arenatrap",
+      "bindings": [
+        {
+          "hook": "onFoeMaybeTrapPokemon",
+          "event": "MaybeTrapPokemon",
+          "scope": "foe",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onFoeTrapPokemon",
+          "event": "TrapPokemon",
+          "scope": "foe",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "battlearmor",
+      "bindings": [
+        {
+          "hook": "onCriticalHit",
+          "event": "CriticalHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "blaze",
+      "bindings": [
+        {
+          "hook": "onBasePower",
+          "event": "BasePower",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "chlorophyll",
+      "bindings": [
+        {
+          "hook": "onModifySpe",
+          "event": "ModifySpe",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "clearbody",
+      "bindings": [
+        {
+          "hook": "onTryBoost",
+          "event": "TryBoost",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "cloudnine",
+      "bindings": [
+        {
+          "hook": "onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "colorchange",
+      "bindings": [
+        {
+          "hook": "onDamagingHit",
+          "event": "DamagingHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "compoundeyes",
+      "bindings": [
+        {
+          "hook": "onSourceModifyAccuracy",
+          "event": "ModifyAccuracy",
+          "scope": "source",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "cutecharm",
+      "bindings": [
+        {
+          "hook": "onDamagingHit",
+          "event": "DamagingHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "damp",
+      "bindings": [
+        {
+          "hook": "onAnyDamage",
+          "event": "Damage",
+          "scope": "any",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onAnyTryMove",
+          "event": "TryMove",
+          "scope": "any",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "effectspore",
+      "bindings": [
+        {
+          "hook": "onDamagingHit",
+          "event": "DamagingHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "flamebody",
+      "bindings": [
+        {
+          "hook": "onDamagingHit",
+          "event": "DamagingHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "flashfire",
+      "bindings": [
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onModifyDamagePhase1",
+          "event": "ModifyDamagePhase1",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 5,
+      "max_same_event_scope_span": 2
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "forecast",
+      "bindings": [
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onWeatherChange",
+          "event": "WeatherChange",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "guts",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "hugepower",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "hustle",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onSourceModifyAccuracy",
+          "event": "ModifyAccuracy",
+          "scope": "source",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "hypercutter",
+      "bindings": [
+        {
+          "hook": "onTryBoost",
+          "event": "TryBoost",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "immunity",
+      "bindings": [
+        {
+          "hook": "onSetStatus",
+          "event": "SetStatus",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "innerfocus",
+      "bindings": [
+        {
+          "hook": "onTryAddVolatile",
+          "event": "TryAddVolatile",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "insomnia",
+      "bindings": [
+        {
+          "hook": "onSetStatus",
+          "event": "SetStatus",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryAddVolatile",
+          "event": "TryAddVolatile",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "intimidate",
+      "bindings": [
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "keeneye",
+      "bindings": [
+        {
+          "hook": "onTryBoost",
+          "event": "TryBoost",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "lightningrod",
+      "bindings": [
+        {
+          "hook": "onFoeRedirectTarget",
+          "event": "RedirectTarget",
+          "scope": "foe",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "limber",
+      "bindings": [
+        {
+          "hook": "onSetStatus",
+          "event": "SetStatus",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "liquidooze",
+      "bindings": [
+        {
+          "hook": "onSourceTryHeal",
+          "event": "TryHeal",
+          "scope": "source",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "magmaarmor",
+      "bindings": [
+        {
+          "hook": "onImmunity",
+          "event": "Immunity",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "magnetpull",
+      "bindings": [
+        {
+          "hook": "onAnyMaybeTrapPokemon",
+          "event": "MaybeTrapPokemon",
+          "scope": "any",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onAnyTrapPokemon",
+          "event": "TrapPokemon",
+          "scope": "any",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "marvelscale",
+      "bindings": [
+        {
+          "hook": "onModifyDef",
+          "event": "ModifyDef",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "minus",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "naturalcure",
+      "bindings": [
+        {
+          "hook": "onSwitchOut",
+          "event": "SwitchOut",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "oblivious",
+      "bindings": [
+        {
+          "hook": "onImmunity",
+          "event": "Immunity",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "overgrow",
+      "bindings": [
+        {
+          "hook": "onBasePower",
+          "event": "BasePower",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "owntempo",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryAddVolatile",
+          "event": "TryAddVolatile",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "plus",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "poisonpoint",
+      "bindings": [
+        {
+          "hook": "onDamagingHit",
+          "event": "DamagingHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "pressure",
+      "bindings": [
+        {
+          "hook": "onDeductPP",
+          "event": "DeductPP",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "purepower",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "raindish",
+      "bindings": [
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "rockhead",
+      "bindings": [
+        {
+          "hook": "onDamage",
+          "event": "Damage",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "roughskin",
+      "bindings": [
+        {
+          "hook": "onDamagingHit",
+          "event": "DamagingHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "sandstream",
+      "bindings": [
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "serenegrace",
+      "bindings": [
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "shedskin",
+      "bindings": [
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "shellarmor",
+      "bindings": [
+        {
+          "hook": "onCriticalHit",
+          "event": "CriticalHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "shielddust",
+      "bindings": [
+        {
+          "hook": "onModifySecondaries",
+          "event": "ModifySecondaries",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "speedboost",
+      "bindings": [
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "static",
+      "bindings": [
+        {
+          "hook": "onDamagingHit",
+          "event": "DamagingHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "stickyhold",
+      "bindings": [
+        {
+          "hook": "onTakeItem",
+          "event": "TakeItem",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "sturdy",
+      "bindings": [
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "suctioncups",
+      "bindings": [
+        {
+          "hook": "onDragOut",
+          "event": "DragOut",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "swarm",
+      "bindings": [
+        {
+          "hook": "onBasePower",
+          "event": "BasePower",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "swiftswim",
+      "bindings": [
+        {
+          "hook": "onModifySpe",
+          "event": "ModifySpe",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "synchronize",
+      "bindings": [
+        {
+          "hook": "onAfterSetStatus",
+          "event": "AfterSetStatus",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "thickfat",
+      "bindings": [
+        {
+          "hook": "onSourceBasePower",
+          "event": "BasePower",
+          "scope": "source",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "torrent",
+      "bindings": [
+        {
+          "hook": "onBasePower",
+          "event": "BasePower",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "trace",
+      "bindings": [
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "truant",
+      "bindings": [
+        {
+          "hook": "onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onSwitchIn",
+          "event": "SwitchIn",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "vitalspirit",
+      "bindings": [
+        {
+          "hook": "onSetStatus",
+          "event": "SetStatus",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryAddVolatile",
+          "event": "TryAddVolatile",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "voltabsorb",
+      "bindings": [
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "waterabsorb",
+      "bindings": [
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "waterveil",
+      "bindings": [
+        {
+          "hook": "onSetStatus",
+          "event": "SetStatus",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "whitesmoke",
+      "bindings": [
+        {
+          "hook": "onTryBoost",
+          "event": "TryBoost",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "wonderguard",
+      "bindings": [
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "brn",
+      "bindings": [
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "choicelock",
+      "bindings": [
+        {
+          "hook": "onDisableMove",
+          "event": "DisableMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "confusion",
+      "bindings": [
+        {
+          "hook": "onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "flinch",
+      "bindings": [
+        {
+          "hook": "onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "frz",
+      "bindings": [
+        {
+          "hook": "onAfterMoveSecondary",
+          "event": "AfterMoveSecondary",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onDamagingHit",
+          "event": "DamagingHit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 5,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "futuremove",
+      "bindings": [
+        {
+          "hook": "onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "hail",
+      "bindings": [
+        {
+          "hook": "onFieldEnd",
+          "event": "End",
+          "scope": "field",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onFieldResidual",
+          "event": "Residual",
+          "scope": "field",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onFieldStart",
+          "event": "Start",
+          "scope": "field",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onWeather",
+          "event": "Weather",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "lockedmove",
+      "bindings": [
+        {
+          "hook": "onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onLockMove",
+          "event": "LockMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onRestart",
+          "event": "Restart",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 5,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "mustrecharge",
+      "bindings": [
+        {
+          "hook": "onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "par",
+      "bindings": [
+        {
+          "hook": "onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onModifySpe",
+          "event": "ModifySpe",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "partiallytrapped",
+      "bindings": [
+        {
+          "hook": "onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTrapPokemon",
+          "event": "TrapPokemon",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "psn",
+      "bindings": [
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "raindance",
+      "bindings": [
+        {
+          "hook": "onFieldEnd",
+          "event": "End",
+          "scope": "field",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onFieldResidual",
+          "event": "Residual",
+          "scope": "field",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onFieldStart",
+          "event": "Start",
+          "scope": "field",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onWeatherModifyDamage",
+          "event": "WeatherModifyDamage",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "rolloutstorage",
+      "bindings": [
+        {
+          "hook": "onBasePower",
+          "event": "BasePower",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "sandstorm",
+      "bindings": [
+        {
+          "hook": "onFieldEnd",
+          "event": "End",
+          "scope": "field",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onFieldResidual",
+          "event": "Residual",
+          "scope": "field",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onFieldStart",
+          "event": "Start",
+          "scope": "field",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onWeather",
+          "event": "Weather",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "slp",
+      "bindings": [
+        {
+          "hook": "onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onSwitchIn",
+          "event": "SwitchIn",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "stall",
+      "bindings": [
+        {
+          "hook": "onRestart",
+          "event": "Restart",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStallMove",
+          "event": "StallMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "sunnyday",
+      "bindings": [
+        {
+          "hook": "onFieldEnd",
+          "event": "End",
+          "scope": "field",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onFieldResidual",
+          "event": "Residual",
+          "scope": "field",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onFieldStart",
+          "event": "Start",
+          "scope": "field",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onImmunity",
+          "event": "Immunity",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onWeatherModifyDamage",
+          "event": "WeatherModifyDamage",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 5,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "tox",
+      "bindings": [
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onSwitchIn",
+          "event": "SwitchIn",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "trapped",
+      "bindings": [
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTrapPokemon",
+          "event": "TrapPokemon",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "condition",
+      "owner_id": "twoturnmove",
+      "bindings": [
+        {
+          "hook": "onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onLockMove",
+          "event": "LockMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onMoveAborted",
+          "event": "MoveAborted",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "format",
+      "owner_id": "freezeclausemod",
+      "bindings": [
+        {
+          "hook": "onSetStatus",
+          "event": "SetStatus",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "format",
+      "owner_id": "sleepclausemod",
+      "bindings": [
+        {
+          "hook": "onSetStatus",
+          "event": "SetStatus",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "aguavberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryEatItem",
+          "event": "TryEatItem",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "apicotberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "aspearberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "blackbelt",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "blackglasses",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "charcoal",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "cheriberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "chestoberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "choiceband",
+      "bindings": [
+        {
+          "hook": "onAfterMove",
+          "event": "AfterMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "deepseascale",
+      "bindings": [
+        {
+          "hook": "onModifySpD",
+          "event": "ModifySpD",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "deepseatooth",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "dragonfang",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "figyberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryEatItem",
+          "event": "TryEatItem",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "focusband",
+      "bindings": [
+        {
+          "hook": "onDamage",
+          "event": "Damage",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "ganlonberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "hardstone",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "iapapaberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryEatItem",
+          "event": "TryEatItem",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "kingsrock",
+      "bindings": [
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "lansatberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "leftovers",
+      "bindings": [
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "leppaberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "liechiberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "lightball",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "luckypunch",
+      "bindings": [
+        {
+          "hook": "onModifyCritRatio",
+          "event": "ModifyCritRatio",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "lumberry",
+      "bindings": [
+        {
+          "hook": "onAfterSetStatus",
+          "event": "AfterSetStatus",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "machobrace",
+      "bindings": [
+        {
+          "hook": "onModifySpe",
+          "event": "ModifySpe",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "magnet",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "magoberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryEatItem",
+          "event": "TryEatItem",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "mail",
+      "bindings": [
+        {
+          "hook": "onTakeItem",
+          "event": "TakeItem",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "mentalherb",
+      "bindings": [
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "metalcoat",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "metalpowder",
+      "bindings": [
+        {
+          "hook": "onModifyDef",
+          "event": "ModifyDef",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "miracleseed",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "mysticwater",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "nevermeltice",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "oranberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryEatItem",
+          "event": "TryEatItem",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "pechaberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "persimberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "petayaberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "poisonbarb",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "rawstberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "salacberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "scopelens",
+      "bindings": [
+        {
+          "hook": "onModifyCritRatio",
+          "event": "ModifyCritRatio",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "seaincense",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "sharpbeak",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "shellbell",
+      "bindings": [
+        {
+          "hook": "onAfterMoveSecondarySelf",
+          "event": "AfterMoveSecondarySelf",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "silkscarf",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "silverpowder",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "sitrusberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryEatItem",
+          "event": "TryEatItem",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "softsand",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "souldew",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onModifySpD",
+          "event": "ModifySpD",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "spelltag",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "starfberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "stick",
+      "bindings": [
+        {
+          "hook": "onModifyCritRatio",
+          "event": "ModifyCritRatio",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "thickclub",
+      "bindings": [
+        {
+          "hook": "onModifyAtk",
+          "event": "ModifyAtk",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "twistedspoon",
+      "bindings": [
+        {
+          "hook": "onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "whiteherb",
+      "bindings": [
+        {
+          "hook": "onAnyAfterMega",
+          "event": "AfterMega",
+          "scope": "any",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onAnyAfterMove",
+          "event": "AfterMove",
+          "scope": "any",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onAnySwitchIn",
+          "event": "SwitchIn",
+          "scope": "any",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUse",
+          "event": "Use",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 6,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "item",
+      "owner_id": "wikiberry",
+      "bindings": [
+        {
+          "hook": "onEat",
+          "event": "Eat",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryEatItem",
+          "event": "TryEatItem",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "aromatherapy",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "assist",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "attract",
+      "bindings": [
+        {
+          "hook": "condition.onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onUpdate",
+          "event": "Update",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTryImmunity",
+          "event": "TryImmunity",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 5,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "batonpass",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "self.onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": "self"
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 2
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "beatup",
+      "bindings": [
+        {
+          "hook": "condition.onFoeModifySpD",
+          "event": "ModifySpD",
+          "scope": "foe",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onModifySpA",
+          "event": "ModifySpA",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "bellydrum",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "bide",
+      "bindings": [
+        {
+          "hook": "condition.onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onDamage",
+          "event": "Damage",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onMoveAborted",
+          "event": "MoveAborted",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 5,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "block",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "bounce",
+      "bindings": [
+        {
+          "hook": "condition.onInvulnerability",
+          "event": "Invulnerability",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSourceBasePower",
+          "event": "BasePower",
+          "scope": "source",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTryMove",
+          "event": "TryMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "brickbreak",
+      "bindings": [
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "camouflage",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "charge",
+      "bindings": [
+        {
+          "hook": "condition.onAfterMove",
+          "event": "AfterMove",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onBasePower",
+          "event": "BasePower",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onMoveAborted",
+          "event": "MoveAborted",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onRestart",
+          "event": "Restart",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 6,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "conversion",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "conversion2",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "counter",
+      "bindings": [
+        {
+          "hook": "condition.onDamage",
+          "event": "Damage",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onRedirectTarget",
+          "event": "RedirectTarget",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "covet",
+      "bindings": [
+        {
+          "hook": "onAfterHit",
+          "event": "AfterHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "curse",
+      "bindings": [
+        {
+          "hook": "condition.onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 5,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "defensecurl",
+      "bindings": [
+        {
+          "hook": "condition.onRestart",
+          "event": "Restart",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "destinybond",
+      "bindings": [
+        {
+          "hook": "condition.onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onFaint",
+          "event": "Faint",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onMoveAborted",
+          "event": "MoveAborted",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onPrepareHit",
+          "event": "PrepareHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 5,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "detect",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onPrepareHit",
+          "event": "PrepareHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "dig",
+      "bindings": [
+        {
+          "hook": "condition.onImmunity",
+          "event": "Immunity",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onInvulnerability",
+          "event": "Invulnerability",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSourceModifyDamage",
+          "event": "ModifyDamage",
+          "scope": "source",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTryMove",
+          "event": "TryMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "disable",
+      "bindings": [
+        {
+          "hook": "condition.onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onDisableMove",
+          "event": "DisableMove",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 5,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "dive",
+      "bindings": [
+        {
+          "hook": "condition.onImmunity",
+          "event": "Immunity",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onInvulnerability",
+          "event": "Invulnerability",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSourceModifyDamage",
+          "event": "ModifyDamage",
+          "scope": "source",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTryMove",
+          "event": "TryMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "doomdesire",
+      "bindings": [
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "dreameater",
+      "bindings": [
+        {
+          "hook": "onTryImmunity",
+          "event": "TryImmunity",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "encore",
+      "bindings": [
+        {
+          "hook": "condition.onDisableMove",
+          "event": "DisableMove",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onOverrideAction",
+          "event": "OverrideAction",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 5,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "endeavor",
+      "bindings": [
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryImmunity",
+          "event": "TryImmunity",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "endure",
+      "bindings": [
+        {
+          "hook": "condition.onDamage",
+          "event": "Damage",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onPrepareHit",
+          "event": "PrepareHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "facade",
+      "bindings": [
+        {
+          "hook": "onBasePower",
+          "event": "BasePower",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "fakeout",
+      "bindings": [
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "falseswipe",
+      "bindings": [
+        {
+          "hook": "onDamage",
+          "event": "Damage",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "fly",
+      "bindings": [
+        {
+          "hook": "condition.onInvulnerability",
+          "event": "Invulnerability",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSourceModifyDamage",
+          "event": "ModifyDamage",
+          "scope": "source",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTryMove",
+          "event": "TryMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "focusenergy",
+      "bindings": [
+        {
+          "hook": "condition.onModifyCritRatio",
+          "event": "ModifyCritRatio",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "focuspunch",
+      "bindings": [
+        {
+          "hook": "condition.onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onTryAddVolatile",
+          "event": "TryAddVolatile",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "followme",
+      "bindings": [
+        {
+          "hook": "condition.onFoeRedirectTarget",
+          "event": "RedirectTarget",
+          "scope": "foe",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "foresight",
+      "bindings": [
+        {
+          "hook": "condition.onModifyBoost",
+          "event": "ModifyBoost",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onNegateImmunity",
+          "event": "NegateImmunity",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "furycutter",
+      "bindings": [
+        {
+          "hook": "condition.onRestart",
+          "event": "Restart",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "futuresight",
+      "bindings": [
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "grudge",
+      "bindings": [
+        {
+          "hook": "condition.onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onFaint",
+          "event": "Faint",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "haze",
+      "bindings": [
+        {
+          "hook": "onHitField",
+          "event": "HitField",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "healbell",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "helpinghand",
+      "bindings": [
+        {
+          "hook": "condition.onBasePower",
+          "event": "BasePower",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onRestart",
+          "event": "Restart",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "hiddenpower",
+      "bindings": [
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onModifyType",
+          "event": "ModifyType",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "highjumpkick",
+      "bindings": [
+        {
+          "hook": "onMoveFail",
+          "event": "MoveFail",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "iceball",
+      "bindings": [
+        {
+          "hook": "condition.onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onAfterMove",
+          "event": "AfterMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "imprison",
+      "bindings": [
+        {
+          "hook": "condition.onFoeBeforeMove",
+          "event": "BeforeMove",
+          "scope": "foe",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onFoeDisableMove",
+          "event": "DisableMove",
+          "scope": "foe",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "ingrain",
+      "bindings": [
+        {
+          "hook": "condition.onDragOut",
+          "event": "DragOut",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onTrapPokemon",
+          "event": "TrapPokemon",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "jumpkick",
+      "bindings": [
+        {
+          "hook": "onMoveFail",
+          "event": "MoveFail",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "knockoff",
+      "bindings": [
+        {
+          "hook": "onAfterHit",
+          "event": "AfterHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "leechseed",
+      "bindings": [
+        {
+          "hook": "condition.onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTryImmunity",
+          "event": "TryImmunity",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "lightscreen",
+      "bindings": [
+        {
+          "hook": "condition.onAnyModifyDamagePhase1",
+          "event": "ModifyDamagePhase1",
+          "scope": "any",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSideEnd",
+          "event": "End",
+          "scope": "side",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSideStart",
+          "event": "Start",
+          "scope": "side",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "lockon",
+      "bindings": [
+        {
+          "hook": "condition.onSourceAccuracy",
+          "event": "Accuracy",
+          "scope": "source",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSourceInvulnerability",
+          "event": "Invulnerability",
+          "scope": "source",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "magiccoat",
+      "bindings": [
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "magnitude",
+      "bindings": [
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onUseMoveMessage",
+          "event": "UseMoveMessage",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "meanlook",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "metronome",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mimic",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mindreader",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "minimize",
+      "bindings": [
+        {
+          "hook": "condition.onRestart",
+          "event": "Restart",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSourceModifyDamage",
+          "event": "ModifyDamage",
+          "scope": "source",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mirrorcoat",
+      "bindings": [
+        {
+          "hook": "condition.onDamage",
+          "event": "Damage",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onRedirectTarget",
+          "event": "RedirectTarget",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mirrormove",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mist",
+      "bindings": [
+        {
+          "hook": "condition.onSideEnd",
+          "event": "End",
+          "scope": "side",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSideStart",
+          "event": "Start",
+          "scope": "side",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onTryBoost",
+          "event": "TryBoost",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "moonlight",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "morningsun",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mudsport",
+      "bindings": [
+        {
+          "hook": "condition.onAnyBasePower",
+          "event": "BasePower",
+          "scope": "any",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "naturepower",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "nightmare",
+      "bindings": [
+        {
+          "hook": "condition.onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "odorsleuth",
+      "bindings": [
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "painsplit",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "payday",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "perishsong",
+      "bindings": [
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onHitField",
+          "event": "HitField",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "present",
+      "bindings": [
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "protect",
+      "bindings": [
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onPrepareHit",
+          "event": "PrepareHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "psychup",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "pursuit",
+      "bindings": [
+        {
+          "hook": "condition.onBeforeSwitchOut",
+          "event": "BeforeSwitchOut",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "rage",
+      "bindings": [
+        {
+          "hook": "condition.onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "rapidspin",
+      "bindings": [
+        {
+          "hook": "onAfterHit",
+          "event": "AfterHit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onAfterSubDamage",
+          "event": "AfterSubDamage",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "self.onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": "self"
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "razorwind",
+      "bindings": [
+        {
+          "hook": "onTryMove",
+          "event": "TryMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "recycle",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "reflect",
+      "bindings": [
+        {
+          "hook": "condition.onAnyModifyDamagePhase1",
+          "event": "ModifyDamagePhase1",
+          "scope": "any",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSideEnd",
+          "event": "End",
+          "scope": "side",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSideStart",
+          "event": "Start",
+          "scope": "side",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "refresh",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "rest",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "roleplay",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "rollout",
+      "bindings": [
+        {
+          "hook": "condition.onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onAfterMove",
+          "event": "AfterMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "safeguard",
+      "bindings": [
+        {
+          "hook": "condition.onSetStatus",
+          "event": "SetStatus",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSideEnd",
+          "event": "End",
+          "scope": "side",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSideStart",
+          "event": "Start",
+          "scope": "side",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onTryAddVolatile",
+          "event": "TryAddVolatile",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "secretpower",
+      "bindings": [
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "sketch",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "skillswap",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "skullbash",
+      "bindings": [
+        {
+          "hook": "onTryMove",
+          "event": "TryMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "skyattack",
+      "bindings": [
+        {
+          "hook": "onTryMove",
+          "event": "TryMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "sleeptalk",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "smellingsalts",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "snatch",
+      "bindings": [
+        {
+          "hook": "condition.onAnyPrepareHit",
+          "event": "PrepareHit",
+          "scope": "any",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "snore",
+      "bindings": [
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "solarbeam",
+      "bindings": [
+        {
+          "hook": "onBasePower",
+          "event": "BasePower",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryMove",
+          "event": "TryMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "spiderweb",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "spikes",
+      "bindings": [
+        {
+          "hook": "condition.onEntryHazard",
+          "event": "EntryHazard",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSideRestart",
+          "event": "Restart",
+          "scope": "side",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSideStart",
+          "event": "Start",
+          "scope": "side",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "spite",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "spitup",
+      "bindings": [
+        {
+          "hook": "onAfterMove",
+          "event": "AfterMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "splash",
+      "bindings": [
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "stockpile",
+      "bindings": [
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onRestart",
+          "event": "Restart",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "struggle",
+      "bindings": [
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "substitute",
+      "bindings": [
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onTryPrimaryHit",
+          "event": "TryPrimaryHit",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 5,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "swallow",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTry",
+          "event": "Try",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "synthesis",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "taunt",
+      "bindings": [
+        {
+          "hook": "condition.onBeforeMove",
+          "event": "BeforeMove",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onDisableMove",
+          "event": "DisableMove",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 4,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "thief",
+      "bindings": [
+        {
+          "hook": "onAfterHit",
+          "event": "AfterHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "thunder",
+      "bindings": [
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "torment",
+      "bindings": [
+        {
+          "hook": "condition.onDisableMove",
+          "event": "DisableMove",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "toxic",
+      "bindings": [
+        {
+          "hook": "condition.onSourceAccuracy",
+          "event": "Accuracy",
+          "scope": "source",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onSourceInvulnerability",
+          "event": "Invulnerability",
+          "scope": "source",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "transform",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "triattack",
+      "bindings": [
+        {
+          "hook": "secondary.onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": "secondary"
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "trick",
+      "bindings": [
+        {
+          "hook": "onHit",
+          "event": "Hit",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onTryImmunity",
+          "event": "TryImmunity",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "uproar",
+      "bindings": [
+        {
+          "hook": "condition.onAnySetStatus",
+          "event": "SetStatus",
+          "scope": "any",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onResidual",
+          "event": "Residual",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 5,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "watersport",
+      "bindings": [
+        {
+          "hook": "condition.onAnyBasePower",
+          "event": "BasePower",
+          "scope": "any",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "weatherball",
+      "bindings": [
+        {
+          "hook": "onModifyMove",
+          "event": "ModifyMove",
+          "scope": "target",
+          "embedded_path": ""
+        },
+        {
+          "hook": "onModifyType",
+          "event": "ModifyType",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 2,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "wish",
+      "bindings": [
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        }
+      ],
+      "binding_count": 1,
+      "max_same_event_scope_span": 1
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "yawn",
+      "bindings": [
+        {
+          "hook": "condition.onEnd",
+          "event": "End",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "condition.onStart",
+          "event": "Start",
+          "scope": "target",
+          "embedded_path": "condition"
+        },
+        {
+          "hook": "onTryHit",
+          "event": "TryHit",
+          "scope": "target",
+          "embedded_path": ""
+        }
+      ],
+      "binding_count": 3,
+      "max_same_event_scope_span": 1
+    }
+  ],
+  "duplicate_event_scope_groups": [
+    {
+      "owner_kind": "ability",
+      "owner_id": "flashfire",
+      "scope": "target",
+      "event": "End",
+      "binding_count": 2,
+      "hooks": [
+        "condition.onEnd",
+        "onEnd"
+      ]
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "batonpass",
+      "scope": "target",
+      "event": "Hit",
+      "binding_count": 2,
+      "hooks": [
+        "onHit",
+        "self.onHit"
+      ]
+    }
+  ],
+  "embedded_bindings": [
+    {
+      "owner_kind": "ability",
+      "owner_id": "flashfire",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "flashfire",
+      "hook": "condition.onModifyDamagePhase1",
+      "event": "ModifyDamagePhase1",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "ability",
+      "owner_id": "flashfire",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "attract",
+      "hook": "condition.onBeforeMove",
+      "event": "BeforeMove",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "attract",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "attract",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "attract",
+      "hook": "condition.onUpdate",
+      "event": "Update",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "batonpass",
+      "hook": "self.onHit",
+      "event": "Hit",
+      "scope": "target",
+      "embedded_path": "self"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "beatup",
+      "hook": "condition.onFoeModifySpD",
+      "event": "ModifySpD",
+      "scope": "foe",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "beatup",
+      "hook": "condition.onModifySpA",
+      "event": "ModifySpA",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "bide",
+      "hook": "condition.onBeforeMove",
+      "event": "BeforeMove",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "bide",
+      "hook": "condition.onDamage",
+      "event": "Damage",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "bide",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "bide",
+      "hook": "condition.onMoveAborted",
+      "event": "MoveAborted",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "bide",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "bounce",
+      "hook": "condition.onInvulnerability",
+      "event": "Invulnerability",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "bounce",
+      "hook": "condition.onSourceBasePower",
+      "event": "BasePower",
+      "scope": "source",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "charge",
+      "hook": "condition.onAfterMove",
+      "event": "AfterMove",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "charge",
+      "hook": "condition.onBasePower",
+      "event": "BasePower",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "charge",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "charge",
+      "hook": "condition.onMoveAborted",
+      "event": "MoveAborted",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "charge",
+      "hook": "condition.onRestart",
+      "event": "Restart",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "charge",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "counter",
+      "hook": "condition.onDamage",
+      "event": "Damage",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "counter",
+      "hook": "condition.onRedirectTarget",
+      "event": "RedirectTarget",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "counter",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "curse",
+      "hook": "condition.onResidual",
+      "event": "Residual",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "curse",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "defensecurl",
+      "hook": "condition.onRestart",
+      "event": "Restart",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "destinybond",
+      "hook": "condition.onBeforeMove",
+      "event": "BeforeMove",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "destinybond",
+      "hook": "condition.onFaint",
+      "event": "Faint",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "destinybond",
+      "hook": "condition.onMoveAborted",
+      "event": "MoveAborted",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "destinybond",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "dig",
+      "hook": "condition.onImmunity",
+      "event": "Immunity",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "dig",
+      "hook": "condition.onInvulnerability",
+      "event": "Invulnerability",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "dig",
+      "hook": "condition.onSourceModifyDamage",
+      "event": "ModifyDamage",
+      "scope": "source",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "disable",
+      "hook": "condition.onBeforeMove",
+      "event": "BeforeMove",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "disable",
+      "hook": "condition.onDisableMove",
+      "event": "DisableMove",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "disable",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "disable",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "dive",
+      "hook": "condition.onImmunity",
+      "event": "Immunity",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "dive",
+      "hook": "condition.onInvulnerability",
+      "event": "Invulnerability",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "dive",
+      "hook": "condition.onSourceModifyDamage",
+      "event": "ModifyDamage",
+      "scope": "source",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "encore",
+      "hook": "condition.onDisableMove",
+      "event": "DisableMove",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "encore",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "encore",
+      "hook": "condition.onOverrideAction",
+      "event": "OverrideAction",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "encore",
+      "hook": "condition.onResidual",
+      "event": "Residual",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "encore",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "endure",
+      "hook": "condition.onDamage",
+      "event": "Damage",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "endure",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "fly",
+      "hook": "condition.onInvulnerability",
+      "event": "Invulnerability",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "fly",
+      "hook": "condition.onSourceModifyDamage",
+      "event": "ModifyDamage",
+      "scope": "source",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "focusenergy",
+      "hook": "condition.onModifyCritRatio",
+      "event": "ModifyCritRatio",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "focusenergy",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "focuspunch",
+      "hook": "condition.onHit",
+      "event": "Hit",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "focuspunch",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "focuspunch",
+      "hook": "condition.onTryAddVolatile",
+      "event": "TryAddVolatile",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "followme",
+      "hook": "condition.onFoeRedirectTarget",
+      "event": "RedirectTarget",
+      "scope": "foe",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "followme",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "foresight",
+      "hook": "condition.onModifyBoost",
+      "event": "ModifyBoost",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "foresight",
+      "hook": "condition.onNegateImmunity",
+      "event": "NegateImmunity",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "foresight",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "furycutter",
+      "hook": "condition.onRestart",
+      "event": "Restart",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "furycutter",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "grudge",
+      "hook": "condition.onBeforeMove",
+      "event": "BeforeMove",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "grudge",
+      "hook": "condition.onFaint",
+      "event": "Faint",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "grudge",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "helpinghand",
+      "hook": "condition.onBasePower",
+      "event": "BasePower",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "helpinghand",
+      "hook": "condition.onRestart",
+      "event": "Restart",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "helpinghand",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "iceball",
+      "hook": "condition.onResidual",
+      "event": "Residual",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "iceball",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "imprison",
+      "hook": "condition.onFoeBeforeMove",
+      "event": "BeforeMove",
+      "scope": "foe",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "imprison",
+      "hook": "condition.onFoeDisableMove",
+      "event": "DisableMove",
+      "scope": "foe",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "imprison",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "ingrain",
+      "hook": "condition.onDragOut",
+      "event": "DragOut",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "ingrain",
+      "hook": "condition.onResidual",
+      "event": "Residual",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "ingrain",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "ingrain",
+      "hook": "condition.onTrapPokemon",
+      "event": "TrapPokemon",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "leechseed",
+      "hook": "condition.onResidual",
+      "event": "Residual",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "leechseed",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "lightscreen",
+      "hook": "condition.onAnyModifyDamagePhase1",
+      "event": "ModifyDamagePhase1",
+      "scope": "any",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "lightscreen",
+      "hook": "condition.onSideEnd",
+      "event": "End",
+      "scope": "side",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "lightscreen",
+      "hook": "condition.onSideStart",
+      "event": "Start",
+      "scope": "side",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "lockon",
+      "hook": "condition.onSourceAccuracy",
+      "event": "Accuracy",
+      "scope": "source",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "lockon",
+      "hook": "condition.onSourceInvulnerability",
+      "event": "Invulnerability",
+      "scope": "source",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "magiccoat",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "magiccoat",
+      "hook": "condition.onTryHit",
+      "event": "TryHit",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "minimize",
+      "hook": "condition.onRestart",
+      "event": "Restart",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "minimize",
+      "hook": "condition.onSourceModifyDamage",
+      "event": "ModifyDamage",
+      "scope": "source",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mirrorcoat",
+      "hook": "condition.onDamage",
+      "event": "Damage",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mirrorcoat",
+      "hook": "condition.onRedirectTarget",
+      "event": "RedirectTarget",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mirrorcoat",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mist",
+      "hook": "condition.onSideEnd",
+      "event": "End",
+      "scope": "side",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mist",
+      "hook": "condition.onSideStart",
+      "event": "Start",
+      "scope": "side",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mist",
+      "hook": "condition.onTryBoost",
+      "event": "TryBoost",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mudsport",
+      "hook": "condition.onAnyBasePower",
+      "event": "BasePower",
+      "scope": "any",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "mudsport",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "nightmare",
+      "hook": "condition.onResidual",
+      "event": "Residual",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "nightmare",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "perishsong",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "perishsong",
+      "hook": "condition.onResidual",
+      "event": "Residual",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "protect",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "protect",
+      "hook": "condition.onTryHit",
+      "event": "TryHit",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "pursuit",
+      "hook": "condition.onBeforeSwitchOut",
+      "event": "BeforeSwitchOut",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "rage",
+      "hook": "condition.onBeforeMove",
+      "event": "BeforeMove",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "rage",
+      "hook": "condition.onHit",
+      "event": "Hit",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "rage",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "rapidspin",
+      "hook": "self.onHit",
+      "event": "Hit",
+      "scope": "target",
+      "embedded_path": "self"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "reflect",
+      "hook": "condition.onAnyModifyDamagePhase1",
+      "event": "ModifyDamagePhase1",
+      "scope": "any",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "reflect",
+      "hook": "condition.onSideEnd",
+      "event": "End",
+      "scope": "side",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "reflect",
+      "hook": "condition.onSideStart",
+      "event": "Start",
+      "scope": "side",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "rollout",
+      "hook": "condition.onResidual",
+      "event": "Residual",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "rollout",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "safeguard",
+      "hook": "condition.onSetStatus",
+      "event": "SetStatus",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "safeguard",
+      "hook": "condition.onSideEnd",
+      "event": "End",
+      "scope": "side",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "safeguard",
+      "hook": "condition.onSideStart",
+      "event": "Start",
+      "scope": "side",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "safeguard",
+      "hook": "condition.onTryAddVolatile",
+      "event": "TryAddVolatile",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "snatch",
+      "hook": "condition.onAnyPrepareHit",
+      "event": "PrepareHit",
+      "scope": "any",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "snatch",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "spikes",
+      "hook": "condition.onEntryHazard",
+      "event": "EntryHazard",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "spikes",
+      "hook": "condition.onSideRestart",
+      "event": "Restart",
+      "scope": "side",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "spikes",
+      "hook": "condition.onSideStart",
+      "event": "Start",
+      "scope": "side",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "stockpile",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "stockpile",
+      "hook": "condition.onRestart",
+      "event": "Restart",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "stockpile",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "substitute",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "substitute",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "substitute",
+      "hook": "condition.onTryPrimaryHit",
+      "event": "TryPrimaryHit",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "taunt",
+      "hook": "condition.onBeforeMove",
+      "event": "BeforeMove",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "taunt",
+      "hook": "condition.onDisableMove",
+      "event": "DisableMove",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "taunt",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "taunt",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "torment",
+      "hook": "condition.onDisableMove",
+      "event": "DisableMove",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "torment",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "torment",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "toxic",
+      "hook": "condition.onSourceAccuracy",
+      "event": "Accuracy",
+      "scope": "source",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "toxic",
+      "hook": "condition.onSourceInvulnerability",
+      "event": "Invulnerability",
+      "scope": "source",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "triattack",
+      "hook": "secondary.onHit",
+      "event": "Hit",
+      "scope": "target",
+      "embedded_path": "secondary"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "uproar",
+      "hook": "condition.onAnySetStatus",
+      "event": "SetStatus",
+      "scope": "any",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "uproar",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "uproar",
+      "hook": "condition.onResidual",
+      "event": "Residual",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "uproar",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "watersport",
+      "hook": "condition.onAnyBasePower",
+      "event": "BasePower",
+      "scope": "any",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "watersport",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "wish",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "yawn",
+      "hook": "condition.onEnd",
+      "event": "End",
+      "scope": "target",
+      "embedded_path": "condition"
+    },
+    {
+      "owner_kind": "move",
+      "owner_id": "yawn",
+      "hook": "condition.onStart",
+      "event": "Start",
+      "scope": "target",
+      "embedded_path": "condition"
+    }
+  ]
+}

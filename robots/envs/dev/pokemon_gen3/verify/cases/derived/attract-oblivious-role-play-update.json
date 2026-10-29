@@ -1,0 +1,121 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "attract-oblivious-role-play-update",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/abilities.ts; data/mods/gen5/abilities.ts; sim/pokemon.ts",
+    "test_name": "Role Play gains Oblivious and immediate Gen 3 Update removes Attract",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    641,
+    29,
+    43,
+    89
+  ],
+  "teams": [
+    {
+      "source": "attract-oblivious-role-play-update-p1.txt",
+      "normalized": [
+        {
+          "species": "alakazam",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "synchronize",
+          "item": "",
+          "moves": [
+            "recover",
+            "roleplay"
+          ],
+          "stats": [
+            251,
+            136,
+            126,
+            306,
+            206,
+            276
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "attract-oblivious-role-play-update-p2.txt",
+      "normalized": [
+        {
+          "species": "slowpoke",
+          "level": 100,
+          "gender": "F",
+          "nature": "hardy",
+          "ability": "oblivious",
+          "item": "",
+          "moves": [
+            "attract",
+            "rest"
+          ],
+          "stats": [
+            321,
+            166,
+            166,
+            116,
+            116,
+            66
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "condition.attract.action",
+      "occurrence": 1,
+      "range": 2,
+      "result": 1
+    }
+  ],
+  "features": [
+    "choice.move",
+    "condition.attract",
+    "ability.oblivious",
+    "handler.immunity",
+    "state.canonical",
+    "move.role-play",
+    "handler.status-update"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

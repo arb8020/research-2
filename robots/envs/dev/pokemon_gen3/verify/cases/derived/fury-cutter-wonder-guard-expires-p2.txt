@@ -1,0 +1,13 @@
+Blissey (F)
+Ability: Natural Cure
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Soft-Boiled
+
+Shedinja
+Ability: Wonder Guard
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Protect

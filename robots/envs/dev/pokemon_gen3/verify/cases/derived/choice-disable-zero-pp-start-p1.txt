@@ -1,0 +1,7 @@
+Smeargle (M)
+Ability: Own Tempo
+Level: 100
+EVs: 4 HP / 252 Spe
+Jolly Nature
+- Splash
+- Disable

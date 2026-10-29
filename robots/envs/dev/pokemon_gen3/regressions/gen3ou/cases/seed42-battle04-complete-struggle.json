@@ -1,0 +1,1068 @@
+{
+  "schema_version": 1,
+  "name": "seed42-battle04-complete-struggle",
+  "description": "Complete 259-boundary battle including Explosion, forced replacement, hazards, phazing, status, PP exhaustion, Struggle, recoil, and terminal winner.",
+  "tags": [
+    "complete-battle",
+    "forced-replacement",
+    "struggle",
+    "terminal",
+    "scheduler"
+  ],
+  "format": "gen3ou",
+  "battle_index": 4,
+  "action_seed": 42,
+  "battle_seed": [
+    46,
+    42,
+    4,
+    0
+  ],
+  "team_files": [
+    "../../../fixtures/gen3ou/balanced.txt",
+    "../../../fixtures/gen3ou/balanced-alt.txt"
+  ],
+  "choices": [
+    [
+      "switch 4",
+      "move 4"
+    ],
+    [
+      null,
+      "switch 4"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ],
+    [
+      "move 3",
+      "move 4"
+    ],
+    [
+      "move 3",
+      "switch 5"
+    ],
+    [
+      "switch 6",
+      "move 2"
+    ],
+    [
+      "switch 3",
+      "switch 5"
+    ],
+    [
+      "switch 5",
+      "switch 6"
+    ],
+    [
+      "switch 3",
+      "switch 3"
+    ],
+    [
+      "switch 2",
+      "move 4"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "switch 3",
+      "switch 2"
+    ],
+    [
+      "move 3",
+      "move 4"
+    ],
+    [
+      "switch 4",
+      "move 3"
+    ],
+    [
+      "move 3",
+      "move 4"
+    ],
+    [
+      "switch 6",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 4"
+    ],
+    [
+      "switch 5",
+      "move 4"
+    ],
+    [
+      "move 4",
+      "move 2"
+    ],
+    [
+      "switch 5",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "switch 3",
+      "switch 5"
+    ],
+    [
+      "switch 5",
+      "move 2"
+    ],
+    [
+      "switch 6",
+      "switch 3"
+    ],
+    [
+      "switch 6",
+      "move 4"
+    ],
+    [
+      "switch 4",
+      "move 4"
+    ],
+    [
+      "switch 6",
+      "move 4"
+    ],
+    [
+      "move 4",
+      "move 4"
+    ],
+    [
+      "switch 6",
+      "switch 6"
+    ],
+    [
+      "switch 4",
+      "switch 6"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 4",
+      "switch 3"
+    ],
+    [
+      "switch 6",
+      "switch 6"
+    ],
+    [
+      "move 4",
+      "switch 5"
+    ],
+    [
+      "switch 5",
+      "move 1"
+    ],
+    [
+      "switch 4",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "switch 3"
+    ],
+    [
+      "switch 2",
+      "switch 3"
+    ],
+    [
+      "move 1",
+      "move 4"
+    ],
+    [
+      "switch 3",
+      "switch 2"
+    ],
+    [
+      "switch 2",
+      "move 3"
+    ],
+    [
+      "move 4",
+      "switch 5"
+    ],
+    [
+      "switch 6",
+      "switch 5"
+    ],
+    [
+      "move 1",
+      "switch 3"
+    ],
+    [
+      "move 1",
+      "move 4"
+    ],
+    [
+      "switch 3",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "switch 4",
+      "switch 6"
+    ],
+    [
+      "move 4",
+      "move 4"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 3",
+      "switch 6"
+    ],
+    [
+      "switch 5",
+      "switch 2"
+    ],
+    [
+      "move 3",
+      "switch 2"
+    ],
+    [
+      null,
+      "switch 3"
+    ],
+    [
+      "switch 3",
+      "switch 2"
+    ],
+    [
+      "switch 5",
+      "move 2"
+    ],
+    [
+      "switch 3",
+      "move 2"
+    ],
+    [
+      "switch 2",
+      "move 4"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "switch 2"
+    ],
+    [
+      "switch 5",
+      "move 2"
+    ],
+    [
+      "switch 2",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 3",
+      "switch 6"
+    ],
+    [
+      "switch 5",
+      "move 4"
+    ],
+    [
+      "switch 4",
+      "switch 2"
+    ],
+    [
+      "switch 3",
+      "move 3"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ],
+    [
+      "switch 2",
+      "switch 6"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "switch 3",
+      "switch 6"
+    ],
+    [
+      null,
+      "switch 2"
+    ],
+    [
+      "switch 5",
+      "move 2"
+    ],
+    [
+      "move 3",
+      "move 4"
+    ],
+    [
+      "switch 4",
+      "move 3"
+    ],
+    [
+      "move 3",
+      "switch 6"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ],
+    [
+      "switch 5",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 3"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "switch 6"
+    ],
+    [
+      "switch 3",
+      "switch 6"
+    ],
+    [
+      "switch 2",
+      "move 4"
+    ],
+    [
+      "switch 3",
+      "move 1"
+    ],
+    [
+      "switch 3",
+      "move 3"
+    ],
+    [
+      "switch 3",
+      "move 4"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 2"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      null,
+      "switch 6"
+    ],
+    [
+      "switch 3",
+      "move 2"
+    ],
+    [
+      "switch 3",
+      "move 4"
+    ],
+    [
+      "move 3",
+      "move 4"
+    ],
+    [
+      "switch 4",
+      "move 1"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ],
+    [
+      "switch 5",
+      "move 1"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 4"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ],
+    [
+      "switch 3",
+      "move 4"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "switch 5",
+      "move 4"
+    ],
+    [
+      "switch 3",
+      "move 2"
+    ],
+    [
+      "switch 5",
+      null
+    ],
+    [
+      "switch 4",
+      null
+    ],
+    [
+      "switch 3",
+      null
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ],
+    [
+      "move 4",
+      "move 4"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 4"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 4"
+    ],
+    [
+      "switch 2",
+      "move 1"
+    ],
+    [
+      "move 4",
+      "move 2"
+    ],
+    [
+      "switch 2",
+      "move 3"
+    ],
+    [
+      "switch 2",
+      "move 4"
+    ],
+    [
+      "move 3",
+      "move 4"
+    ],
+    [
+      "move 4",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 4"
+    ],
+    [
+      "move 2",
+      "move 4"
+    ],
+    [
+      "move 1",
+      "move 4"
+    ],
+    [
+      "move 4",
+      "move 2"
+    ],
+    [
+      "switch 2",
+      null
+    ],
+    [
+      "move 2",
+      "move 3"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 3"
+    ],
+    [
+      "move 4",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ],
+    [
+      "move 4",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 3",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 2"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 3"
+    ],
+    [
+      "move 2",
+      "move 3"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 4",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "move 4",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 4",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 2"
+    ],
+    [
+      "move 2",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 3",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "expected": {
+    "terminal": true,
+    "winner": "p2"
+  }
+}
+

@@ -1,0 +1,13 @@
+Blissey (F)
+Ability: Natural Cure
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Seismic Toss
+
+Magikarp (M)
+Ability: Swift Swim
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Splash

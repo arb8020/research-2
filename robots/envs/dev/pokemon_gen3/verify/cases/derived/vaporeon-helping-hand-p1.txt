@@ -1,0 +1,6 @@
+Vaporeon (M)
+Ability: Water Absorb
+Level: 100
+EVs: 1 HP
+Hardy Nature
+- Helping Hand

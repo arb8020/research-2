@@ -1,0 +1,28 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "perish-song-switch-cleanup-forced-replacement",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/mods/gen4/moves.ts; sim/pokemon.ts; sim/battle.ts",
+    "test_name": "Gen 3 field move through Protect, switch cleanup, peer expiry, and forced replacement",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [1, 2, 3, 4],
+  "teams": [
+    {"source": "perish-song-switch-cleanup-forced-replacement-p1.txt", "normalized": [
+      {"species":"misdreavus","level":100,"gender":"F","nature":"timid","ability":"levitate","item":"","moves":["perishsong"],"stats":[262,140,156,269,206,295],"status":null},
+      {"species":"magikarp","level":100,"gender":"M","nature":"hardy","ability":"swiftswim","item":"","moves":["splash"],"stats":[182,56,146,66,76,196],"status":null}
+    ]},
+    {"source": "perish-song-switch-cleanup-forced-replacement-p2.txt", "normalized": [
+      {"species":"lapras","level":100,"gender":"F","nature":"calm","ability":"waterabsorb","item":"","moves":["protect","rest"],"stats":[464,185,196,207,317,156],"status":null},
+      {"species":"magikarp","level":100,"gender":"F","nature":"hardy","ability":"swiftswim","item":"","moves":["splash"],"stats":[182,56,146,66,76,196],"status":null}
+    ]}
+  ],
+  "source_choices": [["move 1","move 1"],["switch 2","move 2"],["move 1","move 2"],["move 1","move 2"],[null,"switch 2"]],
+  "choices": [["move 1","move 1"],["switch 2","move 2"],["move 1","move 2"],["move 1","move 2"],[null,"switch 2"]],
+  "forced_outcomes": [],
+  "features": ["choice.move","choice.switch","condition.volatile","handler.residual","lifecycle.condition-duration","lifecycle.faint","lifecycle.forced-replacement","lifecycle.switch-persistence","move.perish-song","state.canonical","volatile.perish-song"],
+  "boundaries": ["choice","events","handlers","prng","queue","request","state"],
+  "limits": {"max_boundaries":6,"max_actions":9}
+}

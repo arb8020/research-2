@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"recharge-hydro-cannon",
+  "provenance":{"kind":"showdown-derived","source_file":"data/moves.ts; data/conditions.ts; sim/pokemon.ts; sim/battle-actions.ts","test_name":"Hydro Cannon enters the shared connected-hit recharge lifecycle","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"recharge-hydro-cannon-p1.txt","normalized":[{"species":"blastoise","level":100,"gender":"M","ability":"torrent","item":"","moves":["hydrocannon"],"stats":[299,202,236,206,246,192],"status":null}]},{"source":"recharge-blissey-rest-p2.txt","normalized":[{"species":"blissey","level":100,"gender":"F","ability":"naturalcure","item":"","moves":["rest"],"stats":[651,56,56,186,306,146],"status":null}]}],
+  "source_choices":[["move 1","move 1"],["move 1","move 1"]],"choices":[["move 1","move 1"],["move 1","move 1"]],"forced_outcomes":[],
+  "features":["choice.move","request.legal-choices","condition.volatile","lifecycle.condition-duration","state.canonical","prng.labeled"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],"limits":{"max_boundaries":3,"max_actions":4}
+}

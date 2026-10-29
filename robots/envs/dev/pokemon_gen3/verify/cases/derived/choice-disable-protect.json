@@ -1,0 +1,12 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"choice-disable-protect",
+  "provenance":{"kind":"showdown-derived","source_file":"data/moves.ts","test_name":"Protect prevents Disable before move-owned admission and duration","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[2,37,53,97],
+  "teams":[
+    {"source":"choice-disable-fast-p1.txt","normalized":[{"species":"alakazam","level":100,"gender":"M","ability":"synchronize","item":"","moves":["splash","disable"],"stats":[252,136,126,306,206,276],"status":null}]},
+    {"source":"choice-disable-protect-p2.txt","normalized":[{"species":"persian","level":100,"gender":"M","ability":"limber","item":"","moves":["protect","pound"],"stats":[272,176,156,166,166,266],"status":null}]}
+  ],
+  "source_choices":[["move 2","move 1"]],"choices":[["move 2","move 1"]],
+  "forced_outcomes":[],"features":["choice.move","condition.volatile","handler.try-hit","lifecycle.condition-duration","prng.labeled","state.canonical"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":2,"max_actions":2}
+}

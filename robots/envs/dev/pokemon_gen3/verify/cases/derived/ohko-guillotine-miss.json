@@ -1,0 +1,15 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "ohko-guillotine-miss",
+  "provenance": {"kind": "showdown-derived", "source_file": "data/mods/gen3/scripts.ts", "test_name": "Gen 3 Guillotine ordinary accuracy miss", "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format": "gen3ou", "seed": [1, 2, 3, 1],
+  "teams": [
+    {"source": "smeargle-ohko-p1.txt", "normalized": [{"species": "smeargle", "level": 100, "gender": "M", "ability": "owntempo", "item": "", "moves": ["fissure", "guillotine", "sheercold"], "stats": [251, 76, 106, 76, 126, 186], "status": null}]},
+    {"source": "persian-splash-p2.txt", "normalized": [{"species": "persian", "level": 100, "gender": "M", "ability": "limber", "item": "", "moves": ["splash"], "stats": [271, 176, 156, 166, 166, 266], "status": null}]}
+  ],
+  "source_choices": [["move 2", "move 1"]], "choices": [["move 2", "move 1"]],
+  "forced_outcomes": [{"label": "move.accuracy", "occurrence": 1, "range": 100, "result": 54}],
+  "features": ["choice.move", "hit.accuracy", "prng.labeled", "state.canonical"],
+  "boundaries": ["choice", "events", "handlers", "immunity", "prng", "queue", "request", "state"],
+  "limits": {"max_boundaries": 2, "max_actions": 2}
+}

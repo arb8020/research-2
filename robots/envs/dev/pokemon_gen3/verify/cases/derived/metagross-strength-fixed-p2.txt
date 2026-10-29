@@ -1,0 +1,6 @@
+Metagross (M)
+Ability: Clear Body
+Level: 90
+EVs: 1 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+Hardy Nature
+- Strength

@@ -1,0 +1,153 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "toxic-switch-in-hazard-order",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/conditions.ts; data/mods/gen4/scripts.ts",
+    "test_name": "Toxic SwitchIn reset runs after EntryHazard and before residual",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    5
+  ],
+  "teams": [
+    {
+      "source": "toxic-switch-in-hazard-order-p1.txt",
+      "normalized": [
+        {
+          "species": "skarmory",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "keeneye",
+          "item": "",
+          "moves": [
+            "toxic",
+            "spikes",
+            "protect"
+          ],
+          "stats": [
+            271,
+            196,
+            316,
+            116,
+            176,
+            176
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "toxic-switch-in-hazard-order-p2.txt",
+      "normalized": [
+        {
+          "species": "vaporeon",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "waterabsorb",
+          "item": "",
+          "moves": [
+            "tackle"
+          ],
+          "stats": [
+            401,
+            166,
+            156,
+            256,
+            226,
+            166
+          ],
+          "status": null
+        },
+        {
+          "species": "persian",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "scratch"
+          ],
+          "stats": [
+            271,
+            176,
+            156,
+            166,
+            166,
+            266
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "switch 2"
+    ],
+    [
+      "move 3",
+      "switch 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 2",
+      "switch 2"
+    ],
+    [
+      "move 3",
+      "switch 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "move.accuracy",
+      "occurrence": 1,
+      "range": 100,
+      "result": 32
+    }
+  ],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "condition.nonvolatile-status",
+    "condition.side",
+    "damage.residual",
+    "handler.entry-hazard",
+    "handler.status-update",
+    "lifecycle.switch-persistence",
+    "prng.labeled",
+    "state.canonical",
+    "status.toxic"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}

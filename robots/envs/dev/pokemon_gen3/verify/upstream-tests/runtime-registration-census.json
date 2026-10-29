@@ -1,0 +1,910 @@
+{
+  "schema": "pokemon-showdown-runtime-registration-census-v1",
+  "pinned_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0",
+  "runner": {
+    "binary": "node_modules/.bin/mocha",
+    "args": [
+      "--no-config",
+      "--dry-run",
+      "--reporter",
+      "json",
+      "test/sim/**/*.js"
+    ]
+  },
+  "summary": {
+    "registered": 2172,
+    "active": 2129,
+    "pending": 43,
+    "static_declarations": 1976,
+    "dynamic_expansions": 196,
+    "gen3ou_applicable_dynamic_variants": 41,
+    "gen3ou_applicable_dynamic_variants_proven": 41
+  },
+  "dynamic_files": [
+    {
+      "file": "test/sim/data.js",
+      "declarations": 13,
+      "runtime": 24,
+      "expansion": 11
+    },
+    {
+      "file": "test/sim/decisions.js",
+      "declarations": 59,
+      "runtime": 77,
+      "expansion": 18
+    },
+    {
+      "file": "test/sim/items/drives.js",
+      "declarations": 4,
+      "runtime": 16,
+      "expansion": 12
+    },
+    {
+      "file": "test/sim/items/plates.js",
+      "declarations": 4,
+      "runtime": 68,
+      "expansion": 64
+    },
+    {
+      "file": "test/sim/misc/ateabilities.js",
+      "declarations": 2,
+      "runtime": 8,
+      "expansion": 6
+    },
+    {
+      "file": "test/sim/misc/trapmoves.js",
+      "declarations": 22,
+      "runtime": 91,
+      "expansion": 69
+    },
+    {
+      "file": "test/sim/misc/typechange.js",
+      "declarations": 5,
+      "runtime": 10,
+      "expansion": 5
+    },
+    {
+      "file": "test/sim/moves/curse.js",
+      "declarations": 12,
+      "runtime": 14,
+      "expansion": 2
+    },
+    {
+      "file": "test/sim/moves/rollout.js",
+      "declarations": 9,
+      "runtime": 18,
+      "expansion": 9
+    }
+  ],
+  "gen3ou_applicable_dynamic_declarations": [
+    {
+      "source": {
+        "file": "test/sim/moves/rollout.js",
+        "line": 18,
+        "full_test_name": "move > should double its Base Power every turn for five turns, then resets to 30 BP"
+      },
+      "execution_status": "active",
+      "loop_parameter": {
+        "name": "move",
+        "literal_values": [
+          "iceball",
+          "rollout"
+        ]
+      },
+      "variants": [
+        {
+          "key": "iceball:18",
+          "entity": "iceball",
+          "assertion": "five-turn-base-power-progression-reset",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_locked_ramp_rollout_ice_ball_and_defense_curl"
+            ],
+            "differential_cases": [
+              "ice-ball-defense-curl-cycle"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "rollout:18",
+          "entity": "rollout",
+          "assertion": "five-turn-base-power-progression-reset",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_locked_ramp_rollout_ice_ball_and_defense_curl"
+            ],
+            "differential_cases": [
+              "rollout-defense-curl-cycle"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        }
+      ]
+    },
+    {
+      "source": {
+        "file": "test/sim/moves/rollout.js",
+        "line": 42,
+        "full_test_name": "move > should reset its Base Power if the move misses"
+      },
+      "execution_status": "active",
+      "loop_parameter": {
+        "name": "move",
+        "literal_values": [
+          "iceball",
+          "rollout"
+        ]
+      },
+      "variants": [
+        {
+          "key": "iceball:42",
+          "entity": "iceball",
+          "assertion": "miss-resets-progression",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_locked_ramp_rollout_ice_ball_and_defense_curl"
+            ],
+            "differential_cases": [
+              "ice-ball-miss-immobilize-reset"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "rollout:42",
+          "entity": "rollout",
+          "assertion": "miss-resets-progression",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_locked_ramp_rollout_ice_ball_and_defense_curl"
+            ],
+            "differential_cases": [
+              "rollout-miss-immobilize-reset"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        }
+      ]
+    },
+    {
+      "source": {
+        "file": "test/sim/moves/rollout.js",
+        "line": 72,
+        "full_test_name": "move > should reset its Base Power if the Pokemon is immobilized"
+      },
+      "execution_status": "active",
+      "loop_parameter": {
+        "name": "move",
+        "literal_values": [
+          "iceball",
+          "rollout"
+        ]
+      },
+      "variants": [
+        {
+          "key": "iceball:72",
+          "entity": "iceball",
+          "assertion": "immobilization-resets-progression",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_locked_ramp_rollout_ice_ball_and_defense_curl"
+            ],
+            "differential_cases": [
+              "ice-ball-miss-immobilize-reset"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "rollout:72",
+          "entity": "rollout",
+          "assertion": "immobilization-resets-progression",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_locked_ramp_rollout_ice_ball_and_defense_curl"
+            ],
+            "differential_cases": [
+              "rollout-miss-immobilize-reset"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        }
+      ]
+    },
+    {
+      "source": {
+        "file": "test/sim/moves/rollout.js",
+        "line": 100,
+        "full_test_name": "move > should have double Base Power if the Pokemon used Defense Curl earlier"
+      },
+      "execution_status": "active",
+      "loop_parameter": {
+        "name": "move",
+        "literal_values": [
+          "iceball",
+          "rollout"
+        ]
+      },
+      "variants": [
+        {
+          "key": "iceball:100",
+          "entity": "iceball",
+          "assertion": "defense-curl-doubles-base-power",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_locked_ramp_rollout_ice_ball_and_defense_curl"
+            ],
+            "differential_cases": [
+              "ice-ball-defense-curl-cycle"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "rollout:100",
+          "entity": "rollout",
+          "assertion": "defense-curl-doubles-base-power",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_locked_ramp_rollout_ice_ball_and_defense_curl"
+            ],
+            "differential_cases": [
+              "rollout-defense-curl-cycle"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        }
+      ]
+    },
+    {
+      "source": {
+        "file": "test/sim/misc/trapmoves.js",
+        "line": 16,
+        "full_test_name": "Trapping Moves > should prevent Pokemon from switching out normally"
+      },
+      "execution_status": "active",
+      "loop_parameter": {
+        "name": "move",
+        "literal_values": [
+          "block",
+          "meanlook",
+          "spiderweb"
+        ]
+      },
+      "variants": [
+        {
+          "key": "block:16",
+          "entity": "block",
+          "assertion": "prevents-normal-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_source_linked_trap_family"
+            ],
+            "differential_cases": [
+              "source-trap-block-release"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "meanlook:16",
+          "entity": "meanlook",
+          "assertion": "prevents-normal-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_source_linked_trap_family"
+            ],
+            "differential_cases": [
+              "source-trap-mean-look-rotation"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "spiderweb:16",
+          "entity": "spiderweb",
+          "assertion": "prevents-normal-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_source_linked_trap_family"
+            ],
+            "differential_cases": [
+              "source-trap-spider-web-rotation"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        }
+      ]
+    },
+    {
+      "source": {
+        "file": "test/sim/misc/trapmoves.js",
+        "line": 28,
+        "full_test_name": "Trapping Moves > should not prevent Pokemon from switching out using moves"
+      },
+      "execution_status": "active",
+      "loop_parameter": {
+        "name": "move",
+        "literal_values": [
+          "block",
+          "meanlook",
+          "spiderweb"
+        ]
+      },
+      "variants": [
+        {
+          "key": "block:28",
+          "entity": "block",
+          "assertion": "permits-baton-pass-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_move_driven_switch_retains_queue_and_transfers_state"
+            ],
+            "differential_cases": [
+              "baton-pass-trap-block"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "meanlook:28",
+          "entity": "meanlook",
+          "assertion": "permits-baton-pass-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_move_driven_switch_retains_queue_and_transfers_state"
+            ],
+            "differential_cases": [
+              "baton-pass-trap-meanlook"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "spiderweb:28",
+          "entity": "spiderweb",
+          "assertion": "permits-baton-pass-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_move_driven_switch_retains_queue_and_transfers_state"
+            ],
+            "differential_cases": [
+              "baton-pass-trap-spiderweb"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        }
+      ]
+    },
+    {
+      "source": {
+        "file": "test/sim/misc/trapmoves.js",
+        "line": 52,
+        "full_test_name": "Trapping Moves > should stop trapping the Pokemon if the user is no longer active"
+      },
+      "execution_status": "active",
+      "loop_parameter": {
+        "name": "move",
+        "literal_values": [
+          "block",
+          "meanlook",
+          "spiderweb"
+        ]
+      },
+      "variants": [
+        {
+          "key": "block:52",
+          "entity": "block",
+          "assertion": "source-no-longer-active-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_source_linked_trap_family"
+            ],
+            "differential_cases": [
+              "source-trap-block-release"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "meanlook:52",
+          "entity": "meanlook",
+          "assertion": "source-no-longer-active-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_source_linked_trap_family"
+            ],
+            "differential_cases": [
+              "source-trap-mean-look-rotation",
+              "source-trap-block-release"
+            ],
+            "descriptor_equivalence": "All three descriptors bind the same generated add-source-linked-trap program; the entity case proves its binding and Block proves source-departure cleanup."
+          },
+          "required_case": null
+        },
+        {
+          "key": "spiderweb:52",
+          "entity": "spiderweb",
+          "assertion": "source-no-longer-active-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_source_linked_trap_family"
+            ],
+            "differential_cases": [
+              "source-trap-spider-web-rotation",
+              "source-trap-block-release"
+            ],
+            "descriptor_equivalence": "All three descriptors bind the same generated add-source-linked-trap program; the entity case proves its binding and Block proves source-departure cleanup."
+          },
+          "required_case": null
+        }
+      ]
+    },
+    {
+      "source": {
+        "file": "test/sim/misc/trapmoves.js",
+        "line": 131,
+        "full_test_name": "Partial Trapping Moves > should prevent Pokemon from switching out normally"
+      },
+      "execution_status": "active",
+      "loop_parameter": {
+        "name": "move",
+        "literal_values": [
+          "bind",
+          "clamp",
+          "firespin",
+          "sandtomb",
+          "whirlpool",
+          "wrap"
+        ]
+      },
+      "variants": [
+        {
+          "key": "bind:131",
+          "entity": "bind",
+          "assertion": "prevents-normal-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-bind-source-switch"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "clamp:131",
+          "entity": "clamp",
+          "assertion": "prevents-normal-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-clamp-rotation"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "firespin:131",
+          "entity": "firespin",
+          "assertion": "prevents-normal-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-fire-spin-rotation"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "sandtomb:131",
+          "entity": "sandtomb",
+          "assertion": "prevents-normal-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-sand-tomb-rotation"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "whirlpool:131",
+          "entity": "whirlpool",
+          "assertion": "prevents-normal-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-whirlpool-rotation"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "wrap:131",
+          "entity": "wrap",
+          "assertion": "prevents-normal-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-wrap-rotation"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        }
+      ]
+    },
+    {
+      "source": {
+        "file": "test/sim/misc/trapmoves.js",
+        "line": 143,
+        "full_test_name": "Partial Trapping Moves > should not prevent Pokemon from switching out using moves"
+      },
+      "execution_status": "active",
+      "loop_parameter": {
+        "name": "move",
+        "literal_values": [
+          "bind",
+          "clamp",
+          "firespin",
+          "sandtomb",
+          "whirlpool",
+          "wrap"
+        ]
+      },
+      "variants": [
+        {
+          "key": "bind:143",
+          "entity": "bind",
+          "assertion": "permits-baton-pass-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_move_driven_switch_retains_queue_and_transfers_state"
+            ],
+            "differential_cases": [
+              "baton-pass-trap-bind"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "clamp:143",
+          "entity": "clamp",
+          "assertion": "permits-baton-pass-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_move_driven_switch_retains_queue_and_transfers_state"
+            ],
+            "differential_cases": [
+              "baton-pass-trap-clamp"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "firespin:143",
+          "entity": "firespin",
+          "assertion": "permits-baton-pass-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_move_driven_switch_retains_queue_and_transfers_state"
+            ],
+            "differential_cases": [
+              "baton-pass-trap-firespin"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "sandtomb:143",
+          "entity": "sandtomb",
+          "assertion": "permits-baton-pass-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_move_driven_switch_retains_queue_and_transfers_state"
+            ],
+            "differential_cases": [
+              "baton-pass-trap-sandtomb"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "whirlpool:143",
+          "entity": "whirlpool",
+          "assertion": "permits-baton-pass-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_move_driven_switch_retains_queue_and_transfers_state"
+            ],
+            "differential_cases": [
+              "baton-pass-trap-whirlpool"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "wrap:143",
+          "entity": "wrap",
+          "assertion": "permits-baton-pass-switch",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_move_driven_switch_retains_queue_and_transfers_state"
+            ],
+            "differential_cases": [
+              "baton-pass-trap-wrap"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        }
+      ]
+    },
+    {
+      "source": {
+        "file": "test/sim/misc/trapmoves.js",
+        "line": 167,
+        "full_test_name": "Partial Trapping Moves > should stop trapping the Pokemon if the user is no longer active"
+      },
+      "execution_status": "active",
+      "loop_parameter": {
+        "name": "move",
+        "literal_values": [
+          "bind",
+          "clamp",
+          "firespin",
+          "sandtomb",
+          "whirlpool",
+          "wrap"
+        ]
+      },
+      "variants": [
+        {
+          "key": "bind:167",
+          "entity": "bind",
+          "assertion": "source-no-longer-active-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-bind-source-switch"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "clamp:167",
+          "entity": "clamp",
+          "assertion": "source-no-longer-active-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-clamp-rotation"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "firespin:167",
+          "entity": "firespin",
+          "assertion": "source-no-longer-active-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-fire-spin-rotation"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "sandtomb:167",
+          "entity": "sandtomb",
+          "assertion": "source-no-longer-active-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-sand-tomb-rotation"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "whirlpool:167",
+          "entity": "whirlpool",
+          "assertion": "source-no-longer-active-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-whirlpool-rotation"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        },
+        {
+          "key": "wrap:167",
+          "entity": "wrap",
+          "assertion": "source-no-longer-active-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-wrap-rotation"
+            ],
+            "descriptor_equivalence": null
+          },
+          "required_case": null
+        }
+      ]
+    },
+    {
+      "source": {
+        "file": "test/sim/misc/trapmoves.js",
+        "line": 182,
+        "full_test_name": "Partial Trapping Moves > should stop trapping the Pokemon if the target uses Rapid Spin"
+      },
+      "execution_status": "active",
+      "loop_parameter": {
+        "name": "move",
+        "literal_values": [
+          "bind",
+          "clamp",
+          "firespin",
+          "sandtomb",
+          "whirlpool",
+          "wrap"
+        ]
+      },
+      "variants": [
+        {
+          "key": "bind:182",
+          "entity": "bind",
+          "assertion": "rapid-spin-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-bind-source-switch",
+              "partial-trap-rapid-spin-cleanup"
+            ],
+            "descriptor_equivalence": "Every descriptor installs the same partiallytrapped condition; Rapid Spin removes that condition independently of the source move identity."
+          },
+          "required_case": null
+        },
+        {
+          "key": "clamp:182",
+          "entity": "clamp",
+          "assertion": "rapid-spin-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-clamp-rotation",
+              "partial-trap-rapid-spin-cleanup"
+            ],
+            "descriptor_equivalence": "Every descriptor installs the same partiallytrapped condition; Rapid Spin removes that condition independently of the source move identity."
+          },
+          "required_case": null
+        },
+        {
+          "key": "firespin:182",
+          "entity": "firespin",
+          "assertion": "rapid-spin-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-fire-spin-rotation",
+              "partial-trap-rapid-spin-cleanup"
+            ],
+            "descriptor_equivalence": "Every descriptor installs the same partiallytrapped condition; Rapid Spin removes that condition independently of the source move identity."
+          },
+          "required_case": null
+        },
+        {
+          "key": "sandtomb:182",
+          "entity": "sandtomb",
+          "assertion": "rapid-spin-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-sand-tomb-rotation",
+              "partial-trap-rapid-spin-cleanup"
+            ],
+            "descriptor_equivalence": "Every descriptor installs the same partiallytrapped condition; Rapid Spin removes that condition independently of the source move identity."
+          },
+          "required_case": null
+        },
+        {
+          "key": "whirlpool:182",
+          "entity": "whirlpool",
+          "assertion": "rapid-spin-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-whirlpool-rotation",
+              "partial-trap-rapid-spin-cleanup"
+            ],
+            "descriptor_equivalence": "Every descriptor installs the same partiallytrapped condition; Rapid Spin removes that condition independently of the source move identity."
+          },
+          "required_case": null
+        },
+        {
+          "key": "wrap:182",
+          "entity": "wrap",
+          "assertion": "rapid-spin-removes-trap",
+          "evidence": {
+            "native_units": [
+              "native/test_pokemon.c#test_partial_trap_condition_programs"
+            ],
+            "differential_cases": [
+              "partial-trap-wrap-rotation",
+              "partial-trap-rapid-spin-cleanup"
+            ],
+            "descriptor_equivalence": "Every descriptor installs the same partiallytrapped condition; Rapid Spin removes that condition independently of the source move identity."
+          },
+          "required_case": null
+        }
+      ]
+    }
+  ]
+}

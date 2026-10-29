@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"brick-break-protect",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen3/moves.ts; sim/battle-actions.ts","test_name":"Protect preserves screens before Brick Break move-owned TryHit","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"smeargle-brick-break-p1.txt","normalized":[{"species":"smeargle","level":100,"gender":"M","nature":"hardy","ability":"owntempo","item":"","moves":["brickbreak","splash"],"stats":[251,76,106,76,126,186],"status":null}]},{"source":"alakazam-reflect-protect-p2.txt","normalized":[{"species":"alakazam","level":100,"gender":"M","nature":"hardy","ability":"synchronize","item":"","moves":["reflect","protect"],"stats":[251,136,126,306,206,276],"status":null}]}],
+  "source_choices":[["move 2","move 1"],["move 1","move 2"]],"choices":[["move 2","move 1"],["move 1","move 2"]],"forced_outcomes":[],
+  "features":["choice.move","condition.side","hit.protect","prng.labeled","state.canonical"],"boundaries":["request","choice","queue","handlers","state","events","prng"],"limits":{"max_boundaries":3,"max_actions":4}
+}

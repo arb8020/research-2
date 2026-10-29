@@ -1,0 +1,12 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"weather-sand-stream-start",
+  "provenance":{"kind":"showdown-derived","source_file":"data/abilities.ts; sim/battle-actions.ts","test_name":"Sand Stream Start installs permanent Sandstorm and re-enters through the generic lifecycle dispatcher","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,4],
+  "teams":[{"source":"tyranitar-sand-stream-p1.txt","normalized":[{"species":"tyranitar","level":100,"gender":"M","ability":"sandstream","item":"","moves":["protect"],"stats":[341,304,256,226,236,158],"status":null},{"species":"starmie","level":100,"gender":"N","ability":"naturalcure","item":"","moves":["surf"],"stats":[261,186,206,236,206,266],"status":null}]},{"source":"blissey-toxic-p2-item-target.txt","normalized":[{"species":"blissey","level":100,"gender":"F","ability":"naturalcure","item":"","moves":["splash"],"stats":[651,56,56,186,306,146],"status":null}]}],
+  "source_choices":[],
+  "choices":[],
+  "forced_outcomes":[],
+  "features":["choice.move","choice.switch","condition.weather","lifecycle.switch-persistence","state.canonical","weather.sandstorm"],
+  "boundaries":["request","choice","queue","handlers","state","events","prng"],
+  "limits":{"max_boundaries":1,"max_actions":0}
+}

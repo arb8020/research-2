@@ -1,0 +1,17 @@
+Machop (M) @ Cheri Berry
+Ability: Guts
+Level: 100
+Hardy Nature
+- Splash
+
+Vaporeon (M) @ Chesto Berry
+Ability: Water Absorb
+Level: 100
+Hardy Nature
+- Splash
+
+Persian (M) @ Pecha Berry
+Ability: Limber
+Level: 100
+Hardy Nature
+- Splash

@@ -1,0 +1,131 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "transform-source-retransform",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts#transform; sim/pokemon.ts#transformInto; sim/pokemon.ts#clearVolatile",
+    "test_name": "a transformed source may use its copied Transform again in Gen 3",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    135,
+    136,
+    137,
+    138
+  ],
+  "teams": [
+    {
+      "source": "transform-source-retransform-p1.txt",
+      "normalized": [
+        {
+          "species": "ditto",
+          "level": 100,
+          "gender": "N",
+          "nature": "hardy",
+          "ability": "limber",
+          "item": "",
+          "moves": [
+            "transform"
+          ],
+          "stats": [
+            237,
+            132,
+            132,
+            132,
+            132,
+            132
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "transform-source-retransform-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "transform",
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        },
+        {
+          "species": "gengar",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "levitate",
+          "item": "",
+          "moves": [
+            "nightshade"
+          ],
+          "stats": [
+            261,
+            166,
+            156,
+            296,
+            186,
+            256
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "switch 2"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 2"
+    ],
+    [
+      "move 1",
+      "switch 2"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "state.canonical",
+    "state.effective-type",
+    "state.transform-profile"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 3,
+    "max_actions": 4
+  }
+}

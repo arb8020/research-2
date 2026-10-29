@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-2.local/pokemon-gen3/feature-map.schema.json",
+  "title": "Native Gen 3 OU supported-feature manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "manifest_version", "oracle", "format", "scope",
+    "observables", "inventories", "features", "interaction_requirements"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "manifest_version": {"type": "string", "minLength": 1},
+    "oracle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit", "format"],
+      "properties": {
+        "repository": {"type": "string"},
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "format": {"const": "gen3ou"},
+        "instrumentation_digest": {"type": ["string", "null"]}
+      }
+    },
+    "format": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topology", "team_size", "input_boundary"],
+      "properties": {
+        "topology": {"const": "singles"},
+        "team_size": {"const": 6},
+        "input_boundary": {"const": "validated_normalized_Gen3BattleInit"}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["included", "excluded"],
+      "properties": {
+        "included": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "excluded": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+      }
+    },
+    "observables": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": [
+        "choices", "actions", "queue", "handlers", "phase_request",
+        "canonical_state", "events", "prng", "faint_switch_replace",
+        "terminal", "replay", "ocean"
+      ]}
+    },
+    "inventories": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/inventory"},
+      "minItems": 1
+    },
+    "features": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/feature"},
+      "minItems": 1
+    },
+    "interaction_requirements": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/interaction"},
+      "minItems": 1
+    }
+  },
+  "$defs": {
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "selector", "frozen_digest", "count"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9_.-]+$"},
+        "source": {"type": "string"},
+        "selector": {"type": "string"},
+        "frozen_digest": {"type": ["string", "null"]},
+        "count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "source_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "symbol"],
+      "properties": {
+        "path": {"type": "string"},
+        "symbol": {"type": "string"}
+      }
+    },
+    "native_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "symbol"],
+      "properties": {
+        "path": {"type": "string"},
+        "symbol": {"type": "string"}
+      }
+    },
+    "feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "kind", "title", "required", "denotation", "members",
+        "showdown_sources", "native_boundaries", "depends_on", "observables",
+        "focused_tests", "differential_cases", "coverage_axes", "invariants",
+        "status"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9_.-]+$"},
+        "kind": {"enum": [
+          "boundary", "scheduler", "event", "move_pipeline", "effect_family",
+          "lifecycle", "projection", "determinism", "integration"
+        ]},
+        "title": {"type": "string", "minLength": 1},
+        "required": {"type": "boolean"},
+        "denotation": {"type": "string", "minLength": 1},
+        "members": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["inventory", "selector"],
+          "properties": {
+            "inventory": {"type": ["string", "null"]},
+            "selector": {"type": "string"}
+          }
+        },
+        "showdown_sources": {"type": "array", "items": {"$ref": "#/$defs/source_ref"}, "minItems": 1},
+        "native_boundaries": {"type": "array", "items": {"$ref": "#/$defs/native_ref"}},
+        "depends_on": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "observables": {"type": "array", "items": {"type": "string"}, "minItems": 1, "uniqueItems": true},
+        "focused_tests": {"type": "array", "items": {"type": "string"}},
+        "differential_cases": {"type": "array", "items": {"type": "string"}},
+        "coverage_axes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "invariants": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "status": {"enum": [
+          "unimplemented", "descriptor_only", "unit_only",
+          "differential_prefix", "complete"
+        ]}
+      }
+    },
+    "interaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "features", "strength", "minimum_hidden_cases"],
+      "properties": {
+        "id": {"type": "string"},
+        "features": {"type": "array", "items": {"type": "string"}, "minItems": 2},
+        "strength": {"enum": ["pairwise", "three_way", "sequence"]},
+        "minimum_hidden_cases": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "schema":"pokemon-native-differential-case-v1","id":"screen-dual-category-routing",
+  "provenance":{"kind":"showdown-derived","source_file":"data/mods/gen4/moves.ts","test_name":"Checkpoint 6: dual screens route by category, critical state, and ordered handlers","oracle_revision":"6e71625b9e6cffeda268b548ae7f43a7643fc3f0"},
+  "format":"gen3ou","seed":[1,2,3,8],
+  "teams":[{"source":"alakazam-dual-screen-p1.txt","normalized":[{"species":"alakazam","level":100,"gender":"M","ability":"synchronize","item":"","moves":["reflect","lightscreen"],"stats":[251,136,126,306,206,276],"status":null}]},{"source":"smeargle-screen-probes-p2.txt","normalized":[{"species":"smeargle","level":100,"gender":"M","ability":"owntempo","item":"","moves":["splash","aerialace","surf"],"stats":[251,76,106,76,126,186],"status":null}]}],
+  "source_choices":[["move 1","move 1"],["move 2","move 1"],["move 1","move 2"],["move 1","move 3"],["move 1","move 3"]],"choices":[["move 1","move 1"],["move 2","move 1"],["move 1","move 2"],["move 1","move 3"],["move 1","move 3"]],"forced_outcomes":[],
+  "features":["condition.side","damage.reflect","damage.screen","handler.modify-damage-phase1","prng.labeled","side.reflect","side.lightscreen","state.canonical"],"boundaries":["request","choice","queue","handlers","immunity","state","events","prng","terminal"],"limits":{"max_boundaries":6,"max_actions":10}
+}

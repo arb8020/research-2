@@ -1,0 +1,116 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "nightmare-shed-skin-order",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts; data/mods/gen3/moves.ts; data/mods/gen4/abilities.ts; sim/pokemon.ts",
+    "test_name": "nightmare-shed-skin-order",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    1,
+    2,
+    3,
+    7
+  ],
+  "teams": [
+    {
+      "source": "gengar-nightmare-protect-p1.txt",
+      "normalized": [
+        {
+          "species": "gengar",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "levitate",
+          "item": "",
+          "moves": [
+            "nightmare",
+            "protect"
+          ],
+          "stats": [
+            262,
+            166,
+            156,
+            296,
+            186,
+            256
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "seviper-screech-p2.txt",
+      "normalized": [
+        {
+          "species": "seviper",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "shedskin",
+          "item": "",
+          "moves": [
+            "screech"
+          ],
+          "stats": [
+            288,
+            236,
+            156,
+            236,
+            156,
+            166
+          ],
+          "status": "slp",
+          "status_state": {
+            "kind": "sleep",
+            "time": 5,
+            "skipped_time": 0
+          }
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "ability.residual_status_cure",
+      "occurrence": 1,
+      "range": 100,
+      "result": 22
+    }
+  ],
+  "features": [
+    "choice.move",
+    "handler.residual",
+    "state.canonical",
+    "status.sleep",
+    "condition.volatile",
+    "prng.labeled"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

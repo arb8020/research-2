@@ -1,0 +1,111 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "berry-starf-stat-3",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/items.ts; data/mods/gen3/items.ts; sim/pokemon.ts; sim/prng.ts",
+    "test_name": "Starf Berry uniformly selects eligible stat index 3",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    701,
+    23,
+    41,
+    37
+  ],
+  "teams": [
+    {
+      "source": "berry-starf-stat-3-p1.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "owntempo",
+          "item": "starfberry",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null,
+          "initial_hp": 62
+        }
+      ]
+    },
+    {
+      "source": "berry-starf-stat-3-p2.txt",
+      "normalized": [
+        {
+          "species": "smeargle",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "owntempo",
+          "item": "",
+          "moves": [
+            "splash"
+          ],
+          "stats": [
+            251,
+            76,
+            106,
+            76,
+            126,
+            186
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [
+    {
+      "label": "item.starfberry.stat",
+      "occurrence": 1,
+      "range": 5,
+      "result": 3
+    }
+  ],
+  "features": [
+    "choice.move",
+    "effect.boost",
+    "handler.residual",
+    "item.consumption",
+    "prng.labeled",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "request",
+    "choice",
+    "queue",
+    "handlers",
+    "state",
+    "events",
+    "prng"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

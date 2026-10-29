@@ -1,0 +1,103 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "happiness-frustration-max",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/moves.ts",
+    "test_name": "frustration happiness power at 255",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    419,
+    71,
+    29,
+    7
+  ],
+  "teams": [
+    {
+      "source": "happiness-frustration-max-p1.txt",
+      "normalized": [
+        {
+          "species": "snorlax",
+          "level": 100,
+          "gender": "M",
+          "nature": "hardy",
+          "ability": "immunity",
+          "item": "",
+          "moves": [
+            "frustration"
+          ],
+          "stats": [
+            461,
+            256,
+            166,
+            166,
+            256,
+            96
+          ],
+          "status": null,
+          "happiness": 255
+        }
+      ]
+    },
+    {
+      "source": "happiness-frustration-max-p2.txt",
+      "normalized": [
+        {
+          "species": "blissey",
+          "level": 100,
+          "gender": "F",
+          "nature": "hardy",
+          "ability": "naturalcure",
+          "item": "",
+          "moves": [
+            "softboiled"
+          ],
+          "stats": [
+            651,
+            56,
+            56,
+            186,
+            306,
+            146
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "move.happiness-power",
+    "prng.labeled",
+    "state.canonical",
+    "state.set-happiness"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 2,
+    "max_actions": 2
+  }
+}

@@ -1,0 +1,11 @@
+Persian (M) @ Pecha Berry
+Ability: Limber
+Level: 100
+Hardy Nature
+- Splash
+
+Vaporeon (M) @ Cheri Berry
+Ability: Water Absorb
+Level: 100
+Hardy Nature
+- Splash

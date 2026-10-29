@@ -1,0 +1,20 @@
+{
+  "schema": "pokemon-pufferlib-training-smoke-v1",
+  "date": "2026-09-30",
+  "status": "pass",
+  "pufferlib_revision": "6ffa5b10dbbbe4d1e8288367c7d9d3acd3bad4a2",
+  "provider": "Modal via box SDK",
+  "gpu": "L4",
+  "sandbox_id": "sb-N9xyXLr5Wpw9pQQuhgdgiB",
+  "sandbox_terminated": true,
+  "scenario": "default fixed 2v2 singles, shared trainable policy for both sides",
+  "agent_steps": 16384,
+  "updates": 8,
+  "parameters": 23168,
+  "checkpoints_written": 8,
+  "checkpoint_reload_evaluation": "pass",
+  "evaluation_games": 126,
+  "reported_sps": 39000,
+  "scope": "build, masked rollout, PPO updates, episode reset, checkpoint save and reload; no competitive-policy or full-OU-training claim",
+  "reproduce": "UV_CACHE_DIR=/tmp/pokemon-uv-cache uv run --frozen --project box python worktrees/pokemon-ocean/robots/envs/dev/pokemon_gen3/ocean/modal_training_smoke.py --pufferlib /path/to/pinned/pufferlib --evidence /path/to/evidence"
+}

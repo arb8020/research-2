@@ -1,0 +1,117 @@
+{
+  "schema": "pokemon-native-differential-case-v1",
+  "id": "truant-recharge-staging",
+  "provenance": {
+    "kind": "showdown-derived",
+    "source_file": "data/mods/gen3/abilities.ts#truant; sim/battle.ts; sim/battle-actions.ts; sim/pokemon.ts",
+    "test_name": "Pinned Truant regression: recharge occupies the loafing phase and the next move executes",
+    "oracle_revision": "6e71625b9e6cffeda268b548ae7f43a7643fc3f0"
+  },
+  "format": "gen3ou",
+  "seed": [
+    731,
+    732,
+    733,
+    734
+  ],
+  "teams": [
+    {
+      "source": "truant-recharge-staging-p1.txt",
+      "normalized": [
+        {
+          "species": "slaking",
+          "level": 100,
+          "gender": "M",
+          "ability": "truant",
+          "item": "",
+          "moves": [
+            "hyperbeam"
+          ],
+          "stats": [
+            441,
+            356,
+            236,
+            226,
+            166,
+            236
+          ],
+          "status": null
+        }
+      ]
+    },
+    {
+      "source": "truant-recharge-staging-p2.txt",
+      "normalized": [
+        {
+          "species": "aggron",
+          "level": 100,
+          "gender": "M",
+          "ability": "sturdy",
+          "item": "",
+          "moves": [
+            "protect"
+          ],
+          "stats": [
+            281,
+            256,
+            396,
+            156,
+            156,
+            136
+          ],
+          "status": null
+        }
+      ]
+    }
+  ],
+  "source_choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "choices": [
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ],
+    [
+      "move 1",
+      "move 1"
+    ]
+  ],
+  "forced_outcomes": [],
+  "features": [
+    "choice.move",
+    "choice.switch",
+    "handler.before-move",
+    "handler.residual",
+    "lifecycle.switch-persistence",
+    "state.canonical"
+  ],
+  "boundaries": [
+    "choice",
+    "events",
+    "handlers",
+    "prng",
+    "queue",
+    "request",
+    "state"
+  ],
+  "limits": {
+    "max_boundaries": 4,
+    "max_actions": 6
+  }
+}
